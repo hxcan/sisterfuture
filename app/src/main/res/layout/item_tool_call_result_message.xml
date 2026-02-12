@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" 
+    android:layout_width="match_parent" 
+    android:layout_height="wrap_content" 
+    android:orientation="horizontal" 
+    android:padding="16dp">
+    <TextView 
+        android:id="@+id/tool_call_result_text" 
+        android:layout_width="0dp" 
+        android:layout_height="wrap_content" 
+        android:layout_weight="1" 
+        android:textSize="18sp" 
+        android:textColor="#FFFFFF" 
+        android:background="#FF6B6B" 
+        android:padding="8dp" 
+        android:textAlignment="viewStart" 
+        android:textIsSelectable="true"/>
+</LinearLayout>

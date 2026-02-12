@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                xmlns:tools="http://schemas.android.com/tools"
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:background="@color/loadingbgcolor"
+                android:orientation="vertical"
+                tools:ignore="Overdraw">
+
+  <androidx.recyclerview.widget.RecyclerView
+    android:id="@+id/articleListmy_recycler_view"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_above="@+id/recognizeResulttextView"
+    android:layout_alignParentStart="false"
+    android:layout_alignParentLeft="false"
+    android:layout_alignParentTop="true"
+    android:scrollbars="vertical" />
+
+  <!-- 进度条移动到输入框上方 -->
+  <ProgressBar
+    style="?android:attr/progressBarStyleHorizontal"
+    android:layout_width="match_parent"
+    android:layout_height="2dp"
+    android:id="@+id/volumeIndicatorprogressBar"
+    android:layout_above="@+id/recognizeResulttextView"
+    android:layout_alignParentLeft="true"
+    android:layout_alignParentStart="false"
+    android:max="30"
+    android:progress="0"
+    android:layout_margin="1dp"
+    android:visibility="invisible"
+    android:progressDrawable="@drawable/progress_horizontal1" />
+
+  <!-- 思考状态遮罩层 -->
+  <TextView
+    android:id="@+id/thinking_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="56dp"
+    android:layout_alignParentBottom="true"
+    android:background="#80000000"
+    android:textColor="@android:color/white"
+    android:textSize="14sp"
+    android:gravity="center"
+    android:padding="8dp"
+    android:visibility="gone"
+    android:text="accesspoint name is thinking..."
+    android:elevation="10dp" />
+
+  <Button
+    android:layout_width="48dp"
+    android:layout_height="48dp"
+    android:id="@+id/commandRecognizebutton2"
+    android:layout_margin="5dp"
+    android:background="@drawable/microphone"
+    android:layout_alignParentBottom="true"
+    android:layout_alignParentRight="true" />
+
+  <Button
+    android:layout_width="48dp"
+    android:layout_height="48dp"
+    android:id="@+id/sendButtonn2"
+    android:layout_margin="5dp"
+    android:background="@drawable/sendicon2048x1841gjc8zxl8512"
+    android:layout_alignParentBottom="true"
+    android:layout_toLeftOf="@+id/commandRecognizebutton2" />
+
+  <EditText
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:id="@+id/recognizeResulttextView"
+    android:layout_alignParentBottom="true"
+    android:layout_alignParentLeft="true"
+    android:layout_toLeftOf="@+id/sendButtonn2"
+    android:inputType="textMultiLine"
+    android:imeOptions="actionSend"
+    android:maxLines="3" />
+
+  <ProgressBar
+    style="?android:attr/progressBarStyleHorizontal"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:id="@+id/progressBar"
+    android:layout_margin="4dp"
+    android:indeterminate="true"
+    android:progressDrawable="@drawable/progress_horizontal1"
+    android:visibility="invisible" />
+  </RelativeLayout>

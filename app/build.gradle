@@ -1,0 +1,111 @@
+apply plugin: 'com.android.application'
+apply plugin: 'io.objectbox' // 这个插件必须加！
+
+dependencies 
+{
+  implementation fileTree(include: ['*.jar'], dir: 'libs')
+  implementation 'com.jakewharton:butterknife:10.2.3'
+  annotationProcessor 'com.jakewharton:butterknife-compiler:10.2.3'  // ✅ 注意是 -compiler
+  implementation 'com.google.code.gson:gson:2.8.2'
+  implementation 'org.apache.commons:commons-lang3:3.4'
+  implementation 'org.apache.commons:commons-io:1.3.2'
+  implementation 'com.github.hxcan:CodePosition:2023.5.19'
+  implementation 'com.mcxiaoke.volley:library:1.0.19'
+  implementation 'com.squareup.okhttp3:okhttp:4.10.0'
+  implementation group: 'com.squareup.okhttp', name: 'okhttp', version: '1.6.0'
+  implementation group: 'com.koushikdutta.async', name: 'androidasync', version: '2.1.7'
+  implementation 'androidx.multidex:multidex:2.0.1'
+  implementation 'io.noties.markwon:core:4.6.1'
+  implementation 'com.jcraft:jsch:0.1.55'
+  implementation 'io.noties.markwon:ext-strikethrough:4.6.1'
+  implementation 'io.noties.markwon:ext-tables:4.6.1'
+  implementation 'com.belerweb:pinyin4j:2.5.1'
+  implementation 'androidx.annotation:annotation:1.5.0'
+  implementation 'androidx.appcompat:appcompat:1.6.1' // Or the latest version
+  implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+  implementation 'org.tensorflow:tensorflow-lite:1.12.0'
+  implementation 'org.tensorflow:tensorflow-lite-select-tf-ops:2.16.1'
+  implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
+  implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0' // Or the latest version
+  implementation 'org.jetbrains:annotations:23.0.0' // Or the latest version
+  implementation 'androidx.recyclerview:recyclerview:1.3.0' // 或者使用最新的版本
+  implementation 'com.github.hxcan:victoriafresh.android:2024.6.9'
+  implementation 'com.upokecenter:cbor:4.4.4'
+  // 在dependencies里加上ObjectBox
+  implementation 'io.objectbox:objectbox-android:5.1.0'
+  // 添加注解处理器
+  annotationProcessor 'io.objectbox:objectbox-processor:5.1.0'
+  implementation 'commons-net:commons-net:3.8.0'
+}
+
+android 
+{
+  lint 
+  {
+    baseline = file("lint-baseline.xml")
+  }
+
+  buildFeatures 
+  {
+    buildConfig = true
+  }
+
+  compileSdkVersion 33
+  buildToolsVersion '28.0.3'
+  namespace 'com.stupidbeauty.sisterfuture'
+
+  defaultConfig 
+  {
+    applicationId "com.stupidbeauty.sisterfuture"
+    minSdkVersion 21
+    targetSdkVersion 28
+    versionCode 652
+    versionName "2026.2.1"
+    multiDexEnabled true
+  }
+
+  buildTypes 
+  {
+    release 
+    {
+      minifyEnabled false
+      proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+    }
+  }
+
+  sourceSets 
+  {
+    main 
+    {
+      jniLibs.srcDirs = ['libs']
+    }
+  }
+
+    aaptOptions {
+        noCompress "tflite"
+    }
+
+}
+
+// # https://stackoverflow.com/questions/65380359/lomboks-access-to-jdk-compilers-internal-packages-incompatible-with-java-16
+
+// # enable internal JDK API access at runtime
+tasks.withType(JavaCompile).configureEach {
+    options.fork = true
+    options.forkOptions.jvmArgs += [
+//         # essential for butterknife
+        '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+
+//         # if you need Glide or LomBok
+//         # these may not be the exact list, but it works for me
+        '--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED',
+    ]
+}
