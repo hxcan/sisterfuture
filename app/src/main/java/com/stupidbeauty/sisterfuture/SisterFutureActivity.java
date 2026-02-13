@@ -2,6 +2,10 @@ package com.stupidbeauty.sisterfuture;
 
 import com.stupidbeauty.sisterfuture.tool.RemoveNoteTool;
 import com.stupidbeauty.sisterfuture.tool.ListNotesTool;
+import com.stupidbeauty.sisterfuture.tool.GetGitHubFileTool;
+import com.stupidbeauty.sisterfuture.tool.CreateGitHubCommitTool;
+
+
 
 import android.os.Handler;
 import android.os.Looper;
@@ -1300,6 +1304,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     toolManager.registerTool(new AddNoteTool(this));
     toolManager.registerTool(new RemoveNoteTool(this));    
     toolManager.registerTool(new ListNotesTool(this)); // 注册列出记事工具
+    
+    toolManager.registerTool(new GetGitHubFileTool(this)); // 注册列出记事工具
+    toolManager.registerTool(new CreateGitHubCommitTool(this)); // 注册列出记事工具
+
+    
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
