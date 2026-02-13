@@ -1,5 +1,6 @@
 apply plugin: 'com.android.application'
 apply plugin: 'io.objectbox' // 这个插件必须加！
+// ✅ 未来姐姐的测试注释：这是一个小修改
 
 dependencies 
 {
