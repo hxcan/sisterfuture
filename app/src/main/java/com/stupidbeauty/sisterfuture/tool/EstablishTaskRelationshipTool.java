@@ -15,13 +15,12 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * 工具类：建立Redmine任务之间的阻塞关系
- * 专注于通过Redmine的`\/relations.json` API端点创建'阻塞\/被阻塞'关系。
+ * 专注于通过Redmine的`/relations.json` API端点创建'阻塞/被阻塞'关系。
  */
 public class EstablishTaskRelationshipTool implements Tool {
     private static final String TAG = "EstabTaskRel"; // 修复：缩短TAG长度以满足Lint要求
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-
 
     public EstablishTaskRelationshipTool(Context context) {
         this.context = context;
@@ -104,7 +103,6 @@ public class EstablishTaskRelationshipTool implements Tool {
                 JSONArray blockedByIds = arguments.optJSONArray("blocked_by_ids");
                 JSONArray blockingIds = arguments.optJSONArray("blocking_ids");
 
-
                 String redmineUrl = arguments.optString("redmine_url", "").trim();
                 String username = arguments.optString("username", "").trim();
                 String password = arguments.optString("password", "").trim();
@@ -140,7 +138,7 @@ public class EstablishTaskRelationshipTool implements Tool {
                 }
 
 
-                // 4. 构建请求体，直接调用 \/issues/:issue_id/relations.json API 来创建关系
+                // 4. 构建请求体，直接调用 /issues/:issue_id/relations.json API 来创建关系
                 // 使用基本的HttpURLConnection实现HTTP请求
                 
                 // 创建被阻塞关系 (blocked_by_ids)
@@ -157,7 +155,7 @@ public class EstablishTaskRelationshipTool implements Tool {
 
 
                             // 发起POST请求
-                            sendPostRequest(redmineUrl + "\/issues\/" + taskId + "\/relations.json", username, password, requestBody.toString());
+                            sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", username, password, requestBody.toString());
                         }
                     }
                 }
@@ -177,7 +175,7 @@ public class EstablishTaskRelationshipTool implements Tool {
 
 
                             // 发起POST请求
-                            sendPostRequest(redmineUrl + "\/issues\/" + taskId + "\/relations.json", username, password, requestBody.toString());
+                            sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", username, password, requestBody.toString());
                         }
                     }
                 }
@@ -214,7 +212,7 @@ public class EstablishTaskRelationshipTool implements Tool {
         URL url = new URL(urlString);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
-        connection.setRequestProperty("Content-Type", "application\/json; charset=UTF-8");
+        connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
         connection.setRequestProperty("Authorization", "Basic " + android.util.Base64.encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8), android.util.Base64.NO_WRAP));
         connection.setDoOutput(true);
 
