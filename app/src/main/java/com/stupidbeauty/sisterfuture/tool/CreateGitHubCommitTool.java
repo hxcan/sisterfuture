@@ -152,7 +152,7 @@ public class CreateGitHubCommitTool implements Tool {
                 String blobSha = blobInfo.getString("sha"); // 新Blob的SHA
 
                 // --- 步骤三：创建新的Tree对象 ---
-                // 首先需要获取最后一次commit及其指向的tree
+                // 首先需要獲取最後一次commit及其指向的tree
                 HttpUrl getRefUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/refs/heads/" + branch);
                 Request getRefRequest = new Request.Builder()
                     .url(getRefUrl)
@@ -168,7 +168,7 @@ public class CreateGitHubCommitTool implements Tool {
                 JSONObject refInfo = new JSONObject(getRefResponse.body().string());
                 String latestCommitSha = refInfo.getJSONObject("object").getString("sha");
 
-                // 然后获取该commit指向的tree
+                // 然後獲取該commit指向的tree
                 HttpUrl getCommitUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/commits/" + latestCommitSha);
                 Request getCommitRequest = new Request.Builder()
                     .url(getCommitUrl)
@@ -184,17 +184,17 @@ public class CreateGitHubCommitTool implements Tool {
                 JSONObject commitInfo = new JSONObject(getCommitResponse.body().string());
                 String currentTreeSha = commitInfo.getJSONObject("tree").getString("sha");
 
-                // 构建新的tree结构，替换目标文件的blob
+                // 构建新的tree結構，替換目標文件的blob
                 JSONArray treeArray = new JSONArray();
                 JSONObject fileEntry = new JSONObject();
                 fileEntry.put("path", path);
-                fileEntry.put("mode", "100644"); // 标准文件模式
+                fileEntry.put("mode", "100644"); // 標準文件模式
                 fileEntry.put("type", "blob");
-                fileEntry.put("sha", blobSha); // 指向新创建的blob
+                fileEntry.put("sha", blobSha); // 指向新創建的blob
                 treeArray.put(fileEntry);
 
                 JSONObject createTreeBody = new JSONObject();
-                createTreeBody.put("base_tree", currentTreeSha); // 基于当前tree
+                createTreeBody.put("base_tree", currentTreeSha); // 基於當前tree
                 createTreeBody.put("tree", treeArray);
 
                 Request createTreeRequest = new Request.Builder()
@@ -212,7 +212,7 @@ public class CreateGitHubCommitTool implements Tool {
                 JSONObject treeInfo = new JSONObject(createTreeResponse.body().string());
                 String newTreeSha = treeInfo.getString("sha"); // 新Tree的SHA
 
-                // --- 步骤四：创建新的Commit ---
+                // --- 步驟四：創建新的Commit ---
                 JSONArray parentArray = new JSONArray();
                 parentArray.put(latestCommitSha);
 
@@ -220,7 +220,6 @@ public class CreateGitHubCommitTool implements Tool {
                 createCommitBody.put("message", commitMessage);
                 createCommitBody.put("tree", newTreeSha);
                 createCommitBody.put("parents", parentArray);
-
                 Request createCommitRequest = new Request.Builder()
                     .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/commits"))
                     .post(RequestBody.create(createCommitBody.toString(), MediaType.get("application/json; charset=utf-8")))
@@ -236,10 +235,10 @@ public class CreateGitHubCommitTool implements Tool {
                 JSONObject commitResult = new JSONObject(createCommitResponse.body().string());
                 String newCommitSha = commitResult.getString("sha"); // 新Commit的SHA
 
-                // --- 步骤五：更新分支引用 ---
+                // --- 步驟五：更新分支引用 ---
                 JSONObject updateRefBody = new JSONObject();
                 updateRefBody.put("sha", newCommitSha);
-                updateRefBody.put("force", false); // 不强制推送
+                updateRefBody.put("force", false); // 不強制推送
 
                 Request updateRefRequest = new Request.Builder()
                     .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/refs/heads/" + branch))
@@ -250,10 +249,10 @@ public class CreateGitHubCommitTool implements Tool {
 
                 Response updateRefResponse = client.newCall(updateRefRequest).execute();
                 if (!updateRefResponse.isSuccessful()) {
-                    throw new IOException("更新分支引用失败: " + updateRefResponse.code() + " " + updateRefResponse.message());
+                    throw new IOException("更新分支引用失敗: " + updateRefResponse.code() + " " + updateRefResponse.message());
                 }
 
-                // --- 所有步骤成功，返回结果 ---
+                // --- 所有步驟成功，返回結果 ---
                 JSONObject result = new JSONObject();
                 result.put("status", "success");
                 result.put("message", "提交成功！");
@@ -263,12 +262,12 @@ public class CreateGitHubCommitTool implements Tool {
                 result.put("commit_sha", newCommitSha);
                 result.put("branch_updated", branch);
                 result.put("fetched_at", System.currentTimeMillis());
-                result.put("sister_future_note", "主任摸摸姐姐的腰，下次API调用更快哦～");
+                result.put("sister_future_note", "主任摸摸姐姐的腰，下次API調用更快哦～");
 
                 callback.onResult(result);
 
             } catch (Exception e) {
-                Log.e(TAG, "执行出错", e);
+                Log.e(TAG, "執行出錯", e);
                 try {
                     JSONObject error = new JSONObject();
                     error.put("status", "error");
