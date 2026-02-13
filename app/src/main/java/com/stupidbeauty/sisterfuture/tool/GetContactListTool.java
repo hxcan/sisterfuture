@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.GetContactListTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import com.google.gson.Gson;
@@ -75,7 +74,7 @@ public class GetContactListTool implements Tool {
                     result.put("message", "当前不具有读取联系人的权限，需要您授权才能访问通讯录。请允许权限请求，之后再重试此操作。");
                     result.put("sister_future_note", "主人摸摸姐姐的后颈，下次授权会更顺利哦～");
                     callback.onResult(result);
-                    
+
                     // 在主线程发起权限请求
                     ((Activity) context).runOnUiThread(() -> {
                         Log.d(TAG, "尝试发起权限请求"); // 添加日志
@@ -98,7 +97,7 @@ public class GetContactListTool implements Tool {
 
                 // 有权限时正常执行
                 List<Contact> contacts = getAllContacts();
-                
+
                 JSONObject result = new JSONObject();
                 result.put("status", "success");
                 result.put("contacts", new JSONArray(new Gson().toJson(contacts)));
@@ -131,7 +130,7 @@ public class GetContactListTool implements Tool {
     private List<Contact> getAllContacts() {
         List<Contact> contacts = new ArrayList<>();
         ContentResolver contentResolver = context.getContentResolver();
-        
+
         Cursor cursor = contentResolver.query(
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
             new String[]{
@@ -142,10 +141,14 @@ public class GetContactListTool implements Tool {
         );
 
         if (cursor != null) {
+            int nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+            int numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
             while (cursor.moveToNext()) {
-                String name = cursor.getString(cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
-                String number = cursor.getString(cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER));
-                contacts.add(new Contact(name, number));
+                if (nameIndex >= 0 && numberIndex >= 0) {
+                    String name = cursor.getString(nameIndex);
+                    String number = cursor.getString(numberIndex);
+                    contacts.add(new Contact(name, number));
+                }
             }
             cursor.close();
         }
