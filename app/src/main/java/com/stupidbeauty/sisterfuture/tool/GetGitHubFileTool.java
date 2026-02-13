@@ -1,6 +1,7 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
+import android.os.Build;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import com.google.gson.Gson;
@@ -123,7 +124,6 @@ public class GetGitHubFileTool implements Tool {
                     .header("Accept", "application/vnd.github.v3+json")
                     .build();
 
-
                 Response response = client.newCall(request).execute();
 
 
@@ -147,7 +147,12 @@ public class GetGitHubFileTool implements Tool {
                     String encodedContent = resultJson.getString("content");
                     // 关键修复：移除所有空白字符
                     encodedContent = encodedContent.replaceAll("\\s+", "");
-                    byte[] decodedBytes = Base64.getDecoder().decode(encodedContent);
+                    byte[] decodedBytes;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        decodedBytes = Base64.getDecoder().decode(encodedContent);
+                    } else {
+                        decodedBytes = android.util.Base64.decode(encodedContent, android.util.Base64.DEFAULT);
+                    }
                     String decodedContent = new String(decodedBytes, StandardCharsets.UTF_8);
                     resultJson.put("decoded_content", decodedContent);
                 }
