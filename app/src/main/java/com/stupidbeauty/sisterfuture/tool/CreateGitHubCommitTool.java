@@ -111,7 +111,7 @@ public class CreateGitHubCommitTool implements Tool {
 
                 OkHttpClient client = new OkHttpClient();
 
-                // --- 步骤一：获取当前文件信息以获取SHA ---
+                // --- 步骤一：试探性地检查文件是否存在 ---
                 HttpUrl getContentUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path)
                     .newBuilder()
                     .addQueryParameter("ref", branch)
@@ -124,12 +124,17 @@ public class CreateGitHubCommitTool implements Tool {
                     .build();
 
                 Response getContentResponse = client.newCall(getContentRequest).execute();
-                if (!getContentResponse.isSuccessful()) {
-                    throw new IOException("获取文件信息失败: " + getContentResponse.code() + " " + getContentResponse.message());
-                }
+                String fileSha = null; // 默认为null，表示新文件
 
-                JSONObject fileInfo = new JSONObject(getContentResponse.body().string());
-                String fileSha = fileInfo.getString("sha"); // 当前文件的SHA
+                // 只有当返回成功时才获取SHA
+                if (getContentResponse.isSuccessful()) {
+                    JSONObject fileInfo = new JSONObject(getContentResponse.body().string());
+                    fileSha = fileInfo.getString("sha"); // 存在则获取旧的SHA
+                } else if (getContentResponse.code() != 404) {
+                    // 如果不是404错误，则说明是其他问题，抛出异常
+                    throw new IOException("检查文件状态失败: " + getContentResponse.code() + " " + getContentResponse.message());
+                }
+                // 如果是404，我们什么都不做，fileSha保持为null，这正是我们想要的
 
                 // --- 步骤二：创建包含新内容的Blob ---
                 JSONObject blobBody = new JSONObject();
@@ -185,6 +190,8 @@ public class CreateGitHubCommitTool implements Tool {
                 String currentTreeSha = commitInfo.getJSONObject("tree").getString("sha");
 
                 // 构建新的tree結構，替換目標文件的blob
+                // 关键修复：如果fileSha为null（即文件不存在），则不会将其包含在tree中，因为新文件不需要旧的sha
+                // 对于新文件，在创建tree时，只需提供新文件的path、mode、type和新的blob_sha即可。
                 JSONArray treeArray = new JSONArray();
                 JSONObject fileEntry = new JSONObject();
                 fileEntry.put("path", path);
@@ -196,7 +203,6 @@ public class CreateGitHubCommitTool implements Tool {
                 JSONObject createTreeBody = new JSONObject();
                 createTreeBody.put("base_tree", currentTreeSha); // 基於當前tree
                 createTreeBody.put("tree", treeArray);
-
                 Request createTreeRequest = new Request.Builder()
                     .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
                     .post(RequestBody.create(createTreeBody.toString(), MediaType.get("application/json; charset=utf-8")))
@@ -256,7 +262,7 @@ public class CreateGitHubCommitTool implements Tool {
                 JSONObject result = new JSONObject();
                 result.put("status", "success");
                 result.put("message", "提交成功！");
-                result.put("file_sha", fileSha);
+                result.put("file_sha", fileSha); // 可能為null
                 result.put("blob_sha", blobSha);
                 result.put("tree_sha", newTreeSha);
                 result.put("commit_sha", newCommitSha);
