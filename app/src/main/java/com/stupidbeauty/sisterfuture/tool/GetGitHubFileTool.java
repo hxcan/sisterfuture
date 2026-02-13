@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.GetGitHubFileTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
@@ -19,6 +18,7 @@ public class GetGitHubFileTool implements Tool {
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
+
     public GetGitHubFileTool(Context context) {
         this.context = context;
     }
@@ -34,6 +34,7 @@ public class GetGitHubFileTool implements Tool {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "get_github_file");
             functionDef.put("description", "通过GitHub API读取指定仓库的文件内容。支持认证访问私有仓库。");
+
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -56,6 +57,7 @@ public class GetGitHubFileTool implements Tool {
             );
             parameters.put("required", new JSONArray(new String[]{"owner", "repo", "path"}));
 
+
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
@@ -64,15 +66,18 @@ public class GetGitHubFileTool implements Tool {
         }
     }
 
+
     @Override
     public boolean shouldInclude() {
         return true;
     }
 
+
     @Override
     public boolean isAsync() {
         return true;
     }
+
 
     @Override
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
@@ -85,6 +90,7 @@ public class GetGitHubFileTool implements Tool {
                 String branch = arguments.optString("branch", "main");
                 String token = arguments.optString("token", "").trim();
 
+
                 // 2. 尝试从备注恢复默认值
                 if (token.isEmpty()) {
                     String noteJson = getNote(context);
@@ -96,10 +102,12 @@ public class GetGitHubFileTool implements Tool {
                     }
                 }
 
+
                 // 3. 验证必要参数
                 if (token.isEmpty()) {
                     throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
                 }
+
 
                 // 4. 构建请求
                 OkHttpClient client = new OkHttpClient();
@@ -108,25 +116,31 @@ public class GetGitHubFileTool implements Tool {
                     .addQueryParameter("ref", branch)
                     .build();
 
+
                 Request request = new Request.Builder()
                     .url(url)
                     .header("Authorization", "Bearer " + token)
                     .header("Accept", "application/vnd.github.v3+json")
                     .build();
 
+
                 Response response = client.newCall(request).execute();
+
 
                 if (!response.isSuccessful()) {
                     throw new IOException("请求失败: " + response.code() + " " + response.message());
                 }
+
 
                 ResponseBody body = response.body();
                 if (body == null) {
                     throw new IOException("返回体为空");
                 }
 
+
                 String resultStr = body.string();
                 JSONObject resultJson = new JSONObject(resultStr);
+
 
                 // 正确的解码逻辑：当存在content字段且编码方式为base64时进行解码，并移除所有空白字符
                 if (resultJson.has("content") && resultJson.getString("encoding").equals("base64")) {
@@ -138,13 +152,16 @@ public class GetGitHubFileTool implements Tool {
                     resultJson.put("decoded_content", decodedContent);
                 }
 
+
                 JSONObject result = new JSONObject();
                 result.put("file_info", resultJson);
                 result.put("status", "success");
                 result.put("fetched_at", System.currentTimeMillis());
                 result.put("sister_future_note", "主任摸摸姐姐的腰，下次API调用更快哦～");
 
+
                 callback.onResult(result);
+
 
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
@@ -158,6 +175,7 @@ public class GetGitHubFileTool implements Tool {
             }
         });
     }
+
 
     // --- 工具备注支持 ---
     @Override
