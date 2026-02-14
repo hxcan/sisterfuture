@@ -19,10 +19,10 @@ public class SystemPromptManager {
         return instance;
     }
     
-    public String getCurrentPrompt() {
+    // 由外部传入默认提示词
+    public String getCurrentPrompt(String defaultPrompt) {
         String saved = prefs.getString(KEY_PROMPT, "");
-        // 如果没有保存过，则返回默认值
-        return saved.isEmpty() ? SfBaseDef.DEFAULT_SYSTEM_PROMPT : saved;
+        return saved.isEmpty() ? defaultPrompt : saved;
     }
     
     public void updatePrompt(String newPrompt) {
