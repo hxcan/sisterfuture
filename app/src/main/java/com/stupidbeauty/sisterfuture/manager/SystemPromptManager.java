@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.manager;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import com.stupidbeauty.sisterfuture.SfBaseDef;
 
 public class SystemPromptManager {
     private static final String PREF_NAME = "system_prompt_store";
@@ -19,10 +20,10 @@ public class SystemPromptManager {
         return instance;
     }
     
-    // 由外部传入默认提示词
-    public String getCurrentPrompt(String defaultPrompt) {
+    public String getCurrentPrompt() {
         String saved = prefs.getString(KEY_PROMPT, "");
-        return saved.isEmpty() ? defaultPrompt : saved;
+        // 如果没有保存过，则返回默认值
+        return saved.isEmpty() ? SfBaseDef.DEFAULT_SYSTEM_PROMPT : saved;
     }
     
     public void updatePrompt(String newPrompt) {
