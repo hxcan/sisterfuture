@@ -1271,7 +1271,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     memoryManager = new MemoryManager(this);
 
 
-
     // ✅ 新增：创建并注册 SwitchNextAccessPointTool
     toolManager = new ToolManager();
     toolManager.registerTool(new ConversationResetTool(contextManager)); // ← 注入
@@ -1322,8 +1321,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     // ✅ 注册 fuse_system_prompt 工具
     toolManager.registerTool(new FuseSystemPromptTool(this));
 
-    // ✅ 注册 get_current_system_prompt 工具
-    toolManager.registerTool(new GetCurrentSystemPromptTool(this));
+    // ✅ 修复：使用 SisterFutureApplication 而非 Activity
+    toolManager.registerTool(new GetCurrentSystemPromptTool(SisterFutureApplication.getAppContext()));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
