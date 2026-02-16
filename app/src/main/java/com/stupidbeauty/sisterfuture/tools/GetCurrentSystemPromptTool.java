@@ -28,9 +28,10 @@ public class GetCurrentSystemPromptTool {
             StringBuilder result = new StringBuilder();
             result.append("# 系统提示词\n\n");
             result.append("当前系统运行的核心规则如下：\n\n");
-            result.append("```")
+            result.append("```");
             result.append(currentPrompt);
-            result.append("```\n\n");
+            result.append("```");
+            result.append("\n\n");
             result.append("*本内容由SystemPromptManager动态提供*\n");
             
             return result.toString();
