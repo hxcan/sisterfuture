@@ -1,5 +1,6 @@
 package com.stupidbeauty.sisterfuture.tool;
 
+import com.stupidbeauty.sisterfuture.SisterFutureApplication;
 import com.stupidbeauty.sisterfuture.Tool;
 
 public class GetCurrentSystemPromptTool implements Tool {
