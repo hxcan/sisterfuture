@@ -1,7 +1,7 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
-import com.stupidbeauty.sisterfuture.SystemPromptManager;
+import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
 import com.stupidbeauty.sisterfuture.tool.Tool;
 
 import org.json.JSONObject;
@@ -50,7 +50,7 @@ public class GetCurrentSystemPromptTool implements Tool {
     public JSONObject execute(JSONObject arguments) {
         try {
             SystemPromptManager promptManager = SystemPromptManager.getInstance(application);
-            return new JSONObject().put("current_prompt", promptManager.getCurrentSystemPrompt());
+            return new JSONObject().put("current_prompt", promptManager.getCurrentPrompt());
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
