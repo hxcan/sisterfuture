@@ -1,0 +1,11 @@
+[
+  {
+    "name": "get_current_system_prompt",
+    "description": "获取当前系统提示词的内容",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    },
+    "required": []
+  }
+]
