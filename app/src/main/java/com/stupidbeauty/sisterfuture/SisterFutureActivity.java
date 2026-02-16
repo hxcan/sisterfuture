@@ -5,15 +5,7 @@ import com.stupidbeauty.sisterfuture.tool.ListNotesTool;
 import com.stupidbeauty.sisterfuture.tool.GetGitHubFileTool;
 import com.stupidbeauty.sisterfuture.tool.CreateGitHubCommitTool;
 
-
-
-
- 
 import com.stupidbeauty.sisterfuture.SystemPromptManager;
- 
-
-
-
 
 import android.os.Handler;
 import android.os.Looper;
