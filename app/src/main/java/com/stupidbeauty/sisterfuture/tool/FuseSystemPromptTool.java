@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
@@ -100,17 +101,12 @@ public class FuseSystemPromptTool implements Tool {
             }
 
             // 3. 通过SystemPromptManager设置新提示词
-            boolean success = promptManager.updatePrompt(newPrompt);
-
+            promptManager.updatePrompt(newPrompt);
+            
             // 4. 构造返回结果
-            if (success) {
-                result.put("success", true);
-                result.put("message", "系统提示词已成功更新");
-                result.put("updated_at", System.currentTimeMillis());
-            } else {
-                result.put("success", false);
-                result.put("error", "系统提示词更新失败");
-            }
+            result.put("success", true);
+            result.put("message", "系统提示词已成功更新");
+            result.put("updated_at", System.currentTimeMillis());
 
         } catch (Exception e) {
             try {
@@ -119,7 +115,6 @@ public class FuseSystemPromptTool implements Tool {
                 result.put("stack_trace", android.util.Log.getStackTraceString(e));
             } catch (Exception ignored) {}
         }
-
         return result;
     }
 }
