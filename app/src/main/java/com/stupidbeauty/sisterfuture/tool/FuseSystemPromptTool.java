@@ -30,7 +30,6 @@ public class FuseSystemPromptTool implements Tool {
         return "fuse_system_prompt";
     }
 
-    @Override
     public String getDescription() {
         return "用于更新系统提示词。接收大模型已经完全融合好的新提示词，并将其设置到SystemPromptManager中。" +
                "注意：本工具不进行任何智能处理，仅为机械式设置操作。" +
