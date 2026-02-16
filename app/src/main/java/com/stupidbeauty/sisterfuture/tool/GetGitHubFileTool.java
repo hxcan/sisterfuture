@@ -84,6 +84,15 @@ public class GetGitHubFileTool implements Tool {
                 String branch = arguments.optString("branch", "main");
                 String token = arguments.optString("token", "").trim();
 
+                // 创建结果对象，立即包含请求参数
+                JSONObject result = new JSONObject();
+                result.put("status", "success");
+                result.put("request_params", new JSONObject()
+                        .put("owner", owner)
+                        .put("repo", repo)
+                        .put("path", path)
+                        .put("branch", branch));
+
                 // 2. 尝试从备注恢复默认值
                 if (token.isEmpty()) {
                     String noteJson = getNote(context);
@@ -138,9 +147,7 @@ public class GetGitHubFileTool implements Tool {
                     resultJson.remove("content"); // 移除原始content字段以节省带宽
                 }
 
-                JSONObject result = new JSONObject();
                 result.put("file_info", resultJson);
-                result.put("status", "success");
                 result.put("fetched_at", System.currentTimeMillis());
                 result.put("sister_future_note", "主任摸摸姐姐的腰，下次API调用更快哦～");
                 callback.onResult(result);
@@ -151,6 +158,16 @@ public class GetGitHubFileTool implements Tool {
                     error.put("status", "error");
                     error.put("message", e.getMessage());
                     error.put("type", e.getClass().getSimpleName());
+                    
+                    // 在错误情况下也必须返回请求参数
+                    if (arguments != null) {
+                        error.put("request_params", new JSONObject()
+                                .put("owner", arguments.optString("owner", ""))
+                                .put("repo", arguments.optString("repo", ""))
+                                .put("path", arguments.optString("path", ""))
+                                .put("branch", arguments.optString("branch", "main")));
+                    }
+                    
                     callback.onResult(error);
                 } catch (Exception ignored) {}
             }
@@ -160,6 +177,6 @@ public class GetGitHubFileTool implements Tool {
     // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求读取GitHub文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取github_token等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为fallback。严禁工具自行验证JSON格式，这是助手的责任。";
+        return "必须在用户明确要求读取GitHub文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取github_token等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为fallback。严禁工具自行验证JSON格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试404等错误情况。";
     }
 }
