@@ -17,20 +17,17 @@ import org.json.JSONObject;
  * 3. 本工具只负责最后一步：将LLM准备好的完整新提示词传递给SystemPromptManager
  * 4. 这是一个纯粹的机械式操作，所有智能决策都应在调用本工具前由LLM完成
  */
-public class FuseSystemPromptTool extends BaseTool {
+public class FuseSystemPromptTool {
     private SystemPromptManager promptManager;
 
     public FuseSystemPromptTool(Context context) {
-        super(context);
         this.promptManager = SystemPromptManager.getInstance(context);
     }
 
-    @Override
     public String getName() {
         return "fuse_system_prompt";
     }
 
-    @Override
     public String getDescription() {
         return "用于更新系统提示词。接收大模型已经完全融合好的新提示词，并将其设置到SystemPromptManager中。" +
                "注意：本工具不进行任何智能处理，仅为机械式设置操作。" +
@@ -42,7 +39,6 @@ public class FuseSystemPromptTool extends BaseTool {
                "只有当以上步骤都完成后，才能调用此工具进行最终设置。";
     }
 
-    @Override
     public JSONObject execute(JSONObject arguments) {
         JSONObject result = new JSONObject();
         try {
@@ -84,7 +80,6 @@ public class FuseSystemPromptTool extends BaseTool {
         return result;
     }
 
-    @Override
     protected void defineParameters(JSONObject params) {
         params.put("type", "object");
         
