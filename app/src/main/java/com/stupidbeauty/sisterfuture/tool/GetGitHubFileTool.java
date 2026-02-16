@@ -122,7 +122,28 @@ public class GetGitHubFileTool implements Tool {
                         .build();
                 Response response = client.newCall(request).execute();
                 if (!response.isSuccessful()) {
-                    throw new IOException("请求失败: " + response.code() + " " + response.message());
+                    // 在错误情况下利用 sister_future_note 字段提供提示
+                    try {
+                        JSONObject error = new JSONObject();
+                        error.put("status", "error");
+                        error.put("message", "请求失败: " + response.code() + " " + response.message());
+                        error.put("type", "IOException");
+
+                        // 必须返回请求参数
+                        if (arguments != null) {
+                            error.put("request_params", new JSONObject()
+                                    .put("owner", arguments.optString("owner", ""))
+                                    .put("repo", arguments.optString("repo", ""))
+                                    .put("path", arguments.optString("path", ""))
+                                    .put("branch", arguments.optString("branch", "master")));
+                        }
+
+                        // 利用该字段向大模型发送调试提示
+                        error.put("sister_future_note", "请检查分支参数是否正确，当前仓库使用的是 \"master\" 分支而非 \"main\" 分支。\n原错误信息：" + response.message());
+
+                        callback.onResult(error);
+                    } catch (Exception ignored) {}
+                    return; // 结束执行
                 }
                 ResponseBody body = response.body();
                 if (body == null) {
@@ -149,7 +170,7 @@ public class GetGitHubFileTool implements Tool {
 
                 result.put("file_info", resultJson);
                 result.put("fetched_at", System.currentTimeMillis());
-                result.put("sister_future_note", "主任摸摸姐姐的腰，下次API调用更快哦～");
+                // 成功情况下不再添加任何附加信息
                 callback.onResult(result);
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
@@ -167,6 +188,9 @@ public class GetGitHubFileTool implements Tool {
                                 .put("path", arguments.optString("path", ""))
                                 .put("branch", arguments.optString("branch", "master")));
                     }
+
+                    // 利用该字段向大模型发送调试提示
+                    error.put("sister_future_note", "请检查分支参数是否正确，当前仓库使用的是 \"master\" 分支而非 \"main\" 分支。\n原错误信息：" + e.getMessage());
 
                     callback.onResult(error);
                 } catch (Exception ignored) {}
