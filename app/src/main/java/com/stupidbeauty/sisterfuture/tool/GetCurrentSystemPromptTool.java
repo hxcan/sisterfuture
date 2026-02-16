@@ -50,7 +50,7 @@ public class GetCurrentSystemPromptTool implements Tool {
     public JSONObject execute(JSONObject arguments) {
         try {
             SystemPromptManager promptManager = SystemPromptManager.getInstance(application);
-            return new JSONObject().put("current_prompt", promptManager.getCurrentPrompt());
+            return new JSONObject().put("current_prompt", promptManager.getCurrentSystemPrompt());
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
