@@ -169,6 +169,8 @@ import com.stupidbeauty.lanime.callback.CommitTextCallback;
 import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
+import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
+
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
@@ -445,7 +447,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       // 发起聊天请求
       sendChatRequest();
   }
-
   
   /**
   * Send by button.
@@ -576,6 +577,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           } // if ((messageContent.isEmpty()) && (messageRole.equals("assistant")) )
 
           Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId); // Debug.
+
 
           messagesArray.put(historyArray.getJSONObject(i));
         }
@@ -726,7 +728,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             List<ToolCall> finalCalls = getFinalToolCalls();
 
-            // � 构建 assistant_message 和 tool_calls 结构
+            //  构建 assistant_message 和 tool_calls 结构
             JSONObject assistantMessage = new JSONObject();
             assistantMessage.put("role", "assistant");
 
@@ -862,7 +864,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 scrollToBottom();
             });
 
-            // � 如果全是同步工具，直接处理；否则等待回调
+            //  如果全是同步工具，直接处理；否则等待回调
             if (pendingResults.size() == toolCallsArray.length())
             {
               postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
@@ -1139,6 +1141,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     } //public boolean onTouch(View v, MotionEvent event)
   };
 
+
   /**
   * 连接信号信号槽。
   */
@@ -1146,6 +1149,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
   } //private void connectSignals()
+
 
   /**
   * 启动HTTP服务器，用于对同一个局域网内其它平板的请求进行响应.
@@ -1223,7 +1227,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
       // promptBuilder.append("\n当用户的问题涉及上述功能时，请务必调用相应工具。\n");
 
-      // � 新增：追加工具自身的系统提示增强
+      //  新增：追加工具自身的系统提示增强
       for (Tool tool : tools)
       {
         String enhancement = tool.getSystemPromptEnhancement(context);
@@ -1240,6 +1244,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     return promptBuilder.toString();
   }
+
 
 
   @Override
@@ -1326,7 +1331,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new GetGitHubFileTool(this)); // 注册列出记事工具
     toolManager.registerTool(new CreateGitHubCommitTool(this)); // 注册列出记事工具
 
-    
+    // ✅ 注册 fuse_system_prompt 工具
+    toolManager.registerTool(new FuseSystemPromptTool(this));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
@@ -1448,7 +1454,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     LocalBroadcastManager localBroadcastManager=LocalBroadcastManager.getInstance(this); //Get the local broadcast manager instance.
     localBroadcastManager.registerReceiver(mBroadcastReceiver, filter); //注册接收器。
   } //private void registerBroadcastReceiver()
-
   /**
   * 广播接收器。
   */
@@ -1461,6 +1466,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     public void onReceive(Context context, Intent intent)
     {
       String action = intent.getAction(); //获取广播中带的动作字符串。
+
 
       if (Constants.Operation.CommitText.equals(action)) //提交文本内容。
       {
