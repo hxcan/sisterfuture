@@ -171,7 +171,7 @@ import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
-import com.stupidbeauty.sisterfuture.tools.GetCurrentSystemPromptTool; // 新增导入
+import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 已修正为 tool 包
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -1269,6 +1269,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     // ✅ 新增：初始化MemoryManager
     memoryManager = new MemoryManager(this);
+
 
 
     // ✅ 新增：创建并注册 SwitchNextAccessPointTool
