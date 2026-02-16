@@ -1,7 +1,7 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
-import com.stupidbeauty.sisterfuture.Tool;
+import com.stupidbeauty.sisterfuture.tool.Tool;
 
 public class GetCurrentSystemPromptTool implements Tool {
     private SisterFutureApplication application;
@@ -16,7 +16,7 @@ public class GetCurrentSystemPromptTool implements Tool {
     }
 
     @Override
-    public Object execute(Object... arguments) {
-        return application.getSystemPromptManager().getCurrentPrompt();
+    public JSONObject execute(JSONObject arguments) {
+        return new JSONObject().put("current_prompt", application.getSystemPromptManager().getCurrentPrompt());
     }
 }
