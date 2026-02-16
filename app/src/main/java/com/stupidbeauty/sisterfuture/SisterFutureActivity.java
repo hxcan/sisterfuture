@@ -7,7 +7,9 @@ import com.stupidbeauty.sisterfuture.tool.CreateGitHubCommitTool;
 
 //import com.stupidbeauty.sisterfuture.SystemPromptManager;
 
-import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;import android.os.Handler;
+import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
+
+import android.os.Handler;
 import android.os.Looper;
 import com.stupidbeauty.codeposition.CodePosition;
 import java.io.FileDescriptor;
