@@ -1166,8 +1166,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   */
   private static String buildEnhancedSystemPrompt(ToolManager toolManager, Context context)
   {
+
+SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
+
+
     StringBuilder promptBuilder = new StringBuilder();
-    promptBuilder.append(SfBaseDef.DEFAULT_SYSTEM_PROMPT);
+    // promptBuilder.append(SfBaseDef.DEFAULT_SYSTEM_PROMPT);
+
+
+
+promptBuilder.append(  promptManager.getBasePrompt()  );
+
+
+
+
+
+
     promptBuilder.append("\n\n");
 
     List<Tool> tools = toolManager.getRegisteredTools();
