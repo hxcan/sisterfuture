@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.GetRedmineTaskInfoTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import org.json.JSONArray;
@@ -146,7 +145,6 @@ public class GetRedmineTaskInfoTool implements Tool
                 result.put("task_info", new JSONObject(resultStr)); // 包装为标准响应
                 result.put("status", "success");
                 result.put("fetched_at", System.currentTimeMillis());
-                result.put("sister_future_note", "主任摸摸姐姐的后颈，能让缓存命中率提升100%哦～");
 
                 callback.onResult(result);
 

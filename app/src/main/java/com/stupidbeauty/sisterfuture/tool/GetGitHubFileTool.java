@@ -1,13 +1,14 @@
-// com.stupidbeauty.sisterfuture.tool.GetGitHubFileTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
+import android.os.Build;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import com.google.gson.Gson;
 import okhttp3.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -34,28 +35,26 @@ public class GetGitHubFileTool implements Tool {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "get_github_file");
             functionDef.put("description", "通过GitHub API读取指定仓库的文件内容。支持认证访问私有仓库。");
-
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()
-                .put("owner", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "仓库所有者"))
-                .put("repo", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "仓库名称"))
-                .put("path", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "要读取的文件路径"))
-                .put("branch", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "目标分支，默认为main"))
-                .put("token", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "GitHub个人访问令牌（PAT），用于认证"))
+                    .put("owner", new JSONObject()
+                            .put("type", "string")
+                            .put("description", "仓库所有者"))
+                    .put("repo", new JSONObject()
+                            .put("type", "string")
+                            .put("description", "仓库名称"))
+                    .put("path", new JSONObject()
+                            .put("type", "string")
+                            .put("description", "要读取的文件路径"))
+                    .put("branch", new JSONObject()
+                            .put("type", "string")
+                            .put("description", "目标分支，默认为main"))
+                    .put("token", new JSONObject()
+                            .put("type", "string")
+                            .put("description", "GitHub个人访问令牌（PAT），用于认证"))
             );
             parameters.put("required", new JSONArray(new String[]{"owner", "repo", "path"}));
-
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
@@ -104,27 +103,22 @@ public class GetGitHubFileTool implements Tool {
                 // 4. 构建请求
                 OkHttpClient client = new OkHttpClient();
                 HttpUrl url = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path)
-                    .newBuilder()
-                    .addQueryParameter("ref", branch)
-                    .build();
-
+                        .newBuilder()
+                        .addQueryParameter("ref", branch)
+                        .build();
                 Request request = new Request.Builder()
-                    .url(url)
-                    .header("Authorization", "Bearer " + token)
-                    .header("Accept", "application/vnd.github.v3+json")
-                    .build();
-
+                        .url(url)
+                        .header("Authorization", "Bearer " + token)
+                        .header("Accept", "application/vnd.github.v3+json")
+                        .build();
                 Response response = client.newCall(request).execute();
-
                 if (!response.isSuccessful()) {
                     throw new IOException("请求失败: " + response.code() + " " + response.message());
                 }
-
                 ResponseBody body = response.body();
                 if (body == null) {
                     throw new IOException("返回体为空");
                 }
-
                 String resultStr = body.string();
                 JSONObject resultJson = new JSONObject(resultStr);
 
@@ -133,9 +127,15 @@ public class GetGitHubFileTool implements Tool {
                     String encodedContent = resultJson.getString("content");
                     // 关键修复：移除所有空白字符
                     encodedContent = encodedContent.replaceAll("\\s+", "");
-                    byte[] decodedBytes = Base64.getDecoder().decode(encodedContent);
+                    byte[] decodedBytes;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        decodedBytes = Base64.getDecoder().decode(encodedContent);
+                    } else {
+                        decodedBytes = android.util.Base64.decode(encodedContent, android.util.Base64.DEFAULT);
+                    }
                     String decodedContent = new String(decodedBytes, StandardCharsets.UTF_8);
                     resultJson.put("decoded_content", decodedContent);
+                    resultJson.remove("content"); // 移除原始content字段以节省带宽
                 }
 
                 JSONObject result = new JSONObject();
@@ -143,9 +143,7 @@ public class GetGitHubFileTool implements Tool {
                 result.put("status", "success");
                 result.put("fetched_at", System.currentTimeMillis());
                 result.put("sister_future_note", "主任摸摸姐姐的腰，下次API调用更快哦～");
-
                 callback.onResult(result);
-
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
                 try {

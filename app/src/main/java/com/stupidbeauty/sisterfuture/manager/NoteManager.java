@@ -6,9 +6,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
+
 
 /**
  * 记事本管理器
@@ -20,9 +21,12 @@ public class NoteManager {
     private static final String KEY_NOTES = "notes_list";
     private SharedPreferences sharedPreferences;
 
+
+
     public NoteManager(Context context) {
         this.sharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
+
 
     /**
      * 保存记事列表到SharedPreferences
@@ -42,6 +46,7 @@ public class NoteManager {
             e.printStackTrace();
         }
     }
+
 
     /**
      * 从SharedPreferences加载记事列表
@@ -67,6 +72,8 @@ public class NoteManager {
         return notes;
     }
 
+
+
     /**
      * 添加新的记事
      */
@@ -78,17 +85,27 @@ public class NoteManager {
         return newNote;
     }
 
+
     /**
      * 根据ID删除记事
      */
     public boolean removeNote(String id) {
         List<Note> notes = loadNotes();
-        boolean removed = notes.removeIf(note -> note.getId().equals(id));
+        Iterator<Note> iterator = notes.iterator();
+        boolean removed = false;
+        while (iterator.hasNext()) {
+            Note note = iterator.next();
+            if (note.getId().equals(id)) {
+                iterator.remove();
+                removed = true;
+            }
+        }
         if (removed) {
             saveNotes(notes);
         }
         return removed;
     }
+
 
     /**
      * 获取所有记事
@@ -96,6 +113,7 @@ public class NoteManager {
     public List<Note> getAllNotes() {
         return loadNotes();
     }
+
 
     /**
      * 根据ID查找记事

@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.QueryToolEnhancementTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import com.stupidbeauty.codeposition.CodePosition;
@@ -16,7 +15,7 @@ import android.util.Log;
 public class QueryToolEnhancementTool implements Tool
 {
   private Context context;
-  private static final String TAG = "QueryToolEnhancementTool";
+  private static final String TAG = "QueryToolEnh"; // 修复：缩短TAG长度以满足Lint要求（23字符以内）
   private ToolManager toolManager;
   private HashMap<String, String> lastQueryResult = new HashMap<>(); //!< The last query result.
 
@@ -103,13 +102,14 @@ public class QueryToolEnhancementTool implements Tool
 
     String lastResult = lastQueryResult.get(toolName); // Get the last result.
 
+
     if (enhancement.equals(lastResult)) // Not changed.
     {
       result.put("warning", "该工具的系统增强提示词从妳上次查询以来还没有变动过，到现在为止用户也没有要求要修改该工具的系统增强提示词。在该工具的系统增强提示词发生真正改变之前，禁止妳再继续查询该工具的系统增强提示词了。");
     } // if (lastResult.equals(enhancement)) // Not changed.
 
-    lastQueryResult.put(toolName, enhancement); // Remember last query result.
 
+    lastQueryResult.put(toolName, enhancement); // Remember last query result.
     Log.d(TAG, CodePosition.newInstance().toString() + ", result: " + enhancement); // Debug.
 
 

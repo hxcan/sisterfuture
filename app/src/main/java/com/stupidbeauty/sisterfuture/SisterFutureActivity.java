@@ -5,7 +5,9 @@ import com.stupidbeauty.sisterfuture.tool.ListNotesTool;
 import com.stupidbeauty.sisterfuture.tool.GetGitHubFileTool;
 import com.stupidbeauty.sisterfuture.tool.CreateGitHubCommitTool;
 
+//import com.stupidbeauty.sisterfuture.SystemPromptManager;
 
+import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
 
 import android.os.Handler;
 import android.os.Looper;
@@ -58,6 +60,7 @@ import com.stupidbeauty.sisterfuture.tool.ListAllMemoriesTool;
 import com.stupidbeauty.sisterfuture.tool.AddModelAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.AddNoteTool;
 
+
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
 
@@ -96,13 +99,6 @@ import java.util.HashMap;
 import java.util.List;
 import com.stupidbeauty.codeposition.CodePosition;
 import java.io.FileDescriptor;
-import android.os.Build;
-import android.os.Bundle;
-import android.os.Environment;
-import android.os.LocaleList;
-import android.os.PowerManager;
-import com.stupidbeauty.codeposition.CodePosition;
-import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import android.Manifest;
 // import android.annotation.SuppressLint;
@@ -119,6 +115,13 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.LocaleList;
+import android.os.PowerManager;
+import com.stupidbeauty.codeposition.CodePosition;
+import java.io.FileDescriptor;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Vibrator;
@@ -167,14 +170,17 @@ import com.stupidbeauty.lanime.callback.CommitTextCallback;
 import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
+import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
+import com.stupidbeauty.sisterfuture.tools.GetCurrentSystemPromptTool; // 新增导入
+
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
  * 
- */
+ **/
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
-  private  GuideManager guideManager ;
+  private GuideManager guideManager ;
 
   private JSONObject firstToolCallDelta = null; // 用于缓存第一条 tool_calls 的 delta
   private boolean isFirstToolCallProcessed = false; // 标记是否已处理第一条
@@ -198,7 +204,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   // 在Activity中添加一个StringBuilder来存储累积的回答文本
   private StringBuilder accumulatedAnswer = new StringBuilder();
 
-  private static final int PERMISSIONS_REQUEST = 1; //!<权限请求标识
+  private static final int PERMISSIONS_REQUEST =1; //!<权限请求标识
   // 假设这是您的通义千问客户端
   private TongYiClient tongYiClient;
   // 在Activity中添加一个变量用于追踪是否正在合成语音
@@ -207,15 +213,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final String PERMISSION_STORAGE = Manifest.permission.WRITE_EXTERNAL_STORAGE;
   private static final String PERMISSION_RECORD_AUDIO = Manifest.permission.RECORD_AUDIO; //!<录音权限。
   private static final String PERMISSION_FINE_LOCATIN = Manifest.permission.ACCESS_FINE_LOCATION; //!<位置权限
-  private static final String PERMISSION_INSTALL_PACKAGE = Manifest.permission.REQUEST_INSTALL_PACKAGES; //!< 安装应用程序权限
+  private static final String PERMISSION_INSTALL_PACKAGE = Manifest.permission.REQUEST_INSTALL_PACKAGES; // 安装应用程序权限
   private MediaPlayer mediaPlayer;
   private boolean voiceEndDetected=false; //!<是否已经探测到用户声音结束。
   // private String textTitle;
 
   private TextToSpeech mTts;
 
-  private static final int LanServicePort = 10471;
-
+  private static final int LanServicePort =10471;
   private String voiceRecognizeResultString; //!<语音识别结果。
   private Vibrator vibrator;
   @BindView(R.id.sendButtonn2) Button sendButtonn2;
@@ -228,18 +233,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 	private SpeechRecognizer mIat; //!<语言识别器。
 
+
 	// @BindView(R.id.statustextView) TextView statustextView; //!<用来显示状态的文字标签。
 
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar; //!<用来显示音量的进度条。
 
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView; //!<识别结果。
-
   @Override
   public void onInit(int arg0)
   {
     // TODO 自动生成的方法存根
   }
-
 // private java.util.Map<String, Function> partialToolArgs = new java.util.HashMap<>();
 
   private void accumulateToolCalls(List<ToolCall> calls)
@@ -280,7 +284,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       partialToolArgs.put(originalId, existing);
     }
   }
-
   private List<ToolCall> getFinalToolCalls()
   {
     List<ToolCall> result = new ArrayList<>();
@@ -315,7 +318,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 停止录音。
-  */
+  **/
   public void stopRecordbutton2()
   {
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
@@ -339,17 +342,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     commandRecognizebutton2.setEnabled(false); //禁用按钮。
     commandRecognizebutton2.setVisibility(View.INVISIBLE); //隐藏按钮。
   } //public void stopRecordbutton2()
-
 	/**
 	 * 在线命令词识别。
-	 */
+	 **/
   public void commandRecognizebutton2startRecognize()
 	{
     voiceEndDetected=false; //重置状态，未探测到用户的声音结束。
 
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
     vibrator.vibrate( 100);
-
 		if (mIat==null) //识别器未创建。
 		{
 			mIat=SpeechRecognizer.createRecognizer(this,null); //创建识别器。
@@ -360,7 +361,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       // statustextView.setText("请先构建语法。");
 
       return;
-    } //if (!setParam()) //参数设置失败。
+    }//if (!setParam()) //参数设置失败。
 
     ret = mIat.startListening(mRecognizerListener);
     if (ret != ErrorCode.SUCCESS)
@@ -373,7 +374,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         // statustextView.setText("识别失败,错误码: " + ret);
       }
     }
-
     volumeIndicatorprogressBar.setIndeterminate(false); //处于决定状态，以表示音量值。
     progressBar.setVisibility(View.INVISIBLE); //隐藏显示进度条。
     recognizeResulttextView.setText(R.string.empty); //显示空白内容。
@@ -383,7 +383,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   * 参数设置
   *
   * @return 是否设置成功。
-  */
+  **/
   public boolean setParam()
   {
     boolean result = false;
@@ -409,7 +409,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     return result;
   }
-
   private void displayExistingContext() {
       List<JSONObject> history = contextManager.getHistory();
       for (JSONObject msg : history) {
@@ -428,7 +427,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 通用消息发送接口，供外部调用（如文字选中、语音输入等）
-  */
+  **/
   public void sendMessageToSister(String message) {
       if (message == null || message.trim().isEmpty()) {
           return;
@@ -443,11 +442,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       // 发起聊天请求
       sendChatRequest();
   }
-
   
   /**
   * Send by button.
-  */
+  **/
   @OnClick(R.id.sendButtonn2)
   public void sendButtonn2()
   {
@@ -461,7 +459,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 发送闲聊请求。
-  */
+  **/
   private void sendChatRequest() 
   {
     recognizeResulttextView.setText(""); // Clear the recognize result or input content.
@@ -478,7 +476,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   /**
   * Report that the operation has failed.
   * @param string 服务器回复的结果说明文字。
-  */
+  **/
   protected void reportOperationFail(String string)
   {
     Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();   //做一个提示，Failed adding address ,please retry.
@@ -521,7 +519,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 向通义千问发送请求并处理回复。
-  */
+  **/
   private void sendChatRequestTongYi()
   {
     Log.d(TAG, CodePosition.newInstance().toString()); // Debug.
@@ -561,7 +559,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           if (messageRole.equals("assistant") || messageRole.equals("user")) // assistant message or user message
           {
             String[] parts = messageContent.split("\n");
-            if (parts.length > 1)
+            if (parts.length >1)
             {
               String maxWidthStr = parts[0];
               messageContent = maxWidthStr + " ...";
@@ -574,6 +572,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           } // if ((messageContent.isEmpty()) && (messageRole.equals("assistant")) )
 
           Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId); // Debug.
+
 
           messagesArray.put(historyArray.getJSONObject(i));
         }
@@ -616,7 +615,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           if (error instanceof TongYiClient.AccessPointUnavailableException)
           {
-            Log.d(TAG, "接入点不可用，正在自动重试...");
+            Log.d(TAG, "接入点不可用，正在自动重试...\n");
             isAccessPointUnavailable = true;
           }
           else if (error instanceof TongYiClient.ResponseException)
@@ -662,13 +661,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     else
     {
-      Log.w(TAG, "Voice recognition result is empty or null.");
+      Log.w(TAG, "Voice recognition result is empty or null.\n");
     }
   }
 
   /**
   * 解析提交问题的结果。
-  */
+  **/
   protected void parseTongYiResponse(String jsonString)
   {
     Log.d(TAG, "JSON Answer: " + jsonString);
@@ -696,7 +695,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           sendChatRequestTongYi(); // Request again.
         }
-
         return;
       }
 
@@ -724,7 +722,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             List<ToolCall> finalCalls = getFinalToolCalls();
 
-            // � 构建 assistant_message 和 tool_calls 结构
+            //  构建 assistant_message 和 tool_calls 结构
             JSONObject assistantMessage = new JSONObject();
             assistantMessage.put("role", "assistant");
 
@@ -787,7 +785,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         Log.e(TAG, "Failed to wrap async result", e);
                       }
 
-                      // 检查是否全部完成
+                      // 桀查是否全部完成
                       if (pendingResults.size() == toolCallsArray.length())
                       {
                         postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
@@ -845,7 +843,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             contextManager.addRawMessage(assistantMessage);
             contextManager.increaseMaxRounds();
 
-            // ✅ 紧跟上下文写入，在 UI 中显示“正在调用”消息
+            // ✅ 跟踪上下文写入，在 UI 中显示“正在调用”消息
             runOnUiThread(() -> {
                 StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
                 for (ToolCall call : finalCalls) {
@@ -860,7 +858,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 scrollToBottom();
             });
 
-            // � 如果全是同步工具，直接处理；否则等待回调
+            // 如果全是同步工具，直接处理；否则等待回调
             if (pendingResults.size() == toolCallsArray.length())
             {
               postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
@@ -982,7 +980,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
    * 判断是否为“上下文长度超出限制”的错误。
-   */
+   **/
   private boolean isContextLengthError(String errorMessage)
   {
     if (errorMessage == null) return false;
@@ -996,7 +994,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void scrollToBottom()
   {
     // 移动到列表的最后一个可见项
-    articleListmyRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+    articleListmyRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() -1);
   }
 
     // statustextView.setText(answer); //显示结果。
@@ -1024,8 +1022,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   /**
   *  使用 findroid 介绍的 TTS接口。
   * https://github.com/tatans-coder/TensorflowTTS_chinese/blob/master/app/src/main/java/net/tatans/tensorflowtts/MainActivity.java
-  */
-  private void        ttsByFindroidTts(String text)
+  **/
+  private void ttsByFindroidTts(String text)
   {
     ThreadPoolManager.getInstance().execute(() ->
     {
@@ -1038,7 +1036,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       TtsManager.getInstance().speak(inputText, speed, true);
     });
-  } // private void        ttsByFindroidTts(String text)
+  } // private void ttsByFindroidTts(String text)
 
   private final RecognizerListener mRecognizerListener=new RecognizerListener()
 	{
@@ -1076,7 +1074,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 			String text=recognizerResult.getResultString(); //结果字符串。
 
       Gson gson=new Gson(); //创建gson对象。
-
 			VoiceRecognizeResult voiceRecognizeResult=gson.fromJson(text, VoiceRecognizeResult.class); //解析成结果对象。
 			String saidText=voiceRecognizeResult.getSaidText(); //获取完整的说出内容。
 
@@ -1094,7 +1091,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         // contextManager.addUserMessage(voiceRecognizeResultString);
         // sendChatRequest();
       }
-		} //public void onResult(RecognizerResult recognizerResult, boolean b)
+		}//public void onResult(RecognizerResult recognizerResult, boolean b)
 
     @Override
 		public void onError(SpeechError speechError)
@@ -1134,16 +1131,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       } //switch (event.getAction()) //根据不同事件进行处理。
 
       return true;
-    } //public boolean onTouch(View v, MotionEvent event)
+    }//public boolean onTouch(View v, MotionEvent event)
   };
+
 
   /**
   * 连接信号信号槽。
-  */
+  **/
   private void connectSignals()
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
-  } //private void connectSignals()
+  }//private void connectSignals()
+
 
   /**
   * 启动HTTP服务器，用于对同一个局域网内其它平板的请求进行响应.
@@ -1151,27 +1150,39 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void startHttpServer()
   {
     AsyncHttpServer server=new AsyncHttpServer(); //Create the async server.
-
     CommitTextCallback commitTextCallback=new CommitTextCallback(); //创建回调对象，告知有人订台.
     server.get("/commitText/", commitTextCallback); //添加这个回调对象.
-
     PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback(); //创建回调对象，查询手机信息.
     server.get("/phoneInformation/", phoneInformationCallback); //添加这个回调对象.
-
     server.listen(LanServicePort); //监听15563端口.tcp。
-  } //private void startHttpServer()
+  }//private void startHttpServer()
 
   /**
   * 构造增强版系统提示词，从每个工具的 getDefinition() 中提取 description。
-  */
+  **/
   private static String buildEnhancedSystemPrompt(ToolManager toolManager, Context context)
   {
+
+SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
+
+
     StringBuilder promptBuilder = new StringBuilder();
-    promptBuilder.append(SfBaseDef.DEFAULT_SYSTEM_PROMPT);
+    // promptBuilder.append(SfBaseDef.DEFAULT_SYSTEM_PROMPT);
+
+
+
+//promptBuilder.append(  promptManager.getBasePrompt()  );
+
+
+promptBuilder.append(promptManager.getCurrentPrompt());
+
+
+
+
+
     promptBuilder.append("\n\n");
 
     List<Tool> tools = toolManager.getRegisteredTools();
-
     if (!tools.isEmpty())
     {
       promptBuilder.append("你可以使用以下工具来获取实时信息，请在需要时调用，不要自行编造：\n");
@@ -1205,7 +1216,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // promptBuilder.append("\n当用户的问题涉及上述功能时，请务必调用相应工具。\n");
 
-      // � 新增：追加工具自身的系统提示增强
+      //  新增：追加工具自身的系统提示增强
       for (Tool tool : tools)
       {
         String enhancement = tool.getSystemPromptEnhancement(context);
@@ -1219,9 +1230,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       promptBuilder.append("\n/no_think\n");
 
     }
-
     return promptBuilder.toString();
   }
+
 
 
   @Override
@@ -1251,7 +1262,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     mediaPlayer=new MediaPlayer();
     mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-
     ButterKnife.bind(this); //视图注入。
 
     // ✅ 修改为：注入 ModelAccessPointManager 实例给新工具
@@ -1308,7 +1318,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     toolManager.registerTool(new GetGitHubFileTool(this)); // 注册列出记事工具
     toolManager.registerTool(new CreateGitHubCommitTool(this)); // 注册列出记事工具
 
-    
+    // ✅ 注册 fuse_system_prompt 工具
+    toolManager.registerTool(new FuseSystemPromptTool(this));
+
+    // ✅ 注册 get_current_system_prompt 工具
+    toolManager.registerTool(new GetCurrentSystemPromptTool(this));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
@@ -1372,8 +1386,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         if (!result) // 没有权限
         {
           Log.d(TAG, CodePosition.newInstance().toString() + ", permission: " + permissionString + ", no permission"); // Debug.
-          break; // 没有权限。
-        } // if (!result) // 没有权限
+          break; // □有权限。
+        } // if (!result) // □有权限
       } // for(String permissionString: articleInfoArrayList) // 一个个检查
     } //if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //安卓6.
     else //旧版本。
@@ -1386,7 +1400,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 请求获取权限
-  */
+  **/
   private void requestPermission()
   {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //动态权限
@@ -1404,7 +1418,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     
   /**
   * 检查权限。
-  */
+  **/
   private void checkPermission()
   {
     if (hasPermission())
@@ -1418,7 +1432,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 注册广播事件接收器。
-  */
+  **/
   private void registerBroadcastReceiver()
   {
     IntentFilter filter = new IntentFilter();
@@ -1430,10 +1444,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     LocalBroadcastManager localBroadcastManager=LocalBroadcastManager.getInstance(this); //Get the local broadcast manager instance.
     localBroadcastManager.registerReceiver(mBroadcastReceiver, filter); //注册接收器。
   } //private void registerBroadcastReceiver()
-
   /**
   * 广播接收器。
-  */
+  **/
   private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
   {
     @Override
@@ -1444,6 +1457,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       String action = intent.getAction(); //获取广播中带的动作字符串。
 
+
       if (Constants.Operation.CommitText.equals(action)) //提交文本内容。
       {
         Bundle extras=intent.getExtras(); //获取参数包。
@@ -1453,7 +1467,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         recognizeResulttextView.setText(voiceRecognizeResultString); //显示结果。
 
         sendChatRequest(); //发送闲聊请求。
-
         startFriendShutDownAt2100Service(); //启动友军“21点关机”的服务。
       }
     } //public void onReceive(Context context, Intent intent)
@@ -1461,7 +1474,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 启动友军“21点关机”的服务。
-  */
+  **/
   protected void startFriendShutDownAt2100Service()
   {
     Intent intent = new Intent();
