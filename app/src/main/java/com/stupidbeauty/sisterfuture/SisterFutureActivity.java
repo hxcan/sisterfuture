@@ -1321,8 +1321,9 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     // ✅ 注册 fuse_system_prompt 工具
     toolManager.registerTool(new FuseSystemPromptTool(this));
 
-    // ✅ 修复：使用 SisterFutureApplication 而非 Activity
-    toolManager.registerTool(new GetCurrentSystemPromptTool(SisterFutureApplication.getAppContext()));
+    // ✅ 修复：使用 casted SisterFutureApplication instance
+    SisterFutureApplication app = (SisterFutureApplication) SisterFutureApplication.getAppContext();
+    toolManager.registerTool(new GetCurrentSystemPromptTool(app));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
