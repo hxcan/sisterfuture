@@ -49,7 +49,7 @@ public class GetGitHubFileTool implements Tool {
                             .put("description", "要读取的文件路径"))
                     .put("branch", new JSONObject()
                             .put("type", "string")
-                            .put("description", "目标分支，默认为main"))
+                            .put("description", "目标分支，默认为master"))
                     .put("token", new JSONObject()
                             .put("type", "string")
                             .put("description", "GitHub个人访问令牌（PAT），用于认证"))
@@ -81,7 +81,7 @@ public class GetGitHubFileTool implements Tool {
                 String owner = arguments.getString("owner");
                 String repo = arguments.getString("repo");
                 String path = arguments.getString("path");
-                String branch = arguments.optString("branch", "main");
+                String branch = arguments.optString("branch", "master");
                 String token = arguments.optString("token", "").trim();
 
                 // 创建结果对象，立即包含请求参数
@@ -158,16 +158,16 @@ public class GetGitHubFileTool implements Tool {
                     error.put("status", "error");
                     error.put("message", e.getMessage());
                     error.put("type", e.getClass().getSimpleName());
-                    
+
                     // 在错误情况下也必须返回请求参数
                     if (arguments != null) {
                         error.put("request_params", new JSONObject()
                                 .put("owner", arguments.optString("owner", ""))
                                 .put("repo", arguments.optString("repo", ""))
                                 .put("path", arguments.optString("path", ""))
-                                .put("branch", arguments.optString("branch", "main")));
+                                .put("branch", arguments.optString("branch", "master")));
                     }
-                    
+
                     callback.onResult(error);
                 } catch (Exception ignored) {}
             }
