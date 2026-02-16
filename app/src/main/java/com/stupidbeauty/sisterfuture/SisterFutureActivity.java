@@ -1177,8 +1177,10 @@ SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
 
 
 
-promptBuilder.append(  promptManager.getBasePrompt()  );
+//promptBuilder.append(  promptManager.getBasePrompt()  );
 
+
+promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
