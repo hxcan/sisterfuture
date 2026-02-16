@@ -17,17 +17,19 @@ import org.json.JSONObject;
  * 3. 本工具只负责最后一步：将LLM准备好的完整新提示词传递给SystemPromptManager
  * 4. 这是一个纯粹的机械式操作，所有智能决策都应在调用本工具前由LLM完成
  */
-public class FuseSystemPromptTool {
+public class FuseSystemPromptTool implements Tool {
     private SystemPromptManager promptManager;
 
     public FuseSystemPromptTool(Context context) {
         this.promptManager = SystemPromptManager.getInstance(context);
     }
 
+    @Override
     public String getName() {
         return "fuse_system_prompt";
     }
 
+    @Override
     public String getDescription() {
         return "用于更新系统提示词。接收大模型已经完全融合好的新提示词，并将其设置到SystemPromptManager中。" +
                "注意：本工具不进行任何智能处理，仅为机械式设置操作。" +
@@ -39,6 +41,47 @@ public class FuseSystemPromptTool {
                "只有当以上步骤都完成后，才能调用此工具进行最终设置。";
     }
 
+    @Override
+    public boolean shouldInclude() {
+        return true;
+    }
+
+    @Override
+    public JSONObject getDefinition() {
+        JSONObject definition = new JSONObject();
+        try {
+            definition.put("type", "function");
+            JSONObject function = new JSONObject();
+            function.put("name", getName());
+            function.put("description", getDescription());
+            
+            JSONObject parameters = new JSONObject();
+            parameters.put("type", "object");
+            
+            JSONObject properties = new JSONObject();
+            
+            // new_prompt - 必填
+            JSONObject newPrompt = new JSONObject();
+            newPrompt.put("type", "string");
+            newPrompt.put("description", "LLM已经完全融合好的完整新系统提示词，必须包含所有必要的约束条件");
+            properties.put("new_prompt", newPrompt);
+            
+            parameters.put("properties", properties);
+            
+            // 设置必填字段
+            JSONArray required = new JSONArray();
+            required.put("new_prompt");
+            parameters.put("required", required);
+            
+            function.put("parameters", parameters);
+            definition.put("function", function);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return definition;
+    }
+
+    @Override
     public JSONObject execute(JSONObject arguments) {
         JSONObject result = new JSONObject();
         try {
@@ -78,23 +121,5 @@ public class FuseSystemPromptTool {
         }
 
         return result;
-    }
-
-    protected void defineParameters(JSONObject params) {
-        params.put("type", "object");
-        
-        JSONObject properties = new JSONObject();
-        params.put("properties", properties);
-        
-        // new_prompt - 必填
-        JSONObject newPrompt = new JSONObject();
-        newPrompt.put("type", "string");
-        newPrompt.put("description", "LLM已经完全融合好的完整新系统提示词，必须包含所有必要的约束条件");
-        properties.put("new_prompt", newPrompt);
-        
-        // 设置必填字段
-        JSONArray required = new JSONArray();
-        required.put("new_prompt");
-        params.put("required", required);
     }
 }
