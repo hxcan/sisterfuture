@@ -171,7 +171,7 @@ import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
-import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 已修正为 tool 包
+import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
