@@ -24,6 +24,29 @@ public class GetCurrentSystemPromptTool implements Tool {
     }
 
     @Override
+    public JSONObject getDefinition() {
+        JSONObject definition = new JSONObject();
+        try {
+            definition.put("type", "function");
+            JSONObject function = new JSONObject();
+            function.put("name", getName());
+            function.put("description", "获取当前系统提示词，用于调试或基于现有提示进行增强调教");
+            
+            JSONObject parameters = new JSONObject();
+            parameters.put("type", "object");
+            
+            // 无参数
+            parameters.put("properties", new JSONObject());
+            
+            definition.put("function", function);
+            definition.put("parameters", parameters);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return definition;
+    }
+
+    @Override
     public JSONObject execute(JSONObject arguments) {
         try {
             SystemPromptManager promptManager = SystemPromptManager.getInstance(application);
