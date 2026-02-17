@@ -32,6 +32,7 @@ import android.util.Log;
 import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
 
+
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -45,11 +46,13 @@ import com.stupidbeauty.sisterfuture.tool.GetIssuesListTool;
 import com.stupidbeauty.sisterfuture.tool.EstablishTaskRelationshipTool;
 
 
+
 import com.stupidbeauty.sisterfuture.tool.BasicWebRequestTool;
 import com.stupidbeauty.sisterfuture.tool.GetContactListTool;
 import com.stupidbeauty.sisterfuture.tool.FtpFileRequestTool;
 import com.stupidbeauty.sisterfuture.tool.ListFtpDirectoryTool;
 import com.stupidbeauty.sisterfuture.tool.FtpFileWriteTool;
+
 
 
 import com.stupidbeauty.sisterfuture.tool.CreateRedmineTaskTool;
@@ -61,8 +64,10 @@ import com.stupidbeauty.sisterfuture.tool.AddModelAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.AddNoteTool;
 
 
+
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
+
 
 import com.stupidbeauty.sisterfuture.tool.GetCurrentTimeTool;
 import com.stupidbeauty.sisterfuture.tool.SwitchAccessPointTool;
@@ -170,8 +175,11 @@ import com.stupidbeauty.lanime.callback.CommitTextCallback;
 import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
+
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
 import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
+
+import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; // ✅ 新增：导入 CreateGitBranchTool
 
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -199,7 +207,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private ContextManager contextManager;
   private MessageAdapter messageAdapter;
   @BindView(R.id.articleListmy_recycler_view) RecyclerView articleListmyRecyclerView; //!< Message list.
-
   private static final String DEFAULT_INPUT_TEXT = "君不见,黄河之水天上来,奔流到海不复回,君不见,高堂明镜悲白发,朝如青丝暮成雪,人生得意须尽欢,莫使金樽空对月";
   // 在Activity中添加一个StringBuilder来存储累积的回答文本
   private StringBuilder accumulatedAnswer = new StringBuilder();
@@ -234,7 +241,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	private SpeechRecognizer mIat; //!<语言识别器。
 
 
-	// @BindView(R.id.statustextView) TextView statustextView; //!<用来显示状态的文字标签。
+
+	//@BindView(R.id.statustextView) TextView statustextView; //!<用来显示状态的文字标签。
+
 
 
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar; //!<用来显示音量的进度条。
@@ -410,7 +419,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // 设置音频保存路径，保存音频格式支持pcm、wav，设置路径为sd卡请注意WRITE_EXTERNAL_STORAGE权限
     // 注：AUDIO_FORMAT参数语记需要更新版本才能生效
     mIat.setParameter(SpeechConstant.AUDIO_FORMAT, "wav");
-    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav"); //设置录音存储路径。
+    mIAt.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav"); //设置录音存储路径。
 
     return result;
   }
@@ -468,7 +477,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void sendChatRequest() 
   {
     recognizeResulttextView.setText(""); // Clear the recognize result or input content.
-
     // ✅ 新增：检查是否需要引导模式拦截
     if (guideManager != null && !guideManager.shouldProceedWithChatRequest(voiceRecognizeResultString)) 
     {
@@ -486,6 +494,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();   //做一个提示，Failed adding address ,please retry.
   } //protected void reportOperationFail()
+
 
 
   private void showThinkingOverlay()
@@ -523,6 +532,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     });
   }
 
+
   /**
   * 向通义千问发送请求并处理回复。
   **/
@@ -533,7 +543,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
       accumulatedAnswer.setLength(0); // clear the last incremental result.
-
       // 显示思考状态
       showThinkingOverlay();
 
@@ -576,6 +585,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             messageContent = historyArray.getJSONObject(i).toString();
           } // if ((messageContent.isEmpty()) && (messageRole.equals("assistant")) )
+
 
           Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId); // Debug.
 
@@ -728,7 +738,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             List<ToolCall> finalCalls = getFinalToolCalls();
 
-            // ✅ 检查 finalCalls 是否为空
+            // ✅ 桀查 finalCalls 是否为空
             if (finalCalls == null || finalCalls.isEmpty()) {
                 Log.w(TAG, "No valid tool calls generated, skipping execution.");
                 return;
@@ -796,7 +806,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         Log.e(TAG, "Failed to wrap async result", e);
                       }
 
-                      // 桀查是否全部完成
+                      // 愙是否全部完成
                       if (pendingResults.size() == toolCallsArray.length())
                       {
                         postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
@@ -897,7 +907,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       else
       {
-        int lastPosition = messageAdapter.getItemCount() - 1;
+        int lastPosition = messageAdapter.getItemCount() -1;
         runOnUiThread(() ->
         {
           messageAdapter.updateAiMessage(lastPosition, accumulatedAnswer.toString());
@@ -1171,6 +1181,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     server.listen(LanServicePort); //监听15563端口.tcp。
   }//private void startHttpServer()
 
+
   /**
   * 构造增强版系统提示词，从每个工具的 getDefinition() 中提取 description。
   **/
@@ -1255,18 +1266,18 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 	{
 		super.onCreate(savedInstanceState); //超类创建。
 
+
 		requestWindowFeature(Window.FEATURE_NO_TITLE); //不显示标题栏。
 		
 		setContentView(R.layout.sister_future); //显示界面。
 
     TtsManager.getInstance().init(this);
-
     contextManager = new ContextManager(this);
     // ✅ 新增：每次启动时清空聊天历史（但保留 currentMaxRounds）
 
 
-    // contextManager.replaceHistory(new ArrayList<>());
 
+    // contextManager.replaceHistory(new ArrayList<>());
     mTts=new TextToSpeech(this,this); //创建TTS对象。
 
     registerBroadcastReceiver(); //注册广播事件接收器。
@@ -1279,7 +1290,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     // ✅ 修改为：注入 ModelAccessPointManager 实例给新工具
     modelAccessPointManager = new ModelAccessPointManager(this);
-
     // ✅ 新增：初始化MemoryManager
     memoryManager = new MemoryManager(this);
 
@@ -1336,6 +1346,9 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     // ✅ 修复：使用 casted SisterFutureApplication instance
     SisterFutureApplication app = (SisterFutureApplication) SisterFutureApplication.getAppContext();
     toolManager.registerTool(new GetCurrentSystemPromptTool(app));
+
+    // ✅ 新增：注册 create_git_branch 工具
+    toolManager.registerTool(new CreateGitBranchTool(this));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
@@ -1399,8 +1412,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         if (!result) // 没有权限
         {
           Log.d(TAG, CodePosition.newInstance().toString() + ", permission: " + permissionString + ", no permission"); // Debug.
-          break; // □有权限。
-        } // if (!result) // □有权限
+          break; // 没有权限。
+        } // if (!result) // 没有权限
       } // for(String permissionString: articleInfoArrayList) // 一个个检查
     } //if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //安卓6.
     else //旧版本。
