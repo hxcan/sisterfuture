@@ -173,7 +173,7 @@ import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
 import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
 
-/**
+/*
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
  * 
@@ -235,6 +235,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 	// @BindView(R.id.statustextView) TextView statustextView; //!<用来显示状态的文字标签。
+
 
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar; //!<用来显示音量的进度条。
 
@@ -349,6 +350,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	{
     voiceEndDetected=false; //重置状态，未探测到用户的声音结束。
 
+
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
     vibrator.vibrate( 100);
 		if (mIat==null) //识别器未创建。
@@ -356,12 +358,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 			mIat=SpeechRecognizer.createRecognizer(this,null); //创建识别器。
 		} //if (mIat==null) //识别器未创建。
 
+
     if (!setParam()) //参数设置失败。
     {
       // statustextView.setText("请先构建语法。");
 
       return;
     }//if (!setParam()) //参数设置失败。
+
 
     ret = mIat.startListening(mRecognizerListener);
     if (ret != ErrorCode.SUCCESS)
@@ -378,6 +382,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     progressBar.setVisibility(View.INVISIBLE); //隐藏显示进度条。
     recognizeResulttextView.setText(R.string.empty); //显示空白内容。
 	} //public void commandRecognizebutton2()
+
 
   /**
   * 参数设置
@@ -481,6 +486,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();   //做一个提示，Failed adding address ,please retry.
   } //protected void reportOperationFail()
+
 
   private void showThinkingOverlay()
   {
@@ -722,7 +728,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             List<ToolCall> finalCalls = getFinalToolCalls();
 
-            //  构建 assistant_message 和 tool_calls 结构
+            // ✅ 检查 finalCalls 是否为空
+            if (finalCalls == null || finalCalls.isEmpty()) {
+                Log.w(TAG, "No valid tool calls generated, skipping execution.");
+                return;
+            }
+
             JSONObject assistantMessage = new JSONObject();
             assistantMessage.put("role", "assistant");
 
@@ -843,7 +854,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             contextManager.addRawMessage(assistantMessage);
             contextManager.increaseMaxRounds();
 
-            // ✅ 跟踪上下文写入，在 UI 中显示“正在调用”消息
+            // 跟踪上下文写入，在 UI 中显示“正在调用”消息
             runOnUiThread(() -> {
                 StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
                 for (ToolCall call : finalCalls) {
@@ -1006,8 +1017,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       mTts.shutdown(); //关闭。
     } //if (null!=mTts) //TTS引擎还在。
 
+
     super.onBackPressed();
   } //public void onBackPressed()
+
 
   // 修改ttsSayReply方法
   private void ttsSayReply(final String text)
@@ -1017,7 +1030,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // ttsByAndroidSystemTts(text); //使用系统自带的TTS接口。
     // ttsByBiaoBei(text); //使用标贝语音来发声。
     ttsByFindroidTts(text); // 使用 findroid 介绍的 TTS接口。
-  }
+  } // private void ttsSayReply(final String text)
 
   /**
   *  使用 findroid 介绍的 TTS接口。
@@ -1122,6 +1135,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         case MotionEvent.ACTION_DOWN: //按下。
           commandRecognizebutton2startRecognize(); //开始识别。
 
+
           break; //跳出。
 
         case MotionEvent.ACTION_UP: //松开。
@@ -1214,9 +1228,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         promptBuilder.append("- ").append(name).append("：").append(description).append("\n");
       }
 
-      // promptBuilder.append("\n当用户的问题涉及上述功能时，请务必调用相应工具。\n");
-
-      //  新增：追加工具自身的系统提示增强
+      // 新增：追加工具自身的系统提示增强
       for (Tool tool : tools)
       {
         String enhancement = tool.getSystemPromptEnhancement(context);
@@ -1251,6 +1263,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     contextManager = new ContextManager(this);
     // ✅ 新增：每次启动时清空聊天历史（但保留 currentMaxRounds）
+
 
     // contextManager.replaceHistory(new ArrayList<>());
 
@@ -1288,7 +1301,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     // ✅ 新增：注册读取和设置工具备注的工具
     toolManager.registerTool(new GetToolRemarkTool(toolManager, this));
     toolManager.registerTool(new SetToolRemarkTool(toolManager, this));
-
     toolManager.registerTool(new GetRedmineTaskInfoTool(this));
     toolManager.registerTool(new CreateRedmineTaskTool(this));
     toolManager.registerTool(new UpdateRedmineIssueTool(this));
@@ -1445,6 +1457,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     LocalBroadcastManager localBroadcastManager=LocalBroadcastManager.getInstance(this); //Get the local broadcast manager instance.
     localBroadcastManager.registerReceiver(mBroadcastReceiver, filter); //注册接收器。
   } //private void registerBroadcastReceiver()
+  
   /**
   * 广播接收器。
   **/
@@ -1462,6 +1475,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       if (Constants.Operation.CommitText.equals(action)) //提交文本内容。
       {
         Bundle extras=intent.getExtras(); //获取参数包。
+
 
         voiceRecognizeResultString= extras.getString("text"); //记录识别结果。
 
