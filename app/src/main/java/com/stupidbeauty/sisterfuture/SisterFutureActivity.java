@@ -491,7 +491,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       {
         // 正确更新遮罩层的文本
         ModelAccessPoint currentAp = modelAccessPointManager.getCurrentAccessPoint();
-        thinking_overlay.setText(currentAp.getName() + " is thinking...");
+        thinking_overlay.setText(currentAp.getName() + " is thinking...\n");
 
         thinking_overlay.setVisibility(View.VISIBLE);
         recognizeResulttextView.setEnabled(false);
@@ -707,14 +707,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       Choice choice = response.getChoices().get(0);
       Delta delta = choice.getDelta();
 
-      // ✅ 仅累积 tool_calls 内容
+      // ✅ 仅累积 tool_calls 内容，并添加判空保护
       if (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty())
       {
         accumulateToolCalls(delta.getToolCalls());
       }
 
-      // ✅ 判断 finish_reason 是否为 tool_calls —— 唯一构造时机
-      if ("tool_calls".equals(choice.getFinishReason()))
+      // ✅ 判断 finish_reason 是否为 tool_calls —— 唯一构造时机，并加强防御性检查
+      if ("tool_calls".equals(choice.getFinishReason())
+          && delta != null 
+          && delta.getToolCalls() != null 
+          && !delta.getToolCalls().isEmpty())
       {
         runOnUiThread(() ->
         {
@@ -1129,7 +1132,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           break; //跳出。
       } //switch (event.getAction()) //根据不同事件进行处理。
-
       return true;
     }//public boolean onTouch(View v, MotionEvent event)
   };
@@ -1173,9 +1175,7 @@ SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
 
 //promptBuilder.append(  promptManager.getBasePrompt()  );
 
-
 promptBuilder.append(promptManager.getCurrentPrompt());
-
 
 
 
@@ -1213,8 +1213,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
         promptBuilder.append("- ").append(name).append("：").append(description).append("\n");
       }
-
-      // promptBuilder.append("\n当用户的问题涉及上述功能时，请务必调用相应工具。\n");
 
       //  新增：追加工具自身的系统提示增强
       for (Tool tool : tools)
@@ -1263,7 +1261,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     mediaPlayer=new MediaPlayer();
     mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
     ButterKnife.bind(this); //视图注入。
-
     // ✅ 修改为：注入 ModelAccessPointManager 实例给新工具
     modelAccessPointManager = new ModelAccessPointManager(this);
 
@@ -1398,6 +1395,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     return result;
   } //private boolean hasPermission()
+
 
   /**
   * 请求获取权限
