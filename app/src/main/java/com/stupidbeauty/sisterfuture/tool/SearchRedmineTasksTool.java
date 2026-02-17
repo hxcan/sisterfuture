@@ -161,7 +161,7 @@ public class SearchRedmineTasksTool implements Tool {
                 result.put("tasks", new JSONObject(resultStr));
                 result.put("status", "success");
                 result.put("searched_at", System.currentTimeMillis());
-                // 已移除：result.put("sister_future_note", "主人摸摸姐姐的大腿，搜索速度能提升100%哦～");
+                // 已完全删除该行，不再保留注释
 
                 callback.onResult(result);
 
