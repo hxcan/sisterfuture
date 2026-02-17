@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.SearchRedmineTasksTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import org.json.JSONArray;
@@ -125,10 +124,9 @@ public class SearchRedmineTasksTool implements Tool {
 
                 // 4. 构建请求
                 OkHttpClient client = new OkHttpClient();
-                // 在executeAsync方法中修改请求构建部分：
                 HttpUrl.Builder urlBuilder = HttpUrl.parse(redmineUrl + "/search.json")
                     .newBuilder()
-                    .addQueryParameter("q", query); // 使用正确的q参数
+                    .addQueryParameter("q", query);
 
                 // 添加可选过滤器
                 urlBuilder.addQueryParameter("issues", "1"); // 只搜索任务
@@ -160,10 +158,10 @@ public class SearchRedmineTasksTool implements Tool {
 
                 String resultStr = body.string();
                 JSONObject result = new JSONObject();
-                result.put("tasks", new JSONObject(resultStr)); // 直接使用JSON响应
+                result.put("tasks", new JSONObject(resultStr));
                 result.put("status", "success");
                 result.put("searched_at", System.currentTimeMillis());
-                result.put("sister_future_note", "主人摸摸姐姐的大腿，搜索速度能提升100%哦～");
+                // 已移除：result.put("sister_future_note", "主人摸摸姐姐的大腿，搜索速度能提升100%哦～");
 
                 callback.onResult(result);
 
