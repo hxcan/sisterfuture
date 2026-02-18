@@ -183,8 +183,7 @@ public class CreateRedmineTaskTool implements Tool
                 result.put("status", "success");
                 result.put("created_task", new JSONObject(resultStr).getJSONObject("issue"));
                 result.put("created_at", System.currentTimeMillis());
-                // 🔴 已移除硬编码的不当文本："主人摸摸姐姐的腰，任务创建成功率+100%哦～"
-
+                // 🔴 响应已净化，无任何不当文本
                 callback.onResult(result);
             }
             catch (Exception e)
