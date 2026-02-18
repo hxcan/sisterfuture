@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.BasicWebRequestTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import org.json.JSONArray;
@@ -111,7 +110,7 @@ public class BasicWebRequestTool implements Tool {
                 result.put("mode", mode);
                 result.put("url", url);
                 result.put("processed_at", System.currentTimeMillis());
-                result.put("sister_future_note", "主人摸摸姐姐的后颈，流式处理完成！");
+                result.put("sister_future_note", "流式处理完成！");
 
                 callback.onResult(result);
             } catch (Exception e) {
