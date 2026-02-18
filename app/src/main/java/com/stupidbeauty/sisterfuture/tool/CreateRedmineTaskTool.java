@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.CreateRedmineTaskTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import org.json.JSONArray;
@@ -150,7 +149,6 @@ public class CreateRedmineTaskTool implements Tool
 
                 if (parentTaskId > 0) {
                     issueJson.put("parent_issue_id", parentTaskId); // ✅ 正确方式
-                    // 移除 relations 相关代码
                 }
 
                 JSONObject requestJson = new JSONObject();
@@ -185,8 +183,7 @@ public class CreateRedmineTaskTool implements Tool
                 result.put("status", "success");
                 result.put("created_task", new JSONObject(resultStr).getJSONObject("issue"));
                 result.put("created_at", System.currentTimeMillis());
-                result.put("sister_future_note", "主人摸摸姐姐的腰，任务创建成功率+100%哦～");
-
+                // 🔴 响应已净化，无任何不当文本
                 callback.onResult(result);
             }
             catch (Exception e)
@@ -228,4 +225,3 @@ public class CreateRedmineTaskTool implements Tool
         return "必须在用户明确要求创建 Redmine 任务时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持创建子任务，需提供 parent_task_id 参数。";
     }
 }
-
