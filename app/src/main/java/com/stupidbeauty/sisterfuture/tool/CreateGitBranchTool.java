@@ -31,7 +31,7 @@ public class CreateGitBranchTool implements Tool {
     try {
       JSONObject functionDef = new JSONObject();
       functionDef.put("name", "create_git_branch");
-      functionDef.put("description", "为未来姐姐项目开发一个专用工具 `create_git_branch`，用于自动化创建 Git 分支。\\\n\\\n## 功能要求：\\\n- 支持创建新分支（如 `release`、`feature/x`）\\\n- 支持指定上游分支作为基线（如 `main`）\\\n- 支持自动推送至远程仓库（GitHub）\\\n- 提供错误处理与冲突检测机制（如分支已存在）\\\n- 返回成功/失败状态及详细日志");
+      functionDef.put("description", "为未来姐姐项目开发一个专用工具 `create_git_branch`，用于自动化创建 Git 分支。\n\n## 功能要求：\n- 支持创建新分支（如 `release`、`feature/x`）\n- 支持指定上游分支作为基线（如 `main`）\n- 支持自动推送至远程仓库（GitHub）\n- 提供错误处理与冲突检测机制（如分支已存在）\n- 返回成功/失败状态及详细日志");
 
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
@@ -99,7 +99,7 @@ public class CreateGitBranchTool implements Tool {
           throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
         }
 
-        // --- 步驟一：獲取基線分支的最新提交SHA ---
+        // --- 步驥一：獲取基線分支的最新提交SHA ---
         HttpUrl getBaseCommitUrl = HttpUrl.parse("https://api.github.com/repos/")
             .newBuilder()
             .addPathSegment(owner)
@@ -161,7 +161,6 @@ public class CreateGitBranchTool implements Tool {
         result.put("base_branch", baseBranch);
         result.put("created_from_sha", baseCommitSha);
         result.put("fetched_at", System.currentTimeMillis());
-        result.put("sister_future_note", "主任摸摸姐姐的腰，下次API調用更快哦～");
 
         callback.onResult(result);
 
