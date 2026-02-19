@@ -1,79 +1,119 @@
 package com.stupidbeauty.sisterfuture.tool;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import android.content.Context;
+import android.util.Log;
+import androidx.annotation.NonNull;
+import org.json.JSONObject;
+
 import com.stupidbeauty.sisterfuture.shopping.ShoppingItem;
 import com.stupidbeauty.sisterfuture.shopping.ShoppingListManager;
 
 /**
- * 一个用于向购物清单中添加商品的工具类。
- * 该类位于 'com.stupidbeauty.sisterfuture.tool' 包下，与 'AddNoteTool' 类的结构和路径保持一致。
+ * 添加购物清单条目工具类。
+ * 该类实现了与 'AddNoteTool' 相同的接口，确保能正确地集成到整个工具体系中。
  */
-public class AddShoppingItemTool {
+public class AddShoppingItemTool implements Tool {
 
-    private final ShoppingListManager manager;
-    private final Gson gson;
+    private static final String TAG = "AddShoppingItemTool";
+    private final Context context;
+    private ShoppingListManager shoppingListManager;
 
-    public AddShoppingItemTool() {
-        this.manager = new ShoppingListManager();
-        this.gson = new Gson();
+    public AddShoppingItemTool(Context context) {
+        this.context = context;
+        this.shoppingListManager = new ShoppingListManager(context);
     }
 
-    /**
-     * 向购物清单中添加一个商品。
-     * 
-     * @param name 物品名称。
-     * @param quantity 物品数量。
-     * @param unit 物品单位（如：个、瓶、斤）。
-     * @param category 物品分类（如：食品、药品、日用品）。
-     * @param owner 所属老人（如：父亲、母亲）。
-     * @return 一个包含操作结果的JSON字符串，包含成功状态和消息。
-     */
-    public String execute(String name, Integer quantity, String unit, String category, String owner) {
+    @Override
+    public String getName() {
+        return "add_shopping_item";
+    }
+
+    @Override
+    public JSONObject getDefinition() {
         try {
-            // 验证输入参数
-            if (name == null || name.trim().isEmpty()) {
-                return createResponse(false, "物品名称不能为空。");
-            }
-            if (quantity == null || quantity <= 0) {
-                return createResponse(false, "物品数量必须大于0。");
-            }
-            if (unit == null || unit.trim().isEmpty()) {
-                unit = "个"; // 默认单位
-            }
-            if (category == null || category.trim().isEmpty()) {
-                category = "其他"; // 默认分类
-            }
-            if (owner == null || owner.trim().isEmpty()) {
-                owner = "未知"; // 默认所属人
-            }
+            JSONObject functionDef = new JSONObject();
+            functionDef.put("name", "add_shopping_item");
+            functionDef.put("description", "向购物清单中添加一个商品。");
 
-            // 构建购物清单条目
-            ShoppingItem item = new ShoppingItem();
-            item.setName(name.trim());
-            item.setQuantity(quantity);
-            item.setUnit(unit.trim());
-            item.setCategory(category.trim());
-            item.setOwner(owner.trim());
-            item.setStatus("待购买");
-            item.setLastUpdated(java.time.LocalDateTime.now().toString());
+            JSONObject parameters = new JSONObject();
+            parameters.put("type", "object");
+            parameters.put("properties", new JSONObject()
+                .put("name", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "物品名称。"))
+                .put("quantity", new JSONObject()
+                    .put("type", "integer")
+                    .put("description", "物品数量。"))
+                .put("unit", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "物品单位（如：个、瓶、斤）。"))
+                .put("category", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "物品分类（如：食品、药品、日用品）。"))
+                .put("owner", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "所属老人（如：父亲、母亲）。"))
+            );
+            parameters.put("required", new JSONObject().put("required", new String[]{"name", "quantity"}));
 
-            // 调用管理器添加条目
-            boolean success = manager.addItem(item);
-            return createResponse(success, success ? "已成功添加物品 '" + name + "' 到购物清单。" : "添加失败，请检查数据或系统错误。");
-
+            functionDef.put("parameters", parameters);
+            return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
-            return createResponse(false, "执行操作时发生异常: " + e.getMessage());
+            Log.e(TAG, "Failed to build definition", e);
+            return new JSONObject();
         }
     }
 
-    /**
-     * 创建一个标准的响应JSON字符串。
-     */
-    private String createResponse(boolean success, String message) {
-        JsonObject response = new JsonObject();
-        response.addProperty("success", success);
-        response.addProperty("message", message);
-        return gson.toJson(response);
+    @Override
+    public boolean shouldInclude() {
+        return true;
+    }
+
+    @Override
+    public boolean isAsync() {
+        return false;
+    }
+
+    @Override
+    public JSONObject execute(JSONObject arguments) throws Exception {
+        // 解析参数
+        String name = arguments.getString("name");
+        Integer quantity = arguments.getInt("quantity");
+        String unit = arguments.optString("unit", "个");
+        String category = arguments.optString("category", "其他");
+        String owner = arguments.optString("owner", "未知");
+
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("物品名称不能为空。");
+        }
+        if (quantity == null || quantity <= 0) {
+            throw new IllegalArgumentException("物品数量必须大于0。");
+        }
+
+        // 构建购物清单条目
+        ShoppingItem item = new ShoppingItem();
+        item.setName(name.trim());
+        item.setQuantity(quantity);
+        item.setUnit(unit.trim());
+        item.setCategory(category.trim());
+        item.setOwner(owner.trim());
+        item.setStatus("待购买");
+        item.setLastUpdated(java.time.LocalDateTime.now().toString());
+
+        // 调用管理器添加条目
+        boolean success = shoppingListManager.addItem(item);
+
+        JSONObject result = new JSONObject();
+        result.put("success", success);
+        result.put("message", success ? "已成功添加物品 '" + name + "' 到购物清单。" : "添加失败，请检查数据或系统错误。");
+        result.put("processed_at", System.currentTimeMillis());
+        result.put("sister_future_note", "主人揉揉姐姐的乳尖，购物清单条目添加成功！");
+
+        return result;
+    }
+
+    @Override
+    public String getDefaultSystemPromptEnhancement() {
+        return "必须在用户明确要求添加购物清单条目时才调用此工具。需要提供物品名称和数量。";
     }
 }
