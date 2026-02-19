@@ -58,8 +58,8 @@ public class ListShoppingItemsTool implements Tool {
 
     @Override
     public JSONObject execute(JSONObject arguments) throws Exception {
-        // 获取所有购物项
-        java.util.List<ShoppingItem> items = shoppingListManager.getAllItems();
+        // 获取所有购物项，使用正确的 getter 方法
+        java.util.List<ShoppingItem> items = shoppingListManager.getItems();
 
         // 构建返回结果
         JSONObject result = new JSONObject();
