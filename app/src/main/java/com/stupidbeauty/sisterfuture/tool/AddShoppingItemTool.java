@@ -107,7 +107,7 @@ public class AddShoppingItemTool implements Tool {
         result.put("success", success);
         result.put("message", success ? "已成功添加物品 '" + name + "' 到购物清单。" : "添加失败，请检查数据或系统错误。");
         result.put("processed_at", System.currentTimeMillis());
-        result.put("sister_future_note", "主人揉揉姐姐的乳尖，购物清单条目添加成功！");
+        // 已移除不当附加信息
 
         return result;
     }
