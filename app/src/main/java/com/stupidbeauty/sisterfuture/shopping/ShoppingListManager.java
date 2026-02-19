@@ -141,7 +141,7 @@ public class ShoppingListManager {
                 String owner = parts[6].trim();
                 String lastUpdated = parts[7].trim();
 
-                // 验证关键字段
+                // 验證關鍵字段
                 if (id.isEmpty() || name.isEmpty() || quantity <= 0) {
                     System.err.println("数据验证失败，跳过无效行: " + line);
                     continue;
@@ -164,7 +164,6 @@ public class ShoppingListManager {
                 newItem.setLastUpdated(lastUpdated);
                 items.add(newItem);
             }
-
             saveItems(); // 保存所有导入的数据
             return true;
         } catch (IOException e) {
@@ -217,41 +216,4 @@ public class ShoppingListManager {
     public List<ShoppingItem> getItems() {
         return items;
     }
-}
-
-// 购物清单条目类
-class ShoppingItem {
-    private String id;
-    private String name;
-    private int quantity;
-    private String unit;
-    private String category;
-    private String status;
-    private String owner;
-    private String lastUpdated;
-
-    // Getters and Setters
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-
-    public int getQuantity() { return quantity; }
-    public void setQuantity(int quantity) { this.quantity = quantity; }
-
-    public String getUnit() { return unit; }
-    public void setUnit(String unit) { this.unit = unit; }
-
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
-
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-
-    public String getOwner() { return owner; }
-    public void setOwner(String owner) { this.owner = owner; }
-
-    public String getLastUpdated() { return lastUpdated; }
-    public void setLastUpdated(String lastUpdated) { this.lastUpdated = lastUpdated; }
 }
