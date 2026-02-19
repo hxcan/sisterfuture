@@ -72,6 +72,9 @@ public class CreateRedmineTaskTool implements Tool
           .put("type", "string")
           .put("enum", new String[]{"Low", "Normal", "High", "Urgent"})
           .put("description", "任务优先级，默认为 Normal"))
+        .put("tracker_id", new JSONObject()
+          .put("type", "integer")
+          .put("description", "可选：任务类型ID（1=Bug, 2=Feature, 3=Support），默认为项目默认值"))
       );
       parameters.put("required", new JSONArray(new String[]{"project_id", "subject"}));
 
@@ -113,6 +116,7 @@ public class CreateRedmineTaskTool implements Tool
                 String description = arguments.optString("description", "");
                 String priority = arguments.optString("priority", "Normal");
                 Integer parentTaskId = arguments.optInt("parent_task_id", -1); // -1 表示无父任务
+                Integer trackerId = arguments.optInt("tracker_id", -1); // -1 表示未指定
 
                 // 2. 尝试从备注恢复凭证
                 if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty())
@@ -149,6 +153,10 @@ public class CreateRedmineTaskTool implements Tool
 
                 if (parentTaskId > 0) {
                     issueJson.put("parent_issue_id", parentTaskId); // ✅ 正确方式
+                }
+                
+                if (trackerId > 0) {
+                    issueJson.put("tracker_id", trackerId);
                 }
 
                 JSONObject requestJson = new JSONObject();
@@ -222,6 +230,6 @@ public class CreateRedmineTaskTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求创建 Redmine 任务时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持创建子任务，需提供 parent_task_id 参数。";
+        return "必须在用户明确要求创建 Redmine 任务时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持创建子任务，需提供 parent_task_id 参数。支持指定任务类型，使用 tracker_id 参数。";
     }
 }
