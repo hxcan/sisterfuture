@@ -1,9 +1,11 @@
 package com.stupidbeauty.sisterfuture.shopping;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,9 +15,11 @@ public class ShoppingListManager {
 
     private static final String DATA_FILE_PATH = "/data/shopping_list.json";
     private List<ShoppingItem> items;
+    private final Gson gson;
 
     public ShoppingListManager() {
         this.items = new ArrayList<>();
+        this.gson = new Gson();
         loadItems();
     }
 
@@ -93,25 +97,28 @@ public class ShoppingListManager {
         return status != null && (status.equals("待购买") || status.equals("已购买") || status.equals("已失效"));
     }
 
-    // 读取数据文件
+    // 读取数据文件 (使用Gson)
     private void loadItems() {
         try {
             File file = new File(DATA_FILE_PATH);
             if (file.exists()) {
-                String json = new String(Files.readAllBytes(Paths.get(DATA_FILE_PATH)));
-                // 这里应使用Gson或Jackson解析JSON，为简化示例，假设数据已加载到items中。
-                // 正确实现需要添加JSON解析逻辑。
+                try (FileReader reader = new FileReader(file)) {
+                    items = gson.fromJson(reader, new TypeToken<List<ShoppingItem>>(){}.getType());
+                }
             }
         } catch (IOException e) {
             System.err.println("无法加载购物清单: " + e.getMessage());
         }
     }
 
-    // 保存数据文件
+    // 保存数据文件 (使用Gson)
     private void saveItems() {
         try {
-            // 这里应使用Gson或Jackson将items序列化为JSON并写入文件，为简化示例，省略具体代码。
-            // 正确实现需要添加JSON序列化逻辑。
+            File file = new File(DATA_FILE_PATH);
+            file.getParentFile().mkdirs(); // 确保目录存在
+            try (FileWriter writer = new FileWriter(file)) {
+                gson.toJson(items, writer);
+            }
         } catch (IOException e) {
             System.err.println("无法保存购物清单: " + e.getMessage());
         }
