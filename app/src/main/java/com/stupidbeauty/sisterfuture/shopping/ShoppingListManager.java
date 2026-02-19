@@ -119,7 +119,10 @@ public class ShoppingListManager {
 
     // 6. 导入功能: 从CSV文件导入购物清单数据，支持自动校验和错误处理
     public boolean importFromCsv(String filePath) {
-        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(filePath, StandardCharsets.UTF_8))) {
+        java.io.BufferedReader reader = null;
+        try {
+            FileReader fileReader = new FileReader(filePath);
+            reader = new java.io.BufferedReader(fileReader);
             String header = reader.readLine();
             if (header == null || !header.trim().equals("ID,物品名称,数量,单位,分类,状态,所属老人,最后更新时间")) {
                 System.err.println("CSV文件格式不正确，缺少正确的表头。");
@@ -175,6 +178,14 @@ public class ShoppingListManager {
         } catch (NumberFormatException e) {
             System.err.println("数据格式错误，无法解析数量: " + e.getMessage());
             return false;
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (IOException e) {
+                    System.err.println("关闭读取器时发生错误: " + e.getMessage());
+                }
+            }
         }
     }
 
