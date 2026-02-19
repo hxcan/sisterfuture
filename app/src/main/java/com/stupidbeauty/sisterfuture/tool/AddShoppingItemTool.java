@@ -13,7 +13,6 @@ import com.stupidbeauty.sisterfuture.shopping.ShoppingListManager;
  * 该类实现了与 'AddNoteTool' 相同的接口，确保能正确地集成到整个工具体系中。
  */
 public class AddShoppingItemTool implements Tool {
-
     private static final String TAG = "AddShoppingItemTool";
     private final Context context;
     private ShoppingListManager shoppingListManager;
