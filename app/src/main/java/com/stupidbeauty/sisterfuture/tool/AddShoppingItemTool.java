@@ -97,7 +97,7 @@ public class AddShoppingItemTool implements Tool {
         item.setCategory(category.trim());
         item.setOwner(owner.trim());
         item.setStatus("待购买");
-        item.setLastUpdated(java.time.LocalDateTime.now().toString());
+        item.setLastUpdated(String.valueOf(System.currentTimeMillis()));
 
         // 调用管理器添加条目
         boolean success = shoppingListManager.addItem(item);
