@@ -1222,7 +1222,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
-
     promptBuilder.append("\n\n");
 
     List<Tool> tools = toolManager.getRegisteredTools();
@@ -1529,6 +1528,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       }
     } //public void onReceive(Context context, Intent intent)
   }; //private BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
+
 
   /**
   * 启动友军“21点关机”的服务。
