@@ -23,3 +23,8 @@ allprojects
     google()
   }
 }
+
+// 为购物清单添加Gson依赖
+dependencies {
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
