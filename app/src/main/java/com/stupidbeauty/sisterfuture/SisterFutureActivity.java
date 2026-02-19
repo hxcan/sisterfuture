@@ -176,6 +176,9 @@ import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 
+// ✅ 新增：导入 AddShoppingItemTool
+import com.stupidbeauty.sisterfuture.tool.AddShoppingItemTool;
+
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
 import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
 
@@ -692,7 +695,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   protected void parseTongYiResponse(String jsonString)
   {
     Log.d(TAG, "JSON Answer: " + jsonString);
-
     try
     {
       TongYiResponse response = new Gson().fromJson(jsonString, TongYiResponse.class);
@@ -743,7 +745,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             List<ToolCall> finalCalls = getFinalToolCalls();
 
-            // ✅ 案查 finalCalls 是否为空
+            // ✅ 查 finalCalls 是否为空
             if (finalCalls == null || finalCalls.isEmpty()) {
                 Log.w(TAG, "No valid tool calls generated, skipping execution.");
                 return;
