@@ -35,7 +35,7 @@ public class ShoppingListManager {
         }
         item.setId(generateId());
         item.setStatus("待购买");
-        item.setLastUpdated(LocalDateTime.now().toString());
+        item.setLastUpdated(String.valueOf(System.currentTimeMillis()));
         items.add(item);
         saveItems();
         return true;
@@ -67,7 +67,7 @@ public class ShoppingListManager {
                         item.setStatus(status);
                     }
                 }
-                item.setLastUpdated(LocalDateTime.now().toString());
+                item.setLastUpdated(String.valueOf(System.currentTimeMillis()));
                 saveItems();
                 return true;
             }
