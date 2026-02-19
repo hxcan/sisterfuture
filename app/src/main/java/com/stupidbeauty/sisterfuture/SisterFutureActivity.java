@@ -177,9 +177,9 @@ import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
-import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
+import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; /️✅ 修正为 tool 包
 
-import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; // ✅ 新增：导入 CreateGitBranchTool
+import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; /️✅ 新增：导入 CreateGitBranchTool
 
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -738,7 +738,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             List<ToolCall> finalCalls = getFinalToolCalls();
 
-            // ✅ 桀查 finalCalls 是否为空
+            // ✅ 检查 finalCalls 是否为空
             if (finalCalls == null || finalCalls.isEmpty()) {
                 Log.w(TAG, "No valid tool calls generated, skipping execution.");
                 return;
@@ -806,7 +806,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         Log.e(TAG, "Failed to wrap async result", e);
                       }
 
-                      // 愙是否全部完成
+                      // 愚是否全部完成
                       if (pendingResults.size() == toolCallsArray.length())
                       {
                         postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
@@ -1349,6 +1349,9 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     // ✅ 新增：注册 create_git_branch 工具
     toolManager.registerTool(new CreateGitBranchTool(this));
+
+    // ✅ 新增：注册 AddShoppingItemTool 工具
+    toolManager.registerTool(new AddShoppingItemTool(this));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
