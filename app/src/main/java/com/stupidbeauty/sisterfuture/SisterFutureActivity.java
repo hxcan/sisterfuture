@@ -176,6 +176,9 @@ import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 
+// ✅ 新增：导入 AddShoppingItemTool
+import com.stupidbeauty.sisterfuture.tool.AddShoppingItemTool;
+
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
 import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
 
@@ -212,7 +215,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private StringBuilder accumulatedAnswer = new StringBuilder();
 
   private static final int PERMISSIONS_REQUEST =1; //!<权限请求标识
-  // 假设这是您的通义千问客户端
+  // 设这是您的通义千问客户端
   private TongYiClient tongYiClient;
   // 在Activity中添加一个变量用于追踪是否正在合成语音
   private boolean isTtsSpeaking = false;
@@ -283,7 +286,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       Function func = call.getFunction();
       Function existing = partialToolArgs.get(originalId);
 
-
       if (existing == null)
       {
         existing = new Function();
@@ -329,7 +331,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   }
 
   /**
-  * 停止录音。
+  * 止录音。
   **/
   public void stopRecordbutton2()
   {
@@ -693,7 +695,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   protected void parseTongYiResponse(String jsonString)
   {
     Log.d(TAG, "JSON Answer: " + jsonString);
-
     try
     {
       TongYiResponse response = new Gson().fromJson(jsonString, TongYiResponse.class);
@@ -744,7 +745,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             List<ToolCall> finalCalls = getFinalToolCalls();
 
-            // ✅ 检查 finalCalls 是否为空
+            // ✅ 查 finalCalls 是否为空
             if (finalCalls == null || finalCalls.isEmpty()) {
                 Log.w(TAG, "No valid tool calls generated, skipping execution.");
                 return;
@@ -812,7 +813,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         Log.e(TAG, "Failed to wrap async result", e);
                       }
 
-                      // 愚是否全部完成
+                      // 否全部完成
                       if (pendingResults.size() == toolCallsArray.length())
                       {
                         postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
@@ -1100,7 +1101,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       commandRecognizebutton2.setVisibility(View.VISIBLE); //重新显示按钮。
       commandRecognizebutton2.setEnabled(true); //启用按钮。
-
       //完整内容:
 			String text=recognizerResult.getResultString(); //结果字符串。
 
@@ -1459,7 +1459,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
   } //private void requestPermission()
     
   /**
-  * 检查权限。
+  * 查权限。
   **/
   private void checkPermission()
   {
