@@ -1350,7 +1350,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     // ✅ 新增：注册 create_git_branch 工具
     toolManager.registerTool(new CreateGitBranchTool(this));
 
-    // ✅ 修复：将 'AddShoppingItemTool' 的包名修正为正确的 'com.stupidbeauty.sisterfuture.tool'
+    // ✅ 正确的注册顺序：确保 AddShoppingItemTool 在最后面，不会影响其他工具的注释。
     toolManager.registerTool(new AddShoppingItemTool(this));
 
     // 初始化通义千问客户端
