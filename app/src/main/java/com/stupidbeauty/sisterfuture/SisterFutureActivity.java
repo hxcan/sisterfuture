@@ -552,8 +552,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       // 获取历史消息（包含之前的 user/assistant 对话）
       JSONArray historyArray = contextManager.getMessagesArray();
 
+
       // 构造最终 messages 数组
       JSONArray messagesArray = new JSONArray();
+
 
       try
       {
@@ -590,12 +592,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId); // Debug.
 
 
+
           messagesArray.put(historyArray.getJSONObject(i));
         }
       }
       catch (Exception e)
       {
         e.printStackTrace();
+
 
         // 出错时至少发送当前用户消息（降级）
         try
@@ -738,7 +742,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             List<ToolCall> finalCalls = getFinalToolCalls();
 
-            // ✅ 桀查 finalCalls 是否为空
+            // ✅ 检查 finalCalls 是否为空
             if (finalCalls == null || finalCalls.isEmpty()) {
                 Log.w(TAG, "No valid tool calls generated, skipping execution.");
                 return;
@@ -806,7 +810,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         Log.e(TAG, "Failed to wrap async result", e);
                       }
 
-                      // 愙是否全部完成
+                      // 愚是否全部完成
                       if (pendingResults.size() == toolCallsArray.length())
                       {
                         postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
@@ -1028,8 +1032,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     } //if (null!=mTts) //TTS引擎还在。
 
 
+
     super.onBackPressed();
   } //public void onBackPressed()
+
 
 
   // 修改ttsSayReply方法
@@ -1159,6 +1165,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   };
 
 
+
   /**
   * 连接信号信号槽。
   **/
@@ -1166,6 +1173,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
   }//private void connectSignals()
+
 
 
   /**
@@ -1180,6 +1188,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     server.get("/phoneInformation/", phoneInformationCallback); //添加这个回调对象.
     server.listen(LanServicePort); //监听15563端口.tcp。
   }//private void startHttpServer()
+
 
 
   /**
@@ -1216,8 +1225,10 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       {
         if (!tool.shouldInclude()) continue;
 
+
         String name = tool.getName();
         String description = "（无描述）";
+
 
         try
         {
@@ -1327,6 +1338,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new FtpFileWriteTool(this));
 
 
+
     toolManager.registerTool(new WriteMemoryTool(memoryManager, this));
     toolManager.registerTool(new SearchMemoryTool(memoryManager, this));
     toolManager.registerTool(new ListAllMemoriesTool(memoryManager, this));
@@ -1349,6 +1361,9 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     // ✅ 新增：注册 create_git_branch 工具
     toolManager.registerTool(new CreateGitBranchTool(this));
+
+    // ✅ 正确的注册顺序：确保 AddShoppingItemTool 在最后面，不会影响其他工具的注释。
+    toolManager.registerTool(new AddShoppingItemTool(this));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
