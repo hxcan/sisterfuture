@@ -1,5 +1,6 @@
 package com.stupidbeauty.sisterfuture.shopping;
 
+import android.content.Context;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.io.File;
@@ -18,8 +19,10 @@ public class ShoppingListManager {
     private static final String DATA_FILE_PATH = "/data/shopping_list.json";
     private List<ShoppingItem> items;
     private final Gson gson;
+    private final Context context;
 
-    public ShoppingListManager() {
+    public ShoppingListManager(Context context) {
+        this.context = context;
         this.items = new ArrayList<>();
         this.gson = new Gson();
         loadItems();
