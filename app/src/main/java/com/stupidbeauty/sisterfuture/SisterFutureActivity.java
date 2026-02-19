@@ -177,9 +177,9 @@ import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
-import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; /️✅ 修正为 tool 包
+import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
 
-import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; /️✅ 新增：导入 CreateGitBranchTool
+import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; // ✅ 新增：导入 CreateGitBranchTool
 
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -552,8 +552,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       // 获取历史消息（包含之前的 user/assistant 对话）
       JSONArray historyArray = contextManager.getMessagesArray();
 
+
       // 构造最终 messages 数组
       JSONArray messagesArray = new JSONArray();
+
 
       try
       {
@@ -590,12 +592,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId); // Debug.
 
 
+
           messagesArray.put(historyArray.getJSONObject(i));
         }
       }
       catch (Exception e)
       {
         e.printStackTrace();
+
 
         // 出错时至少发送当前用户消息（降级）
         try
@@ -1028,8 +1032,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     } //if (null!=mTts) //TTS引擎还在。
 
 
+
     super.onBackPressed();
   } //public void onBackPressed()
+
 
 
   // 修改ttsSayReply方法
@@ -1159,6 +1165,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   };
 
 
+
   /**
   * 连接信号信号槽。
   **/
@@ -1166,6 +1173,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
   }//private void connectSignals()
+
 
 
   /**
@@ -1180,6 +1188,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     server.get("/phoneInformation/", phoneInformationCallback); //添加这个回调对象.
     server.listen(LanServicePort); //监听15563端口.tcp。
   }//private void startHttpServer()
+
 
 
   /**
@@ -1216,8 +1225,10 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       {
         if (!tool.shouldInclude()) continue;
 
+
         String name = tool.getName();
         String description = "（无描述）";
+
 
         try
         {
@@ -1325,6 +1336,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new FtpFileRequestTool(this));
     toolManager.registerTool(new ListFtpDirectoryTool(this));
     toolManager.registerTool(new FtpFileWriteTool(this));
+
 
 
     toolManager.registerTool(new WriteMemoryTool(memoryManager, this));
