@@ -264,6 +264,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       int index = call.getIndex();
 
+
       // ✅ 一级映射：记录 index 到原始 id 的关系
       if (call.getId() != null && !call.getId().trim().isEmpty())
       {
@@ -281,6 +282,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       Function func = call.getFunction();
       Function existing = partialToolArgs.get(originalId);
+
 
       if (existing == null)
       {
@@ -1159,7 +1161,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           break; //跳出。
       } //switch (event.getAction()) //根据不同事件进行处理。
-
       return true;
     }//public boolean onTouch(View v, MotionEvent event)
   };
@@ -1500,12 +1501,15 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       String action = intent.getAction(); //获取广播中带的动作字符串。
 
 
+
       if (Constants.Operation.CommitText.equals(action)) //提交文本内容。
       {
         Bundle extras=intent.getExtras(); //获取参数包。
 
 
+
         voiceRecognizeResultString= extras.getString("text"); //记录识别结果。
+
 
         recognizeResulttextView.setText(voiceRecognizeResultString); //显示结果。
 
