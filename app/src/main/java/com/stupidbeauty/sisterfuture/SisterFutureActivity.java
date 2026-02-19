@@ -65,8 +65,10 @@ import com.stupidbeauty.sisterfuture.tool.AddNoteTool;
 
 
 
+
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
+
 
 
 import com.stupidbeauty.sisterfuture.tool.GetCurrentTimeTool;
@@ -184,6 +186,9 @@ import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修
 
 import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; // ✅ 新增：导入 CreateGitBranchTool
 
+// ✅ 新增：导入 ListShoppingItemsTool
+import com.stupidbeauty.sisterfuture.tool.ListShoppingItemsTool;
+
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
@@ -211,7 +216,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private MessageAdapter messageAdapter;
   @BindView(R.id.articleListmy_recycler_view) RecyclerView articleListmyRecyclerView; //!< Message list.
   private static final String DEFAULT_INPUT_TEXT = "君不见,黄河之水天上来,奔流到海不复回,君不见,高堂明镜悲白发,朝如青丝暮成雪,人生得意须尽欢,莫使金樽空对月";
-  // 在Activity中添加一个StringBuilder来存储累积的回答文本
+  // 在Activity中添加一个变量用于追踪是否正在合成语音
   private StringBuilder accumulatedAnswer = new StringBuilder();
 
   private static final int PERMISSIONS_REQUEST =1; //!<权限请求标识
@@ -246,6 +251,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 	//@BindView(R.id.statustextView) TextView statustextView; //!<用来显示状态的文字标签。
+
 
 
 
@@ -314,7 +320,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
-      // ✅ 创建 toolCall，使用原始 id
+      // ✅ 创建 toolCall，使用原始的 id
       ToolCall call = new ToolCall();
       call.setId(entry.getKey()); // 保留原始的 id
       call.setType("function");
@@ -395,6 +401,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     progressBar.setVisibility(View.INVISIBLE); //隐藏显示进度条。
     recognizeResulttextView.setText(R.string.empty); //显示空白内容。
 	} //public void commandRecognizebutton2()
+
 
 
   /**
@@ -501,6 +508,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
   private void showThinkingOverlay()
   {
     runOnUiThread(new Runnable()
@@ -519,6 +527,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     });
   }
+
 
   private void hideThinkingOverlay()
   {
@@ -591,7 +600,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             messageContent = historyArray.getJSONObject(i).toString();
           } // if ((messageContent.isEmpty()) && (messageRole.equals("assistant")) )
-
 
           Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId); // Debug.
 
@@ -1362,6 +1370,9 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     // ✅ 新增：注册 create_git_branch 工具
     toolManager.registerTool(new CreateGitBranchTool(this));
+
+    // ✅ 新增：注册 ListShoppingItemsTool
+    toolManager.registerTool(new ListShoppingItemsTool(this));
 
     // ✅ 正确的注册顺序：确保 AddShoppingItemTool 在最后面，不会影响其他工具的注释。
     toolManager.registerTool(new AddShoppingItemTool(this));
