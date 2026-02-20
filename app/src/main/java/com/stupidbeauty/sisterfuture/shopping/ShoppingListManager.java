@@ -1,6 +1,7 @@
 package com.stupidbeauty.sisterfuture.shopping;
 
 import android.content.Context;
+import android.content.ContextWrapper;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.io.File;
@@ -9,14 +10,13 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class ShoppingListManager {
 
-    private static final String DATA_FILE_PATH = "/data/shopping_list.json";
+    private static final String DATA_FILE_NAME = "shopping_list.json";
     private List<ShoppingItem> items;
     private final Gson gson;
     private final Context context;
@@ -30,7 +30,7 @@ public class ShoppingListManager {
 
     // 1. 创建条目 (Create)
     public boolean addItem(ShoppingItem item) {
-        if (item == null || item.getName() == null || item.getQuantity() <= 0) {
+        if (item == null || item.getName() == null || item.getQuantity() <=0) {
             return false;
         }
         item.setId(generateId());
@@ -125,7 +125,7 @@ public class ShoppingListManager {
             reader = new java.io.BufferedReader(fileReader);
             String header = reader.readLine();
             if (header == null || !header.trim().equals("ID,物品名称,数量,单位,分类,状态,所属老人,最后更新时间")) {
-                System.err.println("CSV文件格式不正确，缺少正确的表头。");
+                System.err.println("CSV文件格式不正确，缺少正确的表头。\n");
                 return false;
             }
 
@@ -202,7 +202,7 @@ public class ShoppingListManager {
     // 读取数据文件 (使用Gson)
     private void loadItems() {
         try {
-            File file = new File(DATA_FILE_PATH);
+            File file = getDataFile();
             if (file.exists()) {
                 try (FileReader reader = new FileReader(file)) {
                     items = gson.fromJson(reader, new TypeToken<List<ShoppingItem>>(){}.getType());
@@ -216,7 +216,7 @@ public class ShoppingListManager {
     // 保存数据文件 (使用Gson)
     private void saveItems() {
         try {
-            File file = new File(DATA_FILE_PATH);
+            File file = getDataFile();
             file.getParentFile().mkdirs(); // 确保目录存在
             try (FileWriter writer = new FileWriter(file)) {
                 gson.toJson(items, writer);
@@ -224,6 +224,11 @@ public class ShoppingListManager {
         } catch (IOException e) {
             System.err.println("无法保存购物清单: " + e.getMessage());
         }
+    }
+
+    // 获取数据文件对象，使用应用私有目录
+    private File getDataFile() {
+        return new File(context.getFilesDir(), DATA_FILE_NAME);
     }
 
     // Getter
