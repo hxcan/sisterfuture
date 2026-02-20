@@ -62,7 +62,20 @@ public class ListShoppingItemsTool implements Tool {
 
         // 构建返回结果
         JSONObject result = new JSONObject();
-        result.put("items", new org.json.JSONArray(items));
+        org.json.JSONArray jsonItems = new org.json.JSONArray();
+        for (ShoppingItem item : items) {
+            JSONObject jsonItem = new JSONObject();
+            jsonItem.put("id", item.getId());
+            jsonItem.put("name", item.getName());
+            jsonItem.put("quantity", item.getQuantity());
+            jsonItem.put("unit", item.getUnit());
+            jsonItem.put("category", item.getCategory());
+            jsonItem.put("status", item.getStatus());
+            jsonItem.put("owner", item.getOwner());
+            jsonItem.put("lastUpdated", item.getLastUpdated());
+            jsonItems.put(jsonItem);
+        }
+        result.put("items", jsonItems);
         result.put("count", items.size());
         result.put("message", "成功获取 " + items.size() + " 个购物项。");
         result.put("processed_at", System.currentTimeMillis());
