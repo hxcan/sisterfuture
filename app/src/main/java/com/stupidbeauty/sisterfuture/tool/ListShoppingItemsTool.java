@@ -15,11 +15,9 @@ import com.stupidbeauty.sisterfuture.shopping.ShoppingListManager;
 public class ListShoppingItemsTool implements Tool {
     private static final String TAG = "ListShoppingItemsTool";
     private final Context context;
-    private ShoppingListManager shoppingListManager;
 
     public ListShoppingItemsTool(Context context) {
         this.context = context;
-        this.shoppingListManager = new ShoppingListManager(context);
     }
 
     @Override
@@ -58,7 +56,8 @@ public class ListShoppingItemsTool implements Tool {
 
     @Override
     public JSONObject execute(JSONObject arguments) throws Exception {
-        // 获取所有购物项，使用正确的 getter 方法
+        // 每次执行时都创建新的ShoppingListManager实例，强制重新加载数据
+        ShoppingListManager shoppingListManager = new ShoppingListManager(context);
         java.util.List<ShoppingItem> items = shoppingListManager.getItems();
 
         // 构建返回结果
