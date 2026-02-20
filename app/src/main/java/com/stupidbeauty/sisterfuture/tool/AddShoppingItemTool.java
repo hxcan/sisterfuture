@@ -15,11 +15,9 @@ import com.stupidbeauty.sisterfuture.shopping.ShoppingListManager;
 public class AddShoppingItemTool implements Tool {
     private static final String TAG = "AddShoppingItemTool";
     private final Context context;
-    private ShoppingListManager shoppingListManager;
 
     public AddShoppingItemTool(Context context) {
         this.context = context;
-        this.shoppingListManager = new ShoppingListManager(context);
     }
 
     @Override
@@ -99,14 +97,14 @@ public class AddShoppingItemTool implements Tool {
         item.setStatus("待购买");
         item.setLastUpdated(String.valueOf(System.currentTimeMillis()));
 
-        // 调用管理器添加条目
+        // 每次执行时都创建新的ShoppingListManager实例
+        ShoppingListManager shoppingListManager = new ShoppingListManager(context);
         boolean success = shoppingListManager.addItem(item);
 
         JSONObject result = new JSONObject();
         result.put("success", success);
         result.put("message", success ? "已成功添加物品 '" + name + "' 到购物清单。" : "添加失败，请检查数据或系统错误。");
         result.put("processed_at", System.currentTimeMillis());
-        // 已移除不当附加信息
 
         return result;
     }
