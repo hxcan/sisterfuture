@@ -38,7 +38,7 @@ public class ContextManager
     List<JSONObject> history = oldHistory;
 
     // 保持历史长度限制（和 addUser/Assistant 一致）
-    if (oldHistory.size() > currentMaxRounds * 2)
+    if (oldHistory.size() > currentMaxRounds *2)
     {
       history = new ArrayList<>(history.subList(history.size() - (currentMaxRounds * 2), history.size()));
     }
@@ -46,7 +46,6 @@ public class ContextManager
     try
     {
       String firstRole = history.get(0).getString("role"); // Get the first role.
-
       if (firstRole.equals("tool")) // It is a tool message
       {
         history = new ArrayList<>(history.subList(1, history.size()));
@@ -59,7 +58,6 @@ public class ContextManager
 
     return history;
   } // private List<JSONObject> removeOldHistoryEntries(List<JSONObject> oldHistory)
-
   // ContextManager.java —— 新增方法
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
@@ -112,11 +110,28 @@ public class ContextManager
       return;
     }
 
+    // 在这里添加对空 tool_calls 的检查
+    try
+    {
+      if (message.has("tool_calls"))
+      {
+        JSONArray toolCalls = message.getJSONArray("tool_calls");
+        if (toolCalls.length() == 0)
+        {
+          Log.w(TAG, "检测到空的 tool_calls 消息，已过滤");
+          return; // 直接返回，不添加到历史中
+        }
+      }
+    }
+    catch (JSONException e)
+    {
+      Log.e(TAG, "检查 tool_calls 时出错", e);
+    }
+
     List<JSONObject> history = getHistory();
     history.add(message);
 
     history = removeOldHistoryEntries(history);
-
     saveHistory(history);
   }
 
@@ -174,6 +189,7 @@ public class ContextManager
     // saveHistory(history);
 
 
+
     List<JSONObject> list = new ArrayList<>();
 
     try
@@ -184,7 +200,6 @@ public class ContextManager
       for (int i = 0; i < history.size(); i++)
       {
         JSONObject currentObject =  history.get(i);
-
         String roleString = currentObject.getString("role"); // Get the role
 
 
@@ -194,7 +209,6 @@ public class ContextManager
           if (currentObject.has("tool_calls")) // Has tool calls
           {
             pendingToolCallsObject = currentObject; // Remmber pending tool call object.
-
             continue; // Not adding this object. We has to wait for the next message.
           } // if (currentObject.has("tool_calls")) // Has tool calls
           // else // No tool calls.

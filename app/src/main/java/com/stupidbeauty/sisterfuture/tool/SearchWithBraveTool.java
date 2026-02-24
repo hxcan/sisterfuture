@@ -10,7 +10,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 使用 Brave Search API 执行安全稳定的网页搜索
+ * 使用 Brave Search API 进行安全稳定的网页搜索
  * 支持 text/raw/summary 模式，当主搜索失败时自动降级调用
  */
 class SearchWithBraveTool implements Tool {
@@ -50,7 +50,7 @@ class SearchWithBraveTool implements Tool {
                     .put("description", "返回模式：text(文本摘要), raw(原始数据), summary(智能摘要)"))
                 .put("count", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "返回结果数量，默认5")))
+                    .put("description", "返回结果数量，默认5"))
             );
             parameters.put("required", new JSONArray(new String[]{"query"}));
             functionDef.put("parameters", parameters);
