@@ -1239,6 +1239,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         String description = "（无描述）";
 
 
+
         try
         {
           JSONObject definition = tool.getDefinition();
