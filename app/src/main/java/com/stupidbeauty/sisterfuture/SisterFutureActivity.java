@@ -605,6 +605,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId); // Debug.
 
 
+
           messagesArray.put(historyArray.getJSONObject(i));
         }
       }
