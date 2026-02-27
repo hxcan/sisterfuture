@@ -214,9 +214,9 @@ public class ModelAccessPointManager
   }
 
   /**
-   * 删除指定索引的接入点。
+   * 从列表中删除指定索引的接入点。
    * @param index 要删除的接入点的索引（从0开始）
-   * @return 如果删除成功返回true，否则返回false（例如索引越界或尝试删除当前激活的接入点）
+   * @return 如果删除成功返回true，否则返回false（例如索引越界）
    */
   public boolean removeAccessPoint(int index) {
     if (index < 0 || index >= accessPoints.size()) {
@@ -224,9 +224,9 @@ public class ModelAccessPointManager
       return false;
     }
 
-    // 禁止删除当前激活的接入点（索引为0）
-    if (index == 0) {
-      Log.e(TAG, "Cannot delete the currently active access point (index 0). Please switch to another access point first.");
+    // 禁止删除当前激活的接入点
+    if (accessPoints.get(index).equals(getCurrentAccessPoint())) {
+      Log.e(TAG, "Cannot delete the currently active access point. Please switch to another access point first.");
       return false;
     }
 
@@ -239,7 +239,7 @@ public class ModelAccessPointManager
     if (index < currentAccessPointIndex) {
       currentAccessPointIndex--;
     }
-
+    
     return true;
   }
 }
