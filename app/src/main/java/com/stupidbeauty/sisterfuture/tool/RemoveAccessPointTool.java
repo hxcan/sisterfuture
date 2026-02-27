@@ -64,11 +64,11 @@ public class RemoveAccessPointTool implements Tool {
                 return error;
             }
 
-            // 检查是否是当前激活的接入点（索引为0）
-            if (index == 0) {
+            // 检查是否是当前激活的接入点
+            if (accessPoints.get(index).equals(getCurrentAccessPoint())) {
                 JSONObject error = new JSONObject();
                 error.put("status", "error");
-                error.put("message", "无法删除当前激活的接入点 (索引 0)。请先切换到其他接入点再尝试删除。");
+                error.put("message", "无法删除当前激活的接入点。请先切换到其他接入点再尝试删除。");
                 return error;
             }
 
