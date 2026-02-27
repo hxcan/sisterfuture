@@ -250,6 +250,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
 	//@BindView(R.id.statustextView) TextView statustextView; //!<用来显示状态的文字标签。
 
 
@@ -1296,6 +1297,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
+
     // contextManager.replaceHistory(new ArrayList<>());
     mTts=new TextToSpeech(this,this); //创建TTS对象。
 
@@ -1375,6 +1377,12 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     // ✅ 正确的注册顺序：确保 AddShoppingItemTool 在最后面，不会影响其他工具的注释。
     toolManager.registerTool(new AddShoppingItemTool(this));
+
+    // ✅ 新增：注册 RemoveAccessPointTool
+    toolManager.registerTool(new RemoveAccessPointTool(modelAccessPointManager, this));
+
+    // ✅ 新增：注册 ListAccessPointsTool
+    toolManager.registerTool(new ListAccessPointsTool(modelAccessPointManager, this));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
