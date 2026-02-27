@@ -5,9 +5,12 @@ import com.stupidbeauty.sisterfuture.tool.ListNotesTool;
 import com.stupidbeauty.sisterfuture.tool.GetGitHubFileTool;
 import com.stupidbeauty.sisterfuture.tool.CreateGitHubCommitTool;
 
+
 //import com.stupidbeauty.sisterfuture.SystemPromptManager;
 
+
 import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
+
 
 import android.os.Handler;
 import android.os.Looper;
@@ -33,6 +36,7 @@ import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
 
 
+
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -47,6 +51,7 @@ import com.stupidbeauty.sisterfuture.tool.EstablishTaskRelationshipTool;
 
 
 
+
 import com.stupidbeauty.sisterfuture.tool.BasicWebRequestTool;
 import com.stupidbeauty.sisterfuture.tool.GetContactListTool;
 import com.stupidbeauty.sisterfuture.tool.FtpFileRequestTool;
@@ -55,13 +60,16 @@ import com.stupidbeauty.sisterfuture.tool.FtpFileWriteTool;
 
 
 
+
 import com.stupidbeauty.sisterfuture.tool.CreateRedmineTaskTool;
+
 
 import com.stupidbeauty.sisterfuture.tool.WriteMemoryTool;
 import com.stupidbeauty.sisterfuture.tool.SearchMemoryTool;
 import com.stupidbeauty.sisterfuture.tool.ListAllMemoriesTool;
 import com.stupidbeauty.sisterfuture.tool.AddModelAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.AddNoteTool;
+
 
 
 
@@ -178,6 +186,7 @@ import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 
+
 // ✅ 新增：导入 AddShoppingItemTool
 import com.stupidbeauty.sisterfuture.tool.AddShoppingItemTool;
 
@@ -188,6 +197,11 @@ import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; // ✅ 新增：�
 
 // ✅ 新增：导入 ListShoppingItemsTool
 import com.stupidbeauty.sisterfuture.tool.ListShoppingItemsTool;
+
+// ✅ 新增：导入 RemoveAccessPointTool 和 ListAccessPointsTool (修复编译错误)
+import com.stupidbeauty.sisterfuture.tool.RemoveAccessPointTool;
+import com.stupidbeauty.sisterfuture.tool.ListAccessPointsTool;
+
 
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -204,11 +218,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private ToolManager toolManager;
   private MemoryManager memoryManager;
 
+
   // 一级映射：通过 index 关联到原始 id
   private Map<Integer, String> indexToOriginalIdMap = new HashMap<>();
 
   // 工具调用累积状态（简化版，假设单次请求只有一个工具调用）
   private Map<String, Function> partialToolArgs = new HashMap<>();
+
 
   private static final Gson gson = new Gson();
 
@@ -232,6 +248,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private MediaPlayer mediaPlayer;
   private boolean voiceEndDetected=false; //!<是否已经探测到用户声音结束。
   // private String textTitle;
+
 
   private TextToSpeech mTts;
 
@@ -275,11 +292,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       int index = call.getIndex();
 
 
+
       // ✅ 一级映射：记录 index 到原始 id 的关系
       if (call.getId() != null && !call.getId().trim().isEmpty())
       {
         indexToOriginalIdMap.put(index, call.getId());
       }
+
 
       // ✅ 二级映射：通过原始 id 关联函数参数
       String originalId = indexToOriginalIdMap.get(index);
@@ -290,8 +309,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         indexToOriginalIdMap.put(index, originalId);
       }
 
+
       Function func = call.getFunction();
       Function existing = partialToolArgs.get(originalId);
+
 
       if (existing == null)
       {
@@ -299,6 +320,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         existing.setName(func.getName());
         existing.setArguments("");
       }
+
 
       String newChunk = func.getArguments() != null ? func.getArguments() : "";
       existing.setArguments(existing.getArguments() + newChunk);
@@ -371,6 +393,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     voiceEndDetected=false; //重置状态，未探测到用户的声音结束。
 
 
+
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
     vibrator.vibrate( 100);
 		if (mIat==null) //识别器未创建。
@@ -379,12 +402,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 		} //if (mIat==null) //识别器未创建。
 
 
+
     if (!setParam()) //参数设置失败。
     {
       // statustextView.setText("请先构建语法。");
 
       return;
     }//if (!setParam()) //参数设置失败。
+
 
 
     ret = mIat.startListening(mRecognizerListener);
@@ -402,6 +427,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     progressBar.setVisibility(View.INVISIBLE); //隐藏显示进度条。
     recognizeResulttextView.setText(R.string.empty); //显示空白内容。
 	} //public void commandRecognizebutton2()
+
 
 
 
@@ -483,6 +509,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // sendChatRequest();
   }
 
+
   /**
   * 发送闲聊请求。
   **/
@@ -492,11 +519,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // ✅ 新增：检查是否需要引导模式拦截
     if (guideManager != null && !guideManager.shouldProceedWithChatRequest(voiceRecognizeResultString)) 
     {
-      return; // 阻止继续执行，等待引导流程处理
+      return; // 止继续执行，等待引导流程处理
     }
 
     sendChatRequestTongYi(); // Send chat request to tong yi.
   }
+
 
   /**
   * Report that the operation has failed.
@@ -506,6 +534,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();   //做一个提示，Failed adding address ,please retry.
   } //protected void reportOperationFail()
+
 
 
 
@@ -547,12 +576,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   }
 
 
+
   /**
   * 向通义千问发送请求并处理回复。
   **/
   private void sendChatRequestTongYi()
   {
     Log.d(TAG, CodePosition.newInstance().toString()); // Debug.
+
 
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
@@ -567,8 +598,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       JSONArray historyArray = contextManager.getMessagesArray();
 
 
+
       // 构造最终 messages 数组
       JSONArray messagesArray = new JSONArray();
+
 
 
       try
@@ -602,7 +635,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             messageContent = historyArray.getJSONObject(i).toString();
           } // if ((messageContent.isEmpty()) && (messageRole.equals("assistant")) )
 
+
           Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId); // Debug.
+
 
 
 
@@ -612,6 +647,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       catch (Exception e)
       {
         e.printStackTrace();
+
 
 
         // 出错时至少发送当前用户消息（降级）
@@ -1070,6 +1106,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       float speed = 1.0F;
 
+
       String inputText = text;
       if (TextUtils.isEmpty(inputText))
       {
@@ -1133,6 +1170,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
 		}//public void onResult(RecognizerResult recognizerResult, boolean b)
 
+
     @Override
 		public void onError(SpeechError speechError)
 		{
@@ -1163,7 +1201,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           commandRecognizebutton2startRecognize(); //开始识别。
 
 
+
           break; //跳出。
+
 
         case MotionEvent.ACTION_UP: //松开。
           stopRecordbutton2(); //停止识别。
@@ -1235,8 +1275,10 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         if (!tool.shouldInclude()) continue;
 
 
+
         String name = tool.getName();
         String description = "（无描述）";
+
 
 
         try
@@ -1270,6 +1312,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         }
       }
 
+
       promptBuilder.append("\n/no_think\n");
 
     }
@@ -1287,6 +1330,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 		super.onCreate(savedInstanceState); //超类创建。
 
 
+
 		requestWindowFeature(Window.FEATURE_NO_TITLE); //不显示标题栏。
 		
 		setContentView(R.layout.sister_future); //显示界面。
@@ -1294,6 +1338,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     TtsManager.getInstance().init(this);
     contextManager = new ContextManager(this);
     // ✅ 新增：每次启动时清空聊天历史（但保留 currentMaxRounds）
+
 
 
 
@@ -1471,6 +1516,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       } //if ( shouldShowRequestPermissionRationale(PERMISSION_STORAGE)  || shouldShowRequestPermissionRationale(PERMISSION_RECORD_AUDIO)) //应当告知原因。
       Log.d(TAG, CodePosition.newInstance().toString() ); // Debug.
 
+
       // requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN, PERMISSION_INSTALL_PACKAGE}, PERMISSIONS_REQUEST);
       requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN}, PERMISSIONS_REQUEST);
     } //if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //动态权限
@@ -1489,6 +1535,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       requestPermission();
     }
   } //private void checkPermission()
+
 
   /**
   * 注册广播事件接收器。
@@ -1531,11 +1578,13 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
         recognizeResulttextView.setText(voiceRecognizeResultString); //显示结果。
 
+
         sendChatRequest(); //发送闲聊请求。
         startFriendShutDownAt2100Service(); //启动友军“21点关机”的服务。
       }
     } //public void onReceive(Context context, Intent intent)
   }; //private BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
+
 
 
   /**
