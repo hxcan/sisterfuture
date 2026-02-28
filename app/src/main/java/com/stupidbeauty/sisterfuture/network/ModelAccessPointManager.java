@@ -26,27 +26,27 @@ public class ModelAccessPointManager
   private Context context; // 上下文用于访问应用私有目录
   
   /** 
-  * 获取当前接入点数量 
-  * @return 接入点数量 
-  */ 
+   * 获取当前接入点数量 
+   * @return 接入点数量 
+   */ 
   public int getAccessPointCount() 
   {
     return accessPoints.size(); 
   } 
 
   /** 
-  * 获取所有接入点列表 
-  * @return 接入点列表（直接返回内部字段） 
-  */ 
+   * 获取所有接入点列表 
+   * @return 接入点列表（直接返回内部字段） 
+   */ 
   public List<ModelAccessPoint> getAllAccessPoints() 
   { 
     return accessPoints; 
   } 
 
   /** 
-  * 检查是否存在可用接入点 
-  * @return 如果存在至少一个接入点则返回true，否则返回false 
-  */ 
+   * 检查是否存在可用接入点 
+   * @return 如果存在至少一个接入点则返回 true，否则返回 false 
+   */ 
   public boolean hasAvailableAccessPoints() 
   { 
     return !accessPoints.isEmpty(); 
@@ -79,7 +79,7 @@ public class ModelAccessPointManager
   /**
    * 动态添加新的接入点，并立即持久化存储
    * @param name 接入点名称
-   * @param baseUrl 基础URL
+   * @param baseUrl 基础 URL
    * @param chatEndpoint 聊天接口端点
    * @param modelName 模型名称
    */
@@ -88,6 +88,16 @@ public class ModelAccessPointManager
       accessPoints.add(newPoint);
       saveToPersistentStorage(); // 添加后立即保存
       Log.i(TAG, "Added new access point: " + name + " and saved to storage");
+  }
+
+  /**
+   * 内部方法：添加已创建的 AccessPoint 对象（带 apiKey 支持）
+   * @param point 要添加的 AccessPoint 实例
+   */
+  public void addAccessPointInternal(ModelAccessPoint point) {
+      accessPoints.add(point);
+      saveToPersistentStorage();
+      Log.i(TAG, "Added access point with internal method: " + point.getName());
   }
 
   /**
@@ -108,11 +118,22 @@ public class ModelAccessPointManager
       JSONArray jsonArray = new JSONArray(jsonStr);
       for (int i = 0; i < jsonArray.length(); i++) {
         JSONObject obj = jsonArray.getJSONObject(i);
+        
+        // ✅ 新增：尝试读取 apiKey 字段（如果存在）
+        String apiKey = null;
+        try {
+          apiKey = obj.getString("apiKey");
+          Log.d(TAG, "Loaded apiKey for access point " + obj.getString("name"));
+        } catch (JSONException e) {
+          Log.d(TAG, "No apiKey found for access point, setting to null");
+        }
+        
         accessPoints.add(new ModelAccessPoint(
           obj.getString("name"),
           obj.getString("baseUrl"),
           obj.getString("chatEndpoint"),
-          obj.getString("modelName")
+          obj.getString("modelName"),
+          apiKey // 传入 apiKey 参数
         ));
       }
       Log.i(TAG, "Loaded " + accessPoints.size() + " access points from persistent storage");
@@ -133,6 +154,12 @@ public class ModelAccessPointManager
         obj.put("baseUrl", point.getBaseUrl());
         obj.put("chatEndpoint", point.getChatEndpoint());
         obj.put("modelName", point.getModelName());
+        
+        // ✅ 新增：保存 apiKey 字段
+        if (point.getApiKey() != null) {
+          obj.put("apiKey", point.getApiKey());
+        }
+        
         jsonArray.put(obj);
       }
       fos.write(jsonArray.toString().getBytes(StandardCharsets.UTF_8));
@@ -143,8 +170,8 @@ public class ModelAccessPointManager
   }
 
   /**
-   * 获取当前接入点的基础URL
-   * @return 当前接入点的基础URL，如果索引越界则返回null
+   * 获取当前接入点的基础 URL
+   * @return 当前接入点的基础 URL，如果索引越界则返回 null
    */
   public String getCurrentBaseUrl()
   {
@@ -158,7 +185,7 @@ public class ModelAccessPointManager
 
   /**
    * 获取当前接入点的模型名称
-   * @return 当前接入点的模型名称，如果索引越界则返回null
+   * @return 当前接入点的模型名称，如果索引越界则返回 null
    */
   public String getCurrentModelName()
   {
@@ -172,7 +199,7 @@ public class ModelAccessPointManager
 
   /**
    * 获取当前接入点的聊天接口端点
-   * @return 当前接入点的聊天接口端点，如果索引越界则返回null
+   * @return 当前接入点的聊天接口端点，如果索引越界则返回 null
    */
   public String getCurrentChatEndpoint()
   {
@@ -185,7 +212,7 @@ public class ModelAccessPointManager
 
   /**
    * 获取当前接入点对象
-   * @return 当前接入点对象，如果索引越界则返回null
+   * @return 当前接入点对象，如果索引越界则返回 null
    */
   public ModelAccessPoint getCurrentAccessPoint()
   {
@@ -215,8 +242,8 @@ public class ModelAccessPointManager
 
   /**
    * 从列表中删除指定索引的接入点。
-   * @param index 要删除的接入点的索引（从0开始）
-   * @return 如果删除成功返回true，否则返回false（例如索引越界）
+   * @param index 要删除的接入点的索引（从 0 开始）
+   * @return 如果删除成功返回 true，否则返回 false（例如索引越界）
    */
   public boolean removeAccessPoint(int index) {
     if (index < 0 || index >= accessPoints.size()) {
