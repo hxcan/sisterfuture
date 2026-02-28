@@ -91,7 +91,7 @@ public class TongYiClient
       // Fallback mechanism: if access point has no apiKey configured, use hardcoded default
       String api_key = (apiKey != null && !apiKey.isEmpty()) 
           ? apiKey 
-          : HARCODED_DEFAULT_API_KEY;
+          : HARDCODED_DEFAULT_API_KEY; // ✅ FIXED: was HARCODED_DEFAULT_API_KEY (typo)
           
       Log.d(TAG, "Using API Key source: " + (apiKey != null && !apiKey.isEmpty() ? "Access Point (dynamic)" : "Hardcoded Default"));
 
