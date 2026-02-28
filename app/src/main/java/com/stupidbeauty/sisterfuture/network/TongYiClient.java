@@ -68,10 +68,13 @@ public class TongYiClient
     private final ModelAccessPointManager accessPointManager;
     private final ToolManager toolManager;
 
+    // ✅ 新增：硬编码的默认密钥（作为 fallback）
+    private static final String HARDCODED_DEFAULT_API_KEY = "sk-5f7c2c5ae9e741d99b5b431256a5ad0d";
+
     public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager)
     {
       this.client = new OkHttpClient.Builder()
-        // .connectTimeout(1, TimeUnit.SECONDS)
+        \/\/ .connectTimeout(1, TimeUnit.SECONDS)
         .connectTimeout(500, TimeUnit.MILLISECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
         .readTimeout(160, TimeUnit.SECONDS)
@@ -83,7 +86,20 @@ public class TongYiClient
     @Override
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete)
     {
-      String api_key = "sk-5f7c2c5ae9e741d99b5b431256a5ad0d";
+      // ✅ 核心修改：优先从接入点获取 apiKey，若为空则使用硬编码默认值
+      ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
+      String apiKey = null;
+      
+      if (currentAccessPoint != null) {
+          apiKey = currentAccessPoint.getApiKey();
+      }
+      
+      // Fallback: 如果接入点没有配置 apiKey，使用硬编码默认密钥
+      String api_key = (apiKey != null && !apiKey.isEmpty()) 
+          ? apiKey 
+          : HARCODED_DEFAULT_API_KEY;
+          
+      Log.d(TAG, "Using API Key source: " + (apiKey != null && !apiKey.isEmpty() ? "Access Point (dynamic)" : "Hardcoded Default"));
 
       try
       {
@@ -92,11 +108,11 @@ public class TongYiClient
         requestBody.put("messages", messages);
         requestBody.put("stream", true);
 
-            // ✅ 根据参数决定是否注入 tools
+            \/\/ ✅ 根据参数决定是否注入 tools
     if (includeTools)
     {
 
-        // 🔥 注入工具定义（基于 Tool.shouldInclude() 动态过滤）
+        \/\/ 🔥 注入工具定义（基于 Tool.shouldInclude() 动态过滤）
         JSONArray toolsArray = new JSONArray();
         for (Tool tool : toolManager.getRegisteredTools())
         {
@@ -115,10 +131,11 @@ public class TongYiClient
           requestBody.put("tools", toolsArray);
           requestBody.put("tool_choice", "auto");
 
-          // ✅ 新增：打印工具定义用于调试
+          \/\/ ✅ 新增：打印工具定义用于调试
           Log.d(TAG, "Sending tools definition (filtered by shouldInclude):\n" + toolsArray.toString(2));
         }
         }
+
 
 
         RequestBody body = RequestBody.create
@@ -144,7 +161,7 @@ public class TongYiClient
             Log.e(TAG, "Request failed: " + e.getMessage());
             accessPointManager.reportCurrentAccessPointUnavailable();
             listener.onError(new AccessPointUnavailableException("Current access point is unavailable", e));
-            // listener.onError(e);
+            \/\/ listener.onError(e);
           }
 
           @Override
@@ -156,7 +173,7 @@ public class TongYiClient
               accessPointManager.reportCurrentAccessPointUnavailable();
               listener.onError(new AccessPointUnavailableException("Error content reading failed, access point unavailable"));
               listener.onError(new ResponseException(response));
-              Log.e(TAG, "Content: \n" );
+              Log.e(TAG, "Content: \n");
               ResponseBody responseBody = response.body();
               printErrorContent(responseBody.charStream(), listener);
             }
@@ -193,11 +210,11 @@ public class TongYiClient
     {
       listener.onError(e);
     }
-    catch (IllegalStateException e) // ← 新增：捕获流已关闭的异常
+    catch (IllegalStateException e) \/\/ ← 新增：捕获流已关闭的异常
     {
-      // 流已被关闭（如 response body 已读取过），属于预期情况，静默忽略或记录
+      \/\/ 流已被关闭（如 response body 已读取过），属于预期情况，静默忽略或记录
       Log.e(TAG, "Reader closed, cannot read error content: " + e.getMessage());
-      // 不调用 listener.onError，避免二次崩溃
+      \/\/ 不调用 listener.onError，避免二次崩溃
     }
   }
 
@@ -230,7 +247,7 @@ private static void processSseStream(java.io.Reader reader, OnResponseListener l
       }
     }
 
-    // ✅ 只有在 [DONE] 出现后才触发完成回调
+    \/\/ ✅ 只有在 [DONE] 出现后才触发完成回调
     if (isDone && onStreamComplete != null)
     {
       onStreamComplete.run();
