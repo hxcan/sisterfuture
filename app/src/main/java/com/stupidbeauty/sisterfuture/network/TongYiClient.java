@@ -77,7 +77,7 @@ public class TongYiClient
     @Override
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete)
     {
-      // Get apiKey from access point - NO FALLBACK ALLOWED (security enhancement)
+      // Get apiKey from access point - use empty string if not configured (for local APs without auth)
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
       String apiKey = null;
       
@@ -85,12 +85,11 @@ public class TongYiClient
           apiKey = currentAccessPoint.getApiKey();
       }
       
-      // Strict validation: must have valid apiKey or throw exception
-      if (apiKey == null || apiKey.isEmpty()) {
-          throw new RuntimeException("当前接入点未配置 API Key: " + (currentAccessPoint != null ? currentAccessPoint.getName() : "未知"));
-      }
+      // Use apiKey or empty string (no exception thrown for local access points)
+      String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
           
-      Log.d(TAG, "Using API Key source: Access Point (dynamic)");
+      Log.d(TAG, "Using API Key source: " + 
+          ((apiKey != null && !apiKey.isEmpty()) ? "Access Point (dynamic)" : "No authentication (local)"));
 
       try
       {
@@ -140,7 +139,7 @@ public class TongYiClient
 
         Request request = new Request.Builder()
           .url(accessPointManager.getCurrentBaseUrl() + accessPointManager.getCurrentChatEndpoint())
-          .addHeader("Authorization", "Bearer " + apiKey)
+          .addHeader("Authorization", "Bearer " + effectiveApiKey)
           .addHeader("Content-Type", "application/json")
           .post(body)
           .build();
@@ -173,7 +172,7 @@ public class TongYiClient
               ResponseBody responseBody = response.body();
               if (responseBody != null)
               {
-                processSseStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete);
+                processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete);
               }
             }
           }
