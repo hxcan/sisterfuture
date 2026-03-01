@@ -12,6 +12,8 @@ import java.util.concurrent.Executors;
 /**
  * 使用 Brave Search API 进行安全稳定的网页搜索
  * 支持 text/raw/summary 模式，当主搜索失败时自动降级调用
+ * API Key 支持运行时参数传入，并降级从工具备注中读取
+ * 构造函数不再需要密钥参数
  */
 class SearchWithBraveTool implements Tool {
     private static final String TAG = "SearchWithBraveTool";
@@ -19,11 +21,11 @@ class SearchWithBraveTool implements Tool {
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final OkHttpClient client = new OkHttpClient();
-    private final String apiKey; // 从长期记忆或配置中获取
+    // apiKey 优先级：1.运行时报参 > 2.备注默认值
+    private String apiKey;
 
-    public SearchWithBraveTool(Context context, String apiKey) {
+    public SearchWithBraveTool(Context context) {
         this.context = context;
-        this.apiKey = apiKey;
     }
 
     @Override
@@ -36,7 +38,7 @@ class SearchWithBraveTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "search_with_brave");
-            functionDef.put("description", "通过 Brave Search API 进行安全稳定的网页搜索，支持多种返回模式");
+            functionDef.put("description", "通过 Brave Search API 进行安全稳定的网页搜索，支持多种返回模式。API Key 支持运行时传入或从备注读取。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -51,7 +53,9 @@ class SearchWithBraveTool implements Tool {
                 .put("count", new JSONObject()
                     .put("type", "integer")
                     .put("description", "返回结果数量，默认5"))
-            );
+                .put("api_key", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "可选：Brave Search API 密钥。如未提供，将自动从工具备注中读取 brave_api_key"));
             parameters.put("required", new JSONArray(new String[]{"query"}));
             functionDef.put("parameters", parameters);
 
@@ -64,7 +68,7 @@ class SearchWithBraveTool implements Tool {
 
     @Override
     public boolean shouldInclude() {
-        return true; // 直启用
+        return true; // 直接启用
     }
 
     @Override
@@ -84,6 +88,24 @@ class SearchWithBraveTool implements Tool {
                     throw new IllegalArgumentException("搜索关键词不能为空");
                 }
 
+                // 优先级获取 API Key：1.运行时报参 > 2.备注默认值
+                apiKey = arguments.optString("api_key", null);
+                
+                if (apiKey == null || apiKey.trim().isEmpty()) {
+                    // 降级：从备注中读取
+                    String remarkJson = toolManager.getToolRemark(context, this);
+                    if (remarkJson != null) {
+                        JSONObject remarkObj = new JSONObject(remarkJson);
+                        if (remarkObj.has("brave_api_key")) {
+                            apiKey = remarkObj.getString("brave_api_key");
+                        }
+                    }
+                }
+
+                if (apiKey == null || apiKey.trim().isEmpty()) {
+                    throw new IllegalStateException("Brave Search API Key 未配置，请先在工具参数中传入 api_key，或先在工具备注中设置 brave_api_key");
+                }
+
                 Request request = new Request.Builder()
                     .url(BASE_URL + "?q=" + java.net.URLEncoder.encode(query, "UTF-8") + "&count=" + count)
                     .header("Accept", "application/json")
@@ -93,7 +115,7 @@ class SearchWithBraveTool implements Tool {
                 Response response = client.newCall(request).execute();
 
                 if (!response.isSuccessful()) {
-                    throw new IOException("Brave API 请求失败: " + response.code());
+                    throw new IOException("Brave API 请求失败：" + response.code());
                 }
 
                 okhttp3.ResponseBody responseBody = response.body();
@@ -140,6 +162,6 @@ class SearchWithBraveTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求获取网页内容时才调用此工具。支持三种模式：raw(原始HTML)、text(纯文本)、summary(摘要)。对超长页面会自动截断以保护上下文长度。";
+        return "必须在用户明确要求获取网页内容时才调用此工具。支持三种模式：raw(原始HTML)、text(纯文本)、summary(摘要)。对超长页面会自动截断以保护上下文长度。API Key 支持运行时传入或从工具备注中读取。";
     }
 }
