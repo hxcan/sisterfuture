@@ -55,7 +55,7 @@ class SearchWithBraveTool implements Tool {
                     .put("description", "返回结果数量，默认 5"))
                 .put("api_key", new JSONObject()
                     .put("type", "string")
-                    .put("description", "可选: Brave Search API 密钥。如未提供，将自动从工具备注中读取 brave_api_key")));
+                    .put("description", "可选：Brave Search API 密钥。如未提供，将自动从工具备注中读取 brave_api_key")));
             parameters.put("required", new JSONArray(new String[]{"query"}));
             functionDef.put("parameters", parameters);
 
@@ -92,12 +92,12 @@ class SearchWithBraveTool implements Tool {
                 apiKey = arguments.optString("api_key", null);
                 
                 if (apiKey == null || apiKey.trim().isEmpty()) {
-                    // 降级：从备注中读取
-                    String remarkJson = toolManager.getToolRemark(context, this);
-                    if (remarkJson != null) {
-                        JSONObject remarkObj = new JSONObject(remarkJson);
-                        if (remarkObj.has("brave_api_key")) {
-                            apiKey = remarkObj.getString("brave_api_key");
+                    // 降级：从备注中读取（使用 Tool 接口提供的 getNote 方法）
+                    String noteJson = getNote(context);
+                    if (!noteJson.isEmpty()) {
+                        JSONObject noteObj = new JSONObject(noteJson);
+                        if (noteObj.has("brave_api_key")) {
+                            apiKey = noteObj.getString("brave_api_key");
                         }
                     }
                 }
