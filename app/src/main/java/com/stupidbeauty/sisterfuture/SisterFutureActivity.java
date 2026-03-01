@@ -941,7 +941,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 for (ToolCall call : finalCalls) {
                     if (call != null && call.getFunction() != null) {
                         String toolName = call.getFunction().getName();
-                        callText.append("- `").append(toolName).append("`\\n");
+                        callText.append("- `").append(toolName).append("`").append("\n");
                     }
                 }
 
