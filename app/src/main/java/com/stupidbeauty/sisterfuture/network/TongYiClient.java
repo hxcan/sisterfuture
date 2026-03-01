@@ -63,9 +63,6 @@ public class TongYiClient
     private final ModelAccessPointManager accessPointManager;
     private final ToolManager toolManager;
 
-    // Hardcoded default API key (used as fallback when access point has no apiKey configured)
-    private static final String HARDCODED_DEFAULT_API_KEY = "sk-5f7c2c5ae9e741d99b5b431256a5ad0d";
-
     public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager)
     {
       this.client = new OkHttpClient.Builder()
@@ -80,7 +77,7 @@ public class TongYiClient
     @Override
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete)
     {
-      // Core modification: prioritize getting apiKey from access point, fallback to hardcoded default if empty/null
+      // Get apiKey from access point - NO FALLBACK ALLOWED (security enhancement)
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
       String apiKey = null;
       
@@ -88,12 +85,12 @@ public class TongYiClient
           apiKey = currentAccessPoint.getApiKey();
       }
       
-      // Fallback mechanism: if access point has no apiKey configured, use hardcoded default
-      String api_key = (apiKey != null && !apiKey.isEmpty()) 
-          ? apiKey 
-          : HARDCODED_DEFAULT_API_KEY; // ✅ FIXED: was HARCODED_DEFAULT_API_KEY (typo)
+      // Strict validation: must have valid apiKey or throw exception
+      if (apiKey == null || apiKey.isEmpty()) {
+          throw new RuntimeException("当前接入点未配置 API Key: " + (currentAccessPoint != null ? currentAccessPoint.getName() : "未知"));
+      }
           
-      Log.d(TAG, "Using API Key source: " + (apiKey != null && !apiKey.isEmpty() ? "Access Point (dynamic)" : "Hardcoded Default"));
+      Log.d(TAG, "Using API Key source: Access Point (dynamic)");
 
       try
       {
@@ -132,6 +129,7 @@ public class TongYiClient
 
 
 
+
         RequestBody body = RequestBody.create
         (
           MediaType.parse("application/json; charset=utf-8"),
@@ -142,7 +140,7 @@ public class TongYiClient
 
         Request request = new Request.Builder()
           .url(accessPointManager.getCurrentBaseUrl() + accessPointManager.getCurrentChatEndpoint())
-          .addHeader("Authorization", "Bearer " + api_key)
+          .addHeader("Authorization", "Bearer " + apiKey)
           .addHeader("Content-Type", "application/json")
           .post(body)
           .build();
@@ -210,7 +208,7 @@ public class TongYiClient
     }
   }
 
-private static void processSseStream(java.io.Reader reader, OnResponseListener listener, ModelAccessPointManager accessPointManager, Runnable onStreamComplete)
+private static void processSSEStream(java.io.Reader reader, OnResponseListener listener, ModelAccessPointManager accessPointManager, Runnable onStreamComplete)
 {
   try (java.io.BufferedReader bufferedReader = new java.io.BufferedReader(reader))
   {
