@@ -52,7 +52,7 @@ class SearchWithBraveTool implements Tool {
                     .put("description", "返回模式：text(文本摘要), raw(原始数据), summary(智能摘要)"))
                 .put("count", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "返回结果数量，默认5"))
+                    .put("description", "返回结果数量，默认 5"))
                 .put("api_key", new JSONObject()
                     .put("type", "string")
                     .put("description", "可选：Brave Search API 密钥。如未提供，将自动从工具备注中读取 brave_api_key"));
@@ -162,6 +162,6 @@ class SearchWithBraveTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求获取网页内容时才调用此工具。支持三种模式：raw(原始HTML)、text(纯文本)、summary(摘要)。对超长页面会自动截断以保护上下文长度。API Key 支持运行时传入或从工具备注中读取。";
+        return "必须在用户明确要求获取网页内容时才调用此工具。支持三种模式：raw(原始 HTML)、text(纯文本)、summary(摘要)。对超长页面会自动截断以保护上下文长度。API Key 支持运行时传入或从工具备注中读取。";
     }
 }
