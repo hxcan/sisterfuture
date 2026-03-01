@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
  * API Key 支持运行时参数传入，并降级从工具备注中读取
  * 构造函数不再需要密钥参数
  */
-class SearchWithBraveTool implements Tool {
+public class SearchWithBraveTool implements Tool {
     private static final String TAG = "SearchWithBraveTool";
     private static final String BASE_URL = "https://api.search.brave.com/res/v1/web/search";
     private final Context context;
