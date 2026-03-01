@@ -55,7 +55,7 @@ class SearchWithBraveTool implements Tool {
                     .put("description", "返回结果数量，默认 5"))
                 .put("api_key", new JSONObject()
                     .put("type", "string")
-                    .put("description", "可选：Brave Search API 密钥。如未提供，将自动从工具备注中读取 brave_api_key"));
+                    .put("description", "可选：Brave Search API 密钥。如未提供，将自动从工具备注中读取 brave_api_key"))));
             parameters.put("required", new JSONArray(new String[]{"query"}));
             functionDef.put("parameters", parameters);
 
