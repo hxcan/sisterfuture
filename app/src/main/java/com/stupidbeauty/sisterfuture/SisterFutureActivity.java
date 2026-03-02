@@ -83,7 +83,6 @@ import com.stupidbeauty.sisterfuture.tool.AddNoteTool;
 
 
 
-
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
 
@@ -216,6 +215,9 @@ import com.stupidbeauty.sisterfuture.tool.ListAccessPointsTool;
 // ✅ 新增：导入 SearchWithBraveTool
 import com.stupidbeauty.sisterfuture.tool.SearchWithBraveTool;
 
+// ✅ 新增：导入 RemoveShoppingItemTool
+import com.stupidbeauty.sisterfuture.tool.RemoveShoppingItemTool;
+
 
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -238,6 +240,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   // 工具调用累积状态（简化版，假设单次请求只有一个工具调用）
   private Map<String, Function> partialToolArgs = new HashMap<>();
+
 
 
   private static final Gson gson = new Gson();
@@ -1460,6 +1463,9 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     // ✅ 新增：注册 SearchWithBraveTool
     toolManager.registerTool(new SearchWithBraveTool(this));
+
+    // ✅ 新增：注册 RemoveShoppingItemTool
+    toolManager.registerTool(new RemoveShoppingItemTool(this));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
