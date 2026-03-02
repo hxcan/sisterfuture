@@ -53,6 +53,9 @@ public class GetGitHubFileTool implements Tool {
                     .put("token", new JSONObject()
                             .put("type", "string")
                             .put("description", "GitHub个人访问令牌（PAT），用于认证"))
+                    .put("encoding", new JSONObject()
+                            .put("type", "string")
+                            .put("description", "返回模式：\"text\"（自动解码Base64，默认）或 \"base64\"（保留原始编码）"))
             );
             parameters.put("required", new JSONArray(new String[]{"owner", "repo", "path"}));
             functionDef.put("parameters", parameters);
@@ -83,6 +86,7 @@ public class GetGitHubFileTool implements Tool {
                 String path = arguments.getString("path");
                 String branch = arguments.optString("branch", "master");
                 String token = arguments.optString("token", "").trim();
+                String encoding = arguments.optString("encoding", "text"); // 新增参数，默认"text"
 
                 // 创建结果对象，立即包含请求参数
                 JSONObject result = new JSONObject();
@@ -91,7 +95,8 @@ public class GetGitHubFileTool implements Tool {
                         .put("owner", owner)
                         .put("repo", repo)
                         .put("path", path)
-                        .put("branch", branch));
+                        .put("branch", branch)
+                        .put("encoding", encoding));
 
                 // 2. 尝试从备注恢复默认值
                 if (token.isEmpty()) {
@@ -126,7 +131,7 @@ public class GetGitHubFileTool implements Tool {
                     try {
                         JSONObject error = new JSONObject();
                         error.put("status", "error");
-                        error.put("message", "请求失败: " + response.code() + " " + response.message());
+                        error.put("message", "请求失败：" + response.code() + " " + response.message());
                         error.put("type", "IOException");
 
                         // 必须返回请求参数
@@ -152,19 +157,26 @@ public class GetGitHubFileTool implements Tool {
                 String resultStr = body.string();
                 JSONObject resultJson = new JSONObject(resultStr);
 
-                // 正确的解码逻辑：当存在content字段且编码方式为base64时进行解码，并移除所有空白字符
+                // 正确的解码逻辑：当存在content字段、编码方式为base64且encoding参数不是"base64"时才解码
                 if (resultJson.has("content") && resultJson.getString("encoding").equals("base64")) {
                     String encodedContent = resultJson.getString("content");
-                    // 关键修复：移除所有空白字符
-                    encodedContent = encodedContent.replaceAll("\\s+", "");
-                    byte[] decodedBytes;
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        decodedBytes = Base64.getDecoder().decode(encodedContent);
+                    
+                    // 如果 encoding="base64"，跳过解码，保留原始内容
+                    if (!"base64".equalsIgnoreCase(encoding)) {
+                        // 关键修复：移除所有空白字符
+                        encodedContent = encodedContent.replaceAll("\\s+", "");
+                        byte[] decodedBytes;
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            decodedBytes = Base64.getDecoder().decode(encodedContent);
+                        } else {
+                            decodedBytes = android.util.Base64.decode(encodedContent, android.util.Base64.DEFAULT);
+                        }
+                        String decodedContent = new String(decodedBytes, StandardCharsets.UTF_8);
+                        resultJson.put("decoded_content", decodedContent);
                     } else {
-                        decodedBytes = android.util.Base64.decode(encodedContent, android.util.Base64.DEFAULT);
+                        // 保留原始的 encoding="base64" 模式下的 content 字段
+                        resultJson.put("raw_content", resultJson.getString("content"));
                     }
-                    String decodedContent = new String(decodedBytes, StandardCharsets.UTF_8);
-                    resultJson.put("decoded_content", decodedContent);
                     resultJson.remove("content"); // 移除原始content字段以节省带宽
                 }
 
@@ -186,7 +198,8 @@ public class GetGitHubFileTool implements Tool {
                                 .put("owner", arguments.optString("owner", ""))
                                 .put("repo", arguments.optString("repo", ""))
                                 .put("path", arguments.optString("path", ""))
-                                .put("branch", arguments.optString("branch", "master")));
+                                .put("branch", arguments.optString("branch", "master"))
+                                .put("encoding", arguments.optString("encoding", "text")));
                     }
 
                     // 利用该字段向大模型发送调试提示
@@ -201,6 +214,6 @@ public class GetGitHubFileTool implements Tool {
     // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求读取GitHub文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取github_token等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为fallback。严禁工具自行验证JSON格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试404等错误情况。";
+        return "必须在用户明确要求读取GitHub文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取github_token等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为fallback。严禁工具自行验证JSON格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试404等错误情况。\n\n**新增功能：**\n- 支持通过参数 `encoding=\"base64\"` 可选返回 Base64 编码的原始文件内容（不自动解码）\n- 对于二进制文件（.keystore, .png, .jpg 等），建议默认使用 base64 模式以避免数据损坏\n- 返回结构包含：`content` (Base64字符串), `encoding` (\"base64\"或\"text\"), 以及原有的 file_info 和 request_params\n- **适用场景建议**：\n  - 二进制文件（.keystore, .apk, .png 等）**必须**使用 `encoding=\"base64"`\n  - 文本文件（.yml, .md, .java 等）使用默认 `encoding=\"text\"` 以节省资源";
     }
 }
