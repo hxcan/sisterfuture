@@ -82,6 +82,6 @@ public class RemoveShoppingItemTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求删除购物清单项时才调用此工具。需要提供物品的唯一ID。";
+        return "必须在用户明确要求删除购物清单项时才调用此工具。需要提供物品的唯一ID。");
     }
 }
