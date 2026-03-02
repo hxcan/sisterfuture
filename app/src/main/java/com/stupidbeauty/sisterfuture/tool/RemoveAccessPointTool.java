@@ -4,6 +4,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import android.content.Context;
 import android.util.Log;
+import com.stupidbeauty.sisterfuture.network.AccessPoint;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 
 public class RemoveAccessPointTool implements Tool {
@@ -60,7 +61,7 @@ public class RemoveAccessPointTool implements Tool {
             if (index < 0 || index >= modelAccessPointManager.getAccessPointCount()) {
                 JSONObject error = new JSONObject();
                 error.put("status", "error");
-                error.put("message", "无效的索引值: " + index + ". 可用范围是 0 到 " + (modelAccessPointManager.getAccessPointCount() - 1));
+                error.put("message", "无效的索引值：" + index + ". 可用范围是 0 到 " + (modelAccessPointManager.getAccessPointCount() - 1));
                 return error;
             }
 
@@ -72,12 +73,17 @@ public class RemoveAccessPointTool implements Tool {
                 return error;
             }
 
+            // 🔧 FIX: 删除前先缓存要删除的接入点名称
+            AccessPoint accessPointToDelete = modelAccessPointManager.getAccessPointByIndex(index);
+            String cachedName = accessPointToDelete.getName();
+
             // 执行删除操作
             modelAccessPointManager.removeAccessPoint(index);
 
             JSONObject result = new JSONObject();
             result.put("status", "success");
-            result.put("message", "已成功删除索引为 " + index + " 的接入点: " + modelAccessPointManager.getAllAccessPoints().get(index).getName());
+            // 使用缓存的名称而不是重新获取
+            result.put("message", "已成功删除索引为 " + index + " 的接入点：" + cachedName);
             return result;
         } catch (Exception e) {
             Log.e(TAG, "执行出错", e);
