@@ -4,7 +4,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import android.content.Context;
 import android.util.Log;
-import com.stupidbeauty.sisterfuture.network.AccessPoint;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 
 public class RemoveAccessPointTool implements Tool {
@@ -74,7 +74,7 @@ public class RemoveAccessPointTool implements Tool {
             }
 
             // 🔧 FIX: 删除前先缓存要删除的接入点名称
-            AccessPoint accessPointToDelete = modelAccessPointManager.getAccessPointByIndex(index);
+            ModelAccessPoint accessPointToDelete = modelAccessPointManager.getAllAccessPoints().get(index);
             String cachedName = accessPointToDelete.getName();
 
             // 执行删除操作
