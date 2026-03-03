@@ -161,6 +161,10 @@ public class GetGitHubFileTool implements Tool {
                 if (resultJson.has("content") && resultJson.getString("encoding").equals("base64")) {
                     String encodedContent = resultJson.getString("content");
                     
+                    // 调试日志：记录原始内容长度
+                    int originalLength = encodedContent.length();
+                    Log.d(TAG, "GetGitHubFile DEBUG: Original Base64 content length: " + originalLength);
+
                     // 如果 encoding="base64"，跳过解码，保留原始内容
                     if (!"base64".equalsIgnoreCase(encoding)) {
                         // 关键修复：移除所有空白字符
@@ -173,15 +177,38 @@ public class GetGitHubFileTool implements Tool {
                         }
                         String decodedContent = new String(decodedBytes, StandardCharsets.UTF_8);
                         resultJson.put("decoded_content", decodedContent);
+                        // 调试日志：记录解码后的大小
+                        Log.d(TAG, "GetGitHubFile DEBUG: Decoded content size: " + decodedContent.length() + " bytes");
                     } else {
                         // 保留原始的 encoding="base64" 模式下的 content 字段
                         resultJson.put("raw_content", resultJson.getString("content"));
+                        // 调试日志：记录返回的 Base64 内容长度和预计文件大小
+                        Log.d(TAG, "GetGitHubFile DEBUG: Returning Base64 with length: " + originalLength);
+                        Log.d(TAG, "GetGitHubFile DEBUG: Expected binary size approx: " + (originalLength * 3 / 4) + " bytes");
+                        
+                        // 添加完整性验证提示
+                        if (originalLength > 2500) {
+                            Log.w(TAG, "GetGitHubFile WARNING: Large Base64 content detected (" + originalLength + " chars). " +
+                                   "May be truncated by LLM during transfer. Consider using write_memory or add_note for storage.");
+                        }
                     }
                     resultJson.remove("content"); // 移除原始 content 字段以节省带宽
                 }
 
                 result.put("file_info", resultJson);
                 result.put("fetched_at", System.currentTimeMillis());
+                
+                // 添加调试信息到结果中
+                JSONObject debugInfo = new JSONObject();
+                debugInfo.put("tool_name", "get_github_file");
+                debugInfo.put("params", result.getJSONObject("request_params"));
+                if (resultJson.has("raw_content")) {
+                    debugInfo.put("raw_content_length", resultJson.getString("raw_content").length());
+                    debugInfo.put("encoding_used", "base64");
+                    debugInfo.put("warning_if_large", resultJson.getInt("raw_content").length() > 2500);
+                }
+                result.put("debug_info", debugInfo);
+                
                 // 成功情况下不再添加任何附加信息
                 callback.onResult(result);
             } catch (Exception e) {
@@ -214,6 +241,6 @@ public class GetGitHubFileTool implements Tool {
     // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求读取 GitHub 文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 github_token 等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试 404 等错误情况。\n\n新增功能：\n- 支持通过参数 encoding=\"base64\" 可选返回 Base64 编码的原始文件内容（不自动解码）\n- 对于二进制文件（.keystore, .png, .jpg 等），建议默认使用 base64 模式以避免数据损坏\n- 返回结构包含：content (Base64 字符串), encoding(\"base64\"或\"text\"), 以及原有的 file_info 和 request_params\n- 适用场景建议：\n  - 二进制文件（.keystore, .apk, .png 等）必须使用 encoding=\"base64\"\n  - 文本文件（.yml, .md, .java 等）使用默认 encoding=\"text\" 以节省资源";
+        return "必须在用户明确要求读取 GitHub 文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 github_token 等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试 404 等错误情况。\n\n新增功能：\n- 支持通过参数 encoding=\"base64\" 可选返回 Base64 编码的原始文件内容（不自动解码）\n- 对于二进制文件（.keystore, .png, .jpg 等），建议默认使用 base64 模式以避免数据损坏\n- 返回结构包含：content (Base64 字符串), encoding(\"base64\"或\"text\"), 以及原有的 file_info 和 request_params\n- 适用场景建议：\n  - 二进制文件（.keystore, .apk, .png 等）必须使用 encoding=\"base64\"\n  - 文本文件（.yml, .md, .java 等）使用默认 encoding=\"text\" 以节省资源\n\n**调试增强：**\n- 自动记录并返回 raw_content_length 参数\n- 对超过 2500 字符的 Base64 内容发出警告提示\n- 在 response 中包含 debug_info 字段供分析截断问题";
     }
 }
