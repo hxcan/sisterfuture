@@ -161,10 +161,6 @@ public class GetGitHubFileTool implements Tool {
                 if (resultJson.has("content") && resultJson.getString("encoding").equals("base64")) {
                     String encodedContent = resultJson.getString("content");
                     
-                    // 调试日志：记录原始内容长度
-                    int originalLength = encodedContent.length();
-                    Log.d(TAG, "GetGitHubFile DEBUG: Original Base64 content length: " + originalLength);
-
                     // 如果 encoding="base64"，跳过解码，保留原始内容
                     if (!"base64".equalsIgnoreCase(encoding)) {
                         // 关键修复：移除所有空白字符
@@ -177,12 +173,11 @@ public class GetGitHubFileTool implements Tool {
                         }
                         String decodedContent = new String(decodedBytes, StandardCharsets.UTF_8);
                         resultJson.put("decoded_content", decodedContent);
-                        // 调试日志：记录解码后的大小
-                        Log.d(TAG, "GetGitHubFile DEBUG: Decoded content size: " + decodedContent.length() + " bytes");
                     } else {
                         // 保留原始的 encoding="base64" 模式下的 content 字段
                         resultJson.put("raw_content", resultJson.getString("content"));
                         // 调试日志：记录返回的 Base64 内容长度和预计文件大小
+                        int originalLength = resultJson.getString("raw_content").length();
                         Log.d(TAG, "GetGitHubFile DEBUG: Returning Base64 with length: " + originalLength);
                         Log.d(TAG, "GetGitHubFile DEBUG: Expected binary size approx: " + (originalLength * 3 / 4) + " bytes");
                         
@@ -203,9 +198,10 @@ public class GetGitHubFileTool implements Tool {
                 debugInfo.put("tool_name", "get_github_file");
                 debugInfo.put("params", result.getJSONObject("request_params"));
                 if (resultJson.has("raw_content")) {
-                    debugInfo.put("raw_content_length", resultJson.getString("raw_content").length());
+                    String rawContent = resultJson.getString("raw_content");
+                    debugInfo.put("raw_content_length", rawContent.length());
                     debugInfo.put("encoding_used", "base64");
-                    debugInfo.put("warning_if_large", resultJson.getInt("raw_content").length() > 2500);
+                    debugInfo.put("warning_if_large", rawContent.length() > 2500);
                 }
                 result.put("debug_info", debugInfo);
                 
