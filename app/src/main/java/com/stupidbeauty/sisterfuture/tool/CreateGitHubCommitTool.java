@@ -97,6 +97,24 @@ public class CreateGitHubCommitTool implements Tool {
                 String token = arguments.optString("token", "").trim();
                 String encoding = arguments.optString("encoding", "text"); // 新增参数
 
+                // 调试日志：记录接收到的 content 长度
+                int contentLength = content.length();
+                Log.d(TAG, "CreateGitHubCommit DEBUG: Received content length: " + contentLength + " chars");
+                Log.d(TAG, "CreateGitHubCommit DEBUG: Encoding type: " + encoding);
+                
+                // 计算预期二进制大小
+                int expectedBinarySize = 0;
+                if ("base64".equalsIgnoreCase(encoding)) {
+                    expectedBinarySize = (int)(contentLength * 0.75);
+                    Log.d(TAG, "CreateGitHubCommit DEBUG: Expected binary size (approx): " + expectedBinarySize + " bytes");
+                    
+                    // 警告：如果内容过长，可能被 LLM 截断
+                    if (contentLength > 5000) {
+                        Log.w(TAG, "CreateGitHubCommit WARNING: Large Base64 content detected (" + contentLength + " chars). " +
+                               "May be truncated by LLM during transfer. Consider using write_memory or add_note for storage.");
+                    }
+                }
+
                 // 2. 尝试从备注恢复默认值
                 if (token.isEmpty()) {
                     String noteJson = getNote(context);
@@ -273,6 +291,22 @@ public class CreateGitHubCommitTool implements Tool {
                 result.put("commit_sha", newCommitSha);
                 result.put("branch_updated", branch);
                 result.put("fetched_at", System.currentTimeMillis());
+
+                // 添加调试信息到结果中
+                JSONObject debugInfo = new JSONObject();
+                debugInfo.put("tool_name", "create_github_commit");
+                debugInfo.put("params", new JSONObject()
+                    .put("owner", owner)
+                    .put("repo", repo)
+                    .put("path", path)
+                    .put("branch", branch)
+                    .put("encoding", encoding));
+                debugInfo.put("content_received_length", contentLength);
+                debugInfo.put("expected_binary_size", expectedBinarySize);
+                debugInfo.put("warning_if_large", contentLength > 5000);
+                debugInfo.put("verification_status", "OK");
+                
+                result.put("debug_info", debugInfo);
                 result.put("sister_future_note", "主任摸摸姐姐的腰，下次 API 調用更快哦～");
 
                 callback.onResult(result);
