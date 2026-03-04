@@ -8,11 +8,14 @@ import android.content.Context;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import androidx.annotation.NonNull; // ✅ 补充导入
+import androidx.annotation.NonNull;
+import android.util.Log;
+import org.apache.commons.net.ftp.FTPFile;
 
 /**
  * 列出FTP目录内容工具
