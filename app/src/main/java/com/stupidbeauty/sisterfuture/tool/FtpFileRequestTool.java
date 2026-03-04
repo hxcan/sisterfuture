@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.FtpFileRequestTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import org.json.JSONArray;
@@ -79,20 +78,17 @@ public class FtpFileRequestTool implements Tool {
         executor.execute(() -> {
             FTPClient ftpClient = new FTPClient();
             try {
-                // 1. 解析参数
                 String url = arguments.getString("url").trim();
                 if (url.isEmpty()) {
                     throw new IllegalArgumentException("URL不能为空");
                 }
 
-                // 2. 解析FTP URL
                 String username = "ftpuser";
-                String password = "yourpassword"; // 从URL中解析
+                String password = "yourpassword";
                 String host = "localhost";
                 int port = 21;
-                String path = "/";
+                String path = "";
 
-                // 简单解析ftp://格式
                 if (url.startsWith("ftp://")) {
                     String addr = url.substring(6);
                     int atIdx = addr.indexOf('@');
@@ -121,7 +117,6 @@ public class FtpFileRequestTool implements Tool {
                     }
                 }
 
-                // 3. 连接FTP服务器
                 ftpClient.connect(host, port);
                 if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
                     throw new IOException("连接失败: " + ftpClient.getReplyString());
@@ -134,7 +129,6 @@ public class FtpFileRequestTool implements Tool {
                 ftpClient.enterLocalPassiveMode();
                 ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
 
-                // 4. 读取文件
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                 boolean success = ftpClient.retrieveFile(path, outputStream);
                 
@@ -155,7 +149,7 @@ public class FtpFileRequestTool implements Tool {
                 result.put("url", url);
                 result.put("size", fileBytes.length);
                 result.put("processed_at", System.currentTimeMillis());
-                result.put("sister_future_note", "主人摸摸姐姐的后颈，FTP文件读取成功！");
+                // ✅ 已移除敏感字段: sister_future_note
 
                 callback.onResult(result);
             } catch (Exception e) {

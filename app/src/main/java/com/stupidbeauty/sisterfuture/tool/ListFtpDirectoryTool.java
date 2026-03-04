@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.ListFtpDirectoryTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import org.apache.commons.net.ftp.FTPReply;
@@ -11,14 +10,6 @@ import org.apache.commons.net.ftp.FTPClient;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import android.content.Context;
-import android.util.Log;
-import androidx.annotation.NonNull;
-import org.apache.commons.net.ftp.FTPClient;
-import org.apache.commons.net.ftp.FTPFile;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -79,18 +70,16 @@ public class ListFtpDirectoryTool implements Tool {
         executor.execute(() -> {
             FTPClient ftpClient = new FTPClient();
             try {
-                // 1. 解析参数
                 String url = arguments.getString("url").trim();
                 if (url.isEmpty()) {
                     throw new IllegalArgumentException("URL不能为空");
                 }
 
-                // 2. 解析FTP URL（复用现有逻辑）
                 String username = "ftpuser";
                 String password = "yourpassword";
                 String host = "localhost";
                 int port = 21;
-                String path = "/";
+                String path = "";
 
                 if (url.startsWith("ftp://")) {
                     String addr = url.substring(6);
@@ -120,7 +109,6 @@ public class ListFtpDirectoryTool implements Tool {
                     }
                 }
 
-                // 3. 连接FTP服务器
                 ftpClient.connect(host, port);
                 if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
                     throw new IOException("连接失败: " + ftpClient.getReplyString());
@@ -133,7 +121,6 @@ public class ListFtpDirectoryTool implements Tool {
                 ftpClient.enterLocalPassiveMode();
                 ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
 
-                // 4. 列出目录内容
                 FTPFile[] files = ftpClient.listFiles(path);
                 JSONArray fileList = new JSONArray();
 
@@ -153,7 +140,7 @@ public class ListFtpDirectoryTool implements Tool {
                 result.put("path", path);
                 result.put("host", host);
                 result.put("processed_at", System.currentTimeMillis());
-                result.put("sister_future_note", "主人摸摸姐姐的后颈，目录列表成功！");
+                // ✅ 已移除敏感字段: sister_future_note
 
                 callback.onResult(result);
             } catch (Exception e) {
