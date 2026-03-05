@@ -1,19 +1,12 @@
 package com.stupidbeauty.sisterfuture.manager;
 
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.media.AudioManager;
-import android.media.MediaPlayer;
-import androidx.recyclerview.widget.RecyclerView;
-import com.stupidbeauty.sisterfuture.tool.Tool;
-import com.stupidbeauty.sisterfuture.tool.ToolCall;
-import com.stupidbeauty.sisterfuture.tool.ToolManager;
+import com.stupidbeauty.sisterfuture.bean.ToolCall;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.tool.AddModelAccessPointTool;
+import com.stupidbeauty.sisterfuture.tool.Tool;
+import com.stupidbeauty.sisterfuture.tool.ToolManager;
 import org.json.JSONObject;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
 
 /** 
  * 向导管理器 - 专门管理引导流程的核心协调者 
@@ -34,7 +27,7 @@ public class GuideManager {
      * @return true 如果列表为空
      */
     public boolean isEmptyAccessPointList() {
-        return modelAccessPointManager.getCurrentAccessPoints().isEmpty();
+        return modelAccessPointManager.getAllAccessPoints().isEmpty();
     }
 
     /**
