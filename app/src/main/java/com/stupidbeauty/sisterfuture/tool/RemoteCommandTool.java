@@ -2,19 +2,17 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
-import com.jcraft.jsch.Channel;
-import com.jcraft.jsch.ChannelShell;
+import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.KeyPair;
 import com.jcraft.jsch.Session;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 public class RemoteCommandTool implements Tool {
     private static final String TAG = "RemoteCommandTool";
@@ -127,7 +125,7 @@ public class RemoteCommandTool implements Tool {
     private CommandResult executeSshCommand(String hostname, int port, String username, 
                                            String password, String command) {
         Session session = null;
-        Channel channel = null;
+        ChannelExec channel = null;
         ByteArrayOutputStream outStream = null;
         
         String debugInfo = "";
@@ -168,7 +166,7 @@ public class RemoteCommandTool implements Tool {
                 debugInfo += "[6] Setting SocketTimeout=30000ms...\n";
                 session.setConfig("SocketTimeout", String.valueOf(socketTimeoutValue));
                 
-                // 📋 记录配置摘要（替代 getConfigProperties）
+                // 📋 记录配置摘要
                 logSessionSetup(session, hostname, port, username, strictHostCheckValue, connectTimeoutValue);
                 
             } else {
@@ -187,36 +185,62 @@ public class RemoteCommandTool implements Tool {
                                      connectEnd - connectStart, 
                                      (connectEnd - startTime) + "ms");
 
-            debugInfo += String.format("\n[9] Opening shell channel for command: '%s'\n", command);
-            // 🔧 **核心修改：使用 ChannelShell 替代 ChannelExec**
-            channel = session.openChannel("shell");
+            debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
+            // ✅ **核心修改：恢复为 ChannelExec（更稳定）**
+            channel = (ChannelExec) session.openChannel("exec");
             
-            // 🔧 **新增：分配 PTY 和环境变量**
-            debugInfo += "[10] Allocating pseudo-terminal (PTY)...\n";
-            ((ChannelShell) channel).setPty(true);
+            // ✅ **不再分配 PTY**：避免 negotiation 问题（之前的 failed to send channel request 来源）
+            debugInfo += "[10] Allocating command (No PTY)... (Standard Exec Mode)\n";
             
+            // 🔧 设置环境变量（可选）
             debugInfo += "[11] Setting environment variables...\n";
-            ((ChannelShell) channel).setEnv("TERM", "xterm");
-            ((ChannelShell) channel).setEnv("LANG", "zh_CN.UTF-8");
+            channel.setEnv("TERM", "xterm");
+            channel.setEnv("LANG", "zh_CN.UTF-8");
             debugInfo += "    ENV: TERM=xterm, LANG=zh_CN.UTF-8\n";
             
-            // 🔧 **新增：设置命令执行模式**
-            debugInfo += "[12] Setting command execution mode...\n";
-            ((ChannelShell) channel).setCommand(command);
+            channel.setCommand(command);
 
             outStream = new ByteArrayOutputStream();
-            channel.setInputStream(null);
-            channel.setOutputStream(outStream);
 
-            debugInfo += String.format("[13] Executing command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
+            debugInfo += String.format("[12] Starting command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
             channel.connect(DEFAULT_TIMEOUT_MS);
-            debugInfo += "[14] Command execution completed\n";
+            
+            // ✅ **核心修复：持续读取流直到关闭（参考官方示例）**
+            debugInfo += "[13] Reading output stream until channel closed...\n";
+            InputStream inputStream = channel.getInputStream();
+            byte[] buffer = new byte[4096];
+            int bytesRead = 0;
+            long idleStartTime = System.currentTimeMillis();
+            final int MAX_IDLE_MS = 5000; // 最多等待 5 秒空闲时间
+            
+            while (true) {
+                if (inputStream.available() > 0) {
+                    bytesRead = inputStream.read(buffer);
+                    if (bytesRead > 0) {
+                        outStream.write(buffer, 0, bytesRead);
+                        idleStartTime = System.currentTimeMillis(); // 重置空闲计时器
+                    }
+                } else if (channel.isClosed()) {
+                    // 如果通道已关闭且没有更多数据，读取完毕
+                    break;
+                } else {
+                    // 检查是否超过最大空闲时间（防止死锁）
+                    if ((System.currentTimeMillis() - idleStartTime) > MAX_IDLE_MS) {
+                        debugInfo += "    → Detected idle timeout, stopping read loop.\n";
+                        break;
+                    }
+                    Thread.sleep(100); // 短暂休眠
+                }
+            }
+            
+            debugInfo += "[14] Reading completed.\n";
 
+            // ✅ 只有在完全读取后才获取退出码
+            int exitCode = channel.getExitStatus();
+            debugInfo += String.format("[15] Exit code: %d\n", exitCode);
+            
             byte[] responseBytes = outStream.toByteArray();
             String stdout = new String(responseBytes, "UTF-8");
-            int exitCode = channel.getExitStatus();
-            
-            debugInfo += String.format("[15] Exit code: %d\n", exitCode);
             debugInfo += String.format("[16] Output length: %d bytes\n", stdout.length());
             if (!stdout.isEmpty()) {
                 debugInfo += String.format("[17] Output content:\n%s\n", stdout);
@@ -258,8 +282,6 @@ public class RemoteCommandTool implements Tool {
      * 检查是否存在可用的私钥
      */
     private boolean isPrivateKeyAvailable() {
-        // TODO: 从 Victoria Fresh VFS 检查是否有私钥文件
-        // 目前返回 false，强制使用密码认证
         return false;
     }
     
@@ -269,13 +291,8 @@ public class RemoteCommandTool implements Tool {
     private void loadPrivateKey(JSch jsch) {
         try {
             // TODO: 从 VFS 读取私钥并解析
-            // 示例伪代码：
-            // String keyContent = readFromVFS("/keys.s/android_ssh_key");
-            // KeyPair kp = KeyPair.load(jsch, keyContent);
-            // jsch.addIdentity(kp);
         } catch (Exception e) {
             Log.e(TAG, "Failed to load private key", e);
-            // 加载失败不影响其他认证方式
         }
     }
 
