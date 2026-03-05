@@ -286,6 +286,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar; \/\/!用来显示音量的进度条。
 
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView; \/\/!识别结果。
@@ -605,6 +606,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     });
   }
+
 
 
 
@@ -1354,6 +1356,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
                       .append(enhancement).append("\n");
         }
       }
+
 
 
       promptBuilder.append("\n/no_think\n");
