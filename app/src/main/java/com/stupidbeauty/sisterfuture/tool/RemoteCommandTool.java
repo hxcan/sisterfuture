@@ -2,7 +2,8 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
-import com.jcraft.jsch.ChannelExec;
+import com.jcraft.jsch.Channel;
+import com.jcraft.jsch.ChannelShell;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.KeyPair;
 import com.jcraft.jsch.Session;
@@ -126,7 +127,7 @@ public class RemoteCommandTool implements Tool {
     private CommandResult executeSshCommand(String hostname, int port, String username, 
                                            String password, String command) {
         Session session = null;
-        ChannelExec channel = null;
+        Channel channel = null;
         ByteArrayOutputStream outStream = null;
         
         String debugInfo = "";
@@ -186,37 +187,39 @@ public class RemoteCommandTool implements Tool {
                                      connectEnd - connectStart, 
                                      (connectEnd - startTime) + "ms");
 
-            debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
-            channel = (ChannelExec) session.openChannel("exec");
+            debugInfo += String.format("\n[9] Opening shell channel for command: '%s'\n", command);
+            // 🔧 **核心修改：使用 ChannelShell 替代 ChannelExec**
+            channel = session.openChannel("shell");
             
-            // 🔧 **新增：启用 Pseudo-Terminal (PTY)**
+            // 🔧 **新增：分配 PTY 和环境变量**
             debugInfo += "[10] Allocating pseudo-terminal (PTY)...\n";
-            channel.setPty(true);
+            ((ChannelShell) channel).setPty(true);
             
-            // 🔧 **新增：注入环境变量**
             debugInfo += "[11] Setting environment variables...\n";
-            ((ChannelExec) channel).setEnv("TERM", "xterm");
-            ((ChannelExec) channel).setEnv("LANG", "zh_CN.UTF-8");
+            ((ChannelShell) channel).setEnv("TERM", "xterm");
+            ((ChannelShell) channel).setEnv("LANG", "zh_CN.UTF-8");
             debugInfo += "    ENV: TERM=xterm, LANG=zh_CN.UTF-8\n";
             
-            channel.setCommand(command);
+            // 🔧 **新增：设置命令执行模式**
+            debugInfo += "[12] Setting command execution mode...\n";
+            ((ChannelShell) channel).setCommand(command);
 
             outStream = new ByteArrayOutputStream();
             channel.setInputStream(null);
             channel.setOutputStream(outStream);
 
-            debugInfo += String.format("[12] Executing command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
+            debugInfo += String.format("[13] Executing command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
             channel.connect(DEFAULT_TIMEOUT_MS);
-            debugInfo += "[13] Command execution completed\n";
+            debugInfo += "[14] Command execution completed\n";
 
             byte[] responseBytes = outStream.toByteArray();
             String stdout = new String(responseBytes, "UTF-8");
             int exitCode = channel.getExitStatus();
             
-            debugInfo += String.format("[14] Exit code: %d\n", exitCode);
-            debugInfo += String.format("[15] Output length: %d bytes\n", stdout.length());
+            debugInfo += String.format("[15] Exit code: %d\n", exitCode);
+            debugInfo += String.format("[16] Output length: %d bytes\n", stdout.length());
             if (!stdout.isEmpty()) {
-                debugInfo += String.format("[16] Output content:\n%s\n", stdout);
+                debugInfo += String.format("[17] Output content:\n%s\n", stdout);
             }
             
             return new CommandResult("success", stdout, "", exitCode, connectionStatus, debugInfo);
