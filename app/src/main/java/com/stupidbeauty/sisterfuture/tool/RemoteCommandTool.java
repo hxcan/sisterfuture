@@ -95,7 +95,9 @@ public class RemoteCommandTool implements Tool {
                         .put("status", "failed")
                         .put("stdout", "")
                         .put("stderr", e.getMessage())
-                        .put("exitCode", -1);
+                        .put("exitCode", -1)
+                        .put("connectionStatus", "failed_to_initiate")
+                        .put("debugInfo", "Unexpected exception: " + e.getClass().getName());
                     callback.onResult(errorResult);
                 } catch (Exception ex) {
                     callback.onError(ex);
@@ -114,24 +116,46 @@ public class RemoteCommandTool implements Tool {
         Session session = null;
         ChannelExec channel = null;
         ByteArrayOutputStream outStream = null;
+        
+        String debugInfo = "";
+        String connectionStatus = "unknown";
+        Throwable lastError = null;
 
         try {
+            debugInfo += "Init JSch...\n";
             JSch jsch = new JSch();
+            connectionStatus = "jsch_initialized";
             
             // 优先级：私钥 > 密码 > 无认证
             if (isPrivateKeyAvailable()) {
+                debugInfo += "Attempting key-based auth...\n";
                 loadPrivateKey(jsch);
+                connectionStatus = "key_auth_attempted";
             } else if (password != null && !password.isEmpty()) {
+                debugInfo += "Creating session for " + username + "@" + hostname + ":" + port + "\n";
                 session = jsch.getSession(username, hostname, port);
                 session.setPassword(password);
+                connectionStatus = "session_created_with_password";
+                
+                // 调试：打印 SSH 配置
+                debugInfo += "Session configs:\n";
+                debugInfo += "  StrictHostKeyChecking: " + session.getConfig("StrictHostKeyChecking") + "\n";
+                debugInfo += "  ConnectTimeout: " + session.getConfig("ConnectTimeout") + "\n";
+                debugInfo += "  SocketTimeout: " + session.getConfig("SocketTimeout") + "\n";
             } else {
+                debugInfo += "No authentication credentials provided\n";
                 session = jsch.getSession(username, hostname, port);
                 session.setPassword(""); // 尝试空密码（通常失败）
+                connectionStatus = "no_credentials";
             }
             
+            debugInfo += "Connecting to host...\n";
             session.setConfig("StrictHostKeyChecking", "no");
             session.connect(3000); // 3 秒连接超时
+            connectionStatus = "connected_successfully";
+            debugInfo += "Connection established after 3s\n";
 
+            debugInfo += "Opening exec channel for command: " + command + "\n";
             channel = (ChannelExec) session.openChannel("exec");
             channel.setCommand(command);
 
@@ -139,18 +163,43 @@ public class RemoteCommandTool implements Tool {
             channel.setInputStream(null);
             channel.setOutputStream(outStream);
 
+            debugInfo += "Executing command with timeout: " + DEFAULT_TIMEOUT_MS + "ms...\n";
             channel.connect(DEFAULT_TIMEOUT_MS);
+            debugInfo += "Command execution completed\n";
 
             byte[] responseBytes = outStream.toByteArray();
             String stdout = new String(responseBytes, "UTF-8");
-
-            return new CommandResult("success", stdout, "", channel.getExitStatus());
+            int exitCode = channel.getExitStatus();
+            
+            debugInfo += "Exit code: " + exitCode + "\n";
+            debugInfo += "Output length: " + stdout.length() + " bytes";
+            
+            return new CommandResult("success", stdout, "", exitCode, connectionStatus, debugInfo);
 
         } catch (Exception e) {
-            return new CommandResult("failed", "", e.getMessage(), -1);
+            connectionStatus = "connection_failed";
+            lastError = e;
+            
+            String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            if (e instanceof java.net.ConnectException) {
+                connectionStatus = "network_unreachable";
+            } else if (e instanceof com.jcraft.jsch.JSchException) {
+                connectionStatus = "authentication_failed";
+            }
+            
+            debugInfo += "ERROR: " + errorMsg + "\n";
+            debugInfo += "Full stack trace available in logs.\n";
+            
+            return new CommandResult("failed", "", errorMsg, -1, connectionStatus, debugInfo);
         } finally {
-            if (channel != null && channel.isConnected()) channel.disconnect();
-            if (session != null && session.isConnected()) session.disconnect();
+            if (channel != null && channel.isConnected()) {
+                debugInfo += "Disconnecting channel...\n";
+                channel.disconnect();
+            }
+            if (session != null && session.isConnected()) {
+                debugInfo += "Disconnecting session...\n";
+                session.disconnect();
+            }
             if (outStream != null) {
                 try { outStream.close(); } catch (Exception ignored) {}
             }
@@ -188,12 +237,21 @@ public class RemoteCommandTool implements Tool {
         final String stdout;
         final String stderr;
         final int exitCode;
+        final String connectionStatus;
+        final String debugInfo;
 
         CommandResult(String status, String stdout, String stderr, int exitCode) {
+            this(status, stdout, stderr, exitCode, "unknown", "");
+        }
+        
+        CommandResult(String status, String stdout, String stderr, int exitCode, 
+                     String connectionStatus, String debugInfo) {
             this.status = status;
             this.stdout = stdout;
             this.stderr = stderr;
             this.exitCode = exitCode;
+            this.connectionStatus = connectionStatus;
+            this.debugInfo = debugInfo;
         }
 
         JSONObject toJson() throws Exception {
@@ -202,6 +260,8 @@ public class RemoteCommandTool implements Tool {
             result.put("stdout", stdout);
             result.put("stderr", stderr);
             result.put("exitCode", exitCode);
+            result.put("connectionStatus", connectionStatus);
+            result.put("debugInfo", debugInfo);
             return result;
         }
     }
