@@ -37,6 +37,8 @@ import com.stupidbeauty.sisterfuture.bean.MessageType;
 
 
 
+
+
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -55,6 +57,12 @@ import com.stupidbeauty.sisterfuture.tool.GetContactListTool;
 import com.stupidbeauty.sisterfuture.tool.FtpFileRequestTool;
 import com.stupidbeauty.sisterfuture.tool.ListFtpDirectoryTool;
 import com.stupidbeauty.sisterfuture.tool.FtpFileWriteTool;
+
+
+
+
+
+
 
 
 
@@ -207,6 +215,7 @@ import com.stupidbeauty.sisterfuture.tool.RemoveShoppingItemTool;
 import com.stupidbeauty.sisterfuture.tool.RemoteCommandTool;
 
 
+
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
@@ -271,8 +280,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-	//@BindView(R.id.statustextView) TextView statustextView; //!用来显示状态的文字标签。
 
+	//@BindView(R.id.statustextView) TextView statustextView; //!用来显示状态的文字标签。
 
 
 
@@ -389,8 +398,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     commandRecognizebutton2.setVisibility(View.INVISIBLE); //隐藏按钮。
   } //public void stopRecordbutton2()
 	/**
-	 * 在线命令词识别。
-	 **/
+	* 在线命令词识别。
+	**/
   public void commandRecognizebutton2startRecognize()
 	{
     voiceEndDetected=false; //重置状态，未探测到用户的声音结束。
@@ -519,10 +528,29 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void sendChatRequest() 
   {
     recognizeResulttextView.setText(""); // Clear the recognize result or input content.
-    // ✅ 新增：检查是否需要引导模式拦截
-    if (guideManager != null && !guideManager.shouldProceedWithChatRequest(voiceRecognizeResultString)) 
-    {
-      return; // 止继续执行，等待引导流程处理
+    
+    // ✅ 新增：MVP 引导逻辑集成
+    if (guideManager != null && guideManager.isEmptyAccessPointList()) {
+        guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback() {
+            @Override
+            public void onResponse(String message) {
+                runOnUiThread(() -> {
+                    messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+                    scrollToBottom();
+                    ttsSayReply(message);
+                });
+            }
+            
+            @Override
+            public void onError(String error) {
+                runOnUiThread(() -> {
+                    messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+                    scrollToBottom();
+                });
+            }
+        });
+        // 如果引导逻辑已处理，不再发送常规聊天请求
+        return;
     }
 
     sendChatRequestTongYi(); // Send chat request to tong yi.
@@ -537,7 +565,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();   //做一个提示，Failed adding address ,please retry.
   } //protected void reportOperationFail()
-
 
 
 
@@ -581,12 +608,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
+
   /**
   * 向通义千问发送请求并处理回复。
   **/
   private void sendChatRequestTongYi()
   {
     Log.d(TAG, CodePosition.newInstance().toString()); // Debug.
+
 
 
 
@@ -605,8 +635,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
       // 构造最终 messages 数组
       JSONArray messagesArray = new JSONArray();
+
 
 
 
@@ -1091,6 +1123,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
   // 修改 ttsSayReply 方法
   private void ttsSayReply(final String text)
   {
@@ -1222,6 +1255,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
   /**
   * 连接信号信号槽。
   **/
@@ -1229,6 +1263,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
 }//private void connectSignals()
+
 
 
 
@@ -1249,6 +1284,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
   /**
   * 构造增强版系统提示词，从每个工具的 getDefinition() 中提取 description。
   **/
@@ -1260,6 +1296,7 @@ SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
 
     StringBuilder promptBuilder = new StringBuilder();
     // promptBuilder.append(SfBaseDef.DEFAULT_SYSTEM_PROMPT);
+
 
 
 
@@ -1334,6 +1371,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 	protected void onCreate(Bundle savedInstanceState) 
 	{
 		super.onCreate(savedInstanceState); //超类创建。
+
 
 
 
@@ -1576,6 +1614,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     public void onReceive(Context context, Intent intent)
     {
       String action = intent.getAction(); //获取广播中带的动作字符串。
+
 
 
 
