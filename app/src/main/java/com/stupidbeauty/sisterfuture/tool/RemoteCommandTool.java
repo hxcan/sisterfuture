@@ -244,9 +244,9 @@ public class RemoteCommandTool implements Tool {
                 Thread.sleep(100);
             }
             
-            // ✅ 获取错误流内容用于日志
+            // ✅ 获取错误流内容用于日志（修复编译错误）
             byte[] errBytes = errStream.toByteArray();
-            if (!errBytes.isEmpty()) {
+            if (errBytes.length > 0) {
                 debugInfo += String.format("[15] Error stream output:\n%s\n", 
                                          new String(errBytes, "UTF-8"));
             }
