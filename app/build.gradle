@@ -81,8 +81,8 @@ android
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 21
     targetSdkVersion 28
-    versionCode 652
-    versionName "2026.2.1"
+    versionCode 932
+    versionName "2026.3.5"
     multiDexEnabled true
   }
 
