@@ -127,6 +127,7 @@ public class RemoteCommandTool implements Tool {
         Session session = null;
         ChannelExec channel = null;
         ByteArrayOutputStream outStream = null;
+        ByteArrayOutputStream errStream = null;
         
         String debugInfo = "";
         String connectionStatus = "unknown";
@@ -186,17 +187,18 @@ public class RemoteCommandTool implements Tool {
                                      (connectEnd - startTime) + "ms");
 
             debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
-            // ✅ **核心修改：恢复为 ChannelExec（更稳定）**
+            // ✅ **核心修改：恢复为 ChannelExec（最稳定）**
             channel = (ChannelExec) session.openChannel("exec");
             
-            // ✅ **不再分配 PTY**：避免 negotiation 问题（之前的 failed to send channel request 来源）
-            debugInfo += "[10] Allocating command (No PTY)... (Standard Exec Mode)\n";
+            // ✅ **关键修复：设置错误输出流（防止缓冲区阻塞）**
+            errStream = new ByteArrayOutputStream();
+            ((ChannelExec) channel).setErrStream(errStream);
+            debugInfo += "[10] Allocating command (Standard Exec Mode)... [ERROR STREAM SETUP]\n";
             
-            // 🔧 设置环境变量（可选）
-            debugInfo += "[11] Setting environment variables...\n";
-            channel.setEnv("TERM", "xterm");
-            channel.setEnv("LANG", "zh_CN.UTF-8");
-            debugInfo += "    ENV: TERM=xterm, LANG=zh_CN.UTF-8\n";
+            // ❌ **移除环境变量设置**（避免兼容性问题，参考官方示例）
+            // channel.setEnv("TERM", "xterm");
+            // channel.setEnv("LANG", "zh_CN.UTF-8");
+            debugInfo += "[11] Environment variables omitted (per official example compatibility)\n";
             
             channel.setCommand(command);
 
@@ -205,48 +207,61 @@ public class RemoteCommandTool implements Tool {
             debugInfo += String.format("[12] Starting command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
             channel.connect(DEFAULT_TIMEOUT_MS);
             
-            // ✅ **核心修复：持续读取流直到关闭（参考官方示例）**
-            debugInfo += "[13] Reading output stream until channel closed...\n";
+            // ✅ **完全参考官方示例的读取逻辑**
+            debugInfo += "[13] Reading stdout stream until channel closed...\n";
             InputStream inputStream = channel.getInputStream();
-            byte[] buffer = new byte[4096];
-            int bytesRead = 0;
+            byte[] tmp = new byte[1024];
             long idleStartTime = System.currentTimeMillis();
             final int MAX_IDLE_MS = 5000; // 最多等待 5 秒空闲时间
             
             while (true) {
-                if (inputStream.available() > 0) {
-                    bytesRead = inputStream.read(buffer);
-                    if (bytesRead > 0) {
-                        outStream.write(buffer, 0, bytesRead);
-                        idleStartTime = System.currentTimeMillis(); // 重置空闲计时器
-                    }
-                } else if (channel.isClosed()) {
-                    // 如果通道已关闭且没有更多数据，读取完毕
-                    break;
-                } else {
-                    // 检查是否超过最大空闲时间（防止死锁）
-                    if ((System.currentTimeMillis() - idleStartTime) > MAX_IDLE_MS) {
-                        debugInfo += "    → Detected idle timeout, stopping read loop.\n";
-                        break;
-                    }
-                    Thread.sleep(100); // 短暂休眠
+                // 内层循环：尽可能多地读取数据
+                while (inputStream.available() > 0) {
+                    int i = inputStream.read(tmp, 0, 1024);
+                    if (i < 0) break;
+                    outStream.write(tmp, 0, i);
+                    idleStartTime = System.currentTimeMillis(); // 重置空闲计时器
                 }
+                
+                // 外层循环：检查通道状态
+                if (channel.isClosed()) {
+                    // 如果还有数据未读完，继续读
+                    if (inputStream.available() > 0) continue; 
+                    
+                    debugInfo += "[14] Channel closed and no more data. Exit status: " + 
+                                 Integer.toString(channel.getExitStatus()) + "\n";
+                    break;
+                }
+                
+                // 检查是否超过最大空闲时间
+                if ((System.currentTimeMillis() - idleStartTime) > MAX_IDLE_MS) {
+                    debugInfo += "    → Detected idle timeout after " + 
+                                 Integer.toString(MAX_IDLE_MS / 1000) + "s, stopping read loop.\n";
+                    break;
+                }
+                
+                // 短暂休眠避免 busy-loop
+                Thread.sleep(100);
             }
             
-            debugInfo += "[14] Reading completed.\n";
+            // ✅ 获取错误流内容用于日志
+            byte[] errBytes = errStream.toByteArray();
+            if (!errBytes.isEmpty()) {
+                debugInfo += String.format("[15] Error stream output:\n%s\n", 
+                                         new String(errBytes, "UTF-8"));
+            }
 
-            // ✅ 只有在完全读取后才获取退出码
-            int exitCode = channel.getExitStatus();
-            debugInfo += String.format("[15] Exit code: %d\n", exitCode);
-            
             byte[] responseBytes = outStream.toByteArray();
             String stdout = new String(responseBytes, "UTF-8");
+            int exitCode = channel.getExitStatus();
+            
             debugInfo += String.format("[16] Output length: %d bytes\n", stdout.length());
             if (!stdout.isEmpty()) {
                 debugInfo += String.format("[17] Output content:\n%s\n", stdout);
             }
             
-            return new CommandResult("success", stdout, "", exitCode, connectionStatus, debugInfo);
+            return new CommandResult("success", stdout, errStream.toString(), exitCode, 
+                                    connectionStatus, debugInfo);
 
         } catch (Exception e) {
             connectionStatus = "connection_failed";
@@ -274,6 +289,9 @@ public class RemoteCommandTool implements Tool {
             }
             if (outStream != null) {
                 try { outStream.close(); } catch (Exception ignored) {}
+            }
+            if (errStream != null) {
+                try { errStream.close(); } catch (Exception ignored) {}
             }
         }
     }
