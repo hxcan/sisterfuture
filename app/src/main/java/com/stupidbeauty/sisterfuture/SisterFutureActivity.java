@@ -37,12 +37,6 @@ import com.stupidbeauty.sisterfuture.bean.MessageType;
 
 
 
-
-
-
-
-
-
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -54,9 +48,6 @@ import com.stupidbeauty.sisterfuture.tool.UpdateRedmineIssueTool;
 import com.stupidbeauty.sisterfuture.tool.SearchRedmineTasksTool;
 import com.stupidbeauty.sisterfuture.tool.GetIssuesListTool;
 import com.stupidbeauty.sisterfuture.tool.EstablishTaskRelationshipTool;
-
-
-
 
 
 import com.stupidbeauty.sisterfuture.tool.BasicWebRequestTool;
@@ -84,7 +75,6 @@ import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
 
 
-
 import com.stupidbeauty.sisterfuture.tool.GetCurrentTimeTool;
 import com.stupidbeauty.sisterfuture.tool.SwitchAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.GetCurrentAccessPointInfoTool;
@@ -99,7 +89,7 @@ import com.stupidbeauty.sisterfuture.bean.ToolCall;
 import com.stupidbeauty.sisterfuture.bean.Function;
 import androidx.recyclerview.widget.RecyclerView;
 import butterknife.ButterKnife;
-import com.stupidbeauty.sisterfuture.R; \/\/ Make sure to import the correct R class
+import com.stupidbeauty.sisterfuture.R;
 import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
 import java.util.List;
@@ -122,7 +112,7 @@ import com.stupidbeauty.codeposition.CodePosition;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import android.Manifest;
-\/\/ import android.annotation.SuppressLint;
+// import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.app.WallpaperManager;
@@ -192,28 +182,28 @@ import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 
-\/\/ ✅ 新增：导入 AddShoppingItemTool
+// ✅ 新增：导入 AddShoppingItemTool
 import com.stupidbeauty.sisterfuture.tool.AddShoppingItemTool;
 
-import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; \/\/ 新增导入
-import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; \/\/ ✅ 修正为 tool 包
+import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
+import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
 
-import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; \/\/ ✅ 新增：导入 CreateGitBranchTool
+import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; // ✅ 新增：导入 CreateGitBranchTool
 
-\/\/ ✅ 新增：导入 ListShoppingItemsTool
+// ✅ 新增：导入 ListShoppingItemsTool
 import com.stupidbeauty.sisterfuture.tool.ListShoppingItemsTool;
 
-\/\/ ✅ 新增：导入 RemoveAccessPointTool 和 ListAccessPointsTool (修复编译错误)
+// ✅ 新增：导入 RemoveAccessPointTool 和 ListAccessPointsTool (修复编译错误)
 import com.stupidbeauty.sisterfuture.tool.RemoveAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.ListAccessPointsTool;
 
-\/\/ ✅ 新增：导入 SearchWithBraveTool
+// ✅ 新增：导入 SearchWithBraveTool
 import com.stupidbeauty.sisterfuture.tool.SearchWithBraveTool;
 
-\/\/ ✅ 新增：导入 RemoveShoppingItemTool
+// ✅ 新增：导入 RemoveShoppingItemTool
 import com.stupidbeauty.sisterfuture.tool.RemoveShoppingItemTool;
 
-\/\/ ✅ 新增：导入 RemoteCommandTool
+// ✅ 新增：导入 RemoteCommandTool
 import com.stupidbeauty.sisterfuture.tool.RemoteCommandTool;
 
 
@@ -1627,7 +1617,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       if (Constants.Operation.CommitText.equals(action)) \/\/提交文本内容。
       {
         Bundle extras=intent.getExtras(); \/\/获取参数包。
-
 
 
 
