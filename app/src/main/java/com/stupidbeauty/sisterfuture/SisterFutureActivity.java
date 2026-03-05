@@ -230,8 +230,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private Map<String, Function> partialToolArgs = new HashMap<>();
 
 
-
-
   private static final Gson gson = new Gson();
 
   private ContextManager contextManager;
@@ -268,7 +266,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final String TAG="SisterFutureActivity"; \/\/!输出调试信息时使用的标记。
   \/\/ @BindView(R.id.speakerVerifyRegisterPasswordtextView) TextView speakerVerifyRegisterPasswordtextView; \/\/!声纹注册密码文本标签。
 
-	 private SpeechRecognizer mIat; \/\/!语言识别器。
+	private SpeechRecognizer mIat; \/\/!语言识别器。
+
 
 
 
@@ -298,16 +297,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
-
       \/\/ ✅ 一级映射：记录 index 到原始 id 的关系
       if (call.getId() != null && !call.getId().trim().isEmpty())
       {
         indexToOriginalIdMap.put(index, call.getId());
       }
-
-
-
 
 
       \/\/ ✅ 二级映射：通过原始 id 关联函数参数
@@ -320,13 +314,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
 
 
-
-
-
       Function func = call.getFunction();
       Function existing = partialToolArgs.get(originalId);
-
-
 
 
       if (existing == null)
@@ -335,8 +324,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         existing.setName(func.getName());
         existing.setArguments("");
       }
-
-
 
 
       String newChunk = func.getArguments() != null ? func.getArguments() : "";
@@ -412,8 +399,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
-
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
     vibrator.vibrate( 100);
 		if (mIat==null) \/\/识别器未创建。
@@ -423,15 +408,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
     if (!setParam()) \/\/参数设置失败。
     {
       \/\/ statustextView.setText("请先构建语法。");
 
       return;
     }\/\/if (!setParam()) \/\/参数设置失败。
-
-
 
 
 
@@ -666,17 +648,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
-
           messagesArray.put(historyArray.getJSONObject(i));
         }
       }
       catch (Exception e)
       {
         e.printStackTrace();
-
-
-
 
 
         \/\/ 出错时至少发送当前用户消息（降级）
@@ -945,7 +922,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             contextManager.addRawMessage(assistantMessage);
             contextManager.increaseMaxRounds();
 
-            \/\/ 跟踪上下文写入，在 UI 中显示"正在调用"消息
+            \/\/ 跟踪上下文写入，在 UI 中显示“正在调用”消息
             runOnUiThread(() -> {
                 StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
                 for (ToolCall call : finalCalls) {
@@ -1110,10 +1087,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
     super.onBackPressed();
   } \/\/public void onBackPressed()
-
 
 
 
@@ -1234,7 +1209,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
           break; \/\/跳出。
 
 
@@ -1291,13 +1265,10 @@ SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
 
 
 
-
 \/\/promptBuilder.append(  promptManager.getBasePrompt()  );
 
 
 promptBuilder.append(promptManager.getCurrentPrompt());
-
-
 
 
 
@@ -1368,7 +1339,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
-
 		requestWindowFeature(Window.FEATURE_NO_TITLE); \/\/不显示标题栏。
 		
 		setContentView(R.layout.sister_future); \/\/显示界面。
@@ -1426,8 +1396,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new FtpFileRequestTool(this));
     toolManager.registerTool(new ListFtpDirectoryTool(this));
     toolManager.registerTool(new FtpFileWriteTool(this));
-
-
 
 
 
@@ -1613,12 +1581,9 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
-
       if (Constants.Operation.CommitText.equals(action)) \/\/提交文本内容。
       {
         Bundle extras=intent.getExtras(); \/\/获取参数包。
-
-
 
 
 
@@ -1626,13 +1591,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
-
-
         recognizeResulttextView.setText(voiceRecognizeResultString); \/\/显示结果。
-
-
-
-
 
 
 
