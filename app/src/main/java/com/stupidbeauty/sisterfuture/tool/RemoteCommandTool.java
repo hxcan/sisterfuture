@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 public class RemoteCommandTool implements Tool {
     private static final String TAG = "RemoteCommandTool";
-    private static final long DEFAULT_TIMEOUT_MS = 60000; // 60秒默认超时
+    private static final int DEFAULT_TIMEOUT_MS = 60000; // 60 秒默认超时
     
     private final Context context;
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -140,7 +140,7 @@ public class RemoteCommandTool implements Tool {
             }
             
             session.setConfig("StrictHostKeyChecking", "no");
-            session.connect(3000); // 3秒连接超时
+            session.connect(3000); // 3 秒连接超时
 
             channel = (ChannelExec) session.openChannel("exec");
             channel.setCommand(command);
