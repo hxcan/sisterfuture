@@ -1,4 +1,3 @@
-// com.stupidbeauty.sisterfuture.tool.FtpFileWriteTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
 import org.apache.commons.net.ftp.FTPReply;
@@ -91,19 +90,17 @@ public class FtpFileWriteTool implements Tool {
         executor.execute(() -> {
             FTPClient ftpClient = new FTPClient();
             try {
-                // 1. 解析参数
                 String url = arguments.getString("url").trim();
                 String content = arguments.getString("content");
                 if (url.isEmpty()) {
                     throw new IllegalArgumentException("URL不能为空");
                 }
 
-                // 2. 解析FTP URL（复用现有逻辑）
                 String username = "ftpuser";
                 String password = "yourpassword";
                 String host = "localhost";
                 int port = 21;
-                String path = "/";
+                String path = "";
 
                 if (url.startsWith("ftp://")) {
                     String addr = url.substring(6);
@@ -133,10 +130,6 @@ public class FtpFileWriteTool implements Tool {
                     }
                 }
 
-                // 🔥 调试输出
-                Log.d(TAG, "连接信息: host=" + host + ", port=" + port + ", path=" + path);
-
-                // 3. 连接FTP服务器
                 ftpClient.connect(host, port);
                 if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
                     throw new IOException("连接失败: " + ftpClient.getReplyString());
@@ -149,15 +142,8 @@ public class FtpFileWriteTool implements Tool {
                 ftpClient.enterLocalPassiveMode();
                 ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
 
-                // 🔥 调试输出
-                Log.d(TAG, "登录成功，准备写入文件: " + path);
-
-                // 4. 写入文件
                 ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
                 boolean success = ftpClient.storeFile(path, inputStream);
-
-                // 🔥 调试输出
-                Log.d(TAG, "storeFile返回: " + success + ", reply: " + ftpClient.getReplyString());
 
                 if (!success) {
                     throw new IOException("文件写入失败: " + ftpClient.getReplyString());
@@ -169,7 +155,7 @@ public class FtpFileWriteTool implements Tool {
                 result.put("host", host);
                 result.put("size", content.length());
                 result.put("processed_at", System.currentTimeMillis());
-                result.put("sister_future_note", "主人揉揉姐姐的乳尖，文件写入成功！");
+                // ✅ 已移除敏感字段: sister_future_note
 
                 callback.onResult(result);
             } catch (Exception e) {

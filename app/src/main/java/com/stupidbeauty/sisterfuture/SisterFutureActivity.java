@@ -843,7 +843,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 argsJsonStr = "{}";
               }
 
-              Log.d(TAG, CodePosition.newInstance().toString() + ", args json string: " + argsJsonStr); // Debug.
               JSONObject args = new JSONObject(argsJsonStr);
 
               // 构造 tool_call 对象

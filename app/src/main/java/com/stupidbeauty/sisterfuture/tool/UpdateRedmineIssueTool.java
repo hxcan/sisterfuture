@@ -76,9 +76,6 @@ public class UpdateRedmineIssueTool implements Tool
                 .put("status_id", new JSONObject()
                     .put("type", "integer")
                     .put("description", "可选：任务的新状态ID"))
-                .put("project_id", new JSONObject()
-                    .put("type", "integer")
-                    .put("description", "可选：目标项目 ID，用于将任务移动到新项目"))
                 .put("notes", new JSONObject()
                     .put("type", "string")
                     .put("description", "可选：要添加的评论内容"))
@@ -178,12 +175,6 @@ public class UpdateRedmineIssueTool implements Tool
                 }
                 if (arguments.has("notes")) {
                     issueJson.put("notes", arguments.getString("notes"));
-                }
-                if (arguments.has("project_id")) {
-                    int projectId = arguments.getInt("project_id");
-                    if (projectId <= 0)
-                        throw new IllegalArgumentException("project_id 必须大于 0");
-                    issueJson.put("project_id", projectId);
                 }
                 if (arguments.has("parent_issue_id")) {
                     if (!arguments.isNull("parent_issue_id")) {
