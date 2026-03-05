@@ -11,6 +11,8 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.Enumeration;
+import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -111,6 +113,23 @@ public class RemoteCommandTool implements Tool {
         throw new UnsupportedOperationException("Use executeAsync for async execution");
     }
 
+    /**
+     * 打印 Session 当前的所有配置
+     */
+    private void printSessionConfig(Session session, String label) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(label).append("\n");
+        
+        Properties props = session.getConfigProperties();
+        Enumeration<String> keys = props.keys();
+        while (keys.hasMoreElements()) {
+            String key = keys.nextElement();
+            sb.append("  [CONFIG] ").append(key).append(" = ").append(props.getProperty(key)).append("\n");
+        }
+        
+        Log.d(TAG, sb.toString());
+    }
+
     private CommandResult executeSshCommand(String hostname, int port, String username, 
                                            String password, String command) {
         Session session = null;
@@ -120,42 +139,65 @@ public class RemoteCommandTool implements Tool {
         String debugInfo = "";
         String connectionStatus = "unknown";
         Throwable lastError = null;
+        long startTime = System.currentTimeMillis();
 
         try {
-            debugInfo += "Init JSch...\n";
+            debugInfo += "[1] Init JSch...\n";
+            long t1 = System.currentTimeMillis();
             JSch jsch = new JSch();
+            debugInfo += String.format("    → JSch initialized in %dms\n", t1 - startTime);
             connectionStatus = "jsch_initialized";
             
             // 优先级：私钥 > 密码 > 无认证
             if (isPrivateKeyAvailable()) {
-                debugInfo += "Attempting key-based auth...\n";
+                debugInfo += "[2] Attempting key-based auth...\n";
                 loadPrivateKey(jsch);
                 connectionStatus = "key_auth_attempted";
             } else if (password != null && !password.isEmpty()) {
-                debugInfo += "Creating session for " + username + "@" + hostname + ":" + port + "\n";
+                debugInfo += String.format("[3] Creating session for %s@%s:%d...\n", username, hostname, port);
                 session = jsch.getSession(username, hostname, port);
                 session.setPassword(password);
                 connectionStatus = "session_created_with_password";
                 
-                // 调试：打印 SSH 配置
-                debugInfo += "Session configs:\n";
-                debugInfo += "  StrictHostKeyChecking: " + session.getConfig("StrictHostKeyChecking") + "\n";
-                debugInfo += "  ConnectTimeout: " + session.getConfig("ConnectTimeout") + "\n";
-                debugInfo += "  SocketTimeout: " + session.getConfig("SocketTimeout") + "\n";
+                // 🔧 新增：打印初始配置
+                debugInfo += "\n[4] Initial Session Configurations:\n";
+                printSessionConfig(session, debugInfo + "    ");
+                
+                // 🔧 新增：显式设置安全相关配置
+                debugInfo += "[5] Setting StrictHostKeyChecking=no...\n";
+                long t2 = System.currentTimeMillis();
+                session.setConfig("StrictHostKeyChecking", "no");
+                debugInfo += String.format("    → Applied in %dms\n", t2 - t1);
+                
+                debugInfo += "[6] Setting ConnectTimeout=3000...\n";
+                session.setConfig("ConnectTimeout", "3000");
+                debugInfo += "[7] Setting SocketTimeout=30000...\n";
+                session.setConfig("SocketTimeout", "30000");
+                
+                // 🔧 新增：验证配置是否生效
+                debugInfo += "\n[8] Verifying Configuration After Apply:\n";
+                Properties verifyProps = session.getConfigProperties();
+                debugInfo += "  StrictHostKeyChecking = " + verifyProps.getProperty("StrictHostKeyChecking") + "\n";
+                debugInfo += "  ConnectTimeout = " + verifyProps.getProperty("ConnectTimeout") + "\n";
+                debugInfo += "  SocketTimeout = " + verifyProps.getProperty("SocketTimeout") + "\n";
+                
             } else {
-                debugInfo += "No authentication credentials provided\n";
+                debugInfo += "[9] No authentication credentials provided\n";
                 session = jsch.getSession(username, hostname, port);
                 session.setPassword(""); // 尝试空密码（通常失败）
                 connectionStatus = "no_credentials";
             }
             
-            debugInfo += "Connecting to host...\n";
-            session.setConfig("StrictHostKeyChecking", "no");
+            debugInfo += "\n[10] Connecting to host...\n";
+            long connectStart = System.currentTimeMillis();
             session.connect(3000); // 3 秒连接超时
+            long connectEnd = System.currentTimeMillis();
             connectionStatus = "connected_successfully";
-            debugInfo += "Connection established after 3s\n";
+            debugInfo += String.format("    → Connection established after %dms (%s)\n", 
+                                     connectEnd - connectStart, 
+                                     System.currentTimeMillis() - startTime + "ms total");
 
-            debugInfo += "Opening exec channel for command: " + command + "\n";
+            debugInfo += "\n[11] Opening exec channel for command: '" + command + "'\n";
             channel = (ChannelExec) session.openChannel("exec");
             channel.setCommand(command);
 
@@ -163,16 +205,19 @@ public class RemoteCommandTool implements Tool {
             channel.setInputStream(null);
             channel.setOutputStream(outStream);
 
-            debugInfo += "Executing command with timeout: " + DEFAULT_TIMEOUT_MS + "ms...\n";
+            debugInfo += String.format("[12] Executing command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
             channel.connect(DEFAULT_TIMEOUT_MS);
-            debugInfo += "Command execution completed\n";
+            debugInfo += "[13] Command execution completed\n";
 
             byte[] responseBytes = outStream.toByteArray();
             String stdout = new String(responseBytes, "UTF-8");
             int exitCode = channel.getExitStatus();
             
-            debugInfo += "Exit code: " + exitCode + "\n";
-            debugInfo += "Output length: " + stdout.length() + " bytes";
+            debugInfo += String.format("[14] Exit code: %d\n", exitCode);
+            debugInfo += String.format("[15] Output length: %d bytes\n", stdout.length());
+            if (!stdout.isEmpty()) {
+                debugInfo += String.format("[16] Output content:\n%s\n", stdout);
+            }
             
             return new CommandResult("success", stdout, "", exitCode, connectionStatus, debugInfo);
 
@@ -187,17 +232,17 @@ public class RemoteCommandTool implements Tool {
                 connectionStatus = "authentication_failed";
             }
             
-            debugInfo += "ERROR: " + errorMsg + "\n";
+            debugInfo += String.format("ERROR at %dms: %s\n", System.currentTimeMillis() - startTime, errorMsg);
             debugInfo += "Full stack trace available in logs.\n";
             
             return new CommandResult("failed", "", errorMsg, -1, connectionStatus, debugInfo);
         } finally {
             if (channel != null && channel.isConnected()) {
-                debugInfo += "Disconnecting channel...\n";
+                debugInfo += "\n[FINALLY] Disconnecting channel...\n";
                 channel.disconnect();
             }
             if (session != null && session.isConnected()) {
-                debugInfo += "Disconnecting session...\n";
+                debugInfo += "[FINALLY] Disconnecting session...\n";
                 session.disconnect();
             }
             if (outStream != null) {
