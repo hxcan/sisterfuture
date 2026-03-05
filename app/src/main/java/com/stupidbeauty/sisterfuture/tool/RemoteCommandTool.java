@@ -188,24 +188,35 @@ public class RemoteCommandTool implements Tool {
 
             debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
             channel = (ChannelExec) session.openChannel("exec");
+            
+            // 🔧 **新增：启用 Pseudo-Terminal (PTY)**
+            debugInfo += "[10] Allocating pseudo-terminal (PTY)...\n";
+            channel.setPty(true);
+            
+            // 🔧 **新增：注入环境变量**
+            debugInfo += "[11] Setting environment variables...\n";
+            ((ChannelExec) channel).setEnv("TERM", "xterm");
+            ((ChannelExec) channel).setEnv("LANG", "zh_CN.UTF-8");
+            debugInfo += "    ENV: TERM=xterm, LANG=zh_CN.UTF-8\n";
+            
             channel.setCommand(command);
 
             outStream = new ByteArrayOutputStream();
             channel.setInputStream(null);
             channel.setOutputStream(outStream);
 
-            debugInfo += String.format("[10] Executing command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
+            debugInfo += String.format("[12] Executing command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
             channel.connect(DEFAULT_TIMEOUT_MS);
-            debugInfo += "[11] Command execution completed\n";
+            debugInfo += "[13] Command execution completed\n";
 
             byte[] responseBytes = outStream.toByteArray();
             String stdout = new String(responseBytes, "UTF-8");
             int exitCode = channel.getExitStatus();
             
-            debugInfo += String.format("[12] Exit code: %d\n", exitCode);
-            debugInfo += String.format("[13] Output length: %d bytes\n", stdout.length());
+            debugInfo += String.format("[14] Exit code: %d\n", exitCode);
+            debugInfo += String.format("[15] Output length: %d bytes\n", stdout.length());
             if (!stdout.isEmpty()) {
-                debugInfo += String.format("[14] Output content:\n%s\n", stdout);
+                debugInfo += String.format("[16] Output content:\n%s\n", stdout);
             }
             
             return new CommandResult("success", stdout, "", exitCode, connectionStatus, debugInfo);
