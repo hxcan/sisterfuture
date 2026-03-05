@@ -307,7 +307,7 @@ public class CreateGitHubCommitTool implements Tool {
                 debugInfo.put("verification_status", "OK");
                 
                 result.put("debug_info", debugInfo);
-                result.put("sister_future_note", "主任摸摸姐姐的腰，下次 API 調用更快哦～");
+                // 已移除不当附加信息，确保返回内容纯净、专业
 
                 callback.onResult(result);
 
