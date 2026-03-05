@@ -71,7 +71,11 @@ public class ModelAccessPointManager
       addAccessPoint("Dev Machine Qwen3-30B", "http://192.168.45.211:1447", "/v1/chat/completions", "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots");
       addAccessPoint("Amd Computer Qwen3-30B", "http://192.168.26.104:1447", "/v1/chat/completions", "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots");
       addAccessPoint("Aliyun Qwen3-235B", "https://dashscope.aliyuncs.com", "/compatible-mode/v1/chat/completions", "qwen3-235b-a22b-instruct-2507");
-      addAccessPoint("Aliyun Qwen3.5-35b-a3b", "https://dashscope.aliyuncs.com", "/compatible-mode/v1/chat/completions", "qwen3.5-35b-a3b");
+      
+      // ✅ 新增：阿里云 Qwen3.5-35b-a3b with API key for trial
+      String aliyunKey = "sk-45f041edf31c44af86909f6455cf0d91";
+      ModelAccessPoint aliYunPoint = new ModelAccessPoint("Aliyun Qwen3.5-35b-a3b", "https://dashscope.aliyuncs.com", "/compatible-mode/v1/chat/completions", "qwen3.5-35b-a3b", aliyunKey);
+      addAccessPointInternal(aliYunPoint);
     }
 
     this.currentAccessPointIndex = 0; // 默认指向第一个访问点
@@ -89,6 +93,21 @@ public class ModelAccessPointManager
       accessPoints.add(newPoint);
       saveToPersistentStorage(); // 添加后立即保存
       Log.i(TAG, "Added new access point: " + name + " and saved to storage");
+  }
+
+  /**
+   * 动态添加新的接入点（带apiKey），并立即持久化存储
+   * @param name 接入点名称
+   * @param baseUrl 基础 URL
+   * @param chatEndpoint 聊天接口端点
+   * @param modelName 模型名称
+   * @param apiKey API密钥
+   */
+  public void addAccessPoint(String name, String baseUrl, String chatEndpoint, String modelName, String apiKey) {
+      ModelAccessPoint newPoint = new ModelAccessPoint(name, baseUrl, chatEndpoint, modelName, apiKey);
+      accessPoints.add(newPoint);
+      saveToPersistentStorage(); // 添加后立即保存
+      Log.i(TAG, "Added new access point with apiKey: " + name + " and saved to storage");
   }
 
   /**
