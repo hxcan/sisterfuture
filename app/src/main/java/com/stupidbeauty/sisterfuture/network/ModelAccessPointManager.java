@@ -71,6 +71,7 @@ public class ModelAccessPointManager
       addAccessPoint("Dev Machine Qwen3-30B", "http://192.168.45.211:1447", "/v1/chat/completions", "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots");
       addAccessPoint("Amd Computer Qwen3-30B", "http://192.168.26.104:1447", "/v1/chat/completions", "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots");
       addAccessPoint("Aliyun Qwen3-235B", "https://dashscope.aliyuncs.com", "/compatible-mode/v1/chat/completions", "qwen3-235b-a22b-instruct-2507");
+      addAccessPoint("Aliyun Qwen3.5-35b-a3b", "https://dashscope.aliyuncs.com", "/compatible-mode/v1/chat/completions", "qwen3.5-35b-a3b");
     }
 
     this.currentAccessPointIndex = 0; // 默认指向第一个访问点
