@@ -41,22 +41,12 @@ public class RemoteCommandTool implements Tool {
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             
-            JSONObject properties = new JSONObject()
-                .put("hostname", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "目标主机 IP 或域名"))
-                .put("port", new JSONObject()
-                    .put("type", "integer")
-                    .put("description", "SSH 端口 (默认 22)", "default", 22))
-                .put("username", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "登录用户名"))
-                .put("password", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "登录密码（如果提供则使用密码认证）"))
-                .put("command", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "要执行的 Shell 命令"));
+            JSONObject properties = new JSONObject();
+            properties.put("hostname", new JSONObject().put("type", "string").put("description", "目标主机 IP 或域名"));
+            properties.put("port", new JSONObject().put("type", "integer").put("description", "SSH 端口"));
+            properties.put("username", new JSONObject().put("type", "string").put("description", "登录用户名"));
+            properties.put("password", new JSONObject().put("type", "string").put("description", "登录密码（可选）"));
+            properties.put("command", new JSONObject().put("type", "string").put("description", "要执行的 Shell 命令"));
             
             parameters.put("properties", properties);
             parameters.put("required", new JSONArray(new String[]{
