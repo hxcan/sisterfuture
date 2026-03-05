@@ -4,15 +4,15 @@ import android.content.Context;
 import android.util.Log;
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.KeyPair;
 import com.jcraft.jsch.Session;
-import com.victoriafresh.api.VFile;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public class RemoteCommandTool implements Tool {
@@ -36,7 +36,7 @@ public class RemoteCommandTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "execute_remote_command");
-            functionDef.put("description", "执行远程 SSH 命令，需传入主机、用户名、私钥和命令");
+            functionDef.put("description", "执行远程 SSH 命令，支持密码或私钥认证");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -51,16 +51,16 @@ public class RemoteCommandTool implements Tool {
                 .put("username", new JSONObject()
                     .put("type", "string")
                     .put("description", "登录用户名"))
-                .put("privateKeyBytes", new JSONObject()
-                    .put("type", "array")
-                    .put("description", "已解密的私钥字节数组（需先解密）"))
+                .put("password", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "登录密码（如果提供则使用密码认证）"))
                 .put("command", new JSONObject()
                     .put("type", "string")
                     .put("description", "要执行的 Shell 命令"));
             
             parameters.put("properties", properties);
             parameters.put("required", new JSONArray(new String[]{
-                "hostname", "username", "privateKeyBytes", "command"
+                "hostname", "username", "command"
             }));
 
             functionDef.put("parameters", parameters);
@@ -88,10 +88,15 @@ public class RemoteCommandTool implements Tool {
                 String hostname = arguments.getString("hostname");
                 int port = arguments.optInt("port", 22);
                 String username = arguments.getString("username");
-                byte[] privateKeyBytes = arguments.getJSONArray("privateKeyBytes").toString().getBytes(); // 注意：此处需优化
                 String command = arguments.getString("command");
+                
+                // 判断使用密码还是私钥认证
+                String password = null;
+                if (arguments.has("password") && !arguments.isNull("password")) {
+                    password = arguments.getString("password");
+                }
 
-                CommandResult result = executeSshCommand(hostname, port, username, privateKeyBytes, command);
+                CommandResult result = executeSshCommand(hostname, port, username, password, command);
                 callback.onResult(result.toJson());
             } catch (Exception e) {
                 Log.e(TAG, "Execution failed", e);
@@ -115,17 +120,25 @@ public class RemoteCommandTool implements Tool {
     }
 
     private CommandResult executeSshCommand(String hostname, int port, String username, 
-                                           byte[] privateKeyBytes, String command) {
+                                           String password, String command) {
         Session session = null;
         ChannelExec channel = null;
         ByteArrayOutputStream outStream = null;
 
         try {
             JSch jsch = new JSch();
-            // TODO: 完整实现私钥加载（含解密逻辑）
-            // jsch.addIdentity(new ByteArrayInputStream(privateKeyBytes));
             
-            session = jsch.getSession(username, hostname, port);
+            // 优先级：私钥 > 密码 > 无认证
+            if (isPrivateKeyAvailable()) {
+                loadPrivateKey(jsch);
+            } else if (password != null && !password.isEmpty()) {
+                session = jsch.getSession(username, hostname, port);
+                session.setPassword(password);
+            } else {
+                session = jsch.getSession(username, hostname, port);
+                session.setPassword(""); // 尝试空密码（通常失败）
+            }
+            
             session.setConfig("StrictHostKeyChecking", "no");
             session.connect(3000); // 3秒连接超时
 
@@ -151,6 +164,31 @@ public class RemoteCommandTool implements Tool {
             if (outStream != null) {
                 try { outStream.close(); } catch (Exception ignored) {}
             }
+        }
+    }
+    
+    /**
+     * 检查是否存在可用的私钥
+     */
+    private boolean isPrivateKeyAvailable() {
+        // TODO: 从 Victoria Fresh VFS 检查是否有私钥文件
+        // 目前返回 false，强制使用密码认证
+        return false;
+    }
+    
+    /**
+     * 加载私钥到 JSch（当前为占位符实现）
+     */
+    private void loadPrivateKey(JSch jsch) {
+        try {
+            // TODO: 从 VFS 读取私钥并解析
+            // 示例伪代码：
+            // String keyContent = readFromVFS("/keys.s/android_ssh_key");
+            // KeyPair kp = KeyPair.load(jsch, keyContent);
+            // jsch.addIdentity(kp);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to load private key", e);
+            // 加载失败不影响其他认证方式
         }
     }
 
@@ -180,6 +218,6 @@ public class RemoteCommandTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求执行远程命令时才调用此工具。需要提供 hostname、username、privateKeyBytes 和 command 参数。";
+        return "必须在用户明确要求执行远程命令时才调用此工具。需要提供 hostname、username 和 command 参数。若需认证，可选提供 password 参数（推荐使用密码认证，私钥认证暂不通过大模型传递）。";
     }
 }
