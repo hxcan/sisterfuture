@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">未来姐姐</string>
+  <string name="somethingIsWrong">出现错误，请稍后再试。</string>
+</resources>

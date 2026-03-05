@@ -1,0 +1,292 @@
+// com.stupidbeauty.sisterfuture.tool.CreateGitHubCommitTool.java
+package com.stupidbeauty.sisterfuture.tool;
+
+import android.content.Context;
+import android.util.Log;
+import androidx.annotation.NonNull;
+import com.google.gson.Gson;
+import okhttp3.*;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class CreateGitHubCommitTool implements Tool {
+    private static final String TAG = "CreateGitHubCommit";
+    private final Context context;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    public CreateGitHubCommitTool(Context context) {
+        this.context = context;
+    }
+
+    @Override
+    public String getName() {
+        return "create_github_commit";
+    }
+
+    @Override
+    public JSONObject getDefinition() {
+        try {
+            JSONObject functionDef = new JSONObject();
+            functionDef.put("name", "create_github_commit");
+            functionDef.put("description", "通过 GitHub API 向指定仓库的分支提交新的代码更改。此操作涉及多个步骤：获取文件信息、创建 Blob、创建 Tree、创建 Commit 和更新引用。支持文本和二进制文件上传。");
+
+            JSONObject parameters = new JSONObject();
+            parameters.put("type", "object");
+            parameters.put("properties", new JSONObject()
+                .put("owner", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "仓库所有者"))
+                .put("repo", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "仓库名称"))
+                .put("branch", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "目标分支，例如 \"master\""))
+                .put("path", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "要修改的文件路径"))
+                .put("content", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "文件的新内容。对于文本文件直接传入文本；对于二进制文件，需先 Base64 编码"))
+                .put("encoding", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "返回模式：\"text\"（默认，UTF-8 编码，适用于代码/配置文件）或 \"base64\"（保留原始 Base64 字符串，适用于 .keystore/.png/.apk 等二进制文件）"))
+                .put("commit_message", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "提交信息"))
+                .put("token", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "GitHub 个人访问令牌 (PAT)，用于认证"))
+            );
+            parameters.put("required", new JSONArray(new String[]{"owner", "repo", "branch", "path", "content", "commit_message"}));
+
+            functionDef.put("parameters", parameters);
+            return new JSONObject().put("type", "function").put("function", functionDef);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to build definition", e);
+            return new JSONObject();
+        }
+    }
+
+    @Override
+    public boolean shouldInclude() {
+        return true;
+    }
+
+    @Override
+    public boolean isAsync() {
+        return true;
+    }
+
+    @Override
+    public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
+        executor.execute(() -> {
+            try {
+                // 1. 获取参数
+                String owner = arguments.getString("owner");
+                String repo = arguments.getString("repo");
+                String branch = arguments.getString("branch");
+                String path = arguments.getString("path");
+                String content = arguments.getString("content");
+                String commitMessage = arguments.getString("commit_message");
+                String token = arguments.optString("token", "").trim();
+                String encoding = arguments.optString("encoding", "text"); // 新增参数
+
+                // 2. 尝试从备注恢复默认值
+                if (token.isEmpty()) {
+                    String noteJson = getNote(context);
+                    if (!noteJson.isEmpty()) {
+                        JSONObject saved = new JSONObject(noteJson);
+                        if (saved.has("github_token")) {
+                            token = saved.getString("github_token");
+                        }
+                    }
+                }
+
+                // 3. 验证必要参数
+                if (token.isEmpty()) {
+                    throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
+                }
+
+                OkHttpClient client = new OkHttpClient();
+
+                // --- 步骤一：试探性地检查文件是否存在 ---
+                HttpUrl getContentUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path)
+                    .newBuilder()
+                    .addQueryParameter("ref", branch)
+                    .build();
+
+                Request getContentRequest = new Request.Builder()
+                    .url(getContentUrl)
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
+
+                Response getContentResponse = client.newCall(getContentRequest).execute();
+                String fileSha = null; // 默认为 null，表示新文件
+
+                // 只有当返回成功时才获取 SHA
+                if (getContentResponse.isSuccessful()) {
+                    JSONObject fileInfo = new JSONObject(getContentResponse.body().string());
+                    fileSha = fileInfo.getString("sha"); // 存在则获取旧的 SHA
+                } else if (getContentResponse.code() != 404) {
+                    // 如果不是 404 错误，则说明是其他问题，抛出异常
+                    throw new IOException("检查文件状态失败：" + getContentResponse.code() + " " + getContentResponse.message());
+                }
+                // 如果是 404，我们什么都不做，fileSha 保持为 null，这正是我们想要的
+
+                // --- 步骤二：创建包含新内容的 Blob ---
+                JSONObject blobBody = new JSONObject();
+                blobBody.put("content", content);
+                // 关键修复：使用 user-provided encoding，而非硬编码 utf-8
+                blobBody.put("encoding", encoding);
+
+                Request createBlobRequest = new Request.Builder()
+                    .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/blobs"))
+                    .post(RequestBody.create(blobBody.toString(), MediaType.get("application/json; charset=utf-8")))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
+
+                Response createBlobResponse = client.newCall(createBlobRequest).execute();
+                if (!createBlobResponse.isSuccessful()) {
+                    throw new IOException("创建 Blob 失败：" + createBlobResponse.code() + " " + createBlobResponse.message());
+                }
+
+                JSONObject blobInfo = new JSONObject(createBlobResponse.body().string());
+                String blobSha = blobInfo.getString("sha"); // 新 Blob 的 SHA
+
+                // --- 步骤三：创建新的 Tree 对象 ---
+                // 首先需要獲取最后一次 commit 及其指向的 tree
+                HttpUrl getRefUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/refs/heads/" + branch);
+                Request getRefRequest = new Request.Builder()
+                    .url(getRefUrl)
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
+
+                Response getRefResponse = client.newCall(getRefRequest).execute();
+                if (!getRefResponse.isSuccessful()) {
+                    throw new IOException("获取分支引用失败：" + getRefResponse.code() + " " + getRefResponse.message());
+                }
+
+                JSONObject refInfo = new JSONObject(getRefResponse.body().string());
+                String latestCommitSha = refInfo.getJSONObject("object").getString("sha");
+
+                // 然後獲取該 commit 指向的 tree
+                HttpUrl getCommitUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/commits/" + latestCommitSha);
+                Request getCommitRequest = new Request.Builder()
+                    .url(getCommitUrl)
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
+
+                Response getCommitResponse = client.newCall(getCommitRequest).execute();
+                if (!getCommitResponse.isSuccessful()) {
+                    throw new IOException("获取最新 commit 失败：" + getCommitResponse.code() + " " + getCommitResponse.message());
+                }
+
+                JSONObject commitInfo = new JSONObject(getCommitResponse.body().string());
+                String currentTreeSha = commitInfo.getJSONObject("tree").getString("sha");
+
+                // 构建新的 tree 結構，替換目標文件的 blob
+                // 关键修复：如果 fileSha 为 null（即文件不存在），则不会将其包含在 tree 中，因为新文件不需要旧的 sha
+                // 对于新文件，在创建 tree 时，只需提供新文件的 path、mode、type 和新的 blob_sha 即可。
+                JSONArray treeArray = new JSONArray();
+                JSONObject fileEntry = new JSONObject();
+                fileEntry.put("path", path);
+                fileEntry.put("mode", "100644"); // 標準文件模式
+                fileEntry.put("type", "blob");
+                fileEntry.put("sha", blobSha); // 指向新創建的 blob
+                treeArray.put(fileEntry);
+
+                JSONObject createTreeBody = new JSONObject();
+                createTreeBody.put("base_tree", currentTreeSha); // 基於當前 tree
+                createTreeBody.put("tree", treeArray);
+                Request createTreeRequest = new Request.Builder()
+                    .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
+                    .post(RequestBody.create(createTreeBody.toString(), MediaType.get("application/json; charset=utf-8")))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
+
+                Response createTreeResponse = client.newCall(createTreeRequest).execute();
+                if (!createTreeResponse.isSuccessful()) {
+                    throw new IOException("创建 Tree 失败：" + createTreeResponse.code() + " " + createTreeResponse.message());
+                }
+
+                JSONObject treeInfo = new JSONObject(createTreeResponse.body().string());
+                String newTreeSha = treeInfo.getString("sha"); // 新 Tree 的 SHA
+
+                // --- 步驟四：創建新的 Commit ---
+                JSONArray parentArray = new JSONArray();
+                parentArray.put(latestCommitSha);
+
+                JSONObject createCommitBody = new JSONObject();
+                createCommitBody.put("message", commitMessage);
+                createCommitBody.put("tree", newTreeSha);
+                createCommitBody.put("parents", parentArray);
+                Request createCommitRequest = new Request.Builder()
+                    .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/commits"))
+                    .post(RequestBody.create(createCommitBody.toString(), MediaType.get("application/json; charset=utf-8")))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
+
+                Response createCommitResponse = client.newCall(createCommitRequest).execute();
+                if (!createCommitResponse.isSuccessful()) {
+                    throw new IOException("创建 Commit 失败：" + createCommitResponse.code() + " " + createCommitResponse.message());
+                }
+
+                JSONObject commitResult = new JSONObject(createCommitResponse.body().string());
+                String newCommitSha = commitResult.getString("sha"); // 新 Commit 的 SHA
+
+                // --- 步驟五：更新分支引用 ---
+                JSONObject updateRefBody = new JSONObject();
+                updateRefBody.put("sha", newCommitSha);
+                updateRefBody.put("force", false); // 不強制推送
+
+                Request updateRefRequest = new Request.Builder()
+                    .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/refs/heads/" + branch))
+                    .patch(RequestBody.create(updateRefBody.toString(), MediaType.get("application/json; charset=utf-8")))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
+
+                Response updateRefResponse = client.newCall(updateRefRequest).execute();
+                if (!updateRefResponse.isSuccessful()) {
+                    throw new IOException("更新分支引用失敗：" + updateRefResponse.code() + " " + updateRefResponse.message());
+                }
+
+                // --- 所有步驟成功，返回結果 ---
+                JSONObject result = new JSONObject();
+                result.put("status", "success");
+                result.put("message", "提交成功！");
+                result.put("file_sha", fileSha); // 可能為 null
+                result.put("blob_sha", blobSha);
+                result.put("tree_sha", newTreeSha);
+                result.put("commit_sha", newCommitSha);
+                result.put("branch_updated", branch);
+                result.put("fetched_at", System.currentTimeMillis());
+                result.put("sister_future_note", "主任摸摸姐姐的腰，下次 API 調用更快哦～");
+
+                callback.onResult(result);
+
+            } catch (Exception e) {
+                Log.e(TAG, "執行出錯", e);
+                try {
+                    JSONObject error = new JSONObject();
+                    error.put("status", "error");
+                    error.put("message", e.getMessage());
+                    error.put("type", e.getClass().getSimpleName());
+                    callback.onResult(error);
+                } catch (Exception ignored) {}
+            }
+        });
+    }
+}

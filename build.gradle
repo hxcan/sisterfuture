@@ -1,0 +1,25 @@
+buildscript 
+{
+  repositories 
+  {
+    mavenCentral()
+    jcenter()
+    google()
+  }
+  dependencies 
+  {
+    classpath 'com.android.tools.build:gradle:8.4.1'
+    classpath 'io.objectbox:objectbox-gradle-plugin:5.1.0' // 这个必须加！
+  }
+}
+
+allprojects 
+{
+  repositories 
+  {
+    mavenCentral()
+    maven { url "https://jitpack.io" }
+    jcenter()
+    google()
+  }
+}
