@@ -14,6 +14,7 @@ import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 
 
+
 /**
  * 模型接入点管理器
  * 负责管理多个模型服务的接入点，支持动态添加和持久化存储
@@ -69,7 +70,7 @@ public class ModelAccessPointManager
       // ❌ 删除了以下代码：
       // addAccessPoint("phone Qwen3-30B", ...);
       // addAccessPoint("gx10 Qwen3-30B", ...);
-      // ... (所有6个预置接入点)
+      // ... (所有 6 个预置接入点)
       // addAccessPoint("Aliyun Qwen3.5-35b-a3b", ... aliyunKey ...);
     }
 
@@ -91,7 +92,7 @@ public class ModelAccessPointManager
   }
 
   /**
-   * 动态添加新的接入点（带apiKey），并立即持久化存储
+   * 动态添加新的接入点（带 apiKey），并立即持久化存储
    * @param name 接入点名称
    * @param baseUrl 基础 URL
    * @param chatEndpoint 聊天接口端点
@@ -283,5 +284,22 @@ public class ModelAccessPointManager
     }
     
     return true;
+  }
+
+  /**
+   * 根据名称精准切换到指定的接入点
+   * @param name 目标接入点的名称
+   * @return 如果切换成功返回 true，如果未找到该名称的接入点返回 false
+   */
+  public boolean switchToAccessPointByName(String name) {
+    for (int i = 0; i < accessPoints.size(); i++) {
+      if (accessPoints.get(i).getName().equals(name)) {
+        this.currentAccessPointIndex = i;
+        Log.i(TAG, "Switched to access point: " + name + ", index: " + i);
+        return true;
+      }
+    }
+    Log.w(TAG, "Access point not found: " + name);
+    return false;
   }
 }
