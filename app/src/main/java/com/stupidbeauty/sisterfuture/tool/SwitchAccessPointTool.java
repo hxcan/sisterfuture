@@ -147,23 +147,26 @@ public class SwitchAccessPointTool implements Tool
    */
   private JSONObject switchToTargetAccessPoint(String targetName) throws Exception
   {
-    // 获取所有接入点列表
-    java.util.List<ModelAccessPoint> allAccessPoints = accessPointManager.getAllAccessPoints();
-    
-    // 查找目标接入点
-    ModelAccessPoint targetAccessPoint = null;
-    for (ModelAccessPoint ap : allAccessPoints)
+    // 先检查当前是否已经是目标接入点
+    ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
+    if (currentAccessPoint != null && currentAccessPoint.getName().equals(targetName))
     {
-      if (ap.getName().equals(targetName))
-      {
-        targetAccessPoint = ap;
-        break;
-      }
+      JSONObject result = new JSONObject();
+      result.put("message", "当前已在使用 \"" + targetName + "\" 接入点");
+      result.put("current_access_point", currentAccessPoint.getName());
+      result.put("base_url", currentAccessPoint.getBaseUrl());
+      result.put("chat_endpoint", currentAccessPoint.getChatEndpoint());
+      result.put("model_name", currentAccessPoint.getModelName());
+      return result;
     }
 
-    // 如果未找到目标接入点，返回错误提示
-    if (targetAccessPoint == null)
+    // 尝试切换到目标接入点
+    boolean success = accessPointManager.switchToAccessPointByName(targetName);
+    
+    if (!success)
     {
+      // 如果未找到目标接入点，返回错误提示
+      java.util.List<ModelAccessPoint> allAccessPoints = accessPointManager.getAllAccessPoints();
       JSONObject errorResult = new JSONObject();
       StringBuilder availableNames = new StringBuilder();
       for (int i = 0; i < allAccessPoints.size(); i++)
@@ -178,29 +181,16 @@ public class SwitchAccessPointTool implements Tool
       return errorResult;
     }
 
-    // 检查当前是否已经是目标接入点
-    ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
-    if (currentAccessPoint.getName().equals(targetName))
-    {
-      JSONObject result = new JSONObject();
-      result.put("message", "当前已在使用 \"" + targetName + "\" 接入点");
-      result.put("current_access_point", currentAccessPoint.getName());
-      result.put("base_url", currentAccessPoint.getBaseUrl());
-      result.put("chat_endpoint", currentAccessPoint.getChatEndpoint());
-      result.put("model_name", currentAccessPoint.getModelName());
-      return result;
-    }
-
-    // 切换到目标接入点
-    accessPointManager.reportCurrentAccessPointUnavailable();
+    // 获取切换后的接入点信息
+    ModelAccessPoint switchedAccessPoint = accessPointManager.getCurrentAccessPoint();
 
     // 构造返回结果
     JSONObject result = new JSONObject();
     result.put("message", "已成功切换到接入点: " + targetName);
-    result.put("current_access_point", targetAccessPoint.getName());
-    result.put("base_url", targetAccessPoint.getBaseUrl());
-    result.put("chat_endpoint", targetAccessPoint.getChatEndpoint());
-    result.put("model_name", targetAccessPoint.getModelName());
+    result.put("current_access_point", switchedAccessPoint.getName());
+    result.put("base_url", switchedAccessPoint.getBaseUrl());
+    result.put("chat_endpoint", switchedAccessPoint.getChatEndpoint());
+    result.put("model_name", switchedAccessPoint.getModelName());
 
     return result;
   }
