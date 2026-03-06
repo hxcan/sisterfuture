@@ -1,4 +1,5 @@
 package com.stupidbeauty.sisterfuture.tool;
+import android.util.Log;
 import java.util.List;
 public class SearchFileInRepoTool implements Tool{
 @Override public String getName(){return"search_file_in_repo";}
