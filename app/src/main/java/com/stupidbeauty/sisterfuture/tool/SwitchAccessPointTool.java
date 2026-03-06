@@ -24,7 +24,7 @@ public class SwitchAccessPointTool implements Tool
   @Override
   public String getDefaultSystemPromptEnhancement()
   {
-    String enhancementString = "必须是在用户用直接语言明确要求切换接入点时才调用此工具，不可以自作主张地调用，以免引起死循环，那样妳将会被打屁股。";
+    String enhancementString = "当用户明确要求切换模型接入点时调用此工具。支持两种模式：\n\n1. **顺序切换模式（默认）**：当用户未指定目标名称时，轮转到下一个候选接入点。\n2. **精准切换模式**：当用户提供 `target_name` 参数时，直接切换到指定名称的接入点（如 \"Qwen3.5-397B-A17B-专业版\"）。\n\n**参数说明：**\n- `target_name`（可选）：目标接入点名称。若不提供，则执行顺序切换。\n\n**错误处理：**\n- 若目标接入点不存在，返回友好提示：\"未找到名为 [XXX] 的接入点，当前可用接入点包括：[列表]\"\n- 若当前已是目标接入点，提示：\"当前已在使用 [XXX] 接入点\"\n\n**重要约束：**\n- 必须是在用户用直接语言明确要求切换接入点时才调用此工具，不可以自作主张地调用，以免引起死循环。\n- 切换成功后，建议调用 `get_current_access_point_info` 确认新接入点已生效。";
     return enhancementString; // 默认不提供增强
   }
 
@@ -44,11 +44,17 @@ public class SwitchAccessPointTool implements Tool
     {
       JSONObject functionDef = new JSONObject();
       functionDef.put("name", "switch_access_point");
-      functionDef.put("description", "当用户明确要求切换模型接入点时调用。此工具会将接入点管理器轮转到下一个候选接入点，适用于需要手动切换模型的场景。");
+      functionDef.put("description", "当用户明确要求切换模型接入点时调用。支持顺序切换到下一个接入点，或通过 target_name 参数精准切换到指定接入点。");
+
+      JSONObject properties = new JSONObject();
+      properties.put("target_name", new JSONObject()
+        .put("type", "string")
+        .put("description", "可选：目标接入点名称。若不提供，则执行顺序切换。")
+      );
 
       functionDef.put("parameters", new JSONObject()
         .put("type", "object")
-        .put("properties", new JSONObject())
+        .put("properties", properties)
         .put("required", new JSONArray())
       );
 
@@ -80,21 +86,23 @@ public class SwitchAccessPointTool implements Tool
   {
     try
     {
-      // 切换到下一个接入点
-      accessPointManager.reportCurrentAccessPointUnavailable();
+      // 检查是否提供了 target_name 参数
+      String targetName = null;
+      if (arguments != null && arguments.has("target_name"))
+      {
+        targetName = arguments.getString("target_name");
+      }
 
-      // 获取当前切换后的接入点信息
-      ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
-
-      // 构造返回结果
-      JSONObject result = new JSONObject();
-      result.put("message", "已成功切换到下一个接入点");
-      result.put("current_access_point", currentAccessPoint.getName());
-      result.put("base_url", currentAccessPoint.getBaseUrl());
-      result.put("chat_endpoint", currentAccessPoint.getChatEndpoint());
-      result.put("model_name", currentAccessPoint.getModelName());
-
-      return result;
+      if (targetName != null && !targetName.isEmpty())
+      {
+        // 精准切换模式：根据名称查找并切换到指定接入点
+        return switchToTargetAccessPoint(targetName);
+      }
+      else
+      {
+        // 顺序切换模式：切换到下一个接入点
+        return switchToNextAccessPoint();
+      }
     }
     catch (Exception e)
     {
@@ -110,5 +118,90 @@ public class SwitchAccessPointTool implements Tool
       }
       return errorResult;
     }
+  }
+
+  /**
+   * 顺序切换到下一个接入点
+   */
+  private JSONObject switchToNextAccessPoint() throws Exception
+  {
+    // 切换到下一个接入点
+    accessPointManager.reportCurrentAccessPointUnavailable();
+
+    // 获取当前切换后的接入点信息
+    ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
+
+    // 构造返回结果
+    JSONObject result = new JSONObject();
+    result.put("message", "已成功切换到下一个接入点");
+    result.put("current_access_point", currentAccessPoint.getName());
+    result.put("base_url", currentAccessPoint.getBaseUrl());
+    result.put("chat_endpoint", currentAccessPoint.getChatEndpoint());
+    result.put("model_name", currentAccessPoint.getModelName());
+
+    return result;
+  }
+
+  /**
+   * 精准切换到指定名称的接入点
+   */
+  private JSONObject switchToTargetAccessPoint(String targetName) throws Exception
+  {
+    // 获取所有接入点列表
+    java.util.List<ModelAccessPoint> allAccessPoints = accessPointManager.getAllAccessPoints();
+    
+    // 查找目标接入点
+    ModelAccessPoint targetAccessPoint = null;
+    for (ModelAccessPoint ap : allAccessPoints)
+    {
+      if (ap.getName().equals(targetName))
+      {
+        targetAccessPoint = ap;
+        break;
+      }
+    }
+
+    // 如果未找到目标接入点，返回错误提示
+    if (targetAccessPoint == null)
+    {
+      JSONObject errorResult = new JSONObject();
+      StringBuilder availableNames = new StringBuilder();
+      for (int i = 0; i < allAccessPoints.size(); i++)
+      {
+        availableNames.append(allAccessPoints.get(i).getName());
+        if (i < allAccessPoints.size() - 1)
+        {
+          availableNames.append(", ");
+        }
+      }
+      errorResult.put("error", "未找到名为 \"" + targetName + "\" 的接入点，当前可用接入点包括：" + availableNames.toString());
+      return errorResult;
+    }
+
+    // 检查当前是否已经是目标接入点
+    ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
+    if (currentAccessPoint.getName().equals(targetName))
+    {
+      JSONObject result = new JSONObject();
+      result.put("message", "当前已在使用 \"" + targetName + "\" 接入点");
+      result.put("current_access_point", currentAccessPoint.getName());
+      result.put("base_url", currentAccessPoint.getBaseUrl());
+      result.put("chat_endpoint", currentAccessPoint.getChatEndpoint());
+      result.put("model_name", currentAccessPoint.getModelName());
+      return result;
+    }
+
+    // 切换到目标接入点
+    accessPointManager.switchToAccessPoint(targetAccessPoint);
+
+    // 构造返回结果
+    JSONObject result = new JSONObject();
+    result.put("message", "已成功切换到接入点: " + targetName);
+    result.put("current_access_point", targetAccessPoint.getName());
+    result.put("base_url", targetAccessPoint.getBaseUrl());
+    result.put("chat_endpoint", targetAccessPoint.getChatEndpoint());
+    result.put("model_name", targetAccessPoint.getModelName());
+
+    return result;
   }
 }
