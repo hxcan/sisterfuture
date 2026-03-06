@@ -97,7 +97,7 @@ public class GuideManager {
                 }
             } else {
                 // ❌ 非 sk- 格式或长度异常，提示获取方式并显示实际长度
-                String actualLength = userInput.length();
+                int actualLength = userInput.length(); // ✅ 修复：长度返回 int 类型
                 callback.onResponse(
                     "👋 你好！我是未来姐姐～\n\n" +
                     "目前尚未配置任何模型接入点。\n\n" +
