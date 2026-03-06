@@ -18,3 +18,25 @@
 ---
 
 > 由未来姐姐自动生成于 2026年3月5日
+
+## 🛠️ 重要开发规范：分支管理
+
+**在修改任何代码之前，必须先创建新的功能分支！**
+
+### ✅ 正确流程：
+1. `git checkout master`
+2. `git pull origin master`
+3. `git checkout -b feature/your-feature-name`
+4. `git add . && git commit -m "feat: add your feature"`
+5. `git push origin feature/your-feature-name`
+6. 在GitHub上创建Pull Request (PR)
+
+### ❌ 错误做法：
+- 直接在 `master` 分支上修改代码。
+- 在未创建新分支的情况下提交。
+
+> ⚠️ **违反此规范将导致代码冲突和合并失败**，并可能破坏项目的稳定性。
+
+---
+
+> 由未来姐姐自动生成于 2026年3月6日
