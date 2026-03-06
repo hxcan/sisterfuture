@@ -13,6 +13,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 
+
 /**
  * 模型接入点管理器
  * 负责管理多个模型服务的接入点，支持动态添加和持久化存储
@@ -62,20 +63,14 @@ public class ModelAccessPointManager
     this.accessPoints = new ArrayList<>();
     loadFromPersistentStorage(); // 启动时先加载持久化数据
     
-    // 只有当持久化存储中没有数据时才添加默认访问点
+    // ✅ 已移除：不再添加任何默认访问点
+    // 新用户首次启动时 accessPoints.isEmpty() == true，将触发 #4547 的空状态检测逻辑
     if (accessPoints.isEmpty()) {
-      // 添加候选访问点并命名
-      addAccessPoint("phone Qwen3-30B", "http://127.0.0.1:1447", "/v1/chat/completions", "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots");
-      addAccessPoint("gx10 Qwen3-30B", "http://192.168.150.58:8000", "/v1/chat/completions", "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots");
-      addAccessPoint("gx10 Qwen3-235B", "http://192.168.150.227:8080", "/v1/chat/completions", "Qwen3 235B Gptq Int4 Fp16 New");
-      addAccessPoint("Dev Machine Qwen3-30B", "http://192.168.45.211:1447", "/v1/chat/completions", "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots");
-      addAccessPoint("Amd Computer Qwen3-30B", "http://192.168.26.104:1447", "/v1/chat/completions", "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots");
-      addAccessPoint("Aliyun Qwen3-235B", "https://dashscope.aliyuncs.com", "/compatible-mode/v1/chat/completions", "qwen3-235b-a22b-instruct-2507");
-      
-      // ✅ 新增：阿里云 Qwen3.5-35b-a3b with API key for trial
-      String aliyunKey = "sk-45f041edf31c44af86909f6455cf0d91";
-      ModelAccessPoint aliYunPoint = new ModelAccessPoint("Aliyun Qwen3.5-35b-a3b", "https://dashscope.aliyuncs.com", "/compatible-mode/v1/chat/completions", "qwen3.5-35b-a3b", aliyunKey);
-      addAccessPointInternal(aliYunPoint);
+      // ❌ 删除了以下代码：
+      // addAccessPoint("phone Qwen3-30B", ...);
+      // addAccessPoint("gx10 Qwen3-30B", ...);
+      // ... (所有6个预置接入点)
+      // addAccessPoint("Aliyun Qwen3.5-35b-a3b", ... aliyunKey ...);
     }
 
     this.currentAccessPointIndex = 0; // 默认指向第一个访问点
@@ -101,7 +96,7 @@ public class ModelAccessPointManager
    * @param baseUrl 基础 URL
    * @param chatEndpoint 聊天接口端点
    * @param modelName 模型名称
-   * @param apiKey API密钥
+   * @param apiKey API 密钥
    */
   public void addAccessPoint(String name, String baseUrl, String chatEndpoint, String modelName, String apiKey) {
       ModelAccessPoint newPoint = new ModelAccessPoint(name, baseUrl, chatEndpoint, modelName, apiKey);
