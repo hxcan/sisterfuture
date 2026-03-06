@@ -62,11 +62,6 @@ import com.stupidbeauty.sisterfuture.tool.FtpFileWriteTool;
 
 
 
-
-
-
-
-
 import com.stupidbeauty.sisterfuture.tool.CreateRedmineTaskTool;
 
 
@@ -214,13 +209,16 @@ import com.stupidbeauty.sisterfuture.tool.RemoveShoppingItemTool;
 // ✅ 新增：导入 RemoteCommandTool
 import com.stupidbeauty.sisterfuture.tool.RemoteCommandTool;
 
+// ✅ 新增：导入 SearchFileInRepoTool
+import com.stupidbeauty.sisterfuture.tool.SearchFileInRepoTool;
+
 
 
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
  * 
- **/
+**/
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
   private GuideManager guideManager ;
@@ -282,6 +280,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 	//@BindView(R.id.statustextView) TextView statustextView; //!用来显示状态的文字标签。
+
 
 
 
@@ -416,12 +415,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
     if (!setParam()) //参数设置失败。
     {
       // statustextView.setText("请先构建语法。");
 
       return;
     }//if (!setParam()) //参数设置失败。
+
 
 
 
@@ -440,6 +441,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     progressBar.setVisibility(View.INVISIBLE); //隐藏显示进度条。
     recognizeResulttextView.setText(R.string.empty); //显示空白内容。
 	} //public void commandRecognizebutton2()
+
 
 
 
@@ -604,7 +606,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     });
   }
-
 
 
 
@@ -952,7 +953,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             contextManager.addRawMessage(assistantMessage);
             contextManager.increaseMaxRounds();
 
-            // 跟踪上下文写入，在 UI 中显示“正在调用”消息
+            // 跟踪上下文写入，在 UI 中显示"正在调用"消息
             runOnUiThread(() -> {
                 StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
                 for (ToolCall call : finalCalls) {
@@ -1088,7 +1089,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   }
 
   /**
-   * 判断是否为“上下文长度超出限制”的错误。
+   * 判断是否为"上下文长度超出限制"的错误。
   **/
   private boolean isContextLengthError(String errorMessage)
   {
@@ -1114,6 +1115,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       mTts.shutdown(); //关闭。
     } //if (null!=mTts) //TTS 引擎还在。
+
 
 
 
@@ -1364,6 +1366,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
+
   @Override
 	/**
   *此活动正在被创建。
@@ -1478,6 +1481,9 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     // ✅ 新增：注册 RemoteCommandTool
     toolManager.registerTool(new RemoteCommandTool(this));
+
+    // ✅ 新增：注册 SearchFileInRepoTool
+    toolManager.registerTool(new SearchFileInRepoTool(this));
 
     // 初始化通义千问客户端
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
