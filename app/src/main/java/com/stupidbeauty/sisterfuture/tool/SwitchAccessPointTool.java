@@ -192,7 +192,7 @@ public class SwitchAccessPointTool implements Tool
     }
 
     // 切换到目标接入点
-    accessPointManager.switchToAccessPoint(targetAccessPoint);
+    accessPointManager.reportCurrentAccessPointUnavailable();
 
     // 构造返回结果
     JSONObject result = new JSONObject();
