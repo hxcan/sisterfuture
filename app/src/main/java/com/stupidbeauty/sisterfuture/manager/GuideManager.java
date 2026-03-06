@@ -14,7 +14,7 @@ import org.json.JSONObject;
 public class GuideManager { 
     private final ModelAccessPointManager modelAccessPointManager; 
     private final ToolManager toolManager; 
-    private final Context context; 
+    private final Context context;
 
     public GuideManager(Context context, ModelAccessPointManager modelAccessPointManager, ToolManager toolManager) { 
         this.context = context; 
@@ -31,15 +31,35 @@ public class GuideManager {
     }
 
     /**
-     * 验证 API Key 格式：sk- 开头且长度 >= 60
+     * 验证 API Key 格式：sk- 开头且长度在合理范围内 ✅ 修复版
+     * 
+     * ✅ 修改前: input.length() >= 60 (过严)
+     * ✅ 修改后: 20 <= length <= 64 (兼容主流平台)
+     * 
      * @param input 用户输入内容
-     * @return true 如果是有效的阿里云 API Key
+     * @return true 如果是有效的 API Key
      */
     public boolean isValidApiKey(String input) {
         if (input == null || input.isEmpty()) {
             return false;
         }
-        return input.startsWith("sk-") && input.length() >= 60;
+        
+        // 检查前缀
+        if (!input.startsWith("sk-")) {
+            return false;
+        }
+        
+        int length = input.length();
+        
+        // ✅ 放宽校验：20-64 字符范围（兼容阿里云、OpenAI 等主流平台）
+        // 阿里云 DashScope: ~35 字符
+        // OpenAI: ~51 字符
+        // 其他常见: 32-40 字符
+        if (length < 20 || length > 64) {
+            return false;
+        }
+        
+        return true;
     }
 
     /**
@@ -76,14 +96,16 @@ public class GuideManager {
                     return;
                 }
             } else {
-                // 非 sk- 格式，提示获取方式
+                // ❌ 非 sk- 格式或长度异常，提示获取方式并显示实际长度
+                String actualLength = userInput.length();
                 callback.onResponse(
                     "👋 你好！我是未来姐姐～\n\n" +
                     "目前尚未配置任何模型接入点。\n\n" +
                     "💡 请按以下步骤操作：\n" +
                     "1️⃣ 访问 https://dashscope.aliyun.com\n" +
                     "2️⃣ 申请阿里云百炼 API Key\n" +
-                    "3️⃣ 将密钥（以 sk- 开头，长度为 60+ 字符）粘贴到这里\n\n" +
+                    "3️⃣ 将密钥（以 sk- 开头，建议长度 20-64 字符）粘贴到这里\n\n" +
+                    "📝 您输入的密钥长度：" + actualLength + " 字符 (有效范围：20-64)\n\n" +
                     "准备好了吗？✨"
                 );
             }
