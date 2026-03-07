@@ -42,6 +42,7 @@ public class SearchFileInRepoTool implements Tool {
                 .put("pathPattern", new JSONObject().put("type", "string").put("description", "可选：路径过滤器"))
                 .put("branch", new JSONObject().put("type", "string").put("description", "目标分支，默认 master"))
                 .put("limit", new JSONObject().put("type", "integer").put("description", "结果数量限制，默认 10"))
+                .put("token", new JSONObject().put("type", "string").put("description", "GitHub 访问令牌，可选；若未提供则从工具备注读取"))
             );
             params.put("required", new JSONArray(new String[]{"owner", "repo", "fileNamePattern"}));
             func.put("parameters", params);
@@ -73,6 +74,30 @@ public class SearchFileInRepoTool implements Tool {
                 String branch = args.optString("branch", "master");
                 int limit = args.optInt("limit", 10);
 
+                // Token 获取逻辑：优先参数，次优备注
+                String token = "";
+                
+                // 1. 优先检查大模型传入的参数 token
+                if (args.has("token") && !args.getString("token").trim().isEmpty()) {
+                    token = args.getString("token").trim();
+                }
+                
+                // 2. 如果参数没有 token，尝试从工具备注读取
+                if (token.isEmpty()) {
+                    String tk = getNote(context);
+                    if (!tk.isEmpty()) {
+                        JSONObject note = new JSONObject(tk);
+                        if (note.has("github_token")) {
+                            token = note.getString("github_token");
+                        }
+                    }
+                }
+                
+                // 3. 最终无 token，抛出错误
+                if (token.isEmpty()) {
+                    throw new IllegalArgumentException("缺少 GitHub 访问令牌，请在参数中提供 token 或先在工具备注中配置 github_token");
+                }
+
                 String query = "filename:" + pattern;
                 if (!path.isEmpty()) {
                     query += " path:" + path.replaceFirst("^/", "");
@@ -80,15 +105,6 @@ public class SearchFileInRepoTool implements Tool {
 
                 URL url = new URL(API_URL + "?q=" + java.net.URLEncoder.encode(query, "UTF-8") + "&per_page=" + limit + "&ref_name=" + branch);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                
-                String tk = getNote(context);
-                String token = "";
-                if (!tk.isEmpty()) {
-                    JSONObject note = new JSONObject(tk);
-                    if (note.has("github_token")) {
-                        token = note.getString("github_token");
-                    }
-                }
                 
                 conn.setRequestProperty("Authorization", "token " + token);
                 conn.setRequestProperty("User-Agent", "SisterFuture");
@@ -135,6 +151,6 @@ public class SearchFileInRepoTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求搜索 GitHub 文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 github_token 配置。只有当备注中缺少 token 时，才允许使用用户提供的 token 参数作为 fallback。";
+        return "必须在用户明确要求搜索 GitHub 文件时才调用此工具。\nToken 读取优先级：\n1. 优先使用大模型传入的参数 token（若有）\n2. 其次从工具备注中读取 github_token\n3. 两者皆无时返回友好错误提示\n严禁自行硬编码 token。";
     }
 }
