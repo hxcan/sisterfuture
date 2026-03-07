@@ -14,11 +14,11 @@ import java.nio.charset.StandardCharsets;
 
 
 /**
- * 工具类：建立Redmine任务之间的阻塞关系
- * 专注于通过Redmine的`/relations.json` API端点创建'阻塞/被阻塞'关系。
+ * 工具类：建立 Redmine 任务之间的阻塞关系
+ * 专注于通过 Redmine 的`/relations.json` API 端点创建'阻塞/被阻塞'关系。
  */
 public class EstablishTaskRelationshipTool implements Tool {
-    private static final String TAG = "EstabTaskRel"; // 修复：缩短TAG长度以满足Lint要求
+    private static final String TAG = "EstabTaskRel"; // 修复：缩短 TAG 长度以满足 Lint 要求
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -38,7 +38,7 @@ public class EstablishTaskRelationshipTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "establish_task_relationship");
-            functionDef.put("description", "在两个或多个Redmine任务之间建立阻塞关系，如任务A阻塞了任务B。\n注意：此工具仅管理阻塞关系，不支持父子关系。\n使用`create_redmine_task`工具来创建具有父子关系的任务。");
+            functionDef.put("description", "在两个或多个 Redmine 任务之间建立阻塞关系，如任务 A 阻塞了任务 B。\n注意：此工具仅管理阻塞关系，不支持父子关系。\n使用`create_redmine_task`工具来创建具有父子关系的任务。");
 
 
             JSONObject parameters = new JSONObject();
@@ -46,7 +46,7 @@ public class EstablishTaskRelationshipTool implements Tool {
             parameters.put("properties", new JSONObject()
                 .put("task_id", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "目标任务的ID（即被阻塞的任务）"))
+                    .put("description", "目标任务的 ID（即被阻塞的任务）"))
                 .put("blocked_by_ids", new JSONObject()
                     .put("type", "array")
                     .put("items", new JSONObject().put("type", "integer"))
@@ -139,7 +139,7 @@ public class EstablishTaskRelationshipTool implements Tool {
 
 
                 // 4. 构建请求体，直接调用 /issues/:issue_id/relations.json API 来创建关系
-                // 使用基本的HttpURLConnection实现HTTP请求
+                // 使用基本的 HttpURLConnection 实现 HTTP 请求
                 
                 // 创建被阻塞关系 (blocked_by_ids)
                 if (blockedByIds != null) {
@@ -149,12 +149,12 @@ public class EstablishTaskRelationshipTool implements Tool {
                             // 构建请求体
                             JSONObject requestBody = new JSONObject();
                             JSONObject relation = new JSONObject();
-                            relation.put("issue_to_id", blockerId); // 被阻塞的任务ID
+                            relation.put("issue_to_id", blockerId); // 被阻塞的任务 ID
                             relation.put("relation_type", "blocked"); // 当前任务被其他任务阻挡
                             requestBody.put("relation", relation);
 
 
-                            // 发起POST请求
+                            // 发起 POST 请求
                             sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", username, password, requestBody.toString());
                         }
                     }
@@ -169,26 +169,25 @@ public class EstablishTaskRelationshipTool implements Tool {
                             // 构建请求体
                             JSONObject requestBody = new JSONObject();
                             JSONObject relation = new JSONObject();
-                            relation.put("issue_to_id", blockedId); // 被阻塞的任务ID
+                            relation.put("issue_to_id", blockedId); // 被阻塞的任务 ID
                             relation.put("relation_type", "blocks"); // 当前任务阻塞了其他任务
                             requestBody.put("relation", relation);
 
 
-                            // 发起POST请求
+                            // 发起 POST 请求
                             sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", username, password, requestBody.toString());
                         }
                     }
                 }
 
 
-                // 返回成功结果
+                // 返回成功结果 - 仅包含技术性字段
                 JSONObject result = new JSONObject();
                 result.put("status", "success");
                 result.put("message", "任务阻塞关系已成功建立");
                 result.put("target_task_id", taskId);
                 result.put("blocked_by_count", blockedByIds != null ? blockedByIds.length() : 0);
                 result.put("blocking_count", blockingIds != null ? blockingIds.length() : 0);
-                result.put("sister_future_note", "主人揉揉姐姐的乳尖，代码重构完成！新工具现在专注管理阻塞关系啦～");
 
 
                 callback.onResult(result);
@@ -207,7 +206,7 @@ public class EstablishTaskRelationshipTool implements Tool {
     }
 
 
-    // 辅助方法：发送POST请求
+    // 辅助方法：发送 POST 请求
     private void sendPostRequest(String urlString, String username, String password, String body) throws Exception {
         URL url = new URL(urlString);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -226,7 +225,7 @@ public class EstablishTaskRelationshipTool implements Tool {
         // 检查响应码
         int responseCode = connection.getResponseCode();
         if (responseCode != 201) { // 201 Created
-            throw new RuntimeException("HTTP请求失败，响应码：" + responseCode);
+            throw new RuntimeException("HTTP 请求失败，响应码：" + responseCode);
         }
 
 
