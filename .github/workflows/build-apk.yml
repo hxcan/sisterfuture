@@ -43,6 +43,16 @@ jobs:
     - name: Assemble Release APK
       run: ./gradlew assembleRelease
 
+    - name: Install Android Build Tools 29.0.3
+      run: |
+        sudo mkdir -p /usr/local/lib/android/sdk/build-tools/29.0.3
+        cd /usr/local/lib/android/sdk/build-tools/29.0.3
+        sudo wget -q https://dl.google.com/android/repository/build-tools_r29.0.3-linux.zip
+        sudo unzip -q build-tools_r29.0.3-linux.zip
+        sudo mv android-10/* .
+        sudo rm -rf android-10 build-tools_r29.0.3-linux.zip
+        sudo chmod +x zipalign
+
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
       with:
@@ -51,7 +61,6 @@ jobs:
         alias: ${{ secrets.KEYSTORE_ALIAS }}
         keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
         keyPassword: ${{ secrets.KEY_STORE_PASSWORD }}
-        buildToolsVersion: "33.0.0"
 
     - name: Upload APK artifact (PR)
       if: github.event_name == 'pull_request'
