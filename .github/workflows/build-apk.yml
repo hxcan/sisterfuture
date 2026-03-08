@@ -51,6 +51,7 @@ jobs:
         alias: ${{ secrets.KEYSTORE_ALIAS }}
         keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
         keyPassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        buildToolsVersion: "33.0.0"
 
     - name: Upload APK artifact (PR)
       if: github.event_name == 'pull_request'
