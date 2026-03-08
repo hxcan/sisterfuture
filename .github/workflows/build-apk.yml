@@ -28,16 +28,6 @@ jobs:
     - name: Assemble Release APK
       run: ./gradlew assembleRelease
 
-    - name: Sign APK
-      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-      uses: r0adkll/sign-android-release@v1
-      with:
-        releaseDirectory: app/build/outputs/apk/release
-        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-        alias: ${{ secrets.KEY_ALIAS }}
-        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-        keyPassword: ${{ secrets.KEY_PASSWORD }}
-
     - name: Upload APK artifact (PR)
       if: github.event_name == 'pull_request'
       uses: actions/upload-artifact@v4
@@ -51,7 +41,7 @@ jobs:
       with:
         tag_name: ci/auto-build-${{ github.run_number }}
         name: 🤖 CI Build #${{ github.run_number }}
-        files: app/build/outputs/apk/release/app-release-unsigned-signed.apk
+        files: app/build/outputs/apk/release/app-release-unsigned.apk
         prerelease: true
         generate_release_notes: true
         token: ${{ secrets.GITHUB_TOKEN }}
