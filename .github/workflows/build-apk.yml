@@ -25,21 +25,42 @@ jobs:
     - name: Build with Gradle
       run: ./gradlew build
 
-    - name: Assemble Debug APK
-      run: ./gradlew assembleDebug
+    - name: Assemble Release APK
+      run: ./gradlew assembleRelease
 
-    - name: Upload APK artifact
+    - name: Sign APK
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      uses: r0adkll/sign-android-release@v1
+      with:
+        releaseDirectory: app/build/outputs/apk/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.KEY_ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+    - name: Upload APK artifact (PR)
+      if: github.event_name == 'pull_request'
       uses: actions/upload-artifact@v4
       with:
-        name: sisterfuture-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: sisterfuture-pr-${{ github.run_number }}
+        path: app/build/outputs/apk/release/app-release-unsigned.apk
 
-    - name: Create GitHub Release
+    - name: Create CI Release (master push)
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: auto-build-${{ github.run_number }}
-        name: Auto Build #${{ github.run_number }} - ${{ github.event.head_commit.message }}
-        files: app/build/outputs/apk/debug/app-debug.apk
+        tag_name: ci/auto-build-${{ github.run_number }}
+        name: 🤖 CI Build #${{ github.run_number }}
+        files: app/build/outputs/apk/release/app-release-unsigned-signed.apk
+        prerelease: true
         generate_release_notes: true
         token: ${{ secrets.GITHUB_TOKEN }}
+        body: |
+          ## 🤖 自动构建版本
+          
+          **构建编号:** ${{ github.run_number }}
+          **提交:** ${{ github.sha }}
+          **时间:** ${{ github.event.head_commit.timestamp }}
+          
+          ---
+          ⚠️ 此为 CI 自动构建的预发布版本，仅供测试使用。
