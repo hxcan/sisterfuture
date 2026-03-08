@@ -28,29 +28,9 @@ jobs:
     - name: Assemble Debug APK
       run: ./gradlew assembleDebug
 
-    - name: Upload APK artifact (PR)
-      if: github.event_name == 'pull_request'
+    - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
-        name: sisterfuture-pr-${{ github.run_number }}
+        name: sisterfuture-debug-${{ github.run_number }}
         path: app/build/outputs/apk/debug/app-debug.apk
-
-    - name: Create CI Release (master push)
-      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ci/auto-build-${{ github.run_number }}
-        name: 🤖 CI Build #${{ github.run_number }}
-        files: app/build/outputs/apk/debug/app-debug.apk
-        prerelease: true
-        generate_release_notes: true
-        token: ${{ secrets.GITHUB_TOKEN }}
-        body: |
-          ## 🤖 自动构建版本 (Debug)
-          
-          **构建编号:** ${{ github.run_number }}
-          **提交:** ${{ github.sha }}
-          **时间:** ${{ github.event.head_commit.timestamp }}
-          
-          ---
-          ⚠️ 此为 Debug 版本，使用自动签名，仅供测试使用。
+        retention-days: 30
