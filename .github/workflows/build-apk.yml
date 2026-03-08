@@ -33,3 +33,13 @@ jobs:
       with:
         name: sisterfuture-debug-apk
         path: app/build/outputs/apk/debug/app-debug.apk
+
+    - name: Create GitHub Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: auto-build-${{ github.run_number }}
+        name: Auto Build #${{ github.run_number }} - ${{ github.event.head_commit.message }}
+        files: app/build/outputs/apk/debug/app-debug.apk
+        generate_release_notes: true
+        token: ${{ secrets.GITHUB_TOKEN }}
