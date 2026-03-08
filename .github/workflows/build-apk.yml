@@ -35,13 +35,13 @@ jobs:
     - name: Build with Gradle (with retry)
       run: |
         export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.daemon=false"
-        ./gradlew build --stacktrace --info || ./gradlew build --stacktrace --info
+        ./gradlew build || ./gradlew build
 
     - name: Assemble Debug APK
-      run: ./gradlew assembleDebug --stacktrace
+      run: ./gradlew assembleDebug
 
     - name: Assemble Release APK
-      run: ./gradlew assembleRelease --stacktrace
+      run: ./gradlew assembleRelease
 
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
