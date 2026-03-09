@@ -9,22 +9,33 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
-import javax.net.ssl.HostnameVerifier; // ✅ 新增导入
 
 /**
  * 工具类：列出 Redmine 所有项目
  * 专门用于通过 API 自动获取所有可见项目的清单
  * 使用/projects.json 接口，符合官方 API 规范
- * 支持分页、状态过滤和缓存机制
  * 
- * 深度修复 v3: 解决 OkHttp 与 Redmine 服务器兼容性问题
+ * 📚 严格遵循 Redmine 官方文档:
+ * https://www.redmine.org/projects/redmine/wiki/Rest_Projects
+ * 
+ * 核心规范:
+ * - limit: 官方默认 30 (本工具采用此值)
+ * - offset: 用于分页
+ * - include: 可选关联数据 (trackers, issue_categories 等)
+ * - ❌ status 参数不存在! (只有 issues 支持)
+ * 
  * @author 未来姐姐
  */
 public class ListRedmineProjectsTool implements Tool {
@@ -44,7 +55,7 @@ public class ListRedmineProjectsTool implements Tool {
     private static final int READ_TIMEOUT_SEC = 60;
     private static final int WRITE_TIMEOUT_SEC = 60;
     
-    // ✅ 新增：明确定义 executor 字段
+    // ✅ 明确定义 executor 字段
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
 
@@ -64,7 +75,7 @@ public class ListRedmineProjectsTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "list_redmine_projects");
-            functionDef.put("description", "列出 Redmine 中所有可用的项目列表。使用 /projects.json 接口，支持分页、状态过滤和项目元数据返回。已修复 SSL/认证兼容性问题。");
+            functionDef.put("description", "列出 Redmine 中所有可用的项目列表。使用 /projects.json 接口，严格遵循官方 API 规范 (https://www.redmine.org/projects/redmine/wiki/Rest_Projects)，支持分页和总数量统计。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -80,13 +91,10 @@ public class ListRedmineProjectsTool implements Tool {
                     .put("description", "登录密码"))
                 .put("limit", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "每页数量，默认 100"))
+                    .put("description", "每页数量，官方默认 30，本工具安全范围 5-50"))
                 .put("offset", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "偏移量，默认 0"))
-                .put("status_filter", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "可选：项目状态过滤 (open|closed|all)，默认 'open'"))
+                    .put("description", "偏移量，默认 0，用于分页"))
             );
             parameters.put("required", new JSONArray(new String[]{"redmine_url", "username", "password"}));
 
@@ -155,10 +163,10 @@ public class ListRedmineProjectsTool implements Tool {
                 .retryOnConnectionFailure(true)
                 .followRedirects(true)
                 .followSslRedirects(true)
-                .cache(null) // 暂不启用磁盘缓存（开发阶段简化逻辑）
+                .cache(null)
                 .build();
                 
-            Log.d(TAG, "OkHttpClient initialized successfully. " +
+            Log.d(TAG, "OkHttpClient initialized successfully." +
                         "Connect timeout: " + CONNECT_TIMEOUT_SEC + "s, " +
                         "Read timeout: " + READ_TIMEOUT_SEC + "s, " +
                         "Write timeout: " + WRITE_TIMEOUT_SEC + "s");
@@ -183,10 +191,9 @@ public class ListRedmineProjectsTool implements Tool {
                 Log.w(TAG, "Attempt " + attempt + "/" + maxRetries + " failed: " + e.getMessage());
                 
                 if (attempt == maxRetries) {
-                    throw e; // 最后一次尝试失败，抛出原异常
+                    throw e;
                 }
                 
-                // 指数退避延迟
                 try {
                     Thread.sleep(delayMs);
                     delayMs = Math.min(delayMs * 2, MAX_RETRY_DELAY_MS);
@@ -209,16 +216,16 @@ public class ListRedmineProjectsTool implements Tool {
                 String redmineUrl = arguments.optString("redmine_url", "").trim();
                 String username = arguments.optString("username", "").trim();
                 String password = arguments.optString("password", "").trim();
-                int limit = arguments.optInt("limit", 100);
+                int limit = arguments.optInt("limit", 30); // ✅ 改为官方默认 30
                 int offset = arguments.optInt("offset", 0);
-                String statusFilter = arguments.optString("status_filter", "open").trim().toLowerCase();
 
                 // Debug: 打印原始参数（脱敏）
                 Log.d(TAG, "=== REQUEST INPUT ===");
                 Log.d(TAG, "URL: " + redmineUrl);
                 Log.d(TAG, "Username: " + (username != null ? username.substring(0, Math.min(3, username.length())) + "..." : "null"));
                 Log.d(TAG, "Password length: " + (password != null ? password.length() : 0));
-                Log.d(TAG, "Params: limit=" + limit + ", offset=" + offset + ", status_filter=" + statusFilter);
+                Log.d(TAG, "Params: limit=" + limit + ", offset=" + offset);
+                Log.d(TAG, "Note: Official Redmine API does NOT support 'status' parameter for /projects.json!");
 
 
                 // 2. 尝试从备注恢复默认值
@@ -252,96 +259,157 @@ public class ListRedmineProjectsTool implements Tool {
                 initHttpClient();
 
 
-                // 5. 双通道认证构建器
+                // 5. 构建请求 URL (✅ 严格遵循官方规范，移除 status 参数)
                 HttpUrl.Builder urlBuilder = HttpUrl.parse(redmineUrl + "/projects.json")
                     .newBuilder()
                     .addQueryParameter("limit", String.valueOf(limit))
                     .addQueryParameter("offset", String.valueOf(offset));
 
-                if (!"all".equals(statusFilter)) {
-                    urlBuilder.addQueryParameter("status", statusFilter);
-                }
-
                 String fullUrl = urlBuilder.build().toString();
-                Log.d(TAG, "=== FULL REQUEST URL ===\n" + fullUrl);
+                Log.d(TAG, "=== FULL REQUEST URL (Official Compliant) ===\n" + fullUrl);
 
 
-                // 6. 尝试两种认证方式（优先 Basic Auth）
-                boolean success = false;
-                String authMethodUsed = "";
-                IOException lastError = null;
+                // 6. 仅使用 Basic Auth (移除无效的 Query Param Fallback)
+                Request request = new Request.Builder()
+                    .url(fullUrl)
+                    .header("Authorization", Credentials.basic(username, password))
+                    .build();
                 
-                // 方案 A: Authorization: Basic xxx
-                try {
-                    Log.d(TAG, "=== AUTH METHOD: Basic Auth (Primary) ===");
-                    Request request = new Request.Builder()
-                        .url(fullUrl)
-                        .header("Authorization", Credentials.basic(username, password))
-                        .build();
+                Response response = executeRequest(request);
+
+                if (!response.isSuccessful()) {
+                    String errorMsg = "Request returned status " + response.code();
+                    Log.e(TAG, errorMsg);
                     
-                    Response response = executeRequest(request);
-                    
-                    if (response.isSuccessful()) {
-                        processResponse(response, callback);
-                        success = true;
-                        authMethodUsed = "Basic_Authorization_Header";
-                    } else {
-                        String errorMsg = "Basic Auth returned status " + response.code();
-                        Log.w(TAG, errorMsg);
-                        
-                        // 如果是 500 或 401，尝试备用方案
-                        if (response.code() >= 500 || response.code() == 401) {
-                            Log.w(TAG, "Retrying with Query Parameter Authentication...");
-                            
-                            // 方案 B: login=username&key=password
-                            urlBuilder.addQueryParameter("login", username);
-                            urlBuilder.addQueryParameter("key", password);
-                            String fallbackUrl = urlBuilder.build().toString();
-                            
-                            Log.d(TAG, "=== AUTH METHOD Fallback: Query Params ===");
-                            Log.d(TAG, "Fallback URL: " + fallbackUrl);
-                            
-                            Request fallbackRequest = new Request.Builder()
-                                .url(fallbackUrl)
-                                .build();
-                                
-                            Response fallbackResponse = executeRequest(fallbackRequest);
-                            
-                            if (fallbackResponse.isSuccessful()) {
-                                processResponse(fallbackResponse, callback);
-                                success = true;
-                                authMethodUsed = "Query_Parameter_Auth";
-                            } else {
-                                lastError = new IOException("Fallback authentication also failed: " + fallbackResponse.code());
-                            }
-                        } else {
-                            lastError = new IOException("Basic Auth failed: " + response.code());
-                        }
+                    ResponseBody body = response.body();
+                    String errorBody = "";
+                    if (body != null) {
+                        errorBody = body.string();
+                        Log.e(TAG, "Error Body: " + errorBody);
                     }
                     
                     response.close();
+                    throw new IOException(errorMsg + ". Details: " + errorBody);
+                }
+
+
+                // 7. 处理响应并实现自动分页
+                ResponseBody body = response.body();
+                if (body == null) {
+                    throw new IOException("Response body is null");
+                }
+
+                String resultStr = body.string();
+                
+                Log.d(TAG, "=== PARSING RESPONSE BODY ===");
+                String displayContent = resultStr.length() > 10000 ? 
+                    resultStr.substring(0, 10000) + "\n...(truncated, total length=" + resultStr.length() + ")" : 
+                    resultStr;
+                Log.d(TAG, displayContent);
+
+                JSONObject jsonResponse = new JSONObject(resultStr);
+                JSONArray projectsArray = jsonResponse.optJSONArray("projects");
+                int totalCount = jsonResponse.optInt("total_count", 0);
+                
+                Log.d(TAG, "=== PROJECT SUMMARY ===");
+                Log.d(TAG, "Total Projects in Server: " + totalCount);
+                Log.d(TAG, "Projects in This Page: " + (projectsArray != null ? projectsArray.length() : 0));
+
+                // ✅ 实现自动分页: 如果当前页面不够，继续拉取后续分页
+                List<Map.Entry<Integer, JSONObject>> allProjectsMap = new ArrayList<>();
+                if (projectsArray != null) {
+                    for (int i = 0; i < projectsArray.length(); i++) {
+                        JSONObject project = projectsArray.getJSONObject(i);
+                        allProjectsMap.add(new java.util.AbstractMap.SimpleEntry<>(project.optInt("id"), project));
+                    }
+                }
+
+                int fetchedCount = allProjectsMap.size();
+                if (totalCount > fetchedCount) {
+                    Log.d(TAG, "More projects needed. Fetching offset=" + fetchedCount + "...");
                     
-                } catch (IOException e) {
-                    Log.e(TAG, "Basic Auth execution error", e);
-                    lastError = e;
+                    // 递归/循环拉取剩余分页
+                    int currentOffset = fetchedCount;
+                    int batchSize = 30; // 每次最多拉 30 条
+                    
+                    while (currentOffset < totalCount) {
+                        int nextLimit = Math.min(batchSize, totalCount - currentOffset);
+                        
+                        Log.d(TAG, "Fetching batch: offset=" + currentOffset + ", limit=" + nextLimit);
+                        
+                        HttpUrl.Builder nextPageBuilder = HttpUrl.parse(redmineUrl + "/projects.json")
+                            .newBuilder()
+                            .addQueryParameter("limit", String.valueOf(nextLimit))
+                            .addQueryParameter("offset", String.valueOf(currentOffset));
+                            
+                        String pageUrl = nextPageBuilder.build().toString();
+                        Log.d(TAG, "=== NEXT PAGE URL ===\n" + pageUrl);
+                        
+                        Request nextPageRequest = new Request.Builder()
+                            .url(pageUrl)
+                            .header("Authorization", Credentials.basic(username, password))
+                            .build();
+                            
+                        Response nextPageResponse = executeRequest(nextPageRequest);
+                        
+                        if (!nextPageResponse.isSuccessful()) {
+                            Log.e(TAG, "Failed to fetch next page: " + nextPageResponse.code());
+                            nextPageResponse.close();
+                            break;
+                        }
+                        
+                        ResponseBody nextPageBody = nextPageResponse.body();
+                        if (nextPageBody == null) {
+                            nextPageResponse.close();
+                            break;
+                        }
+                        
+                        String pageResultStr = nextPageBody.string();
+                        JSONObject pageJsonResponse = new JSONObject(pageResultStr);
+                        JSONArray pageProjectsArray = pageJsonResponse.optJSONArray("projects");
+                        
+                        if (pageProjectsArray != null) {
+                            for (int i = 0; i < pageProjectsArray.length(); i++) {
+                                JSONObject project = pageProjectsArray.getJSONObject(i);
+                                allProjectsMap.add(new java.util.AbstractMap.SimpleEntry<>(project.optInt("id"), project));
+                            }
+                        }
+                        
+                        nextPageResponse.close();
+                        
+                        currentOffset += nextLimit;
+                        fetchedCount = allProjectsMap.size();
+                        
+                        if (fetchedCount >= totalCount) {
+                            break;
+                        }
+                    }
                 }
                 
-                if (!success) {
-                    throw new IOException("Authentication failed after trying all methods. Last error: " + (lastError != null ? lastError.getMessage() : "Unknown"));
-                }
+                Log.d(TAG, "=== ALL PROJECTS FETCHED ===");
+                Log.d(TAG, "Total Retrieved: " + fetchedCount);
 
 
-                // 7. 构造标准响应
+                // 8. 构造标准响应
                 JSONObject result = new JSONObject();
-                result.put("projects", new JSONObject()); // placeholder, will be filled in processResponse
+                JSONArray allProjectsArray = new JSONArray();
+                for (Map.Entry<Integer, JSONObject> entry : allProjectsMap) {
+                    allProjectsArray.put(entry.getValue());
+                }
+                
+                result.put("projects", allProjectsArray);
+                result.put("total_count", totalCount);
                 result.put("status", "success");
                 result.put("fetched_at", System.currentTimeMillis());
-                
+                result.put("debug_info", new JSONObject()
+                    .put("official_limit_default", 30)
+                    .put("status_param_removed_official_compliance", true)
+                    .put("pages_fetched", allProjectsMap.size() > 30 ? "auto-paginated" : "single_page")
+                    .put("pagination_enabled", totalCount > 30));
+
                 callback.onResult(result);
                 
                 Log.d(TAG, "=== SUCCESS ===");
-                Log.d(TAG, "Auth method used: " + authMethodUsed);
-                Log.d(TAG, "Total attempts: 1");
                 
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
@@ -350,8 +418,6 @@ public class ListRedmineProjectsTool implements Tool {
                     error.put("status", "error");
                     error.put("message", e.getMessage());
                     error.put("type", e.getClass().getSimpleName());
-                    error.put("auth_method_attempted", "Basic_Authorization_Header (+ Query Param fallback)");
-                    error.put("target_url", "https://glzquuktdzuk.gzg.seals.ru/projects.json");
                     
                     StringBuilder stackTraceStr = new StringBuilder();
                     for (StackTraceElement element : e.getStackTrace()) {
@@ -359,7 +425,7 @@ public class ListRedmineProjectsTool implements Tool {
                     }
                     error.put("stack_trace", stackTraceStr.toString());
                     
-                    error.put("suggestion", "请检查：\n1. Redmine URL 是否正确\n2. 用户名和密码是否有效\n3. 网络连接是否正常\n4. 若仍失败，请将此错误报告发给开发者进行进一步诊断");
+                    error.put("suggestion", "请检查：\n1. Redmine URL 是否正确\n2. 用户名和密码是否有效\n3. 网络连接是否正常\n4. 若仍失败，请将此错误报告发给开发者进行进一步诊断\n\nDebug Info:\n- Official Redmine API does not support 'status' parameter for /projects.json!\n- Using official default limit=30\n- Auto-pagination enabled if total_count > limit");
                     
                     callback.onResult(error);
                 } catch (Exception ignored) {}
@@ -399,7 +465,7 @@ public class ListRedmineProjectsTool implements Tool {
             } else {
                 Log.d(TAG, "Response preview: " + bodyPreview);
             }
-            // ✅ 修复：使用标准 OkHttp API 重新创建 ResponseBody
+            // ✅ 使用标准 OkHttp API 重新创建 ResponseBody
             MediaType mediaType = MediaType.parse("application/json; charset=utf-8");
             return response.newBuilder()
                 .body(ResponseBody.create(mediaType, bodyPreview)).build();
@@ -409,55 +475,9 @@ public class ListRedmineProjectsTool implements Tool {
     }
 
 
-    /**
-     * 处理成功响应
-     */
-    private void processResponse(Response response, OnResultCallback callback) throws IOException {
-        try {
-            ResponseBody body = response.body();
-            if (body == null) {
-                throw new IOException("Response body is null");
-            }
-
-            String resultStr = body.string();
-            
-            Log.d(TAG, "=== PARSING RESPONSE BODY ===");
-            String displayContent = resultStr.length() > 10000 ? 
-                resultStr.substring(0, 10000) + "\n...(truncated, total length=" + resultStr.length() + ")" : 
-                resultStr;
-            Log.d(TAG, displayContent);
-
-            JSONObject jsonResponse = new JSONObject(resultStr);
-            JSONArray projects = jsonResponse.optJSONArray("projects");
-            int totalCount = jsonResponse.optInt("total_count", 0);
-            
-            Log.d(TAG, "=== PROJECT SUMMARY ===");
-            Log.d(TAG, "Total Projects: " + totalCount);
-            if (projects != null) {
-                Log.d(TAG, "Projects Count in Array: " + projects.length());
-            }
-
-            JSONObject result = new JSONObject();
-            result.put("projects", jsonResponse);
-            result.put("status", "success");
-            result.put("fetched_at", System.currentTimeMillis());
-            result.put("debug_info", new JSONObject()
-                .put("total_count", totalCount)
-                .put("array_length", projects != null ? projects.length() : 0)
-                .put("response_body_length", resultStr.length())
-                .put("request_duration_ms", System.currentTimeMillis() - (System.currentTimeMillis() - 100)));
-
-            callback.onResult(result);
-            
-        } catch (Exception e) {
-            throw new IOException("Failed to parse response JSON", e);
-        }
-    }
-
-
     // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求列出 Redmine 所有项目时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。此工具用于发现未知项目 ID，是获取特定项目任务列表的前置步骤。\n\n已深度修复 SSL/认证兼容性问题，支持双通道认证和自动重试。";
+        return "必须在用户明确要求列出 Redmine 所有项目时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。\n\n已严格遵循 Redmine 官方 API 规范 (https://www.redmine.org/projects/redmine/wiki/Rest_Projects)，自动分页获取全部项目。\n注意：/projects.json 不支持 status 参数（仅/issues.json 支持）!";
     }
 }
