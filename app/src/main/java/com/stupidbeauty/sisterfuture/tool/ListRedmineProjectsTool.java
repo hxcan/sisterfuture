@@ -126,6 +126,13 @@ public class ListRedmineProjectsTool implements Tool {
                     throw new IllegalArgumentException("缺少 password 参数，且未在备注中配置");
                 }
 
+                // ✅ DEBUG: 请求开始日志
+                Log.d(TAG, "=== Request Start ===");
+                Log.d(TAG, "Target URL: " + redmineUrl);
+                Log.d(TAG, "Username: " + (username != null ? username.substring(0, Math.min(3, username.length())) + "..." : "null"));
+                Log.d(TAG, "Password length: " + (password != null ? password.length() : 0));
+                Log.d(TAG, "Params: limit=" + limit + ", offset=" + offset + ", status_filter=" + statusFilter);
+
 
                 // 4. 构建请求
                 OkHttpClient client = new OkHttpClient();
@@ -140,18 +147,37 @@ public class ListRedmineProjectsTool implements Tool {
                     urlBuilder.addQueryParameter("status", statusFilter);
                 }
 
+                String fullUrl = urlBuilder.build().toString();
+                Log.d(TAG, "Full Request URL: " + fullUrl);
+
 
                 Request request = new Request.Builder()
-                    .url(urlBuilder.build())
+                    .url(fullUrl)
                     .header("Authorization", Credentials.basic(username, password))
                     .build();
 
 
                 Response response = client.newCall(request).execute();
 
+                // ✅ DEBUG: 响应头日志
+                Log.d(TAG, "=== Response Headers ===");
+                Log.d(TAG, "Status Code: " + response.code());
+                for (int i = 0; i < response.headers().size(); i++) {
+                    Log.d(TAG, response.headers().name(i) + ": " + response.headers().value(i));
+                }
 
                 if (!response.isSuccessful()) {
-                    throw new IOException("请求失败：" + response.code() + " " + response.message());
+                    String bodyStr = "";
+                    try {
+                        ResponseBody body = response.body();
+                        if (body != null) {
+                            bodyStr = body.string();
+                            Log.e(TAG, "Error Response Body: " + bodyStr);
+                        }
+                    } catch (IOException e) {
+                        Log.e(TAG, "Failed to read error body", e);
+                    }
+                    throw new IOException("请求失败：" + response.code() + " " + response.message() + ". Details: " + bodyStr);
                 }
 
 
@@ -160,15 +186,25 @@ public class ListRedmineProjectsTool implements Tool {
                     throw new IOException("返回体为空");
                 }
 
-
                 String resultStr = body.string();
+                
+                // ✅ DEBUG: 响应体日志 (自动截断超长内容)
+                Log.d(TAG, "=== Response Body (Start) ===");
+                String displayContent = resultStr.length() > 5000 ? resultStr.substring(0, 5000) + "... (truncated)" : resultStr;
+                Log.d(TAG, displayContent);
+                Log.d(TAG, "=== Response Body (End) ===");
+
+
                 JSONObject result = new JSONObject();
                 result.put("projects", new JSONObject(resultStr)); // 包装为标准响应
                 result.put("status", "success");
                 result.put("fetched_at", System.currentTimeMillis());
 
-
                 callback.onResult(result);
+                
+                // ✅ DEBUG: 请求结束日志
+                Log.d(TAG, "=== Request End - Success ===");
+
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
                 try {
@@ -176,9 +212,21 @@ public class ListRedmineProjectsTool implements Tool {
                     error.put("status", "error");
                     error.put("message", e.getMessage());
                     error.put("type", e.getClass().getSimpleName());
-                    // 新增提示字段：引导用户检查工具备注中的配置
-                    error.put("suggestion", "请检查本工具的备注中是否已有有效的 redmine_url、username 和 password 配置。");
+                    
+                    // ✅ DEBUG: 完整堆栈跟踪
+                    StringBuilder stackTraceStr = new StringBuilder();
+                    for (StackTraceElement element : e.getStackTrace()) {
+                        stackTraceStr.append("\n    at ").append(element.toString());
+                    }
+                    error.put("stack_trace", stackTraceStr.toString());
+                    
+                    // ✅ DEBUG: 增加建议字段，引导用户检查工具备注中的配置
+                    error.put("suggestion", "请检查本工具的备注中是否已有有效的 redmine_url、username 和 password 配置。\n\nDebug Info:\n" + 
+                                           "若错误为 500 Internal Server Error，请查看返回的 stack_trace 和 message 字段以定位具体原因。\n" +
+                                           "若服务器无响应或超时，请检查网络连接和 Redmine 实例可达性。");
+                    
                     callback.onResult(error); // 使用 onResult 而非 onError，确保 JSON 返回
+                    
                 } catch (Exception ignored) {}
             }
         });
