@@ -73,6 +73,7 @@ import com.stupidbeauty.sisterfuture.tool.SearchMemoryTool;
 import com.stupidbeauty.sisterfuture.tool.ListAllMemoriesTool;
 import com.stupidbeauty.sisterfuture.tool.AddModelAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.AddNoteTool;
+import com.stupidbeauty.sisterfuture.tool.AddShoppingItemTool; // ✅ 新增：确保导入存在
 
 
 
