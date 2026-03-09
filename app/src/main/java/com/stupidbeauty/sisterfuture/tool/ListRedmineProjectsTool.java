@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.HostnameVerifier; // ✅ 新增导入
 
 /**
  * 工具类：列出 Redmine 所有项目
@@ -23,7 +24,7 @@ import javax.net.ssl.X509TrustManager;
  * 使用/projects.json 接口，符合官方 API 规范
  * 支持分页、状态过滤和缓存机制
  * 
- * 深度修复 v2: 解决 OkHttp 与 Redmine 服务器兼容性问题
+ * 深度修复 v3: 解决 OkHttp 与 Redmine 服务器兼容性问题
  * @author 未来姐姐
  */
 public class ListRedmineProjectsTool implements Tool {
@@ -42,6 +43,9 @@ public class ListRedmineProjectsTool implements Tool {
     private static final int CONNECT_TIMEOUT_SEC = 60;
     private static final int READ_TIMEOUT_SEC = 60;
     private static final int WRITE_TIMEOUT_SEC = 60;
+    
+    // ✅ 新增：明确定义 executor 字段
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
 
     public ListRedmineProjectsTool(Context context) {
@@ -395,9 +399,10 @@ public class ListRedmineProjectsTool implements Tool {
             } else {
                 Log.d(TAG, "Response preview: " + bodyPreview);
             }
-            // 重新包裹 ResponseBody
+            // ✅ 修复：使用标准 OkHttp API 重新创建 ResponseBody
+            MediaType mediaType = MediaType.parse("application/json; charset=utf-8");
             return response.newBuilder()
-                .body(HttpUtil.createResponseBody(bodyPreview)).build();
+                .body(ResponseBody.create(mediaType, bodyPreview)).build();
         }
         
         return response;
