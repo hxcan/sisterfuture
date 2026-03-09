@@ -78,14 +78,14 @@ public class TongYiClient
      * 检测响应内容是否为 HTML 页面
      * 用于防止 API 返回错误页面（如登录页、404 页）时客户端解析崩溃
      */
-    private boolean isHtmlResponse(String responseBody)
+    private boolean isHtmlResponse(String content)
     {
-      if (responseBody == null || responseBody.isEmpty())
+      if (content == null || content.isEmpty())
       {
         return false;
       }
       
-      String trimmedContent = responseBody.trim();
+      String trimmedContent = content.trim();
       return trimmedContent.startsWith("<!DOCTYPE html") ||
              trimmedContent.startsWith("<html") ||
              trimmedContent.startsWith("<HTML") ||
@@ -191,21 +191,7 @@ public class TongYiClient
               ResponseBody responseBody = response.body();
               if (responseBody != null)
               {
-                // 预读取少量内容检测是否为 HTML 响应
-                responseBody = responseBody.peekBody(2048); //  peek 前 2KB 用于检测
-                String preview = responseBody.string();
-                
-                if (isHtmlResponse(preview))
-                {
-                  Log.e(TAG, "API 返回非预期内容：HTML 页面，可能是认证失败或服务不可用。");
-                  Log.e(TAG, "原始响应预览（前 500 字符）: " + 
-                      (preview.length() > 500 ? preview.substring(0, 500) + "..." : preview));
-                  accessPointManager.reportCurrentAccessPointUnavailable();
-                  listener.onError(new ResponseException(response, "API 服务异常或未正确配置，返回了 HTML 页面而非 JSON。请检查接入点设置。"));
-                  return;
-                }
-                
-                // 非 HTML 响应，继续正常处理 SSE 流
+                // 正常处理 SSE 流，HTML 检测在流处理内部进行
                 processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete);
               }
             }
@@ -247,10 +233,31 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
   {
     String line;
     boolean isDone = false;
+    boolean htmlChecked = false;
+    StringBuilder firstLineBuffer = new StringBuilder();
 
     while ((line = bufferedReader.readLine()) != null)
     {
       Log.d(TAG, CodePosition.newInstance().toString() + ", line: " + line);
+
+      // 首次读取时检测是否为 HTML 响应
+      if (!htmlChecked)
+      {
+        htmlChecked = true;
+        firstLineBuffer.append(line);
+        
+        // 检查前 500 字符是否包含 HTML 标记
+        String preview = firstLineBuffer.length() > 500 ? firstLineBuffer.substring(0, 500) : firstLineBuffer.toString();
+        if (isHtmlResponse(preview))
+        {
+          Log.e(TAG, "API 返回非预期内容：HTML 页面，可能是认证失败或服务不可用。");
+          Log.e(TAG, "原始响应预览（前 500 字符）: " + 
+              (preview.length() > 500 ? preview.substring(0, 500) + "..." : preview));
+          accessPointManager.reportCurrentAccessPointUnavailable();
+          listener.onError(new ResponseException(null, "API 服务异常或未正确配置，返回了 HTML 页面而非 JSON。请检查接入点设置。"));
+          return;
+        }
+      }
 
       if (line.startsWith("data:"))
       {
