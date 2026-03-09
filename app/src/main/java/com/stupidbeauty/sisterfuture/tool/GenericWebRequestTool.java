@@ -161,7 +161,9 @@ public class GenericWebRequestTool implements Tool {
                         if (authValue == null || authValue.isEmpty()) {
                             throw new IllegalArgumentException("Basic Auth 需要 auth_value 参数 (格式：username:password)");
                         }
-                        String basicAuth = Base64.getEncoder().encodeToString(authValue.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        // Fixed: Use Base64.encodeToString for API compatibility (minSdk=21)
+                        byte[] authBytes = authValue.getBytes("UTF-8");
+                        String basicAuth = Base64.encodeToString(authBytes, Base64.NO_WRAP);
                         builder.header("Authorization", "Basic " + basicAuth);
                         break;
                     case "bearer":
