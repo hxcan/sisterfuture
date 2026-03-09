@@ -31,7 +31,7 @@ public class RemoveAccessPointTool implements Tool {
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             JSONObject properties = new JSONObject();
-            properties.put("index", new JSONObject().put("type", "integer").put("description", "要删除的接入点在列表中的索引位置，从0开始计数。"));
+            properties.put("index", new JSONObject().put("type", "integer").put("description", "要删除的接入点在列表中的索引位置，从 0 开始计数。"));
             parameters.put("properties", properties);
             JSONArray required = new JSONArray();
             required.put("index");
@@ -65,11 +65,13 @@ public class RemoveAccessPointTool implements Tool {
                 return error;
             }
 
-            // 检查是否是当前激活的接入点（索引为0）
-            if (index == 0) {
+            // 🔧 FIX #4595: 通过比较当前激活的索引值，而非硬编码 index == 0
+            int currentActiveIndex = modelAccessPointManager.getCurrentAccessPointIndex();
+            if (index == currentActiveIndex) {
+                ModelAccessPoint currentActive = modelAccessPointManager.getCurrentAccessPoint();
                 JSONObject error = new JSONObject();
                 error.put("status", "error");
-                error.put("message", "无法删除当前激活的接入点 (索引 0)。请先切换到其他接入点再尝试删除。");
+                error.put("message", "无法删除当前激活的接入点 (" + currentActive.getName() + ", 索引 " + currentActiveIndex + ")。请先切换到其他接入点再尝试删除。");
                 return error;
             }
 
