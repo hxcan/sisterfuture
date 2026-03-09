@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 
 
 
+
 /**
  * 模型接入点管理器
  * 负责管理多个模型服务的接入点，支持动态添加和持久化存储
@@ -237,6 +238,15 @@ public class ModelAccessPointManager
       return accessPoints.get(currentAccessPointIndex);
     }
     return null;
+  }
+
+  /**
+   * 获取当前激活的接入点索引
+   * @return 当前激活的接入点索引（从 0 开始）
+   */
+  public int getCurrentAccessPointIndex()
+  {
+    return currentAccessPointIndex;
   }
 
   /**
