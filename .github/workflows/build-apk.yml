@@ -43,14 +43,9 @@ jobs:
     - name: Assemble Release APK
       run: ./gradlew assembleRelease
 
-    - name: Install Android Build Tools 29.0.3
+    - name: Install Build Tools via SDK Manager
       run: |
-        cd /tmp
-        wget -q https://dl.google.com/android/repository/build-tools_r29.0.3-linux.zip
-        unzip -q build-tools_r29.0.3-linux.zip
-        sudo mkdir -p /usr/local/lib/android/sdk/build-tools/29.0.3
-        sudo cp -r android-10/* /usr/local/lib/android/sdk/build-tools/29.0.3/ || sudo cp -r */ /usr/local/lib/android/sdk/build-tools/29.0.3/
-        sudo chmod +x /usr/local/lib/android/sdk/build-tools/29.0.3/zipalign
+        yes | sdkmanager "build-tools;29.0.3" --sdk_root=/usr/local/lib/android/sdk
 
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
