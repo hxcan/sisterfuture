@@ -49,7 +49,14 @@ jobs:
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin
         yes | sdkmanager "build-tools;29.0.3"
 
+    - name: List Release APK Files (Debug)
+      run: |
+        echo "=== Release APK Directory ==="
+        ls -la app/build/outputs/apk/release/ || echo "Directory not found"
+        find app/build/outputs -name "*.apk" || echo "No APK files found"
+
     - name: Sign Release APK
+      id: sign_release
       uses: r0adkll/sign-android-release@v1
       with:
         releaseDirectory: app/build/outputs/apk/release
@@ -57,6 +64,12 @@ jobs:
         alias: ${{ secrets.KEYSTORE_ALIAS }}
         keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
         keyPassword: ${{ secrets.KEY_STORE_PASSWORD }}
+
+    - name: List Signed APK Files (Debug)
+      run: |
+        echo "=== After Signing ==="
+        ls -la app/build/outputs/apk/release/ || echo "Directory not found"
+        find app/build/outputs -name "*-signed.apk" || echo "No signed APK files found"
 
     - name: Upload APK artifact (PR)
       if: github.event_name == 'pull_request'
@@ -73,7 +86,7 @@ jobs:
         name: 🤖 CI Build #${{ github.run_number }}
         files: |
           app/build/outputs/apk/debug/app-debug.apk
-          app/build/outputs/apk/release/app-release-signed.apk
+          ${{ steps.sign_release.outputs.signedReleaseFile }}
         prerelease: true
         generate_release_notes: true
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -87,7 +100,7 @@ jobs:
           ---
           ### 📦 下载
           - **Debug 版**: `app-debug.apk` (自动签名，仅供测试)
-          - **Release 版**: `app-release-signed.apk` (正式签名，可覆盖安装)
+          - **Release 版**: 签名后的 APK (正式签名，可覆盖安装)
           
           ⚠️ Release 版本使用正式证书签名，支持覆盖安装和正式分发。
           
