@@ -39,8 +39,6 @@ import com.stupidbeauty.sisterfuture.bean.MessageType;
 
 
 
-
-
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -60,7 +58,6 @@ import com.stupidbeauty.sisterfuture.tool.GetContactListTool;
 import com.stupidbeauty.sisterfuture.tool.FtpFileRequestTool;
 import com.stupidbeauty.sisterfuture.tool.ListFtpDirectoryTool;
 import com.stupidbeauty.sisterfuture.tool.FtpFileWriteTool;
-
 
 
 
@@ -221,7 +218,7 @@ import com.stupidbeauty.sisterfuture.tool.SearchFileInRepoTool;
 
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
- * status bar and navigation\/system bar) with user interaction.
+ * status bar and navigation/system bar) with user interaction.
  * 
 **/
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
@@ -279,8 +276,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   // @BindView(R.id.speakerVerifyRegisterPasswordtextView) TextView speakerVerifyRegisterPasswordtextView; //!声纹注册密码文本标签。
 
 		private SpeechRecognizer mIat; //!语言识别器。
-
-
 
 
 
@@ -416,6 +411,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
+
     if (!setParam()) //参数设置失败。
     {
       // statustextView.setText("请先构建语法。");
@@ -442,6 +439,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     progressBar.setVisibility(View.INVISIBLE); //隐藏显示进度条。
     recognizeResulttextView.setText(R.string.empty); //显示空白内容。
 	} //public void commandRecognizebutton2()
+
 
 
 
@@ -572,6 +570,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
   private void showThinkingOverlay()
   {
     runOnUiThread(new Runnable()
@@ -623,7 +622,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
       accumulatedAnswer.setLength(0); // clear the last incremental result.
@@ -642,6 +640,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // 构造最终 messages 数组
       JSONArray messagesArray = new JSONArray();
+
 
 
 
@@ -732,8 +731,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             Response response = responseException.getResponse();
             try
             {
+              // ✅ 新增：先读取响应体并检测是否为 HTML
               String errorBody = response.body().string();
               Log.e(TAG, "Error body: " + errorBody);
+              
+              // 检测 HTML 响应
+              if (isHtmlResponse(errorBody))
+              {
+                Log.e(TAG, "API 返回 HTML 页面而非 JSON，跳过 Gson 解析，防止崩溃。");
+                runOnUiThread(() -> {
+                  messageAdapter.addMessage(new MessageItem("API 服务异常：返回了 HTML 页面而非 JSON。请检查接入点配置。", MessageType.AI));
+                  scrollToBottom();
+                });
+                return; // 直接返回，不执行后续 Gson 解析
+              }
+              
+              // 非 HTML 响应，继续原有逻辑
               TongYiResponse errResp = new Gson().fromJson(errorBody, TongYiResponse.class);
               if (errResp != null && errResp.getError() != null)
               {
@@ -771,6 +784,25 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       Log.w(TAG, "Voice recognition result is empty or null.\n");
     }
+  }
+
+  /**
+   * 检测响应内容是否为 HTML 页面
+   * 用于防止 API 返回错误页面（如登录页、404 页）时客户端解析崩溃
+   */
+  private boolean isHtmlResponse(String content)
+  {
+    if (content == null || content.isEmpty())
+    {
+      return false;
+    }
+    
+    String trimmedContent = content.trim();
+    return trimmedContent.startsWith("<!DOCTYPE html") ||
+           trimmedContent.startsWith("<html") ||
+           trimmedContent.startsWith("<HTML") ||
+           trimmedContent.contains("<title") ||
+           trimmedContent.contains("<TITLE");
   }
 
   /**
@@ -1129,8 +1161,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
-
   // 修改 ttsSayReply 方法
   private void ttsSayReply(final String text)
   {
@@ -1271,7 +1301,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
   /**
   * 连接信号信号槽。
   **/
@@ -1279,7 +1308,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
 }//private void connectSignals()
-
 
 
 
@@ -1323,12 +1351,10 @@ SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
 
 
 
-
 //promptBuilder.append(  promptManager.getBasePrompt()  );
 
 
 promptBuilder.append(promptManager.getCurrentPrompt());
-
 
 
 
@@ -1393,9 +1419,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
-
-
-
   @Override
 	/**
   *此活动正在被创建。
@@ -1434,7 +1457,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     memoryManager = new MemoryManager(this);
 
 
-    // ✅ 新增：创建并注册 SwitchNextAccessPointTool
+    // ✅ 创建并注册 SwitchNextAccessPointTool
     toolManager = new ToolManager();
     toolManager.registerTool(new ConversationResetTool(contextManager)); // ← 注入
     toolManager.registerTool(new GetCurrentTimeTool()); // ← 新增
