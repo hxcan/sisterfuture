@@ -41,36 +41,60 @@ public class GenericWebRequestTool implements Tool {
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
-            parameters.put("properties", new JSONObject()
-                .put("method", new JSONObject()
-                    .put("type", "string")
-                    .put("enum", new JSONArray(new String[]{"GET", "POST", "PUT", "DELETE", "PATCH"}))
-                    .put("description", "HTTP 方法 (必填)", "GET|POST|PUT|DELETE|PATCH"))
-                .put("url", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "目标 URL (必填)"))
-                .put("headers", new JSONObject()
-                    .put("type", "object")
-                    .put("description", "自定义 Header 对象 (可选)"))
-                .put("body", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "请求体内容 (JSON/String/Form) (POST/PUT 时选填)"))
-                .put("params", new JSONObject()
-                    .put("type", "object")
-                    .put("description", "URL Query 参数 (可选)"))
-                .put("auth_type", new JSONObject()
-                    .put("type", "string")
-                    .put("enum", new JSONArray(new String[]{"none", "basic", "bearer", "api_key"}))
-                    .put("default", "\"none\"")
-                    .put("description", "认证方式 (可选)"))
-                .put("auth_value", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "认证凭据 (根据 auth_type 填充) (可选)"))
-                .put("timeout_sec", new JSONObject()
-                    .put("type", "integer")
-                    .put("default", 30)
-                    .put("description", "超时时间 (秒) (可选)")));
-            parameters.put("required", new JSONArray(new String[]{"method", "url"}));
+            JSONObject properties = new JSONObject();
+            
+            JSONObject methodParam = new JSONObject();
+            methodParam.put("type", "string");
+            JSONArray enumValues = new JSONArray();
+            enumValues.put("GET").put("POST").put("PUT").put("DELETE").put("PATCH");
+            methodParam.put("enum", enumValues);
+            methodParam.put("description", "HTTP 方法 (必填): GET|POST|PUT|DELETE|PATCH");
+            properties.put("method", methodParam);
+            
+            JSONObject urlParam = new JSONObject();
+            urlParam.put("type", "string");
+            urlParam.put("description", "目标 URL (必填)");
+            properties.put("url", urlParam);
+            
+            JSONObject headersParam = new JSONObject();
+            headersParam.put("type", "object");
+            headersParam.put("description", "自定义 Header 对象 (可选)");
+            properties.put("headers", headersParam);
+            
+            JSONObject bodyParam = new JSONObject();
+            bodyParam.put("type", "string");
+            bodyParam.put("description", "请求体内容 (JSON/String/Form) (POST/PUT 时选填)");
+            properties.put("body", bodyParam);
+            
+            JSONObject paramsObjParam = new JSONObject();
+            paramsObjParam.put("type", "object");
+            paramsObjParam.put("description", "URL Query 参数 (可选)");
+            properties.put("params", paramsObjParam);
+            
+            JSONObject authTypeParam = new JSONObject();
+            authTypeParam.put("type", "string");
+            JSONArray authEnums = new JSONArray();
+            authEnums.put("none").put("basic").put("bearer").put("api_key");
+            authTypeParam.put("enum", authEnums);
+            authTypeParam.put("default", "\"none\"");
+            authTypeParam.put("description", "认证方式 (可选)");
+            properties.put("auth_type", authTypeParam);
+            
+            JSONObject authValueParam = new JSONObject();
+            authValueParam.put("type", "string");
+            authValueParam.put("description", "认证凭据 (根据 auth_type 填充) (可选)");
+            properties.put("auth_value", authValueParam);
+            
+            JSONObject timeoutParam = new JSONObject();
+            timeoutParam.put("type", "integer");
+            timeoutParam.put("default", 30);
+            timeoutParam.put("description", "超时时间 (秒) (可选)");
+            properties.put("timeout_sec", timeoutParam);
+            
+            parameters.put("properties", properties);
+            JSONArray required = new JSONArray();
+            required.put("method").put("url");
+            parameters.put("required", required);
             functionDef.put("parameters", parameters);
 
             return new JSONObject().put("type", "function").put("function", functionDef);
@@ -99,7 +123,7 @@ public class GenericWebRequestTool implements Tool {
                 String url = arguments.getString("url").trim();
                 
                 if (url.isEmpty()) {
-                    throw new IllegalArgumentException("URL不能为空");
+                    throw new IllegalArgumentException("URL 不能为空");
                 }
 
                 JSONObject headers = arguments.optJSONObject("headers");
@@ -121,9 +145,11 @@ public class GenericWebRequestTool implements Tool {
                     builder.header("Accept", headers.getString("Accept"));
                 }
                 // 其他自定义 Header
-                for (String key : JSONObject.getNames(headers)) {
-                    if (!key.equals("Content-Type") && !key.equals("Accept")) {
-                        builder.header(key, headers.getString(key));
+                if (headers != null) {
+                    for (String key : headers.names()) {
+                        if (!key.equals("Content-Type") && !key.equals("Accept")) {
+                            builder.header(key, headers.getString(key));
+                        }
                     }
                 }
 
@@ -160,11 +186,17 @@ public class GenericWebRequestTool implements Tool {
                     String contentType = "application/json";
                     if (headers != null && headers.has("Content-Type")) {
                         contentType = headers.getString("Content-Type");
-                    } else if (bodyStr != null && bodyStr.startsWith("{") || bodyStr.startsWith("[")) {
+                    } else if (bodyStr != null && (bodyStr.startsWith("{") || bodyStr.startsWith("["))) {
                         contentType = "application/json";
                     } else if (bodyStr != null && bodyStr.contains("=") && !bodyStr.startsWith("{")) {
                         contentType = "application/x-www-form-urlencoded";
-                        requestBody = new FormBody.Builder().addEncoded(bodyStr).build();
+                        // Fixed: FormBody.Builder requires key-value pair
+                        int equalsIndex = bodyStr.indexOf("=");
+                        if (equalsIndex > 0) {
+                            String key = bodyStr.substring(0, equalsIndex);
+                            String value = bodyStr.substring(equalsIndex + 1);
+                            requestBody = new FormBody.Builder().add(key, value).build();
+                        }
                     } else {
                         contentType = "text/plain";
                     }
@@ -176,7 +208,7 @@ public class GenericWebRequestTool implements Tool {
                                 return MediaType.parse(contentType);
                             }
                             @Override
-                            public void writeTo(okhttp3.RequestBody.BufferSink sink) throws IOException {
+                            public void writeTo(okhttp3.MediaType sink) throws IOException {
                                 sink.writeUtf8(bodyStr);
                             }
                         };
@@ -226,7 +258,7 @@ public class GenericWebRequestTool implements Tool {
                 } else {
                     JSONObject error = new JSONObject();
                     error.put("status", "error");
-                    error.put("message", "HTTP请求失败：" + response.code() + " " + response.message());
+                    error.put("message", "HTTP 请求失败：" + response.code() + " " + response.message());
                     error.put("raw_body", responseBody);
                     error.put("status_code", response.code());
                     callback.onResult(error);
