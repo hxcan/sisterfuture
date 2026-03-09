@@ -74,6 +74,25 @@ public class TongYiClient
       this.toolManager = toolManager;
     }
 
+    /**
+     * 检测响应内容是否为 HTML 页面
+     * 用于防止 API 返回错误页面（如登录页、404 页）时客户端解析崩溃
+     */
+    private boolean isHtmlResponse(String responseBody)
+    {
+      if (responseBody == null || responseBody.isEmpty())
+      {
+        return false;
+      }
+      
+      String trimmedContent = responseBody.trim();
+      return trimmedContent.startsWith("<!DOCTYPE html") ||
+             trimmedContent.startsWith("<html") ||
+             trimmedContent.startsWith("<HTML") ||
+             trimmedContent.contains("<title") ||
+             trimmedContent.contains("<TITLE");
+    }
+
     @Override
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete)
     {
@@ -172,6 +191,21 @@ public class TongYiClient
               ResponseBody responseBody = response.body();
               if (responseBody != null)
               {
+                // 预读取少量内容检测是否为 HTML 响应
+                responseBody = responseBody.peekBody(2048); //  peek 前 2KB 用于检测
+                String preview = responseBody.string();
+                
+                if (isHtmlResponse(preview))
+                {
+                  Log.e(TAG, "API 返回非预期内容：HTML 页面，可能是认证失败或服务不可用。");
+                  Log.e(TAG, "原始响应预览（前 500 字符）: " + 
+                      (preview.length() > 500 ? preview.substring(0, 500) + "..." : preview));
+                  accessPointManager.reportCurrentAccessPointUnavailable();
+                  listener.onError(new ResponseException(response, "API 服务异常或未正确配置，返回了 HTML 页面而非 JSON。请检查接入点设置。"));
+                  return;
+                }
+                
+                // 非 HTML 响应，继续正常处理 SSE 流
                 processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete);
               }
             }
@@ -265,16 +299,30 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
   public static class ResponseException extends Exception
   {
     private final Response response;
+    private final String customMessage;
 
     public ResponseException(Response response)
     {
       super("HTTP request failed with code: " + response.code());
       this.response = response;
+      this.customMessage = null;
+    }
+
+    public ResponseException(Response response, String customMessage)
+    {
+      super("HTTP request failed with code: " + response.code() + " - " + customMessage);
+      this.response = response;
+      this.customMessage = customMessage;
     }
 
     public Response getResponse()
     {
       return response;
+    }
+
+    public String getCustomMessage()
+    {
+      return customMessage;
     }
   }
 }
