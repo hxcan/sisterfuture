@@ -39,6 +39,8 @@ import com.stupidbeauty.sisterfuture.bean.MessageType;
 
 
 
+
+
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -50,6 +52,7 @@ import com.stupidbeauty.sisterfuture.tool.UpdateRedmineIssueTool;
 import com.stupidbeauty.sisterfuture.tool.SearchRedmineTasksTool;
 import com.stupidbeauty.sisterfuture.tool.GetIssuesListTool;
 import com.stupidbeauty.sisterfuture.tool.EstablishTaskRelationshipTool;
+import com.stupidbeauty.sisterfuture.tool.ListRedmineProjectsTool; // ✅ 新增导入
 
 
 import com.stupidbeauty.sisterfuture.tool.BasicWebRequestTool;
@@ -70,6 +73,7 @@ import com.stupidbeauty.sisterfuture.tool.SearchMemoryTool;
 import com.stupidbeauty.sisterfuture.tool.ListAllMemoriesTool;
 import com.stupidbeauty.sisterfuture.tool.AddModelAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.AddNoteTool;
+import com.stupidbeauty.sisterfuture.tool.AddShoppingItemTool; // ✅ 新增：确保导入存在
 
 
 
@@ -186,7 +190,6 @@ import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 
 // ✅ 新增：导入 AddShoppingItemTool
-import com.stupidbeauty.sisterfuture.tool.AddShoppingItemTool;
 
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
 import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
@@ -214,9 +217,11 @@ import com.stupidbeauty.sisterfuture.tool.SearchFileInRepoTool;
 
 
 
+
+
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
- * status bar and navigation/system bar) with user interaction.
+ * status bar and navigation\/system bar) with user interaction.
  * 
 **/
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
@@ -273,15 +278,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final String TAG="SisterFutureActivity"; //!输出调试信息时使用的标记。
   // @BindView(R.id.speakerVerifyRegisterPasswordtextView) TextView speakerVerifyRegisterPasswordtextView; //!声纹注册密码文本标签。
 
-	private SpeechRecognizer mIat; //!语言识别器。
+		private SpeechRecognizer mIat; //!语言识别器。
 
 
 
 
 
 	//@BindView(R.id.statustextView) TextView statustextView; //!用来显示状态的文字标签。
-
-
 
 
 
@@ -320,10 +323,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         indexToOriginalIdMap.put(index, originalId);
       }
 
-
       Function func = call.getFunction();
       Function existing = partialToolArgs.get(originalId);
-
 
       if (existing == null)
       {
@@ -331,7 +332,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         existing.setName(func.getName());
         existing.setArguments("");
       }
-
 
       String newChunk = func.getArguments() != null ? func.getArguments() : "";
       existing.setArguments(existing.getArguments() + newChunk);
@@ -380,11 +380,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     if (voiceEndDetected) //之前已经探测到用户的声音结束。
     {
-    } //if (voiceEndDetected) //之前已经探测到用户的声音结束。
+    }//if (voiceEndDetected) //之前已经探测到用户的声音结束。
     else //之前未探测到用户的声音结束。
     {
       mIat.stopListening(); //停止录音。
-    } //else //之前未探测到用户的声音结束。
+    }//else //之前未探测到用户的声音结束。
 
     volumeIndicatorprogressBar.setIndeterminate(true); //处于未决状态，以表示正在识别。
     volumeIndicatorprogressBar.setProgress(0); //进度归零。
@@ -395,7 +395,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     commandRecognizebutton2.setEnabled(false); //禁用按钮。
     commandRecognizebutton2.setVisibility(View.INVISIBLE); //隐藏按钮。
-  } //public void stopRecordbutton2()
+  }//public void stopRecordbutton2()
 	/**
 	* 在线命令词识别。
 	**/
@@ -406,13 +406,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
     vibrator.vibrate( 100);
 		if (mIat==null) //识别器未创建。
 		{
 			mIat=SpeechRecognizer.createRecognizer(this,null); //创建识别器。
-		} //if (mIat==null) //识别器未创建。
-
+		}//if (mIat==null) //识别器未创建。
 
 
 
@@ -422,6 +422,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       return;
     }//if (!setParam()) //参数设置失败。
+
 
 
 
@@ -566,7 +567,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   protected void reportOperationFail(String string)
   {
     Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();   //做一个提示，Failed adding address ,please retry.
-  } //protected void reportOperationFail()
+  }//protected void reportOperationFail()
 
 
 
@@ -621,6 +622,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
+
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
       accumulatedAnswer.setLength(0); // clear the last incremental result.
@@ -639,7 +642,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // 构造最终 messages 数组
       JSONArray messagesArray = new JSONArray();
-
 
 
 
@@ -1067,16 +1069,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               Log.d(TAG, "  [...] ");
 
               outputDotsDone = true;
-            } // if (!outputDotsDone)
-          } // if ((i >= startEndMessagsOutputAmount) && (i <= (messagesAmount-startEndMessagsOutputAmount) )) // It is in the middle, skip, not output.
+            }//if (!outputDotsDone)
+          }//if ((i >= startEndMessagsOutputAmount) && (i <= (messagesAmount-startEndMessagsOutputAmount) )) // It is in the middle, skip, not output.
           else // output.
           {
             JSONObject msg = contextManager.getHistory().get(i);
-            if (msg!=null) // The msg exists
+            if (msg!=null)//The msg exists
             {
               Log.d(TAG, "  [" + i + "] " + msg.toString(2));
-            } // if (msg!=null) // The msg exists
-          } // else // output.
+            }//if (msg!=null)//The msg exists
+          }//else //output.
         }
 
         sendChatRequestTongYi();
@@ -1114,13 +1116,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     if (null!=mTts) //TTS 引擎还在。
     {
       mTts.shutdown(); //关闭。
-    } //if (null!=mTts) //TTS 引擎还在。
-
+    }//if (null!=mTts) //TTS 引擎还在。
 
 
 
     super.onBackPressed();
-  } //public void onBackPressed()
+  }//public void onBackPressed()
+
+
+
+
 
 
 
@@ -1134,7 +1139,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // ttsByAndroidSystemTts(text); //使用系统自带的 TTS 接口。
     // ttsByBiaoBei(text); //使用标贝语音来发声。
     ttsByFindroidTts(text); // 使用 findroid 介绍的 TTS 接口。
-  } // private void ttsSayReply(final String text)
+  }//private void ttsSayReply(final String text)
 
   /**
   *  使用 findroid 介绍的 TTS 接口。
@@ -1154,7 +1159,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       TtsManager.getInstance().speak(inputText, speed, true);
     });
-  } // private void ttsByFindroidTts(String text)
+  }//private void ttsByFindroidTts(String text)
 
   private final RecognizerListener mRecognizerListener=new RecognizerListener()
 	{
@@ -1167,7 +1172,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 		@Override
 		public void onBeginOfSpeech()
     {
-      voiceRecognizeResultString=""; //重置识别结果。
+      voiceRecognizeResultString="";//重置识别结果。
 
 		volumeIndicatorprogressBar.setVisibility(View.VISIBLE); //显示音量。
 		}
@@ -1242,17 +1247,26 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-          break; //跳出。
+
+          break;//跳出。
 
 
         case MotionEvent.ACTION_UP: //松开。
           stopRecordbutton2(); //停止识别。
 
-          break; //跳出。
-      } //switch (event.getAction()) //根据不同事件进行处理。
+          break;//跳出。
+      }//switch (event.getAction()) //根据不同事件进行处理。
       return true;
    }//public boolean onTouch(View v, MotionEvent event)
   };
+
+
+
+
+
+
+
+
 
 
 
@@ -1265,6 +1279,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
 }//private void connectSignals()
+
+
+
+
+
+
 
 
 
@@ -1287,6 +1307,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
   /**
   * 构造增强版系统提示词，从每个工具的 getDefinition() 中提取 description。
   **/
@@ -1302,10 +1323,13 @@ SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
 
 
 
+
 //promptBuilder.append(  promptManager.getBasePrompt()  );
 
 
 promptBuilder.append(promptManager.getCurrentPrompt());
+
+
 
 
 
@@ -1367,6 +1391,11 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
+
+
+
+
+
   @Override
 	/**
   *此活动正在被创建。
@@ -1374,6 +1403,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 	protected void onCreate(Bundle savedInstanceState) 
 	{
 		super.onCreate(savedInstanceState); //超类创建。
+
 
 
 
@@ -1426,6 +1456,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new UpdateRedmineIssueTool(this));
     toolManager.registerTool(new SearchRedmineTasksTool(this));
     toolManager.registerTool(new GetIssuesListTool(this));
+    toolManager.registerTool(new ListRedmineProjectsTool(this)); // ✅ 新增：注册新工具
     toolManager.registerTool(new EstablishTaskRelationshipTool(this));
     
     
@@ -1435,6 +1466,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new FtpFileRequestTool(this));
     toolManager.registerTool(new ListFtpDirectoryTool(this));
     toolManager.registerTool(new FtpFileWriteTool(this));
+
 
 
 
@@ -1507,7 +1539,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         {
           voiceRecognizeResultString = recognizeResulttextView.getText().toString(); // Get the input text.
           sendChatRequest();
-          return true; // 消耗事件
+          return true; //消耗事件
         }
         return false;
       }
@@ -1524,7 +1556,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         sendMessageToSister(question);
     }
 
-	} //protected void onCreate(Bundle savedInstanceState)
+	}//protected void onCreate(Bundle savedInstanceState)
 
   private boolean hasPermission()
   {
@@ -1547,17 +1579,17 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         if (!result) //没有权限
         {
           Log.d(TAG, CodePosition.newInstance().toString() + ", permission: " + permissionString + ", no permission"); //Debug.
-          break; //没有权限。
-        } // if (!result) //没有权限
-      } // for(String permissionString: articleInfoArrayList) //一个个检查
-    } //if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //安卓 6.
+          break;//没有权限。
+        }//if (!result)//没有权限
+      }//for(String permissionString: articleInfoArrayList)//一个个检查
+    }//if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)//安卓 6.
     else //旧版本。
     {
-      result=true; //有权限。
-    } //else //旧版本。
+      result=true;//有权限。
+    }//else//旧版本。
 
     return result;
-  } //private boolean hasPermission()
+  }//private boolean hasPermission()
 
   /**
   * 请求获取权限
@@ -1569,14 +1601,14 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       if ( shouldShowRequestPermissionRationale(PERMISSION_STORAGE)  || shouldShowRequestPermissionRationale(PERMISSION_RECORD_AUDIO) || shouldShowRequestPermissionRationale(PERMISSION_FINE_LOCATIN)  || shouldShowRequestPermissionRationale(PERMISSION_INSTALL_PACKAGE)) //应当告知原因。
       {
         Toast.makeText(this, "Camera AND storage permission are required for this demo", Toast.LENGTH_LONG).show();
-      } //if ( shouldShowRequestPermissionRationale(PERMISSION_STORAGE)  || shouldShowRequestPermissionRationale(PERMISSION_RECORD_AUDIO)) //应当告知原因。
+      }//if ( shouldShowRequestPermissionRationale(PERMISSION_STORAGE)  || shouldShowRequestPermissionRationale(PERMISSION_RECORD_AUDIO)) //应当告知原因。
       Log.d(TAG, CodePosition.newInstance().toString() ); //Debug.
 
 
       // requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN, PERMISSION_INSTALL_PACKAGE}, PERMISSIONS_REQUEST);
       requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN}, PERMISSIONS_REQUEST);
-    } //if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //动态权限
-  } //private void requestPermission()
+    }//if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)//动态权限
+  }//private void requestPermission()
     
   /**
   * 查权限。
@@ -1590,7 +1622,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     {
       requestPermission();
     }
-  } //private void checkPermission()
+  }//private void checkPermission()
 
 
   /**
@@ -1606,7 +1638,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     LocalBroadcastManager localBroadcastManager=LocalBroadcastManager.getInstance(this); //Get the local broadcast manager instance.
     localBroadcastManager.registerReceiver(mBroadcastReceiver, filter); //注册接收器。
-  } //private void registerBroadcastReceiver()
+  }//private void registerBroadcastReceiver()
   
   /**
   * 广播接收器。
@@ -1624,9 +1656,12 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
+
       if (Constants.Operation.CommitText.equals(action)) //提交文本内容。
       {
         Bundle extras=intent.getExtras(); //获取参数包。
+
+
 
 
 
@@ -1634,15 +1669,22 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
+
+
         recognizeResulttextView.setText(voiceRecognizeResultString); //显示结果。
+
+
 
 
 
         sendChatRequest(); //发送闲聊请求。
         startFriendShutDownAt2100Service(); //启动友军"21 点关机"的服务。
       }
-    } //public void onReceive(Context context, Intent intent)
-  }; //private BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
+    }//public void onReceive(Context context, Intent intent)
+  };//private BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
+
+
+
 
 
 
@@ -1656,15 +1698,15 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     Intent intent = new Intent();
     intent.setComponent(new ComponentName("com.stupidbeauty.shutdownat2100androidnative", "com.stupidbeauty.shutdownat2100androidnative.TimeCheckService")); //设置组件。
     startService(intent); //启动服务。
-  } //protected void startFriendShutDownAt2100Service()
+  }//protected void startFriendShutDownAt2100Service()
 
   /**
   * 初始化 MSC。
   **/
   private void initializeMsc()
   {
-    SpeechUtility.createUtility(this, SpeechConstant.APPID + "=56e142d3"); //创建工具。
+    SpeechUtility.createUtility(this, SpeechConstant.APPID+"=56e142d3"); //创建工具。
 
     mIat= SpeechRecognizer.createRecognizer(this, null);
-  } //private void initializeMsc()
+  }//private void initializeMsc()
 }
