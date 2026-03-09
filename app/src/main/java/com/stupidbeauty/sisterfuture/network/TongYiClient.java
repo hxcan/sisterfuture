@@ -74,25 +74,6 @@ public class TongYiClient
       this.toolManager = toolManager;
     }
 
-    /**
-     * 检测响应内容是否为 HTML 页面
-     * 用于防止 API 返回错误页面（如登录页、404 页）时客户端解析崩溃
-     */
-    private boolean isHtmlResponse(String content)
-    {
-      if (content == null || content.isEmpty())
-      {
-        return false;
-      }
-      
-      String trimmedContent = content.trim();
-      return trimmedContent.startsWith("<!DOCTYPE html") ||
-             trimmedContent.startsWith("<html") ||
-             trimmedContent.startsWith("<HTML") ||
-             trimmedContent.contains("<title") ||
-             trimmedContent.contains("<TITLE");
-    }
-
     @Override
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete)
     {
@@ -225,6 +206,25 @@ public class TongYiClient
       // Reader closed (like response body already read), expected scenario
       Log.e(TAG, "Reader closed, cannot read error content: " + e.getMessage());
     }
+  }
+
+  /**
+   * 检测响应内容是否为 HTML 页面
+   * 用于防止 API 返回错误页面（如登录页、404 页）时客户端解析崩溃
+   */
+  private static boolean isHtmlResponse(String content)
+  {
+    if (content == null || content.isEmpty())
+    {
+      return false;
+    }
+    
+    String trimmedContent = content.trim();
+    return trimmedContent.startsWith("<!DOCTYPE html") ||
+           trimmedContent.startsWith("<html") ||
+           trimmedContent.startsWith("<HTML") ||
+           trimmedContent.contains("<title") ||
+           trimmedContent.contains("<TITLE");
   }
 
 private static void processSSEStream(java.io.Reader reader, OnResponseListener listener, ModelAccessPointManager accessPointManager, Runnable onStreamComplete)
