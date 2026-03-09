@@ -146,7 +146,9 @@ public class GenericWebRequestTool implements Tool {
                 }
                 // 其他自定义 Header
                 if (headers != null) {
-                    for (String key : headers.names()) {
+                    JSONArray keys = headers.names();
+                    for (int i = 0; i < keys.length(); i++) {
+                        String key = keys.getString(i);
                         if (!key.equals("Content-Type") && !key.equals("Accept")) {
                             builder.header(key, headers.getString(key));
                         }
@@ -202,14 +204,16 @@ public class GenericWebRequestTool implements Tool {
                     }
 
                     if (requestBody == null) {
+                        final MediaType mediaType = MediaType.parse(contentType);
+                        final String content = bodyStr;
                         requestBody = new RequestBody() {
                             @Override
                             public MediaType contentType() {
-                                return MediaType.parse(contentType);
+                                return mediaType;
                             }
                             @Override
-                            public void writeTo(okhttp3.MediaType sink) throws IOException {
-                                sink.writeUtf8(bodyStr);
+                            public void writeTo(okio.BufferedSink sink) throws IOException {
+                                sink.writeUtf8(content);
                             }
                         };
                     }
