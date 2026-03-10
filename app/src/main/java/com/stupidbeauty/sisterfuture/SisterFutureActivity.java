@@ -510,7 +510,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     recognizeResulttextView.setText(""); //! Clear the recognize result or input content.
     
-    // ✅ 新增：MVP 引导逻辑集成
+    // ✅ 新增：MVP 引导逻辑集成（原有逻辑保持不变）
     if (guideManager != null && guideManager.isEmptyAccessPointList()) {
         guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback() {
             @Override
@@ -664,6 +664,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
+      // 🔒 动态计算最大重试次数：接入点个数的 2 倍
+      final int maxRetries = Math.max(3, modelAccessPointManager.getAccessPointCount() * 2);
+      final AtomicInteger failureCounter = new AtomicInteger(0);
+
       // 使用通义千问客户端发送请求
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
@@ -729,37 +733,53 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             Log.e(TAG, "未知异常，不触发重试：" + error.getMessage());
           }
 
-          // 🔒 关键修改：加入熔断计数器和向导触发逻辑（仅修改此处）
+          // 🔒 关键修改：复用 sendChatRequest() 的向导触发逻辑
           if (isAccessPointUnavailable) {
-              // 🔒 新增计数器声明（仅在类成员中声明一次）
-              if (!sisterfuture_activity_counter_initialized) {
-                  consecutiveFailures = 0;
-                  sisterfuture_activity_counter_initialized = true;
-              }
-              
-              consecutiveFailures++;
-              
-              if (consecutiveFailures >= MAX_FAILURE_THRESHOLD) {
-                  // ✅ 触发向导并重置计数器
-                  runOnUiThread(() -> {
-                      Toast.makeText(SisterFutureActivity.this, 
-                          "所有接入点均不可用，正在启动配置向导...", 
-                          Toast.LENGTH_LONG).show();
-                      guideManager.showAddAccessPointGuide();
-                  });
-                  consecutiveFailures = 0;
-                  return; //! 停止递归，打破死循环
-              }
-              
               // 🔥 报告当前接入点不可用，切换下一个
               modelAccessPointManager.reportCurrentAccessPointUnavailable();
               
-              Log.w(TAG, "Consecutive failures: " + consecutiveFailures + ", retrying...");
+              // 🔒 计数器累加并判断是否超过阈值
+              int currentFailures = failureCounter.incrementAndGet();
+              
+              if (currentFailures >= maxRetries) {
+                  // ✅ 达到最大重试次数，触发向导（复用 processWithGuideLogic）
+                  runOnUiThread(() -> {
+                      Toast.makeText(SisterFutureActivity.this, 
+                          "所有接入点均不可用，正在启动配置向导...", 
+                          Toast.LENGTH_LONG).show());
+                      
+                      // 复用原有的向导触发逻辑（与 sendChatRequest() 一致）
+                      guideManager.processWithGuideLogic("", new GuideManager.ChatCallback() {
+                          @Override
+                          public void onResponse(String message) {
+                              runOnUiThread(() -> {
+                                  messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+                                  scrollToBottom();
+                              });
+                          }
+                          
+                          @Override
+                          public void onError(String error) {
+                              runOnUiThread(() -> {
+                                  messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+                                  scrollToBottom();
+                              });
+                          }
+                      });
+                  });
+                  
+                  // 🔒 重置计数器
+                  failureCounter.set(0);
+                  return; //! 停止递归调用，打破死循环
+              }
+              
+              Log.w(TAG, "Consecutive failures: " + currentFailures + "/" + maxRetries + ", retrying...");
               runOnUiThread(() -> {
                   Toast.makeText(SisterFutureActivity.this, 
-                      "当前接入点不可用，正在尝试其他接入点 (第" + consecutiveFailures + "次)...", 
-                      Toast.LENGTH_SHORT).show();
+                      "当前接入点不可用，正在尝试其他接入点 (第" + currentFailures + "/" + maxRetries + "次)...", 
+                      Toast.LENGTH_SHORT).show());
               });
+              
               sendChatRequestTongYi();
           }
         }
