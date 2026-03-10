@@ -15,7 +15,6 @@ import java.nio.charset.StandardCharsets;
 
 
 
-
 /**
  * 模型接入点管理器
  * 负责管理多个模型服务的接入点，支持动态添加和持久化存储
@@ -283,14 +282,29 @@ public class ModelAccessPointManager
       return false;
     }
 
+    // 🔧 FIX #4624: 执行删除操作前缓存当前索引值
+    int oldIndex = currentAccessPointIndex;
+    
     // 执行删除操作并更新当前索引（如果需要）
     accessPoints.remove(index);
     saveToPersistentStorage();
-    Log.i(TAG, "Successfully removed access point at index " + index + ": " + accessPoints.get(index).getName());
-
-    // 调整当前索引（如果被删除的是当前索引之后的项）
-    if (index < currentAccessPointIndex) {
-      currentAccessPointIndex--;
+    
+    // 🔧 修复核心：删除后立即验证索引有效性
+    if (index <= currentAccessPointIndex && accessPoints.size() > 0) {
+      // 如果删除的是当前索引或之前的节点，且列表不为空，则索引应减 1
+      currentAccessPointIndex = Math.max(0, currentAccessPointIndex - 1);
+      Log.i(TAG, "Removed node at index=" + index + ", adjusted currentAccessPointIndex from " + oldIndex + " to " + currentAccessPointIndex);
+    } else if (accessPoints.size() == 0) {
+      // 如果删除后列表为空，重置为 0
+      currentAccessPointIndex = 0;
+      Log.i(TAG, "Removed last node, reset currentAccessPointIndex to 0");
+    }
+    
+    // 🔧 强制刷新：确保所有后续操作使用最新的列表和索引
+    Log.i(TAG, "After removal: size=" + accessPoints.size() + ", currentIndex=" + currentAccessPointIndex);
+    if (accessPoints.size() > 0 && currentAccessPointIndex >= accessPoints.size()) {
+      currentAccessPointIndex = accessPoints.size() - 1;
+      Log.w(TAG, "Index out of bounds after removal, corrected to: " + currentAccessPointIndex);
     }
     
     return true;
