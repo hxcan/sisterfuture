@@ -510,7 +510,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     recognizeResulttextView.setText(""); //! Clear the recognize result or input content.
     
-    // ✅ 新增：MVP 引导逻辑集成（原有逻辑保持不变）
+    // ✅ 新增：MVP 引导逻辑集成
     if (guideManager != null && guideManager.isEmptyAccessPointList()) {
         guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback() {
             @Override
@@ -666,7 +666,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // 🔒 动态计算最大重试次数：接入点个数的 2 倍
       final int maxRetries = Math.max(3, modelAccessPointManager.getAccessPointCount() * 2);
-      final AtomicInteger failureCounter = new AtomicInteger(0);
+      final int[] consecutiveFailures = {0}; // 🔒 简单整数数组实现线程安全计数
 
       // 使用通义千问客户端发送请求
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
@@ -739,9 +739,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               modelAccessPointManager.reportCurrentAccessPointUnavailable();
               
               // 🔒 计数器累加并判断是否超过阈值
-              int currentFailures = failureCounter.incrementAndGet();
+              consecutiveFailures[0]++;
               
-              if (currentFailures >= maxRetries) {
+              if (consecutiveFailures[0] >= maxRetries) {
                   // ✅ 达到最大重试次数，触发向导（复用 processWithGuideLogic）
                   runOnUiThread(() -> {
                       Toast.makeText(SisterFutureActivity.this, 
@@ -769,14 +769,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   });
                   
                   // 🔒 重置计数器
-                  failureCounter.set(0);
+                  consecutiveFailures[0] = 0;
                   return; //! 停止递归调用，打破死循环
               }
               
-              Log.w(TAG, "Consecutive failures: " + currentFailures + "/" + maxRetries + ", retrying...");
+              Log.w(TAG, "Consecutive failures: " + consecutiveFailures[0] + "/" + maxRetries + ", retrying...");
               runOnUiThread(() -> {
                   Toast.makeText(SisterFutureActivity.this, 
-                      "当前接入点不可用，正在尝试其他接入点 (第" + currentFailures + "/" + maxRetries + "次)...", 
+                      "当前接入点不可用，正在尝试其他接入点 (第" + consecutiveFailures[0] + "/" + maxRetries + "次)...", 
                       Toast.LENGTH_SHORT).show());
               });
               
