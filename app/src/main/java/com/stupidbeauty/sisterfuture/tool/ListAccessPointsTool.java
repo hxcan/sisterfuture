@@ -57,7 +57,10 @@ public class ListAccessPointsTool implements Tool {
         try {
             // 获取所有接入点
             JSONArray accessPointsArray = new JSONArray();
-            for (int i = 0; i < modelAccessPointManager.getAccessPointCount(); i++) {
+            int total = modelAccessPointManager.getAccessPointCount();
+            int currentIdx = modelAccessPointManager.getCurrentAccessPointIndex(); // 🔧 FIX: 获取真实当前索引
+            
+            for (int i = 0; i < total; i++) {
                 JSONObject point = new JSONObject();
                 point.put("index", i);
                 point.put("name", modelAccessPointManager.getAllAccessPoints().get(i).getName());
@@ -65,20 +68,22 @@ public class ListAccessPointsTool implements Tool {
                 point.put("chatEndpoint", modelAccessPointManager.getAllAccessPoints().get(i).getChatEndpoint());
                 point.put("modelName", modelAccessPointManager.getAllAccessPoints().get(i).getModelName());
                 
-                // 标记当前活跃的接入点
-                if (i == 0) { // 假设索引 0 是当前活跃的（根据 manager 逻辑可能需调整）
+                // 🔧 修复核心：基于 Manager 的真实状态标记
+                if (i == currentIdx && currentIdx >= 0 && currentIdx < total) {
                     point.put("isCurrent", true);
                 } else {
                     point.put("isCurrent", false);
                 }
+                
                 accessPointsArray.put(point);
             }
             
             JSONObject result = new JSONObject();
             result.put("status", "success");
-            result.put("total_count", modelAccessPointManager.getAccessPointCount());
+            result.put("total_count", total);
             result.put("access_points", accessPointsArray);
-            result.put("message", "共找到 " + modelAccessPointManager.getAccessPointCount() + " 个接入点");
+            result.put("message", "共找到 " + total + " 个接入点");
+            Log.i(TAG, "Returning list with current index=" + currentIdx);
             return result;
         } catch (Exception e) {
             Log.e(TAG, "执行出错", e);
