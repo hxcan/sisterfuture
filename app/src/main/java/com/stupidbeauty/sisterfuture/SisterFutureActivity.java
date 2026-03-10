@@ -233,6 +233,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     @BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
     @BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
+    // 🔒 新增：死循环计数器
+    private int consecutiveFailures = 0;
+    private static final int MAX_FAILURE_THRESHOLD = 3;
+
     @Override
     public void onInit(int arg0) {}
 
@@ -390,9 +394,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     private void sendChatRequest() {
         recognizeResulttextView.setText("");
 
-        // 🔒 新增：空列表检测（已移除旧的 empty list 检查）
         if (guideManager != null && modelAccessPointManager.getAccessPointCount() == 0) {
-            guideManager.processWithEmptyState(new GuideManager.EmptyStateCallback() {
+            guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback() {
                 @Override
                 public void onResponse(String message) {
                     runOnUiThread(() -> {
@@ -412,16 +415,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             });
             return;
         }
-
-        // 🔒 新增：设置熔断回调
-        modelAccessPointManager.setAccessPointGuideCallback(() -> {
-            runOnUiThread(() -> {
-                Toast.makeText(SisterFutureActivity.this, 
-                    "所有接入点不可用，即将启动配置向导...", 
-                    Toast.LENGTH_LONG).show();
-                guideManager.showAddAccessPointGuide();
-            });
-        });
 
         sendChatRequestTongYi();
     }
@@ -563,11 +556,27 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         Log.e(TAG, "未知异常，不触发重试：" + error.getMessage());
                     }
 
-                    // ✅ 仅在确认有可用接入点时才重试
-                    if (isAccessPointUnavailable && modelAccessPointManager.getAccessPointCount() > 0) {
+                    // 🔒 关键修改：加入熔断逻辑
+                    if (isAccessPointUnavailable) {
+                        consecutiveFailures++;
+                        
+                        if (consecutiveFailures >= MAX_FAILURE_THRESHOLD) {
+                            // ✅ 触发向导并重置计数器
+                            runOnUiThread(() -> {
+                                Toast.makeText(SisterFutureActivity.this, 
+                                    "所有接入点均不可用，正在启动配置向导...", 
+                                    Toast.LENGTH_LONG).show();
+                                guideManager.showAddAccessPointGuide();
+                            });
+                            consecutiveFailures = 0;
+                            return;
+                        }
+                        
+                        // 未达到阈值，继续尝试
+                        Log.w(TAG, "Consecutive failures: " + consecutiveFailures + ", retrying...");
                         runOnUiThread(() -> {
                             Toast.makeText(SisterFutureActivity.this, 
-                                "当前接入点不可用，正在尝试其他接入点...", 
+                                "当前接入点不可用，正在尝试其他接入点 (第" + consecutiveFailures + "次)...", 
                                 Toast.LENGTH_SHORT).show();
                         });
                         sendChatRequestTongYi();
