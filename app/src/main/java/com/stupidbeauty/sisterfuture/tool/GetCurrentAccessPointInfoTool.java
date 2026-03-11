@@ -1,6 +1,7 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 
@@ -31,7 +32,7 @@ public class GetCurrentAccessPointInfoTool implements Tool
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
       parameters.put("properties", new JSONObject());
-      parameters.put("required", new JSONObject());
+      parameters.put("required", new JSONArray()); // ✅ 修复：使用 JSONArray 替代 JSONObject
 
       functionDef.put("parameters", parameters);
 
@@ -80,8 +81,7 @@ public class GetCurrentAccessPointInfoTool implements Tool
       {
         errorResult.put("error", "Failed to retrieve current access point info");
       }
-      catch (Exception ignored)
-      {}
+      catch (Exception ignored) {}
       return errorResult;
     }
   }

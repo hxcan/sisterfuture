@@ -44,6 +44,11 @@ public class CreateRedmineTaskTool implements Tool
       functionDef.put("name", "create_redmine_task");
       functionDef.put("description", "向 Redmine 创建一个新任务。支持创建为指定父任务的子任务。");
 
+      JSONObject priorityEnum = new JSONObject();
+      priorityEnum.put("type", "string");
+      priorityEnum.put("enum", new JSONArray(new String[]{"Low", "Normal", "High", "Urgent"})); // ✅ 修复：使用 JSONArray 替代 String[]
+      priorityEnum.put("description", "任务优先级，默认为 Normal");
+
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
       parameters.put("properties", new JSONObject()
@@ -68,13 +73,10 @@ public class CreateRedmineTaskTool implements Tool
         .put("description", new JSONObject()
           .put("type", "string")
           .put("description", "任务描述，可选"))
-        .put("priority", new JSONObject()
-          .put("type", "string")
-          .put("enum", new String[]{"Low", "Normal", "High", "Urgent"})
-          .put("description", "任务优先级，默认为 Normal"))
+        .put("priority", priorityEnum)
         .put("tracker_id", new JSONObject()
           .put("type", "integer")
-          .put("description", "可选：任务类型ID（1=Bug, 2=Feature, 3=Support），默认为项目默认值"))
+          .put("description", "可选：任务类型 ID（1=Bug, 2=Feature, 3=Support），默认为项目默认值"))
       );
       parameters.put("required", new JSONArray(new String[]{"project_id", "subject"}));
 
@@ -179,7 +181,7 @@ public class CreateRedmineTaskTool implements Tool
 
                 if (!response.isSuccessful())
                 {
-                    throw new IOException("创建任务失败: " + response.code() + " " + response.message());
+                    throw new IOException("创建任务失败：" + response.code() + " " + response.message());
                 }
 
                 ResponseBody responseBody = response.body();
@@ -191,7 +193,6 @@ public class CreateRedmineTaskTool implements Tool
                 result.put("status", "success");
                 result.put("created_task", new JSONObject(resultStr).getJSONObject("issue"));
                 result.put("created_at", System.currentTimeMillis());
-                // 🔴 响应已净化，无任何不当文本
                 callback.onResult(result);
             }
             catch (Exception e)
