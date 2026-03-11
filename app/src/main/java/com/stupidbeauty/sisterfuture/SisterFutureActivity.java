@@ -1260,21 +1260,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
    }
   };
 
-
-
-
-  /**
-  * 连接信号信号槽。
-  **/
-  private void connectSignals()
-  {
-    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
-}
-
-
-  /**
-  * 启动 HTTP 服务器，用于对同一个局域网内其它平板的请求进行响应.
-  **/
   private void startHttpServer()
   {
     AsyncHttpServer server=new AsyncHttpServer(); //Create the async server.
