@@ -34,6 +34,7 @@ public class SetToolRemarkTool implements Tool
     try
     {
       def.put("name", "set_tool_remark");
+      def.put("description", "用于设置特定工具的备注信息。必须在用户明确要求修改备注时才调用此工具，不可擅自执行。"); // ✅ 修复：添加 description
 
       JSONObject params = new JSONObject();
       params.put("type", "object");

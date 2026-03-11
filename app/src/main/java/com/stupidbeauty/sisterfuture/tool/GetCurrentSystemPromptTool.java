@@ -4,6 +4,7 @@ import com.stupidbeauty.sisterfuture.SisterFutureApplication;
 import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
 import com.stupidbeauty.sisterfuture.tool.Tool;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class GetCurrentSystemPromptTool implements Tool {
@@ -37,9 +38,10 @@ public class GetCurrentSystemPromptTool implements Tool {
             
             // 无参数
             parameters.put("properties", new JSONObject());
+            parameters.put("required", new JSONArray()); // ✅ 修复：添加空 required 数组
             
+            function.put("parameters", parameters); // ✅ 修复：将 parameters 放入 function
             definition.put("function", function);
-            definition.put("parameters", parameters);
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -4,9 +4,11 @@ import android.content.Context;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import com.stupidbeauty.sisterfuture.shopping.ShoppingItem;
 import com.stupidbeauty.sisterfuture.shopping.ShoppingListManager;
+
 
 /**
  * 查询购物清单条目工具类。
@@ -35,6 +37,7 @@ public class ListShoppingItemsTool implements Tool {
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()); // 无参数
+            parameters.put("required", new JSONArray()); // ✅ 修复：添加空 required 数组
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
@@ -56,7 +59,7 @@ public class ListShoppingItemsTool implements Tool {
 
     @Override
     public JSONObject execute(JSONObject arguments) throws Exception {
-        // 每次执行时都创建新的ShoppingListManager实例，强制重新加载数据
+        // 每次执行时都创建新的 ShoppingListManager 实例，强制重新加载数据
         ShoppingListManager shoppingListManager = new ShoppingListManager(context);
         java.util.List<ShoppingItem> items = shoppingListManager.getItems();
 

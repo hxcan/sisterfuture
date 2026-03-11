@@ -11,6 +11,7 @@ import java.io.FileDescriptor;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import org.json.JSONArray;
 
 public class ConversationResetTool implements Tool
 {
@@ -86,7 +87,10 @@ public class ConversationResetTool implements Tool
       JSONObject functionDef = new JSONObject();
       functionDef.put("name", getName());
       functionDef.put("description", RESET_TOOL_DESCRIPTION);
-      functionDef.put("parameters", new JSONObject()); // 无参数
+      functionDef.put("parameters", new JSONObject()
+        .put("type", "object")
+        .put("properties", new JSONObject())
+        .put("required", new JSONArray())); // ✅ 最小化修复：添加 required
 
       function.put("function", functionDef);
       return function;
