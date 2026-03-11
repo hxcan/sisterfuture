@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import com.stupidbeauty.sisterfuture.shopping.ShoppingListManager;
 
@@ -29,8 +30,8 @@ public class RemoveShoppingItemTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "remove_shopping_item");
-            functionDef.put("description", "从购物清单中删除一个商品条目，根据其唯一ID。"
-                + "必须在用户明确要求删除购物清单项时才调用此工具。需要提供物品的唯一ID。");
+            functionDef.put("description", "从购物清单中删除一个商品条目，根据其唯一 ID。"
+                + "必须在用户明确要求删除购物清单项时才调用此工具。需要提供物品的唯一 ID。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -39,7 +40,7 @@ public class RemoveShoppingItemTool implements Tool {
                     .put("type", "string")
                     .put("description", "物品的唯一标识符（ID）。"))
             );
-            parameters.put("required", new JSONObject().put("required", new String[]{"item_id"}));
+            parameters.put("required", new JSONArray().put("item_id")); // ✅ 修复
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
@@ -67,7 +68,7 @@ public class RemoveShoppingItemTool implements Tool {
             throw new IllegalArgumentException("物品的唯一标识符（ID）不能为空。");
         }
 
-        // 每次执行时都创建新的ShoppingListManager实例，强制重新加载数据
+        // 每次执行时都创建新的 ShoppingListManager 实例，强制重新加载数据
         ShoppingListManager shoppingListManager = new ShoppingListManager(context);
         boolean success = shoppingListManager.deleteItem(itemId);
 
@@ -82,6 +83,6 @@ public class RemoveShoppingItemTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求删除购物清单项时才调用此工具。需要提供物品的唯一ID.";
+        return "必须在用户明确要求删除购物清单项时才调用此工具。需要提供物品的唯一 ID.";
     }
 }
