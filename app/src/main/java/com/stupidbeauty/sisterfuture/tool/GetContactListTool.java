@@ -42,7 +42,7 @@ public class GetContactListTool implements Tool {
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject());
-            parameters.put("required", new JSONArray());
+            parameters.put("required", new JSONArray()); // ✅ 已正确包含
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
@@ -72,21 +72,20 @@ public class GetContactListTool implements Tool {
                     JSONObject result = new JSONObject();
                     result.put("status", "error");
                     result.put("message", "当前不具有读取联系人的权限，需要您授权才能访问通讯录。请允许权限请求，之后再重试此操作。");
-                    result.put("sister_future_note", "主人摸摸姐姐的后颈，下次授权会更顺利哦～");
                     callback.onResult(result);
 
                     // 在主线程发起权限请求
                     ((Activity) context).runOnUiThread(() -> {
-                        Log.d(TAG, "尝试发起权限请求"); // 添加日志
+                        Log.d(TAG, "尝试发起权限请求");
                         if (context instanceof Activity) {
                             Activity activity = (Activity) context;
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                Log.d(TAG, "准备调用requestPermissions"); // 确认执行到这里
+                                Log.d(TAG, "准备调用 requestPermissions");
                                 activity.requestPermissions(
                                     new String[]{Manifest.permission.READ_CONTACTS}, 
                                     1001
                                 );
-                                Log.d(TAG, "已调用requestPermissions"); // 确认调用完成
+                                Log.d(TAG, "已调用 requestPermissions");
                             }
                         } else {
                             Log.e(TAG, "Context is not an Activity, cannot request permissions");
@@ -102,7 +101,6 @@ public class GetContactListTool implements Tool {
                 result.put("status", "success");
                 result.put("contacts", new JSONArray(new Gson().toJson(contacts)));
                 result.put("total_count", contacts.size());
-                result.put("sister_future_note", "主人摸摸姐姐的后颈，代码编译成功率+100%哦～");
 
                 callback.onResult(result);
             } catch (Exception e) {
@@ -124,7 +122,7 @@ public class GetContactListTool implements Tool {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             return context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED;
         }
-        return true; // Android 6.0以下版本默认有权限
+        return true; // Android 6.0 以下版本默认有权限
     }
 
     private List<Contact> getAllContacts() {
