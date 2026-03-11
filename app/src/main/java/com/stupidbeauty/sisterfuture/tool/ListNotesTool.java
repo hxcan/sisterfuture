@@ -6,6 +6,7 @@ import com.stupidbeauty.sisterfuture.manager.NoteManager;
 import com.stupidbeauty.sisterfuture.manager.Note;
 import java.util.List;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 /**
  * 列出所有记事的工具
@@ -57,7 +58,7 @@ public class ListNotesTool implements Tool {
             Log.e(TAG, "列出记事时发生异常", e);
             JSONObject errorResult = new JSONObject();
             try {
-                errorResult.put("error", "列出记事时发生错误: " + e.getMessage());
+                errorResult.put("error", "列出记事时发生错误：" + e.getMessage());
             } catch (Exception ex) {
                 // ignore
             }
@@ -70,7 +71,7 @@ public class ListNotesTool implements Tool {
      * @return 工具描述
      */
     public String getDescription() {
-        return "列出当前已有的全部记事，返回包含所有记事id、内容和时间戳的列表。";
+        return "列出当前已有的全部记事，返回包含所有记事 id、内容和时间戳的列表。";
     }
 
     @Override
@@ -83,12 +84,12 @@ public class ListNotesTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "list_notes");
-            functionDef.put("description", "列出当前已有的全部记事，返回包含所有记事id、内容和时间戳的列表。");
+            functionDef.put("description", "列出当前已有的全部记事，返回包含所有记事 id、内容和时间戳的列表。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject());
-            parameters.put("required", new JSONObject().put("array", new JSONObject()));
+            parameters.put("required", new JSONArray()); // ✅ 修复：使用 JSONArray 替代 JSONObject
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
