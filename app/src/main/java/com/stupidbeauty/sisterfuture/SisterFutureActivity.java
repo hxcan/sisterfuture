@@ -1,11 +1,9 @@
 package com.stupidbeauty.sisterfuture;
 
-
 import com.stupidbeauty.sisterfuture.tool.RemoveNoteTool;
 import com.stupidbeauty.sisterfuture.tool.ListNotesTool;
 import com.stupidbeauty.sisterfuture.tool.GetGitHubFileTool;
 import com.stupidbeauty.sisterfuture.tool.CreateGitHubCommitTool;
-
 
 
 //import com.stupidbeauty.sisterfuture.SystemPromptManager;
@@ -39,8 +37,6 @@ import com.stupidbeauty.sisterfuture.bean.MessageType;
 
 
 
-
-
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -53,7 +49,6 @@ import com.stupidbeauty.sisterfuture.tool.SearchRedmineTasksTool;
 import com.stupidbeauty.sisterfuture.tool.GetIssuesListTool;
 import com.stupidbeauty.sisterfuture.tool.EstablishTaskRelationshipTool;
 import com.stupidbeauty.sisterfuture.tool.ListRedmineProjectsTool; // ✅ 新增导入
-
 
 
 import com.stupidbeauty.sisterfuture.tool.BasicWebRequestTool;
@@ -73,13 +68,6 @@ import com.stupidbeauty.sisterfuture.tool.ListAllMemoriesTool;
 import com.stupidbeauty.sisterfuture.tool.AddModelAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.AddNoteTool;
 import com.stupidbeauty.sisterfuture.tool.AddShoppingItemTool; // ✅ 新增：确保导入存在
-
-
-
-
-
-
-
 
 
 
@@ -125,7 +113,7 @@ import com.stupidbeauty.codeposition.CodePosition;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import android.Manifest;
-// import android.annotation.SuppressLint;
+// import android.annotationSuppressLint;
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.app.WallpaperManager;
@@ -286,12 +274,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
 	//@BindView(R.id.statustextView) TextView statustextView; //!用来显示状态的文字标签。
-
-
-
-
 
 
 
@@ -616,7 +599,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       // 获取当前访问点名称
       String currentApName = modelAccessPointManager.getCurrentAccessPoint().getName();
 
-      // 获取历史消息（包含之前的 user\/assistant 对话）
+      // 获取历史消息（包含之前的 user/assistant 对话）
       JSONArray historyArray = contextManager.getMessagesArray();
 
       // 构造最终 messages 数组
@@ -766,7 +749,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   /**
    * 检测响应内容是否为 HTML 页面
    * 用于防止 API 返回错误页面（如登录页、404 页）时客户端解析崩溃
-   *\/
+   */
   private boolean isHtmlResponse(String content)
   {
     if (content == null || content.isEmpty())
@@ -1145,7 +1128,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   *  使用 findroid 介绍的 TTS 接口。
-  * https:\/\/github.com\/tatans-coder\/TensorflowTTS_chinese\/blob\/master\/app\/src\/main\/java\/net\/tatans\/tensorflowtts\/MainActivity.java
+  * https://github.com/tatans-coder/TensorflowTTS_chinese/blob/master/app/src/main/java/net/tatans/tensorflowtts/MainActivity.java
   **/
   private void ttsByFindroidTts(String text)
   {
@@ -1383,8 +1366,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
    * 初始化服务层 (TTS, HTTP, Media 等)
-   * \/\/~35 lines
-   *\/
+   * //~35 lines
+   */
   private void initServices() {
     TtsManager.getInstance().init(this);
     registerBroadcastReceiver();
@@ -1395,8 +1378,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
    * 初始化数据层 (Context, Memory, ModelAccess 等)
-   * \/\/~20 lines
-   *\/
+   * //~20 lines
+   */
   private void initData() {
     contextManager = new ContextManager(this);
     // ✅ 修改为：注入 ModelAccessPointManager 实例给新工具
@@ -1407,8 +1390,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
    * 初始化工具管理器
-   * \/\/~20 lines (注意：registerTool 将在 #4670 提取至独立类)
-   *\/
+   * //~20 lines (注意：registerTool 将在 #4670 提取至独立类)
+   */
   private void initTools() {
     toolManager = new ToolManager();
     
@@ -1499,8 +1482,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
    * 初始化视图层 (ButterKnife, RecyclerView 等)
-   * \/\/~30 lines
-   *\/
+   * //~30 lines
+   */
   private void initView() {
     ButterKnife.bind(this);
     initializeMsc(); // MSC 初始化
