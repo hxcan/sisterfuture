@@ -1263,7 +1263,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void connectSignals()
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
-}
+  }
 
   private void startHttpServer()
   {
@@ -1527,7 +1527,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
 
     // ✅ 新增：创建并注册 GuideManager
-    guideManager = new GuideManager(this, modelAccessPointPointManager, toolManager);
+    guideManager = new GuideManager(this, modelAccessPointManager, toolManager);
 
     String question = getIntent().getStringExtra("question");
     if (question != null) {
