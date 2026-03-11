@@ -1260,7 +1260,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   **\/
   private void connectSignals()
   {
-    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
+    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
 }
 
 
@@ -1384,7 +1384,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     displayExistingContext(); // 显示历史消息 (<50 行)
 	}
 
-  // ==================== INIT METHODS DEFINITIONS ====================
+  // ==================== INIT METHODS DEFINITIONS (平级于 onCreate) ====================
 
   /**
    * 初始化服务层 (TTS, HTTP, Media 等)
