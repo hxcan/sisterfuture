@@ -685,6 +685,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             {
               Log.e(TAG, "Error reading response body: " + e.getMessage());
             }
+            catch (IllegalStateException e)
+            {
+              Log.e(TAG, "Error reading response body: " + e.getMessage());
+            }
           }
           else
           {
