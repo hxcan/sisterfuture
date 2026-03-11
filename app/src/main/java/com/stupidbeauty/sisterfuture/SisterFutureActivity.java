@@ -1260,6 +1260,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
    }
   };
 
+  private void connectSignals()
+  {
+    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
+}
+
   private void startHttpServer()
   {
     AsyncHttpServer server=new AsyncHttpServer(); //Create the async server.
@@ -1522,7 +1527,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
 
     // ✅ 新增：创建并注册 GuideManager
-    guideManager = new GuideManager(this, modelAccessPointManager, toolManager);
+    guideManager = new GuideManager(this, modelAccessPointPointManager, toolManager);
 
     String question = getIntent().getStringExtra("question");
     if (question != null) {
@@ -1530,34 +1535,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         sendMessageToSister(question);
     }
   }
-
-  /**
-   * 连接信号槽（已在 connectSignals 中实现）
-   *\/
-  private void connectSignals()
-  {
-    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
-  }
-
-  /**
-   * 显示现有上下文（已在 displayExistingContext 中实现）
-   *\/
-  private void displayExistingContext() {
-      List<JSONObject> history = contextManager.getHistory();
-      for (JSONObject msg : history) {
-          String role = msg.optString("role");
-          String content = msg.optString("content");
-
-          // 只显示有 content 的 user 和 assistant 消息
-          if ("user".equals(role) && !content.isEmpty()) {
-              messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
-          } else if ("assistant".equals(role) && !content.isEmpty()) {
-              messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
-          }
-          // 忽略 tool 消息和其他无 content 的消息
-      }
-  }
-
 
   private boolean hasPermission()
   {
