@@ -48,6 +48,11 @@ public class UpdateRedmineIssueTool implements Tool
             functionDef.put("name", "update_redmine_issue");
             functionDef.put("description", "更新 Redmine 任务的任意属性。支持添加评论、修改标题、描述、优先级、状态和父子关系等。");
 
+            JSONObject priorityEnum = new JSONObject();
+            priorityEnum.put("type", "string");
+            priorityEnum.put("enum", new JSONArray(new String[]{"Low", "Normal", "High", "Urgent"})); // ✅ 修复：使用 JSONArray 替代 String[]
+            priorityEnum.put("description", "可选：任务的新优先级");
+
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()
@@ -69,22 +74,19 @@ public class UpdateRedmineIssueTool implements Tool
                 .put("description", new JSONObject()
                     .put("type", "string")
                     .put("description", "可选：任务的新描述"))
-                .put("priority", new JSONObject()
-                    .put("type", "string")
-                    .put("enum", new String[]{"Low", "Normal", "High", "Urgent"})
-                    .put("description", "可选：任务的新优先级"))
+                .put("priority", priorityEnum)
                 .put("status_id", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "可选：任务的新状态ID"))
+                    .put("description", "可选：任务的新状态 ID"))
                 .put("notes", new JSONObject()
                     .put("type", "string")
                     .put("description", "可选：要添加的评论内容"))
                 .put("parent_issue_id", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "可选：新的上级任务ID，用于调整任务父子关系"))
+                    .put("description", "可选：新的上级任务 ID，用于调整任务父子关系"))
                 .put("project_id", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "可选：新的项目ID，用于将任务移动到其他项目"))
+                    .put("description", "可选：新的项目 ID，用于将任务移动到其他项目"))
                 .put("blocked_by_ids", new JSONObject()
                     .put("type", "array")
                     .put("items", new JSONObject().put("type", "integer"))
@@ -223,7 +225,7 @@ public class UpdateRedmineIssueTool implements Tool
 
                 if (!response.isSuccessful())
                 {
-                    throw new IOException("更新任务失败: " + response.code() + " " + response.message());
+                    throw new IOException("更新任务失败：" + response.code() + " " + response.message());
                 }
 
                 ResponseBody responseBody = response.body();
@@ -235,7 +237,6 @@ public class UpdateRedmineIssueTool implements Tool
                 result.put("status", "success");
                 result.put("updated_task", taskId);
                 result.put("updated_at", System.currentTimeMillis());
-                // 移除了sister_future_note字段
 
                 callback.onResult(result);
             }
