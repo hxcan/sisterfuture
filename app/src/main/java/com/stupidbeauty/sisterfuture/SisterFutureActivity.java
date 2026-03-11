@@ -219,9 +219,9 @@ import com.stupidbeauty.sisterfuture.tool.RemoteCommandTool;
 
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
- * status bar and navigation\/system bar) with user interaction.
+ * status bar and navigation/system bar) with user interaction.
  
-*\/*
+*/
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
   private GuideManager guideManager ;
@@ -373,7 +373,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 止录音。
-  **\/
+  **/
   public void stopRecordbutton2()
   {
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
@@ -398,7 +398,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   }
   /**
   * 在线命令词识别。
-  **\/
+  **/
   public void commandRecognizebutton2startRecognize()
   {
     voiceEndDetected=false; //重置状态，未探测到用户的声音结束。
@@ -437,7 +437,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   * 参数设置
   *
   * @return 是否设置成功。
-  **\/
+  **/
   public boolean setParam()
   {
     boolean result = false;
@@ -481,7 +481,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 通用消息发送接口，供外部调用（如文字选中、语音输入等）
-  **\/
+  **/
   public void sendMessageToSister(String message) {
       if (message == null || message.trim().isEmpty()) {
           return;
@@ -499,7 +499,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   
   /**
   * Send by button.
-  **\/
+  **/
   @OnClick(R.id.sendButtonn2)
   public void sendButtonn2()
   {
@@ -514,7 +514,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 发送闲聊请求。
-  **\/
+  **/
   private void sendChatRequest() 
   {
     recognizeResulttextView.setText(""); // Clear the recognize result or input content.
@@ -550,7 +550,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   /**
   * Report that the operation has failed.
   * @param string 服务器回复的结果说明文字。
-  **\/
+  **/
   protected void reportOperationFail(String string)
   {
     Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();   //做一个提示，Failed adding address ,please retry.
@@ -596,7 +596,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 向通义千问发送请求并处理回复。
-  **\/
+  **/
   private void sendChatRequestTongYi()
   {
     Log.d(TAG, CodePosition.newInstance().toString()); // Debug.
@@ -778,7 +778,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 解析提交问题的结果。
-  **\/
+  **/
   protected void parseTongYiResponse(String jsonString)
   {
     Log.d(TAG, "JSON Answer: " + jsonString);
@@ -1095,7 +1095,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
    * 判断是否为"上下文长度超出限制"的错误。
-  **\/
+  **/
   private boolean isContextLengthError(String errorMessage)
   {
     if (errorMessage == null) return false;
@@ -1140,7 +1140,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   /**
   *  使用 findroid 介绍的 TTS 接口。
   * https:\/\/github.com\/tatans-coder\/TensorflowTTS_chinese\/blob\/master\/app\/src\/main\/java\/net\/tatans\/tensorflowtts\/MainActivity.java
-  **\/
+  **/
   private void ttsByFindroidTts(String text)
   {
     ThreadPoolManager.getInstance().execute(() ->
@@ -1259,7 +1259,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 连接信号信号槽。
-  **\/
+  **/
   private void connectSignals()
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
@@ -1268,7 +1268,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 启动 HTTP 服务器，用于对同一个局域网内其它平板的请求进行响应.
-  **\/
+  **/
   private void startHttpServer()
   {
     AsyncHttpServer server=new AsyncHttpServer(); //Create the async server.
@@ -1282,7 +1282,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   /**
   * 构造增强版系统提示词，从每个工具的 getDefinition() 中提取 description。
-  **\/
+  **/
   private static String buildEnhancedSystemPrompt(ToolManager toolManager, Context context)
   {
 
@@ -1361,7 +1361,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
   @Override
 	/**
   *此活动正在被创建。
-  **\/
+  **/
 	protected void onCreate(Bundle savedInstanceState) 
 	{
 		super.onCreate(savedInstanceState); //超类创建。
@@ -1603,7 +1603,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
   * 请求获取权限
-  **\/
+  **/
   private void requestPermission()
   {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //动态权限
@@ -1622,7 +1622,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     
   /**
   * 查权限。
-  **\/
+  **/
   private void checkPermission()
   {
     if (hasPermission())
@@ -1637,7 +1637,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
   * 注册广播事件接收器。
-  **\/
+  **/
   private void registerBroadcastReceiver()
   {
     IntentFilter filter = new IntentFilter();
@@ -1652,13 +1652,13 @@ promptBuilder.append(promptManager.getCurrentPrompt());
   
   /**
   * 广播接收器。
-  **\/
+  **/
   private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
   {
     @Override
     /**
     *接收到广播。
-    **\/
+    **/
     public void onReceive(Context context, Intent intent)
     {
       String action = intent.getAction(); //获取广播中带的动作字符串。
@@ -1693,7 +1693,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
   * 启动友军"21 点关机"的服务。
-  **\/
+  **/
   protected void startFriendShutDownAt2100Service()
   {
     Intent intent = new Intent();
@@ -1703,7 +1703,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
   * 初始化 MSC。
-  **\/
+  **/
   private void initializeMsc()
   {
     SpeechUtility.createUtility(this, SpeechConstant.APPID+"=56e142d3"); //创建工具。
