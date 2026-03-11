@@ -41,16 +41,18 @@ public class BasicWebRequestTool implements Tool {
             functionDef.put("name", "basic_web_request");
             functionDef.put("description", "发送基本网页请求，返回页面内容。强调不执行页面内脚本。");
 
+            JSONObject modeEnum = new JSONObject();
+            modeEnum.put("type", "string");
+            modeEnum.put("enum", new JSONArray(new String[]{"raw", "text", "summary"})); // ✅ 修复：使用 JSONArray 替代 String[]
+            modeEnum.put("description", "返回模式：raw(原始 HTML), text(纯文本), summary(摘要)");
+
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()
                 .put("url", new JSONObject()
                     .put("type", "string")
-                    .put("description", "要请求的网页URL"))
-                .put("mode", new JSONObject()
-                    .put("type", "string")
-                    .put("enum", new String[]{"raw", "text", "summary"})
-                    .put("description", "返回模式：raw(原始HTML), text(纯文本), summary(摘要)"))
+                    .put("description", "要请求的网页 URL"))
+                .put("mode", modeEnum)
             );
             parameters.put("required", new JSONArray(new String[]{"url"}));
 
@@ -81,19 +83,19 @@ public class BasicWebRequestTool implements Tool {
                 String mode = arguments.optString("mode", "raw");
 
                 if (url.isEmpty()) {
-                    throw new IllegalArgumentException("URL不能为空");
+                    throw new IllegalArgumentException("URL 不能为空");
                 }
 
-                // 2. 构建HTTP请求
+                // 2. 构建 HTTP 请求
                 Request request = new Request.Builder()
                     .url(url)
-                    .header("User-Agent", "SisterFuture/1.0") // 设置UA
+                    .header("User-Agent", "SisterFuture/1.0") // 设置 UA
                     .build();
 
                 Response response = client.newCall(request).execute();
 
                 if (!response.isSuccessful()) {
-                    throw new IOException("请求失败: " + response.code() + " " + response.message());
+                    throw new IOException("请求失败：" + response.code() + " " + response.message());
                 }
 
                 ResponseBody responseBody = response.body();
@@ -110,7 +112,6 @@ public class BasicWebRequestTool implements Tool {
                 result.put("mode", mode);
                 result.put("url", url);
                 result.put("processed_at", System.currentTimeMillis());
-                result.put("sister_future_note", "流式处理完成！");
 
                 callback.onResult(result);
             } catch (Exception e) {
@@ -138,12 +139,12 @@ public class BasicWebRequestTool implements Tool {
             case "summary":
                 return generateSummary(html);
             default:
-                return truncateRawHtml(html); // raw模式
+                return truncateRawHtml(html); // raw 模式
         }
     }
 
     /**
-     * 截断原始HTML，优先保留头部信息
+     * 截断原始 HTML，优先保留头部信息
      */
     private String truncateRawHtml(String html) {
         if (html.length() <= MAX_RAW_SIZE) {
@@ -167,7 +168,7 @@ public class BasicWebRequestTool implements Tool {
      * 提取纯文本内容
      */
     private String extractTextContent(String html) {
-        // 简单实现，实际应使用更 sophisticated 的HTML解析
+        // 简单实现，实际应使用更 sophisticated 的 HTML 解析
         return html.replaceAll("<[^>]+>", "")  // 移除标签
                    .replaceAll("\\s+", " ")     // 多个空白符变一个空格
                    .trim();
@@ -184,10 +185,10 @@ public class BasicWebRequestTool implements Tool {
         int titleEnd = html.indexOf("</title>");
         if (titleStart != -1 && titleEnd != -1) {
             String title = html.substring(titleStart + 7, titleEnd);
-            summary.append("标题: ").append(title).append("\n\n");
+            summary.append("标题：").append(title).append("\n\n");
         }
 
-        // 提取meta描述
+        // 提取 meta 描述
         int metaStart = html.indexOf("name=\"description\"");
         if (metaStart != -1) {
             int contentStart = html.indexOf("content=\"", metaStart);
@@ -195,17 +196,17 @@ public class BasicWebRequestTool implements Tool {
                 int contentEnd = html.indexOf("\"", contentStart + 9);
                 if (contentEnd != -1) {
                     String desc = html.substring(contentStart + 9, contentEnd);
-                    summary.append("描述: ").append(desc).append("\n\n");
+                    summary.append("描述：").append(desc).append("\n\n");
                 }
             }
         }
 
         // 提取前几段文字
         String textOnly = extractTextContent(html);
-        String[] sentences = textOnly.split("[。！？]");
+        String[] sentences = textOnly.split("[.!?!]");
         for (int i = 0; i < Math.min(3, sentences.length); i++) {
             if (!sentences[i].trim().isEmpty()) {
-                summary.append(sentences[i].trim()).append("。\n");
+                summary.append(sentences[i].trim()).append(".\n");
             }
         }
 
@@ -214,6 +215,6 @@ public class BasicWebRequestTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求获取网页内容时才调用此工具。支持三种模式：raw(原始HTML)、text(纯文本)、summary(摘要)。对超长页面会自动截断以保护上下文长度。";
+        return "必须在用户明确要求获取网页内容时才调用此工具。支持三种模式：raw(原始 HTML)、text(纯文本)、summary(摘要)。对超长页面会自动截断以保护上下文长度。";
     }
 }
