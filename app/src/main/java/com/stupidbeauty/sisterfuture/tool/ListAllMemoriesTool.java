@@ -46,7 +46,7 @@ public class ListAllMemoriesTool implements Tool {
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject());
-            parameters.put("required", new JSONArray());
+            parameters.put("required", new JSONArray()); // ✅ 已正确包含
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
