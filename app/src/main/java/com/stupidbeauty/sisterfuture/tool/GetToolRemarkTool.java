@@ -40,6 +40,7 @@ public class GetToolRemarkTool implements Tool
     try
     {
       def.put("name", "get_tool_remark");
+      def.put("description", "用于获取特定工具的备注信息。必须在用户明确要求查询备注时才调用此工具。"); // ✅ 修复：添加 description
 
       JSONObject params = new JSONObject();
       params.put("type", "object");
