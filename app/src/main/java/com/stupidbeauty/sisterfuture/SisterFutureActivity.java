@@ -225,7 +225,7 @@ import com.stupidbeauty.sisterfuture.tool.RemoteCommandTool;
 
 /*
  * An example full-screen activity that shows and hides the system UI (i.e.
- * status bar and navigation\/system bar) with user interaction.
+ * status bar and navigation/system bar) with user interaction.
  
 */
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
