@@ -1384,8 +1384,11 @@ promptBuilder.append(promptManager.getCurrentPrompt());
    * 初始化服务层 (TTS, HTTP, Media 等)
    * //~35 lines
    */
-  private void initServices() {
+  private void initServices()
+  {
     TtsManager.getInstance().init(this);
+    mTts=new TextToSpeech(this,this); //创建 TTS 对象。
+
     registerBroadcastReceiver();
     startHttpServer();
     mediaPlayer = new MediaPlayer();
