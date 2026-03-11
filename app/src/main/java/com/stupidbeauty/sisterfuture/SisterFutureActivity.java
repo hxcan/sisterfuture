@@ -1257,8 +1257,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void connectSignals()
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
-}
-
+  }
 
   /**
   * 启动 HTTP 服务器，用于对同一个局域网内其它平板的请求进行响应.
@@ -1330,7 +1329,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
           Log.e("SisterFutureActivity", "Failed to extract description for tool: " + name, e);
         }
 
-        promptBuilder.append("- ").append(name).append("：").append(description).append("\n");
+        promptBuilder.append("- ").append(name).append(":").append(description).append("\n");
       }
 
       // 新增：追加工具自身的系统提示增强
@@ -1369,30 +1368,56 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 		
 		setContentView(R.layout.sister_future); //显示界面。
 
+    // ==================== INIT METHODS CALLS ====================
+    initServices();         // TTS, HTTP, Media 等服务初始化 (<50 行)
+    initData();             // Context, Memory 等数据层初始化 (<50 行)
+    initTools();            // ToolManager 及工具注册 (<50 行)
+    initView();             // ButterKnife, RecyclerView 等视图绑定 (<50 行)
+    checkPermission();      // 权限检查 (<50 行)
+    connectSignals();       // 信号槽连接 (<50 行)
+    displayExistingContext(); // 显示历史消息 (<50 行)
+	}
+
+  // ==================== INIT METHODS DEFINITIONS (平级于 onCreate) ====================
+
+  /**
+   * 初始化服务层 (TTS, HTTP, Media 等)
+   * //~35 lines
+   */
+  private void initServices()
+  {
     TtsManager.getInstance().init(this);
-    contextManager = new ContextManager(this);
-    // ✅ 新增：每次启动时清空聊天历史（但保留 currentMaxRounds）
-
-
-    // contextManager.replaceHistory(new ArrayList<>());
     mTts=new TextToSpeech(this,this); //创建 TTS 对象。
 
-    registerBroadcastReceiver(); //注册广播事件接收器。
-
-    startHttpServer(); //启动 HTTP 服务器
-
-    mediaPlayer=new MediaPlayer();
+    registerBroadcastReceiver();
+    startHttpServer();
+    mediaPlayer = new MediaPlayer();
     mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-    ButterKnife.bind(this); //视图注入。
+  }
 
+  /**
+   * 初始化数据层 (Context, Memory, ModelAccess 等)
+   * //~20 lines
+   */
+  private void initData() {
+    contextManager = new ContextManager(this);
     // ✅ 修改为：注入 ModelAccessPointManager 实例给新工具
     modelAccessPointManager = new ModelAccessPointManager(this);
     // ✅ 新增：初始化 MemoryManager
     memoryManager = new MemoryManager(this);
+  }
 
-
-    // ✅ 创建并注册 SwitchNextAccessPointTool
+  /**
+   * 初始化工具管理器
+   * //~20 lines (注意：registerTool 将在 #4670 提取至独立类)
+   */
+  private void initTools() {
     toolManager = new ToolManager();
+    
+    // ✅ 新增：每次启动时清空聊天历史（但保留 currentMaxRounds）
+    // contextManager.replaceHistory(new ArrayList<>());
+    
+    // 初始化工具注册（临时保留在 Activity，#4670 将提取至 ToolRegistry）
     toolManager.registerTool(new ConversationResetTool(contextManager)); // ← 注入
     toolManager.registerTool(new GetCurrentTimeTool()); // ← 新增
 
@@ -1424,7 +1449,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new FtpFileRequestTool(this));
     toolManager.registerTool(new ListFtpDirectoryTool(this));
     toolManager.registerTool(new FtpFileWriteTool(this));
-
 
 
 
@@ -1474,16 +1498,16 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
     // ✅ 新增：注册 SearchFileInRepoTool
     toolManager.registerTool(new SearchFileInRepoTool(this));
+  }
 
-    // 初始化通义千问客户端
-    tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
-
-    checkPermission(); //检查权限。
-
-		initializeMsc(); //初始化 MSC。
-
-		connectSignals(); //连接信号信号槽。
-		
+  /**
+   * 初始化视图层 (ButterKnife, RecyclerView 等)
+   * //~30 lines
+   */
+  private void initView() {
+    ButterKnife.bind(this);
+    initializeMsc(); // MSC 初始化
+    checkPermission(); // 权限检查
     messageAdapter = new MessageAdapter();
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
     articleListmyRecyclerView.setAdapter(messageAdapter);
@@ -1503,7 +1527,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       }
     });
 
-    displayExistingContext(); // Show existing context.
+    tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
 
     // ✅ 新增：创建并注册 GuideManager
     guideManager = new GuideManager(this, modelAccessPointManager, toolManager);
@@ -1513,8 +1537,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         // 自动发送给 AI 引擎
         sendMessageToSister(question);
     }
-
-	}
+  }
 
   private boolean hasPermission()
   {
