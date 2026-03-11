@@ -308,18 +308,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
     return result;
   }
-  private void displayExistingContext() {
-      List<JSONObject> history = contextManager.getHistory();
-      for (JSONObject msg : history) {
-          String role = msg.optString("role");
-          String content = msg.optString("content");
-          if ("user".equals(role) && !content.isEmpty()) {
-              messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
-          } else if ("assistant".equals(role) && !content.isEmpty()) {
-              messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
-          }
-      }
-  }
 
   public void sendMessageToSister(String message) {
       if (message == null || message.trim().isEmpty()) {
@@ -804,10 +792,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
    }
   };
 
-  private void connectSignals() {
-    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
-}
-
   private void startHttpServer() {
     AsyncHttpServer server=new AsyncHttpServer();
     CommitTextCallback commitTextCallback=new CommitTextCallback();
@@ -958,21 +942,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
-  private void connectSignals() {
-    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
-  }
-
-  private void displayExistingContext() {
-      List<JSONObject> history = contextManager.getHistory();
-      for (JSONObject msg : history) {
-          String role = msg.optString("role");
-          String content = msg.optString("content");
-          if ("user".equals(role) && !content.isEmpty()) {
-              messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
-          } else if ("assistant".equals(role) && !content.isEmpty()) {
-              messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
-          }
-      }
+  private void checkPermission() {
+    if (hasPermission()) {
+    }
+    else {
+      requestPermission();
+    }
   }
 
   private boolean hasPermission() {
@@ -1004,14 +979,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       Log.d(TAG, CodePosition.newInstance().toString() );
       requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN}, PERMISSIONS_REQUEST);
-    }
-  }
-    
-  private void checkPermission() {
-    if (hasPermission()) {
-    }
-    else {
-      requestPermission();
     }
   }
 
@@ -1047,5 +1014,23 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void initializeMsc() {
     SpeechUtility.createUtility(this, SpeechConstant.APPID+"=56e142d3");
     mIat= SpeechRecognizer.createRecognizer(this, null);
+  }
+
+  // ✅ Combined connectSignals + displayExistingContext (no duplicates!)
+  private void connectSignals() {
+    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
+  }
+
+  private void displayExistingContext() {
+      List<JSONObject> history = contextManager.getHistory();
+      for (JSONObject msg : history) {
+          String role = msg.optString("role");
+          String content = msg.optString("content");
+          if ("user".equals(role) && !content.isEmpty()) {
+              messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
+          } else if ("assistant".equals(role) && !content.isEmpty()) {
+              messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
+          }
+      }
   }
 }
