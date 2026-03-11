@@ -6,12 +6,7 @@ import com.stupidbeauty.sisterfuture.tool.GetGitHubFileTool;
 import com.stupidbeauty.sisterfuture.tool.CreateGitHubCommitTool;
 
 
-//import com.stupidbeauty.sisterfuture.SystemPromptManager;
-
-
 import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
-
-
 import android.os.Handler;
 import android.os.Looper;
 import com.stupidbeauty.codeposition.CodePosition;
@@ -34,9 +29,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
-
-
-
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -49,33 +41,21 @@ import com.stupidbeauty.sisterfuture.tool.SearchRedmineTasksTool;
 import com.stupidbeauty.sisterfuture.tool.GetIssuesListTool;
 import com.stupidbeauty.sisterfuture.tool.EstablishTaskRelationshipTool;
 import com.stupidbeauty.sisterfuture.tool.ListRedmineProjectsTool; // ✅ 新增导入
-
-
 import com.stupidbeauty.sisterfuture.tool.BasicWebRequestTool;
 import com.stupidbeauty.sisterfuture.tool.GenericWebRequestTool;
 import com.stupidbeauty.sisterfuture.tool.GetContactListTool;
 import com.stupidbeauty.sisterfuture.tool.FtpFileRequestTool;
 import com.stupidbeauty.sisterfuture.tool.ListFtpDirectoryTool;
 import com.stupidbeauty.sisterfuture.tool.FtpFileWriteTool;
-
-
 import com.stupidbeauty.sisterfuture.tool.CreateRedmineTaskTool;
-
-
 import com.stupidbeauty.sisterfuture.tool.WriteMemoryTool;
 import com.stupidbeauty.sisterfuture.tool.SearchMemoryTool;
 import com.stupidbeauty.sisterfuture.tool.ListAllMemoriesTool;
 import com.stupidbeauty.sisterfuture.tool.AddModelAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.AddNoteTool;
 import com.stupidbeauty.sisterfuture.tool.AddShoppingItemTool; // ✅ 新增：确保导入存在
-
-
-
-
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
-
-
 import com.stupidbeauty.sisterfuture.tool.GetCurrentTimeTool;
 import com.stupidbeauty.sisterfuture.tool.SwitchAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.GetCurrentAccessPointInfoTool;
@@ -113,7 +93,7 @@ import com.stupidbeauty.codeposition.CodePosition;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import android.Manifest;
-// import android.annotationSuppressLint;
+
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.app.WallpaperManager;
@@ -183,41 +163,27 @@ import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
 
-// ✅ 新增：导入 AddShoppingItemTool
-
 import com.stupidbeauty.sisterfuture.tool.FuseSystemPromptTool; // 新增导入
 import com.stupidbeauty.sisterfuture.tool.GetCurrentSystemPromptTool; // ✅ 修正为 tool 包
-
 import com.stupidbeauty.sisterfuture.tool.CreateGitBranchTool; // ✅ 新增：导入 CreateGitBranchTool
 
-// ✅ 新增：导入 ListShoppingItemsTool
 import com.stupidbeauty.sisterfuture.tool.ListShoppingItemsTool;
 
-// ✅ 新增：导入 RemoveAccessPointTool 和 ListAccessPointsTool (修复编译错误)
 import com.stupidbeauty.sisterfuture.tool.RemoveAccessPointTool;
 import com.stupidbeauty.sisterfuture.tool.ListAccessPointsTool;
 
-// ✅ 新增：导入 SearchWithBraveTool
 import com.stupidbeauty.sisterfuture.tool.SearchWithBraveTool;
 
-// ✅ 新增：导入 RemoveShoppingItemTool
 import com.stupidbeauty.sisterfuture.tool.RemoveShoppingItemTool;
 
-// ✅ 新增：导入 RemoteCommandTool
 import com.stupidbeauty.sisterfuture.tool.RemoteCommandTool;
 
-// ✅ 新增：导入 SearchFileInRepoTool
 import com.stupidbeauty.sisterfuture.tool.SearchFileInRepoTool;
 
 
 
 
 
-/*
- * An example full-screen activity that shows and hides the system UI (i.e.
- * status bar and navigation/system bar) with user interaction.
- 
-*/
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
   private GuideManager guideManager ;
@@ -228,13 +194,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private ToolManager toolManager;
   private MemoryManager memoryManager;
 
-
   // 一级映射：通过 index 关联到原始 id
   private Map<Integer, String> indexToOriginalIdMap = new HashMap<>();
 
   // 工具调用累积状态（简化版，假设单次请求只有一个工具调用）
   private Map<String, Function> partialToolArgs = new HashMap<>();
-
 
   private static final Gson gson = new Gson();
 
@@ -242,7 +206,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private MessageAdapter messageAdapter;
   @BindView(R.id.articleListmy_recycler_view) RecyclerView articleListmyRecyclerView; //< Message list.
   private static final String DEFAULT_INPUT_TEXT = "君不见，黄河之水天上来，奔流到海不复回，君不见，高堂明镜悲白发，朝如青丝暮成雪，人生得意须尽欢，莫使金樽空对月";
-  // 在 Activity 中添加一个变量用于追踪是否正在合成语音
+
   private StringBuilder accumulatedAnswer = new StringBuilder();
 
   private static final int PERMISSIONS_REQUEST =1; //!权限请求标识
@@ -257,7 +221,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final String PERMISSION_INSTALL_PACKAGE = Manifest.permission.REQUEST_INSTALL_PACKAGES; //!安装应用程序权限
   private MediaPlayer mediaPlayer;
   private boolean voiceEndDetected=false; //!是否已经探测到用户声音结束。
-  // private String textTitle;
+
 
   private TextToSpeech mTts;
 
@@ -270,25 +234,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   @BindView(R.id.progressBar) ProgressBar progressBar; //!进度条。
   int ret = 0;
   private static final String TAG="SisterFutureActivity"; //!输出调试信息时使用的标记。
-  // @BindView(R.id.speakerVerifyRegisterPasswordtextView) TextView speakerVerifyRegisterPasswordtextView; //!声纹注册密码文本标签。
-
-		private SpeechRecognizer mIat; //!语言识别器。
 
 
-
-	//@BindView(R.id.statustextView) TextView statustextView; //!用来显示状态的文字标签。
+  private SpeechRecognizer mIat; //!语言识别器。
 
 
 
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar; //!用来显示音量的进度条。
 
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView; //!识别结果。
-  @Override
+
+	@Override
   public void onInit(int arg0)
   {
-    // TODO 自动生成的方法存根
+
   }
-// private java.util.Map<String, Function> partialToolArgs = new java.util.HashMap<>();
+
 
   private void accumulateToolCalls(List<ToolCall> calls)
   {
@@ -298,13 +259,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       int index = call.getIndex();
 
-
       // ✅ 一级映射：记录 index 到原始 id 的关系
       if (call.getId() != null && !call.getId().trim().isEmpty())
       {
         indexToOriginalIdMap.put(index, call.getId());
       }
-
 
       // ✅ 二级映射：通过原始 id 关联函数参数
       String originalId = indexToOriginalIdMap.get(index);
@@ -396,14 +355,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
     vibrator.vibrate( 100);
-	if (mIat==null) //识别器未创建。
-	{
-		mIat=SpeechRecognizer.createRecognizer(this,null); //创建识别器。
-	}//if (mIat==null) //识别器未创建。
+    if (mIat==null) //识别器未创建。
+    {
+      mIat=SpeechRecognizer.createRecognizer(this,null); //创建识别器。
+    }//if (mIat==null) //识别器未创建。
 
     if (!setParam()) //参数设置失败。
     {
-      // statustextView.setText("请先构建语法。");
+
 
       return;
     }//if (!setParam()) //参数设置失败。
@@ -454,38 +413,45 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     return result;
   }
-  private void displayExistingContext() {
-      List<JSONObject> history = contextManager.getHistory();
-      for (JSONObject msg : history) {
-          String role = msg.optString("role");
-          String content = msg.optString("content");
+  private void displayExistingContext()
+  {
+    List<JSONObject> history = contextManager.getHistory();
+    for (JSONObject msg : history)
+    {
+      String role = msg.optString("role");
+      String content = msg.optString("content");
 
-          // 只显示有 content 的 user 和 assistant 消息
-          if ("user".equals(role) && !content.isEmpty()) {
-              messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
-          } else if ("assistant".equals(role) && !content.isEmpty()) {
-              messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
-          }
-          // 忽略 tool 消息和其他无 content 的消息
+      // 只显示有 content 的 user 和 assistant 消息
+      if ("user".equals(role) && !content.isEmpty())
+      {
+        messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
       }
+      else if ("assistant".equals(role) && !content.isEmpty())
+      {
+        messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
+      }
+      // 忽略 tool 消息和其他无 content 的消息
+    }
   }
 
   /**
   * 通用消息发送接口，供外部调用（如文字选中、语音输入等）
   **/
-  public void sendMessageToSister(String message) {
-      if (message == null || message.trim().isEmpty()) {
-          return;
-      }
-      
-      // 添加用户消息到界面
-      messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
-      
-      // 添加到上下文管理器
-      contextManager.addUserMessage(message);
-      
-      // 发起聊天请求
-      sendChatRequest();
+  public void sendMessageToSister(String message)
+  {
+    if (message == null || message.trim().isEmpty())
+    {
+      return;
+    }
+
+    // 添加用户消息到界面
+    messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
+
+    // 添加到上下文管理器
+    contextManager.addUserMessage(message);
+
+    // 发起聊天请求
+    sendChatRequest();
   }
   
   /**
@@ -497,9 +463,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     voiceRecognizeResultString = recognizeResulttextView.getText().toString();
     
     sendMessageToSister(voiceRecognizeResultString);
-    // messageAdapter.addMessage(new MessageItem(voiceRecognizeResultString, MessageType.USER));
-    // contextManager.addUserMessage(voiceRecognizeResultString);
-    // sendChatRequest();
   }
 
 
@@ -511,32 +474,37 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText(""); // Clear the recognize result or input content.
     
     // ✅ 新增：MVP 引导逻辑集成
-    if (guideManager != null && guideManager.isEmptyAccessPointList()) {
-        guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback() {
-            @Override
-            public void onResponse(String message) {
-                runOnUiThread(() -> {
-                    messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
-                    scrollToBottom();
-                    ttsSayReply(message);
-                });
-            }
-            
-            @Override
-            public void onError(String error) {
-                runOnUiThread(() -> {
-                    messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-                    scrollToBottom();
-                });
-            }
-        });
-        // 如果引导逻辑已处理，不再发送常规聊天请求
-        return;
+    if (guideManager != null && guideManager.isEmptyAccessPointList())
+    {
+      guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback()
+      {
+        @Override
+        public void onResponse(String message)
+        {
+          runOnUiThread(() ->
+          {
+            messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(message);
+          });
+        }
+
+        @Override
+        public void onError(String error)
+        {
+          runOnUiThread(() ->
+          {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          });
+        }
+      });
+      // 如果引导逻辑已处理，不再发送常规聊天请求
+      return;
     }
 
     sendChatRequestTongYi(); // Send chat request to tong yi.
   }
-
 
   /**
   * Report that the operation has failed.
@@ -546,7 +514,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();   //做一个提示，Failed adding address ,please retry.
   }
-
 
   private void showThinkingOverlay()
   {
@@ -567,7 +534,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     });
   }
 
-
   private void hideThinkingOverlay()
   {
     runOnUiThread(new Runnable()
@@ -583,7 +549,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     });
   }
-
 
   /**
   * 向通义千问发送请求并处理回复。
@@ -638,9 +603,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             messageContent = historyArray.getJSONObject(i).toString();
           } // if ((messageContent.isEmpty()) && (messageRole.equals("assistant")) )
 
-
           Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId); // Debug.
-
 
           messagesArray.put(historyArray.getJSONObject(i));
         }
@@ -648,7 +611,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       catch (Exception e)
       {
         e.printStackTrace();
-
 
         // 出错时至少发送当前用户消息（降级）
         try
@@ -701,7 +663,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               if (isHtmlResponse(errorBody))
               {
                 Log.e(TAG, "API 返回 HTML 页面而非 JSON，跳过 Gson 解析，防止崩溃。");
-                runOnUiThread(() -> {
+                runOnUiThread(() ->
+                {
                   messageAdapter.addMessage(new MessageItem("API 服务异常：返回了 HTML 页面而非 JSON。请检查接入点配置。", MessageType.AI));
                   scrollToBottom();
                 });
@@ -736,10 +699,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           }
         }
       },
-() ->
-      {
-        // ✅ 流结束回调
-      }
+      () ->
+        {
+          // ✅ 流结束回调
+        }
       );
     }
     else
@@ -824,9 +787,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             List<ToolCall> finalCalls = getFinalToolCalls();
 
             // ✅ 查 finalCalls 是否为空
-            if (finalCalls == null || finalCalls.isEmpty()) {
-                Log.w(TAG, "No valid tool calls generated, skipping execution.");
-                return;
+            if (finalCalls == null || finalCalls.isEmpty())
+            {
+              Log.w(TAG, "No valid tool calls generated, skipping execution.");
+              return;
             }
 
             JSONObject assistantMessage = new JSONObject();
@@ -950,18 +914,21 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             contextManager.increaseMaxRounds();
 
             // 跟踪上下文写入，在 UI 中显示"正在调用"消息
-            runOnUiThread(() -> {
-                StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
-                for (ToolCall call : finalCalls) {
-                    if (call != null && call.getFunction() != null) {
-                        String toolName = call.getFunction().getName();
-                        callText.append("- `").append(toolName).append("`").append("\n");
-                    }
+            runOnUiThread(() ->
+            {
+              StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
+              for (ToolCall call : finalCalls)
+              {
+                if (call != null && call.getFunction() != null)
+                {
+                  String toolName = call.getFunction().getName();
+                  callText.append("- `").append(toolName).append("`").append("\n");
                 }
+              }
 
-                // 使用 AI 消息类型，复用 AIMessageViewHolder
-                messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
-                scrollToBottom();
+              // 使用 AI 消息类型，复用 AIMessageViewHolder
+              messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
+              scrollToBottom();
             });
 
             // 如果全是同步工具，直接处理；否则等待回调
@@ -987,7 +954,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       {
         runOnUiThread(() ->
         {
-            messageAdapter.addMessage(new MessageItem(accumulatedAnswer.toString(), MessageType.AI));
+          messageAdapter.addMessage(new MessageItem(accumulatedAnswer.toString(), MessageType.AI));
         });
       }
       else
@@ -1041,9 +1008,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             contextManager.addToolMessage(id, name, result.toString());
             Log.d(TAG, "✅ Tool message added: ID=" + id + ", Name=" + name);
             // 就在这里...啊...主任轻点...添加消息显示...
-            messageAdapter.addMessage(new MessageItem(
+            messageAdapter.addMessage(
+              new MessageItem(
                 "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
-                MessageType.TOOL_CALL_RESULT));
+                MessageType.TOOL_CALL_RESULT
+              )
+            );
           }
         }
 
@@ -1103,7 +1073,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     articleListmyRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() -1);
   }
 
-    // statustextView.setText(answer); //显示结果。
+
   @Override
   public void onBackPressed()
   {
@@ -1112,19 +1082,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       mTts.shutdown(); //关闭。
     }//if (null!=mTts) //TTS 引擎还在。
 
-
-
     super.onBackPressed();
   }
-
 
   // 修改 ttsSayReply 方法
   private void ttsSayReply(final String text)
   {
-    // 直接开始语音合成
-    // tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utteranceId");
-    // ttsByAndroidSystemTts(text); //使用系统自带的 TTS 接口。
-    // ttsByBiaoBei(text); //使用标贝语音来发声。
     ttsByFindroidTts(text); // 使用 findroid 介绍的 TTS 接口。
   }
 
@@ -1160,13 +1123,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       voiceRecognizeResultString="";//重置识别结果。
 
-		volumeIndicatorprogressBar.setVisibility(View.VISIBLE); //显示音量。
+      volumeIndicatorprogressBar.setVisibility(View.VISIBLE); //显示音量。
 		}
 
 		@Override
 		public void onEndOfSpeech()
     {
-		volumeIndicatorprogressBar.setVisibility(View.INVISIBLE); //不显示音量。
+      volumeIndicatorprogressBar.setVisibility(View.INVISIBLE); //不显示音量。
 
       voiceEndDetected=true; //记录，已经探测到用户声音结束。
 		}
@@ -1179,11 +1142,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       commandRecognizebutton2.setVisibility(View.VISIBLE); //重新显示按钮。
       commandRecognizebutton2.setEnabled(true); //启用按钮。
       //完整内容:
-		String text=recognizerResult.getResultString(); //结果字符串。
+      String text=recognizerResult.getResultString(); //结果字符串。
 
       Gson gson=new Gson(); //创建 gson 对象。
-		VoiceRecognizeResult voiceRecognizeResult=gson.fromJson(text, VoiceRecognizeResult.class); //解析成结果对象。
-		String saidText=voiceRecognizeResult.getSaidText(); //获取完整的说出内容。
+      VoiceRecognizeResult voiceRecognizeResult=gson.fromJson(text, VoiceRecognizeResult.class); //解析成结果对象。
+      String saidText=voiceRecognizeResult.getSaidText(); //获取完整的说出内容。
 
       recognizeResulttextView.append(saidText); //显示内容。
 
@@ -1195,11 +1158,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       {
         sendMessageToSister(voiceRecognizeResultString);
 
-        // messageAdapter.addMessage(new MessageItem(voiceRecognizeResultString, MessageType.USER));
-        // contextManager.addUserMessage(voiceRecognizeResultString);
-        // sendChatRequest();
       }
-	}
+    }
 
     @Override
 		public void onError(SpeechError speechError)
@@ -1208,9 +1168,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       commandRecognizebutton2.setEnabled(true); //启用按钮。
       progressBar.setVisibility(View.INVISIBLE); //隐藏显示进度条。
-		String errorText=speechError.getErrorDescription(); //获取错误信息。
+      String errorText=speechError.getErrorDescription(); //获取错误信息。
 
-		recognizeResulttextView.setText(errorText+",error code:"+speechError.getErrorCode()); //显示错误信息。
+      recognizeResulttextView.setText(errorText+",error code:"+speechError.getErrorCode()); //显示错误信息。
 		}
 
 		@Override
@@ -1230,11 +1190,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         case MotionEvent.ACTION_DOWN: //按下。
           commandRecognizebutton2startRecognize(); //开始识别。
 
-
-
-
           break;//跳出;
-
 
         case MotionEvent.ACTION_UP: //松开。
           stopRecordbutton2(); //停止识别。
@@ -1244,12 +1200,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       return true;
    }
   };
-
-
-
-
-
-
 
   /**
   * 连接信号信号槽。
@@ -1270,31 +1220,25 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback(); //创建回调对象，查询手机信息.
     server.get("/phoneInformation/", phoneInformationCallback); //添加这个回调对象.
     server.listen(LanServicePort); //监听 15563 端口.tcp。
-}
-
+  }
 
   /**
   * 构造增强版系统提示词，从每个工具的 getDefinition() 中提取 description。
   **/
   private static String buildEnhancedSystemPrompt(ToolManager toolManager, Context context)
   {
-
-SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
-
+    SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
 
     StringBuilder promptBuilder = new StringBuilder();
-    // promptBuilder.append(SfBaseDef.DEFAULT_SYSTEM_PROMPT);
 
 
 
 
-//promptBuilder.append(  promptManager.getBasePrompt()  );
-
-
-promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
+
+    promptBuilder.append(promptManager.getCurrentPrompt());
 
     promptBuilder.append("\n\n");
 
@@ -1307,10 +1251,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       {
         if (!tool.shouldInclude()) continue;
 
-
         String name = tool.getName();
         String description = "（无描述）";
-
 
         try
         {
@@ -1343,15 +1285,10 @@ promptBuilder.append(promptManager.getCurrentPrompt());
         }
       }
 
-
       promptBuilder.append("\n/no_think\n");
-
     }
     return promptBuilder.toString();
   }
-
-
-
 
   @Override
 	/**
@@ -1360,9 +1297,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 	protected void onCreate(Bundle savedInstanceState) 
 	{
 		super.onCreate(savedInstanceState); //超类创建。
-
-
-
 
 		requestWindowFeature(Window.FEATURE_NO_TITLE); //不显示标题栏。
 		
@@ -1399,7 +1333,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
    * 初始化数据层 (Context, Memory, ModelAccess 等)
    * //~20 lines
    */
-  private void initData() {
+  private void initData()
+  {
     contextManager = new ContextManager(this);
     // ✅ 修改为：注入 ModelAccessPointManager 实例给新工具
     modelAccessPointManager = new ModelAccessPointManager(this);
@@ -1411,11 +1346,9 @@ promptBuilder.append(promptManager.getCurrentPrompt());
    * 初始化工具管理器
    * //~20 lines (注意：registerTool 将在 #4670 提取至独立类)
    */
-  private void initTools() {
+  private void initTools()
+  {
     toolManager = new ToolManager();
-    
-    // ✅ 新增：每次启动时清空聊天历史（但保留 currentMaxRounds）
-    // contextManager.replaceHistory(new ArrayList<>());
     
     // 初始化工具注册（临时保留在 Activity，#4670 将提取至 ToolRegistry）
     toolManager.registerTool(new ConversationResetTool(contextManager)); // ← 注入
@@ -1441,7 +1374,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new ListRedmineProjectsTool(this)); // ✅ 新增：注册新工具
     toolManager.registerTool(new EstablishTaskRelationshipTool(this));
     
-    
     toolManager.registerTool(new BasicWebRequestTool(this));
     toolManager.registerTool(new GenericWebRequestTool(this)); // ✅ 新增：通用 HTTP 请求工具
     toolManager.registerTool(new GetContactListTool(this));
@@ -1449,8 +1381,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new FtpFileRequestTool(this));
     toolManager.registerTool(new ListFtpDirectoryTool(this));
     toolManager.registerTool(new FtpFileWriteTool(this));
-
-
 
     toolManager.registerTool(new WriteMemoryTool(memoryManager, this));
     toolManager.registerTool(new SearchMemoryTool(memoryManager, this));
@@ -1504,7 +1434,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
    * 初始化视图层 (ButterKnife, RecyclerView 等)
    * //~30 lines
    */
-  private void initView() {
+  private void initView()
+  {
     ButterKnife.bind(this);
     initializeMsc(); // MSC 初始化
     checkPermission(); // 权限检查
@@ -1533,9 +1464,10 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     guideManager = new GuideManager(this, modelAccessPointManager, toolManager);
 
     String question = getIntent().getStringExtra("question");
-    if (question != null) {
-        // 自动发送给 AI 引擎
-        sendMessageToSister(question);
+    if (question != null)
+    {
+      // 自动发送给 AI 引擎
+      sendMessageToSister(question);
     }
   }
 
@@ -1585,7 +1517,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       }//if ( shouldShowRequestPermissionRationale(PERMISSION_STORAGE)  || shouldShowRequestPermissionRationale(PERMISSION_RECORD_AUDIO)) //应当告知原因。
       Log.d(TAG, CodePosition.newInstance().toString() ); //Debug.
 
-
       // requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN, PERMISSION_INSTALL_PACKAGE}, PERMISSIONS_REQUEST);
       requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN}, PERMISSIONS_REQUEST);
     }//if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)//动态权限
@@ -1604,7 +1535,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
       requestPermission();
     }
   }
-
 
   /**
   * 注册广播事件接收器。
@@ -1634,36 +1564,19 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     {
       String action = intent.getAction(); //获取广播中带的动作字符串。
 
-
-
-
       if (Constants.Operation.CommitText.equals(action)) //提交文本内容。
       {
         Bundle extras=intent.getExtras(); //获取参数包。
 
-
-
-
-
         voiceRecognizeResultString= extras.getString("text"); //记录识别结果。
 
-
-
-
-
         recognizeResulttextView.setText(voiceRecognizeResultString); //显示结果。
-
-
-
-
 
         sendChatRequest(); //发送闲聊请求。
         startFriendShutDownAt2100Service(); //启动友军"21 点关机"的服务。
       }
     }
   };
-
-
 
   /**
   * 启动友军"21 点关机"的服务。
