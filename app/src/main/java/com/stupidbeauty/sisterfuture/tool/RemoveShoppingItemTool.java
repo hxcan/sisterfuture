@@ -40,7 +40,7 @@ public class RemoveShoppingItemTool implements Tool {
                     .put("type", "string")
                     .put("description", "物品的唯一标识符（ID）。"))
             );
-            parameters.put("required", new JSONArray().put("item_id")); // ✅ 修复
+            parameters.put("required", new JSONArray().put("item_id")); // ✅ 修复：使用 JSONArray
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
