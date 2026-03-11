@@ -207,6 +207,8 @@ import com.stupidbeauty.sisterfuture.tool.RemoveShoppingItemTool;
 import com.stupidbeauty.sisterfuture.tool.RemoteCommandTool;
 
 // ✅ 新增：导入 SearchFileInRepoTool
+import com.stupidbeauty.sisterfuture.tool.SearchFileInRepoTool;
+
 
 
 
@@ -1243,11 +1245,23 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
    }
   };
 
+
+
+
+
+
+
+  /**
+  * 连接信号信号槽。
+  **/
   private void connectSignals()
   {
-    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
+    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
   }
 
+  /**
+  * 启动 HTTP 服务器，用于对同一个局域网内其它平板的请求进行响应.
+  **/
   private void startHttpServer()
   {
     AsyncHttpServer server=new AsyncHttpServer(); //Create the async server.
@@ -1337,6 +1351,8 @@ promptBuilder.append(promptManager.getCurrentPrompt());
   }
 
 
+
+
   @Override
 	/**
   *此活动正在被创建。
@@ -1401,6 +1417,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     // 初始化工具注册（临时保留在 Activity，#4670 将提取至 ToolRegistry）
     toolManager.registerTool(new ConversationResetTool(contextManager)); // ← 注入
     toolManager.registerTool(new GetCurrentTimeTool()); // ← 新增
+
     toolManager.registerTool(new SwitchAccessPointTool(modelAccessPointManager));
     toolManager.registerTool(new GetCurrentAccessPointInfoTool(modelAccessPointManager));
     toolManager.registerTool(new DeveloperInfoTool());
@@ -1624,12 +1641,15 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
 
 
+
         voiceRecognizeResultString= extras.getString("text"); //记录识别结果。
 
 
 
 
+
         recognizeResulttextView.setText(voiceRecognizeResultString); //显示结果。
+
 
 
 
