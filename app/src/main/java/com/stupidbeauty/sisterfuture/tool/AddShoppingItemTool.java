@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import com.stupidbeauty.sisterfuture.shopping.ShoppingItem;
 import com.stupidbeauty.sisterfuture.shopping.ShoppingListManager;
@@ -51,7 +52,7 @@ public class AddShoppingItemTool implements Tool {
                     .put("type", "string")
                     .put("description", "所属老人（如：父亲、母亲）。"))
             );
-            parameters.put("required", new JSONObject().put("required", new String[]{"name", "quantity"}));
+            parameters.put("required", new JSONArray().put("name").put("quantity")); // ✅ 修复：使用 JSONArray
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
@@ -84,7 +85,7 @@ public class AddShoppingItemTool implements Tool {
             throw new IllegalArgumentException("物品名称不能为空。");
         }
         if (quantity == null || quantity <= 0) {
-            throw new IllegalArgumentException("物品数量必须大于0。");
+            throw new IllegalArgumentException("物品数量必须大于 0。");
         }
 
         // 构建购物清单条目
@@ -97,7 +98,7 @@ public class AddShoppingItemTool implements Tool {
         item.setStatus("待购买");
         item.setLastUpdated(String.valueOf(System.currentTimeMillis()));
 
-        // 每次执行时都创建新的ShoppingListManager实例
+        // 每次执行时都创建新的 ShoppingListManager 实例
         ShoppingListManager shoppingListManager = new ShoppingListManager(context);
         boolean success = shoppingListManager.addItem(item);
 
