@@ -181,13 +181,18 @@ public class TongYiClient
           {
             if (!response.isSuccessful())
             {
-              Log.e(TAG, "Unexpected code " + response);
+              // FIX: Read and log complete error response body before creating exceptions
+              String errorBody = "";
+              try {
+                errorBody = response.body().string();
+                Log.e(TAG, "Unexpected code " + response.code() + ", Error body: " + errorBody);
+              } catch (Exception e) {
+                Log.e(TAG, "Failed to read error body: " + e.getMessage());
+              }
+              
               accessPointManager.reportCurrentAccessPointUnavailable();
-              listener.onError(new AccessPointUnavailableException("Error content reading failed, access point unavailable"));
-              listener.onError(new ResponseException(response));
-              Log.e(TAG, "Content: \n");
-              ResponseBody responseBody = response.body();
-              printErrorContent(responseBody.charStream(), listener);
+              listener.onError(new AccessPointUnavailableException("Error: " + errorBody));
+              listener.onError(new ResponseException(response, errorBody));
             }
             else
             {
