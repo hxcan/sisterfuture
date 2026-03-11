@@ -128,17 +128,39 @@ public class TongYiClient
 
 
 
-
         RequestBody body = RequestBody.create
         (
           MediaType.parse("application/json; charset=utf-8"),
           requestBody.toString()
         );
 
-        Log.d(TAG, CodePosition.newInstance().toString() + ", request body length: " + requestBody.toString().length());
+        // DEBUG: Construct URL first for logging
+        String baseUrl = accessPointManager.getCurrentBaseUrl();
+        String endpoint = accessPointManager.getCurrentChatEndpoint();
+        String fullUrl = baseUrl + endpoint;
+        
+        // Debug logging: Check for common URL concatenation issues
+        Log.d(TAG, "=== REQUEST DEBUG INFO ===");
+        Log.d(TAG, "Base URL: " + baseUrl);
+        Log.d(TAG, "Endpoint: " + endpoint);
+        Log.d(TAG, "Full URL (concatenated): " + fullUrl);
+        Log.d(TAG, "Request body length: " + requestBody.toString().length());
+        Log.d(TAG, "Raw JSON Body:\n" + requestBody.toString(2));
+        Log.d(TAG, "Authorization Header: Bearer " + effectiveApiKey);
+        Log.d(TAG, "=========================");
+        
+        // Potential issue check: trailing slash in base_url?
+        if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
+            Log.w(TAG, "⚠️ WARNING: Double slash detected! baseUrl ends with '/' and endpoint starts with '/'");
+        }
+        
+        // Potential issue check: missing slash in endpoint?
+        if (!endpoint.startsWith("/")) {
+            Log.w(TAG, "⚠️ WARNING: Endpoint does not start with '/'. May cause wrong path.");
+        }
 
         Request request = new Request.Builder()
-          .url(accessPointManager.getCurrentBaseUrl() + accessPointManager.getCurrentChatEndpoint())
+          .url(fullUrl)
           .addHeader("Authorization", "Bearer " + effectiveApiKey)
           .addHeader("Content-Type", "application/json")
           .post(body)
