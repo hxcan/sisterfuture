@@ -212,7 +212,7 @@ import com.stupidbeauty.sisterfuture.tool.RemoveShoppingItemTool;
 import com.stupidbeauty.sisterfuture.tool.RemoteCommandTool;
 
 // ✅ 新增：导入 SearchFileInRepoTool
-import com.stupidbeauty.sisterfuture.tool.SearchFileInRepoTool;
+
 
 
 
@@ -221,7 +221,7 @@ import com.stupidbeauty.sisterfuture.tool.SearchFileInRepoTool;
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation\/system bar) with user interaction.
  
-*\/
+*\/*
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
   private GuideManager guideManager ;
@@ -280,7 +280,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
+
 	//@BindView(R.id.statustextView) TextView statustextView; //!用来显示状态的文字标签。
+
+
 
 
 
@@ -1254,7 +1257,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 
-
   /**
   * 连接信号信号槽。
   **\/
@@ -1289,8 +1291,6 @@ SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
 
     StringBuilder promptBuilder = new StringBuilder();
     // promptBuilder.append(SfBaseDef.DEFAULT_SYSTEM_PROMPT);
-
-
 
 
 
@@ -1358,7 +1358,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
   }
 
 
-
   @Override
 	/**
   *此活动正在被创建。
@@ -1389,7 +1388,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
   /**
    * 初始化服务层 (TTS, HTTP, Media 等)
    * \/\/~35 lines
-   */
+   *\/
   private void initServices() {
     TtsManager.getInstance().init(this);
     registerBroadcastReceiver();
@@ -1401,7 +1400,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
   /**
    * 初始化数据层 (Context, Memory, ModelAccess 等)
    * \/\/~20 lines
-   */
+   *\/
   private void initData() {
     contextManager = new ContextManager(this);
     // ✅ 修改为：注入 ModelAccessPointManager 实例给新工具
@@ -1413,7 +1412,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
   /**
    * 初始化工具管理器
    * \/\/~20 lines (注意：registerTool 将在 #4670 提取至独立类)
-   */
+   *\/
   private void initTools() {
     toolManager = new ToolManager();
     
@@ -1451,7 +1450,6 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     toolManager.registerTool(new FtpFileRequestTool(this));
     toolManager.registerTool(new ListFtpDirectoryTool(this));
     toolManager.registerTool(new FtpFileWriteTool(this));
-
 
 
 
@@ -1506,7 +1504,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
   /**
    * 初始化视图层 (ButterKnife, RecyclerView 等)
    * \/\/~30 lines
-   */
+   *\/
   private void initView() {
     ButterKnife.bind(this);
     initializeMsc(); // MSC 初始化
@@ -1544,7 +1542,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
    * 连接信号槽（已在 connectSignals 中实现）
-   */
+   *\/
   private void connectSignals()
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
@@ -1552,7 +1550,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
 
   /**
    * 显示现有上下文（已在 displayExistingContext 中实现）
-   */
+   *\/
   private void displayExistingContext() {
       List<JSONObject> history = contextManager.getHistory();
       for (JSONObject msg : history) {
@@ -1664,6 +1662,7 @@ promptBuilder.append(promptManager.getCurrentPrompt());
     public void onReceive(Context context, Intent intent)
     {
       String action = intent.getAction(); //获取广播中带的动作字符串。
+
 
 
 
