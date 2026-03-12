@@ -74,6 +74,7 @@ public class ToolRegistry
     toolManager.registerTool(new WriteMemoryTool(memoryManager, context));
     toolManager.registerTool(new SearchMemoryTool(memoryManager, context));
     toolManager.registerTool(new ListAllMemoriesTool(memoryManager, context));
+    toolManager.registerTool(new RemoveMemoryTool(memoryManager, context));
 
     // === 接入点配置工具 ===
     toolManager.registerTool(new AddModelAccessPointTool(modelAccessPointManager, context));
