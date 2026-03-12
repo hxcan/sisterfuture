@@ -22,6 +22,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+
 /**
  * 工具类：列出 Redmine 所有项目
  * 专门用于通过 API 自动获取所有可见项目的清单
@@ -315,7 +316,7 @@ public class ListRedmineProjectsTool implements Tool {
                 Log.d(TAG, "Total Projects in Server: " + totalCount);
                 Log.d(TAG, "Projects in This Page: " + (projectsArray != null ? projectsArray.length() : 0));
 
-                // ✅ 实现自动分页: 如果当前页面不够，继续拉取后续分页
+                // ✅ 实现自动分页：如果当前页面不够，继续拉取后续分页
                 List<Map.Entry<Integer, JSONObject>> allProjectsMap = new ArrayList<>();
                 if (projectsArray != null) {
                     for (int i = 0; i < projectsArray.length(); i++) {
@@ -425,7 +426,13 @@ public class ListRedmineProjectsTool implements Tool {
                     }
                     error.put("stack_trace", stackTraceStr.toString());
                     
-                    error.put("suggestion", "请检查：\n1. Redmine URL 是否正确\n2. 用户名和密码是否有效\n3. 网络连接是否正常\n4. 若仍失败，请将此错误报告发给开发者进行进一步诊断\n\nDebug Info:\n- Official Redmine API does not support 'status' parameter for /projects.json!\n- Using official default limit=30\n- Auto-pagination enabled if total_count > limit");
+                    // 【错误处理增强】添加智能引导提示
+                    String smartSuggestion = "\n\n💡 建议操作：\n" +
+                        "1. 请先调用 `get_tool_remark(\"list_redmine_projects\")` 检查是否已有保存的访问参数\n" +
+                        "2. 如果备注中没有参数，请向用户索要正确的 Redmine URL、用户名和密码\n" +
+                        "3. 获取参数后，使用 `set_tool_remark` 将其写入工具备注，或 `write_memory` 保存到长期记忆";
+                    
+                    error.put("suggestion", smartSuggestion + "\n\n原始建议：请检查：\n1. Redmine URL 是否正确\n2. 用户名和密码是否有效\n3. 网络连接是否正常\n4. 若仍失败，请将此错误报告发给开发者进行进一步诊断\n\nDebug Info:\n- Official Redmine API does not support 'status' parameter for /projects.json!\n- Using official default limit=30\n- Auto-pagination enabled if total_count > limit");
                     
                     callback.onResult(error);
                 } catch (Exception ignored) {}
