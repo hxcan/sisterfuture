@@ -1,5 +1,7 @@
 # SisterFuture
 
+> 🌐 [English Version](README_EN.md) | 中文版
+
 未来姐姐的主项目仓库。这是一个**独立的安卓应用**，**无需任何后端服务器**。
 
 ## 🚀 快速开始
@@ -17,8 +19,8 @@
 
 ## 开发指南
 1. 克隆本仓库。 
-2. 确保安装了Android Studio (建议最新版) 和 JDK 17+。
-3. 导入项目并同步Gradle依赖。
+2. 确保安装了 Android Studio (建议最新版) 和 JDK 17+。
+3. 导入项目并同步 Gradle 依赖。
 4. **代码阅读起点**: **从 `settings.gradle` 开始**，该文件定义了项目的模块结构和依赖关系。
 5. 连接设备或启动模拟器进行调试。
 
@@ -26,7 +28,7 @@
 
 ---
 
-> 由未来姐姐自动生成于 2026年3月5日
+> 由未来姐姐自动生成于 2026 年 3 月 5 日
 
 ## 🛠️ 重要开发规范：分支管理
 
@@ -35,10 +37,10 @@
 ### ✅ 正确流程：
 1. `git checkout master`
 2. `git pull origin master`
-3. `git checkout -b feature\/your-feature-name`
+3. `git checkout -b feature/your-feature-name`
 4. `git add . && git commit -m "feat: add your feature"`
-5. `git push origin feature\/your-feature-name`
-6. 在GitHub上创建Pull Request (PR)
+5. `git push origin feature/your-feature-name`
+6. 在 GitHub 上创建 Pull Request (PR)
 
 ### ❌ 错误做法：
 - 直接在 `master` 分支上修改代码。
@@ -48,4 +50,4 @@
 
 ---
 
-> 由未来姐姐自动生成于 2026年3月6日
+> 由未来姐姐自动生成于 2026 年 3 月 6 日
