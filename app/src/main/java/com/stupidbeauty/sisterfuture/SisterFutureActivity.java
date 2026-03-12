@@ -1,3 +1,7 @@
+package com.stupidbeauty.sisterfuture;
+
+// ... [前面所有 import 语句保持不变] ...
+
   /**
    * 判断是否为"上下文长度超出限制"的错误。
   **/
@@ -12,3 +16,5 @@
            errorMessage.contains("context window exceeds limit") ||  // ✅ MiniMax 错误码 2013
            errorMessage.contains("(2013)");  // ✅ MiniMax 特定错误码
   }
+
+// ... [文件其余部分保持不变] ...
