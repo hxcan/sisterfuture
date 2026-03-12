@@ -51,13 +51,19 @@ public class MemoryManager
 
     // 删除记忆
     public boolean removeMemory(String key) {
+        // ObjectBox 不直接支持 String 类型的 equal 查询
+        // 使用 contains 代替，然后手动匹配
         Query<MemoryEntity> query = memoryBox.query()
-            .equal(MemoryEntity_.key, key)
+            .contains(MemoryEntity_.key, key, StringOrder.CASE_SENSITIVE)
             .build();
         List<MemoryEntity> results = query.find();
-        if (!results.isEmpty()) {
-            memoryBox.remove(results.get(0).getId());
-            return true;
+        
+        // 手动查找完全匹配的项
+        for (MemoryEntity entity : results) {
+            if (entity.getKey() != null && entity.getKey().equals(key)) {
+                memoryBox.remove(entity.getId());
+                return true;
+            }
         }
         return false;
     }
