@@ -52,7 +52,7 @@ public class MemoryManager
     // 删除记忆
     public boolean removeMemory(String key) {
         Query<MemoryEntity> query = memoryBox.query()
-            .equal(MemoryEntity_.key, key)
+            .equals(MemoryEntity_.key, key)
             .build();
         List<MemoryEntity> results = query.find();
         if (!results.isEmpty()) {
