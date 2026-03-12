@@ -2,7 +2,7 @@ package com.stupidbeauty.sisterfuture;
 
 import com.stupidbeauty.sisterfuture.tool.ToolRegistry;
 import com.stupidbeauty.sisterfuture.tool.ToolManager;
-import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.ContextManager;
 import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
@@ -105,7 +105,6 @@ import com.iflytek.cloud.SpeechError;
 import com.iflytek.cloud.SpeechRecognizer;
 import com.iflytek.cloud.SpeechUtility;
 import com.stupidbeauty.sisterfuture.network.TongYiClient;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
