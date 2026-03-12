@@ -1,5 +1,7 @@
 # SisterFuture
 
+> 🌐 [中文版](README.md) | English Version
+
 SisterFuture's main project repository. This is a **standalone Android application** that requires **no backend server**.
 
 ## 🚀 Quick Start
