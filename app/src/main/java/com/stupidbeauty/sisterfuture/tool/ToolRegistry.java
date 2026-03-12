@@ -1,7 +1,7 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import com.stupidbeauty.sisterfuture.ContextManager;
-import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
 import android.content.Context;
