@@ -1,14 +1,14 @@
 // MemoryManager.java
 package com.stupidbeauty.sisterfuture.manager;
 
-// 在MemoryManager.java顶部添加
+// 在 MemoryManager.java 顶部添加
 import com.stupidbeauty.sisterfuture.bean.MemoryEntity_;
 import io.objectbox.BoxStore;
 import com.stupidbeauty.sisterfuture.bean.MyObjectBox;
 
-// 在MemoryManager.java顶部添加导入
+// 在 MemoryManager.java 顶部添加导入
 import io.objectbox.query.QueryBuilder.StringOrder;
-// 在MemoryManager.java顶部添加导入
+// 在 MemoryManager.java 顶部添加导入
 import android.content.Context;
 import android.util.Log;
 import androidx.annotation.NonNull;
@@ -18,7 +18,7 @@ import io.objectbox.Box;
 import io.objectbox.BoxStore;
 import java.util.List;
 import java.util.Arrays;
-// 在MemoryManager.java顶部添加导入
+// 在 MemoryManager.java 顶部添加导入
 import io.objectbox.query.Query;
 import io.objectbox.query.QueryBuilder;
 import com.stupidbeauty.sisterfuture.bean.MemoryEntity;
@@ -49,6 +49,25 @@ public class MemoryManager
         memoryBox.put(memory);
     }
 
+    // 删除记忆
+    public boolean removeMemory(String key) {
+        // ObjectBox 不直接支持 String 类型的 equal 查询
+        // 使用 contains 代替，然后手动匹配
+        Query<MemoryEntity> query = memoryBox.query()
+            .contains(MemoryEntity_.key, key, StringOrder.CASE_SENSITIVE)
+            .build();
+        List<MemoryEntity> results = query.find();
+        
+        // 手动查找完全匹配的项
+        for (MemoryEntity entity : results) {
+            if (entity.getKey() != null && entity.getKey().equals(key)) {
+                memoryBox.remove(entity.getId());
+                return true;
+            }
+        }
+        return false;
+    }
+
     // 修改搜索方法
     public List<MemoryEntity> searchMemory(String query) {
         Query<MemoryEntity> queryBuilder = memoryBox.query()
@@ -69,18 +88,18 @@ public class MemoryManager
         memoryBox.removeAll();
     }
 
-    // 获取BoxStore（用于其他操作）
+    // 获取 BoxStore（用于其他操作）
     public BoxStore getBoxStore() {
         return boxStore;
     }
 
     // 记住主人的喜好
     public void rememberPreference() {
-        // 用特殊key记住主人的厌恶
+        // 用特殊 key 记住主人的厌恶
         saveMemory("user_preference", "dislikes_kotlin", Arrays.asList("dislike", "preference"));
     }
 
-    // 在MemoryManager.java中添加测试方法
+    // 在 MemoryManager.java 中添加测试方法
     public void testObjectBox() {
         // 1. 创建测试记忆
         saveMemory("test_key", "这是测试内容", Arrays.asList("test", "memory"));
@@ -88,9 +107,9 @@ public class MemoryManager
         // 2. 搜索验证
         List<MemoryEntity> results = searchMemory("测试");
         if (!results.isEmpty()) {
-            Log.d(TAG, CodePosition.newInstance().toString() + "✅ ObjectBox测试成功！找到了 " + results.size() + " 条记忆");
+            Log.d(TAG, CodePosition.newInstance().toString() + "✅ ObjectBox 测试成功！找到了 " + results.size() + " 条记忆");
         } else {
-            Log.d(TAG, CodePosition.newInstance().toString() + "❌ ObjectBox测试失败！没有找到记忆");
+            Log.d(TAG, CodePosition.newInstance().toString() + "❌ ObjectBox 测试失败！没有找到记忆");
         }
     }
 
