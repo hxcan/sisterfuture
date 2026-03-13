@@ -67,9 +67,9 @@ public class CreateRedmineTaskTool implements Tool
         .put("subject", new JSONObject()
           .put("type", "string")
           .put("description", "任务标题"))
-        .put("parent_task_id", new JSONObject()
+        .put("parent_issue_id", new JSONObject()
           .put("type", "integer")
-          .put("description", "可选：父任务 ID，用于创建子任务"))
+          .put("description", "可选：父任务 ID，用于创建子任务（与 Redmine API 保持一致）"))
         .put("description", new JSONObject()
           .put("type", "string")
           .put("description", "任务描述，可选"))
@@ -117,7 +117,7 @@ public class CreateRedmineTaskTool implements Tool
                 String subject = arguments.getString("subject");
                 String description = arguments.optString("description", "");
                 String priority = arguments.optString("priority", "Normal");
-                Integer parentTaskId = arguments.optInt("parent_task_id", -1); // -1 表示无父任务
+                Integer parentIssueId = arguments.optInt("parent_issue_id", -1); // -1 表示无父任务 ✅ 参数名修正
                 Integer trackerId = arguments.optInt("tracker_id", -1); // -1 表示未指定
 
                 // 2. 尝试从备注恢复凭证
@@ -153,8 +153,8 @@ public class CreateRedmineTaskTool implements Tool
                 issueJson.put("description", description);
                 issueJson.put("priority_id", getPriorityId(priority));
 
-                if (parentTaskId > 0) {
-                    issueJson.put("parent_issue_id", parentTaskId); // ✅ 正确方式
+                if (parentIssueId > 0) {
+                    issueJson.put("parent_issue_id", parentIssueId); // ✅ 正确方式
                 }
                 
                 if (trackerId > 0) {
@@ -231,6 +231,6 @@ public class CreateRedmineTaskTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求创建 Redmine 任务时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持创建子任务，需提供 parent_task_id 参数。支持指定任务类型，使用 tracker_id 参数。";
+        return "必须在用户明确要求创建 Redmine 任务时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持创建子任务，需提供 parent_issue_id 参数（与 Redmine API 保持一致）。支持指定任务类型，使用 tracker_id 参数。";
     }
 }
