@@ -37,6 +37,16 @@ dependencies
   // 添加注解处理器
   annotationProcessor 'io.objectbox:objectbox-processor:5.1.0'
   implementation 'commons-net:commons-net:3.8.0'
+  
+  // #3088 百度地图 SDK 依赖（降级到 7.5.4，与旅行盲盒一致）
+  // 地图组件
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Map:7.5.4'
+  // 检索组件（含反向地理编码）
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Search:7.5.4'
+  // 工具组件
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Util:7.5.4'
+  // 全量定位组件
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Location_All:9.3.7'
 }
 
 android 
@@ -79,11 +89,16 @@ android
   defaultConfig 
   {
     applicationId "com.stupidbeauty.sisterfuture"
-    minSdkVersion 21
+    minSdkVersion 22  // 百度地图 SDK 要求最低 API 22
     targetSdkVersion 28
     versionCode 932
     versionName "2026.3.5"
     multiDexEnabled true
+    
+    // 配置支持的 SO 库架构
+    ndk {
+      abiFilters "armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+    }
   }
 
   sourceSets 

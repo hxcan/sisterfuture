@@ -20,6 +20,7 @@
     <uses-feature android:required="true" android:glEsVersion="0x00020000"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
 
     <application
       android:allowBackup="true"
@@ -33,6 +34,19 @@
       android:hasFragileUserData="true"
       android:usesCleartextTraffic="true"
       tools:ignore="GoogleAppIndexingWarning">
+      
+      <!-- 百度地图 API Key -->
+      <!-- AK 与包名 + SHA1 签名指纹强绑定，即使被反编译也无法在其他应用中使用 -->
+      <meta-data
+          android:name="com.baidu.lbsapi.API_KEY"
+          android:value="ORqAPXcSHUKBVmh1ltLiXIuKlU4j6KQi" />
+      
+      <!-- 百度定位 Service -->
+      <service
+          android:name="com.baidu.location.f"
+          android:enabled="true"
+          android:process=":remote" />
+      
       <uses-library
         android:name="org.apache.http.legacy"
         android:required="false" 
