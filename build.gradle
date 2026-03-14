@@ -19,9 +19,6 @@ allprojects
   {
     mavenCentral()
     maven { url "https://jitpack.io" }
-    // 百度地图 SDK 官方 Maven 仓库
-    maven { url 'https://maven.baidu.com' }
-    maven { url 'https://jcenter.bintray.com' }
     jcenter()
     google()
   }
