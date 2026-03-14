@@ -3,6 +3,7 @@ package com.stupidbeauty.sisterfuture.tool;
 import org.json.JSONArray;
 import android.content.Context;
 import android.util.Log;
+import android.util.Base64;
 import androidx.annotation.NonNull;
 import org.json.JSONObject;
 import java.util.concurrent.ExecutorService;
