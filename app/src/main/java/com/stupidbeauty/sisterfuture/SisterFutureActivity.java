@@ -325,6 +325,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     return result;
   }
   
+  /**
+   * 显示历史消息记录（重构版）
+   * 修复：#3741 #3743 - 启动时正确显示工具调用和工具回复消息
+   */
   private void displayExistingContext()
   {
     List<JSONObject> history = contextManager.getHistory();
@@ -332,16 +336,57 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       String role = msg.optString("role");
       String content = msg.optString("content");
+      String toolCallId = msg.optString("tool_call_id");
+      JSONArray toolCalls = msg.optJSONArray("tool_calls");
 
-      if ("user".equals(role) && !content.isEmpty())
+      // 1. 工具回复消息 (tool_call_result) - #3743
+      if ("tool".equals(role) && !toolCallId.isEmpty())
+      {
+        String toolName = msg.optString("name", "unknown_tool");
+        String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
+        messageAdapter.addMessage(new MessageItem(displayText, MessageType.TOOL_CALL_RESULT));
+        Log.d(TAG, "✅ 启动时加载工具回复消息：ID=" + toolCallId + ", Name=" + toolName);
+      }
+      // 2. 用户消息
+      else if ("user".equals(role) && !content.isEmpty())
       {
         messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
       }
-      else if ("assistant".equals(role) && !content.isEmpty())
+      // 3. AI 消息（含工具调用）- #3741
+      else if ("assistant".equals(role))
       {
-        messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
+        // 3.1 包含工具调用的 AI 消息
+        if (toolCalls != null && toolCalls.length() > 0)
+        {
+          StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
+          for (int i = 0; i < toolCalls.length(); i++)
+          {
+            try
+            {
+              JSONObject toolCall = toolCalls.getJSONObject(i);
+              JSONObject func = toolCall.optJSONObject("function");
+              if (func != null)
+              {
+                String toolName = func.optString("name", "unknown");
+                callText.append("- `").append(toolName).append("`").append("\n");
+              }
+            }
+            catch (JSONException e)
+            {
+              Log.e(TAG, "解析工具调用失败", e);
+            }
+          }
+          messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
+          Log.d(TAG, "✅ 启动时加载工具调用消息，数量=" + toolCalls.length());
+        }
+        // 3.2 普通 AI 文本消息
+        else if (!content.isEmpty())
+        {
+          messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
+        }
       }
     }
+    Log.d(TAG, "✅ 历史消息加载完成，总数=" + history.size());
   }
 
   public void sendMessageToSister(String message)
