@@ -19,6 +19,10 @@ allprojects
   {
     mavenCentral()
     maven { url "https://jitpack.io" }
+    // 百度地图 SDK 依赖源
+    maven { url 'https://maven.aliyun.com/repository/public' }
+    maven { url 'https://maven.aliyun.com/repository/google' }
+    maven { url 'https://jcenter.bintray.com' }
     jcenter()
     google()
   }
