@@ -60,7 +60,7 @@ public class GetLocationTool implements Tool {
 
         // 初始化百度地图 SDK
         try {
-            SDKInitializer.setAgreePrivacy(context);
+            SDKInitializer.setAgreePrivacy(context, true);  // 修复：需要两个参数
             SDKInitializer.setCoordType(CoordType.BD09LL);
             
             if (baiduApiKey != null && !baiduApiKey.isEmpty()) {
