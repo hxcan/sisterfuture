@@ -15,10 +15,11 @@ import android.os.Looper;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import com.baidu.mapapi.search.geocode.GeoCoder;
-import com.baidu.mapapi.search.geocode.GeoCoderOption;
+import com.baidu.mapapi.search.geocode.ReverseGeoCodeOption;
 import com.baidu.mapapi.search.geocode.ReverseGeoCodeResult;
 import com.baidu.mapapi.search.geocode.OnGetGeoCoderResultListener;
 import com.baidu.mapapi.search.core.SearchResult;
+import com.baidu.mapapi.model.LatLng;
 import com.baidu.mapapi.CoordType;
 import com.baidu.mapapi.SDKInitializer;
 import com.google.gson.Gson;
@@ -285,6 +286,7 @@ public class GetLocationTool implements Tool {
 
     /**
      * 百度反向地理编码（同步等待模式）
+     * 参考旅行盲盒 LauncherActivity.queryGeoCode() 方法
      */
     private String reverseGeocodeBaidu(double latitude, double longitude) {
         if (geoCoder == null) {
@@ -296,41 +298,58 @@ public class GetLocationTool implements Tool {
         final AtomicReference<String> resultAddress = new AtomicReference<>(null);
 
         try {
-            // 创建反向地理编码参数
-            GeoCoderOption option = new GeoCoderOption();
-            option.location(new com.baidu.mapapi.model.LatLng(latitude, longitude));
-            
-            // 设置监听器（覆盖默认监听器）
+            // 创建监听器（覆盖默认监听器）
             geoCoder.setOnGetGeoCodeResultListener(new OnGetGeoCoderResultListener() {
                 @Override
                 public void onGetGeoCodeResult(com.baidu.mapapi.search.geocode.GeoCodeResult result) {
-                    // 正向地理编码，不使用
+                    // 正向地理编码（地址→坐标），不使用
+                    latch.countDown();
                 }
 
                 @Override
-                public void onGetReverseGeoCodeResult(ReverseGeoCodeResult result) {
-                    if (result == null || result.error != SearchResult.ERRORNO.NO_ERROR) {
-                        Log.w(TAG, "百度反向地理编码失败：" + (result != null ? result.error : "null"));
+                public void onGetReverseGeoCodeResult(ReverseGeoCodeResult reverseGeoCodeResult) {
+                    Log.d(TAG, "百度反向地理编码结果：" + reverseGeoCodeResult);
+                    
+                    if (reverseGeoCodeResult == null || 
+                        reverseGeoCodeResult.error != SearchResult.ERRORNO.NO_ERROR) {
+                        Log.w(TAG, "百度反向地理编码失败：" + 
+                            (reverseGeoCodeResult != null ? reverseGeoCodeResult.error : "null"));
                         latch.countDown();
                         return;
                     }
 
                     // 提取地址信息
                     StringBuilder sb = new StringBuilder();
-                    if (result.getAddress() != null) {
-                        sb.append(result.getAddress());
+                    
+                    // 详细地址
+                    String address = reverseGeoCodeResult.getAddress();
+                    if (address != null && !address.isEmpty()) {
+                        sb.append(address);
                     }
-                    if (result.getSematicDescription() != null && 
-                        !result.getSematicDescription().isEmpty()) {
+                    
+                    // 语义化描述
+                    String sematicDescription = reverseGeoCodeResult.getSematicDescription();
+                    if (sematicDescription != null && !sematicDescription.isEmpty()) {
                         if (sb.length() > 0) sb.append(" - ");
-                        sb.append(result.getSematicDescription());
+                        sb.append(sematicDescription);
                     }
 
                     resultAddress.set(sb.toString());
-                    Log.d(TAG, "百度反向地理编码结果：" + sb.toString());
+                    Log.d(TAG, "百度反向地理编码成功：" + sb.toString());
                     latch.countDown();
                 }
             });
+            
+            // 创建反向地理编码选项
+            LatLng point = new LatLng(latitude, longitude);
+            ReverseGeoCodeOption option = new ReverseGeoCodeOption()
+                .location(point)
+                // 设置是否返回新数据 默认值 0 不返回，1 返回
+                .newVersion(1)
+                // POI 召回半径，允许设置区间为 0-1000 米，超过 1000 米按 1000 米召回。默认值为 1000
+                .radius(200);
+            
+            Log.d(TAG, "发起百度反向地理编码请求：lat=" + latitude + ", lng=" + longitude);
             
             // 发起反向地理编码请求
             geoCoder.reverseGeoCode(option);
@@ -349,18 +368,17 @@ public class GetLocationTool implements Tool {
     }
 
     /**
-     * 百度地理编码结果监听器
+     * 百度地理编码结果监听器（默认）
      */
     private class BaiduGeoCoderListener implements OnGetGeoCoderResultListener {
         @Override
         public void onGetGeoCodeResult(com.baidu.mapapi.search.geocode.GeoCodeResult geoCodeResult) {
-            // 正向地理编码（地址->坐标），本工具不使用
+            // 正向地理编码（地址→坐标），本工具不使用
         }
 
         @Override
         public void onGetReverseGeoCodeResult(ReverseGeoCodeResult reverseGeoCodeResult) {
-            // 这个监听器主要用于初始化时的默认设置
-            // 实际使用时会在 reverseGeocodeBaidu 中创建新的监听器
+            // 默认监听器，实际使用时会覆盖
         }
     }
 
