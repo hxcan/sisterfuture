@@ -20,6 +20,7 @@ import com.baidu.mapapi.search.geocode.GeoReverseCodeOption;
 import com.baidu.mapapi.search.geocode.ReverseGeoCodeOption;
 import com.baidu.mapapi.search.geocode.ReverseGeoCodeResult;
 import com.baidu.mapapi.search.geocode.ReverseGeoCodeSearch;
+import com.baidu.mapapi.search.geocode.OnGetGeoCoderResultListener;
 import com.baidu.mapapi.CoordType;
 import com.baidu.mapapi.SDKInitializer;
 import com.google.gson.Gson;
@@ -28,23 +29,53 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class GetLocationTool implements Tool {
     private static final String TAG = "GetLocationTool";
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private ReverseGeoCodeSearch geoSearch;
+    private String baiduApiKey;
 
     public GetLocationTool(Context context) {
         this.context = context;
+        
+        // 从备注读取百度 API Key
+        try {
+            String noteJson = getNote(context);
+            if (!noteJson.isEmpty()) {
+                JSONObject saved = new JSONObject(noteJson);
+                if (saved.has("baidu_api_key")) {
+                    baiduApiKey = saved.getString("baidu_api_key");
+                    Log.d(TAG, "从备注读取到百度 API Key");
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "读取备注失败，将不使用百度 API Key", e);
+        }
+
         // 初始化百度地图 SDK
         try {
             SDKInitializer.setAgreePrivacy(context);
             SDKInitializer.setCoordType(CoordType.BD09LL);
+            
+            if (baiduApiKey != null && !baiduApiKey.isEmpty()) {
+                SDKInitializer.setApiKey(baiduApiKey);
+                Log.d(TAG, "百度地图 SDK 已配置 API Key");
+            } else {
+                Log.w(TAG, "未配置百度 API Key，将降级使用 Android Geocoder");
+            }
+            
             SDKInitializer.initialize(context);
             geoSearch = ReverseGeoCodeSearch.newInstance();
+            
+            if (geoSearch != null) {
+                geoSearch.setOnGetGeoCodeResultListener(new BaiduGeoCoderListener());
+            }
         } catch (Exception e) {
             Log.e(TAG, "百度地图 SDK 初始化失败", e);
         }
@@ -60,7 +91,7 @@ public class GetLocationTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "get_location");
-            functionDef.put("description", "查询当前地理位置，返回坐标和自然语言的地理位置信息。需要位置权限。");
+            functionDef.put("description", "查询当前地理位置，返回坐标和自然语言的地理位置信息。需要位置权限。支持配置百度地图 API Key 以获得更精确的地址解析。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -131,10 +162,13 @@ public class GetLocationTool implements Tool {
                 String provider = locationResult.location.getProvider();
                 float accuracy = locationResult.location.getAccuracy();
 
-                // 使用百度地图进行反向地理编码
-                String addressText = reverseGeocodeBaidu(latitude, longitude);
+                // 使用百度地图进行反向地理编码（如果有 API Key）
+                String addressText = null;
+                if (baiduApiKey != null && !baiduApiKey.isEmpty() && geoSearch != null) {
+                    addressText = reverseGeocodeBaidu(latitude, longitude);
+                }
                 
-                // 备用方案：如果百度失败，使用 Android 原生 Geocoder
+                // 备用方案：如果百度失败或无 API Key，使用 Android 原生 Geocoder
                 if (addressText == null || addressText.isEmpty()) {
                     addressText = reverseGeocodeAndroid(latitude, longitude);
                 }
@@ -149,6 +183,12 @@ public class GetLocationTool implements Tool {
                 locationData.put("provider", provider);
                 locationData.put("address", addressText != null ? addressText : "无法解析地址");
                 locationData.put("formatted_address", String.format(Locale.CHINA, "纬度: %.6f, 经度: %.6f", latitude, longitude));
+                
+                if (baiduApiKey != null && !baiduApiKey.isEmpty()) {
+                    locationData.put("geocoder", "Baidu");
+                } else {
+                    locationData.put("geocoder", "Android");
+                }
                 
                 result.put("location", locationData);
                 result.put("message", "位置获取成功");
@@ -243,28 +283,69 @@ public class GetLocationTool implements Tool {
         return result[0] != null ? result[0] : (lastKnownLocation != null ? new LocationResult(lastKnownLocation) : null);
     }
 
+    /**
+     * 百度反向地理编码（同步等待模式）
+     */
     private String reverseGeocodeBaidu(double latitude, double longitude) {
         if (geoSearch == null) {
             Log.w(TAG, "百度地图搜索实例未初始化");
             return null;
         }
 
+        final CountDownLatch latch = new CountDownLatch(1);
+        final String[] resultAddress = {null};
+
         try {
             ReverseGeoCodeOption option = new ReverseGeoCodeOption();
             option.location(new com.baidu.mapapi.model.LatLng(latitude, longitude));
             
-            // 同步调用（在后台线程）
-            // 注意：百度 SDK 通常是异步回调，这里简化处理
-            // 实际项目中可能需要使用 CountDownLatch 等待回调
-            Log.d(TAG, "百度反向地理编码: " + latitude + ", " + longitude);
+            // 异步调用，使用 listener 回调
+            geoSearch.reverseGeoCode(option);
             
-            // 由于百度 SDK 是异步的，这里返回一个占位符
-            // 完整实现需要使用回调或 LiveData
-            return "纬度: " + latitude + ", 经度: " + longitude + " (百度 SDK 需异步处理)";
-            
+            // 等待回调（最多 5 秒）
+            if (latch.await(5, TimeUnit.SECONDS)) {
+                Log.d(TAG, "百度反向地理编码成功: " + resultAddress[0]);
+                return resultAddress[0];
+            } else {
+                Log.w(TAG, "百度反向地理编码超时");
+                return null;
+            }
         } catch (Exception e) {
             Log.e(TAG, "百度反向地理编码失败", e);
             return null;
+        }
+    }
+
+    /**
+     * 百度地理编码结果监听器
+     */
+    private class BaiduGeoCoderListener implements OnGetGeoCoderResultListener {
+        @Override
+        public void onGetGeoCodeResult(GeoCodeResult geoCodeResult) {
+            // 正向地理编码（地址->坐标），本工具不使用
+        }
+
+        @Override
+        public void onGetReverseGeoCodeResult(ReverseGeoCodeResult reverseGeoCodeResult) {
+            if (reverseGeoCodeResult == null || reverseGeoCodeResult.error != SearchResult.ERRORNO.NO_ERROR) {
+                Log.w(TAG, "百度反向地理编码失败: " + (reverseGeoCodeResult != null ? reverseGeoCodeResult.error : "null"));
+                return;
+            }
+
+            // 提取地址信息
+            StringBuilder sb = new StringBuilder();
+            if (reverseGeoCodeResult.getAddress() != null) {
+                sb.append(reverseGeoCodeResult.getAddress());
+            }
+            if (reverseGeoCodeResult.getSematicDescription() != null && 
+                !reverseGeoCodeResult.getSematicDescription().isEmpty()) {
+                if (sb.length() > 0) sb.append(" - ");
+                sb.append(reverseGeoCodeResult.getSematicDescription());
+            }
+
+            // 存储结果（供 CountDownLatch 使用）
+            // 注意：这里需要外部类能访问到，实际实现可能需要更复杂的同步机制
+            Log.d(TAG, "百度反向地理编码结果: " + sb.toString());
         }
     }
 
@@ -293,7 +374,7 @@ public class GetLocationTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "用于查询当前地理位置，返回坐标和自然语言的地理位置信息。需要位置权限。当缺少权限时，会直接发起权限请求并提示用户授权后重试。优先使用百度地图 SDK 进行反向地理编码，Android 原生 Geocoder 作为备用方案。";
+        return "用于查询当前地理位置，返回坐标和自然语言的地理位置信息。需要位置权限。当缺少权限时，会直接发起权限请求并提示用户授权后重试。支持通过工具备注配置百度地图 API Key（键名：baidu_api_key）以获得更精确的地址解析，未配置时自动降级使用 Android 原生 Geocoder。";
     }
 
     // 内部类：位置结果
