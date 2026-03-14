@@ -38,10 +38,15 @@ dependencies
   annotationProcessor 'io.objectbox:objectbox-processor:5.1.0'
   implementation 'commons-net:commons-net:3.8.0'
   
-  // #3088 百度地图 SDK 依赖（与旅行盲盒项目版本一致）
-  implementation 'com.baidu.lbsyun:BaiduMapSDK_Map:7.5.4'
-  implementation 'com.baidu.lbsyun:BaiduMapSDK_Location_All:9.3.7'
-  implementation 'com.baidu.lbsyun:BaiduMapSDK_Util:7.5.4'
+  // #3088 百度地图 SDK 依赖（官方文档推荐版本）
+  // 地图组件
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Map:7.6.4'
+  // 检索组件（含反向地理编码）
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Search:7.6.4'
+  // 工具组件
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Util:7.6.4'
+  // 全量定位组件
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Location_All:9.6.4'
 }
 
 android 
@@ -89,6 +94,11 @@ android
     versionCode 932
     versionName "2026.3.5"
     multiDexEnabled true
+    
+    // 配置支持的 SO 库架构
+    ndk {
+      abiFilters "armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+    }
   }
 
   sourceSets 
