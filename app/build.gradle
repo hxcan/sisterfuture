@@ -37,6 +37,10 @@ dependencies
   // 添加注解处理器
   annotationProcessor 'io.objectbox:objectbox-processor:5.1.0'
   implementation 'commons-net:commons-net:3.8.0'
+  
+  // #3088 百度地图 SDK 依赖
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Map:9.6.0'
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Search:9.6.0'
 }
 
 android 
