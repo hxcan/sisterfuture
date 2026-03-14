@@ -1155,6 +1155,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     checkPermission();
     connectSignals();
     displayExistingContext();
+    
+    // #4713 冷启动时自动滚动到聊天记录最底部
+    if (savedInstanceState == null)
+    {
+      articleListmyRecyclerView.post(() -> 
+      {
+        scrollToBottom();
+        Log.d(TAG, "#4713 冷启动完成，已自动滚动到最新消息");
+      });
+    }
 	}
 
   private void initServices()
