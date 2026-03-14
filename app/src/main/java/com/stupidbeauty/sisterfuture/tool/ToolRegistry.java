@@ -33,6 +33,7 @@ public class ToolRegistry
     // === 基础工具 ===
     toolManager.registerTool(new ConversationResetTool(contextManager));
     toolManager.registerTool(new GetCurrentTimeTool());
+    toolManager.registerTool(new GetLocationTool(context));
 
     // === 接入点管理工具 ===
     toolManager.registerTool(new SwitchAccessPointTool(modelAccessPointManager));
