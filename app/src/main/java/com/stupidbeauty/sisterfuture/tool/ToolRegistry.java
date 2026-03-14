@@ -6,6 +6,7 @@ import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
 import android.content.Context;
 
+
 /**
  * 工具注册中心 - 集中管理所有工具的注册逻辑
  * 
@@ -58,6 +59,7 @@ public class ToolRegistry
     toolManager.registerTool(new GetIssuesListTool(context));
     toolManager.registerTool(new ListRedmineProjectsTool(context));
     toolManager.registerTool(new EstablishTaskRelationshipTool(context));
+    toolManager.registerTool(new RemoveTaskRelationshipTool(context));
 
     // === 网络请求工具 ===
     toolManager.registerTool(new BasicWebRequestTool(context));
