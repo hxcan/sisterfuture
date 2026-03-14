@@ -34,6 +34,19 @@
       android:hasFragileUserData="true"
       android:usesCleartextTraffic="true"
       tools:ignore="GoogleAppIndexingWarning">
+      
+      <!-- 百度地图 API_KEY (AK) 配置 -->
+      <!-- TODO: 替换为从百度地图开放平台申请的真实 AK -->
+      <meta-data
+          android:name="com.baidu.lbsapi.API_KEY"
+          android:value="需要替换为真实的百度地图 AK" />
+      
+      <!-- 百度定位 Service -->
+      <service
+          android:name="com.baidu.location.f"
+          android:enabled="true"
+          android:process=":remote" />
+      
       <uses-library
         android:name="org.apache.http.legacy"
         android:required="false" 
