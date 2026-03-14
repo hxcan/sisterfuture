@@ -35,11 +35,11 @@
       android:usesCleartextTraffic="true"
       tools:ignore="GoogleAppIndexingWarning">
       
-      <!-- 百度地图 API_KEY (AK) 配置 -->
-      <!-- TODO: 替换为从百度地图开放平台申请的真实 AK -->
+      <!-- 百度地图 API Key -->
+      <!-- AK 与包名 + SHA1 签名指纹强绑定，即使被反编译也无法在其他应用中使用 -->
       <meta-data
           android:name="com.baidu.lbsapi.API_KEY"
-          android:value="需要替换为真实的百度地图 AK" />
+          android:value="ORqAPXcSHUKBVmh1ltLiXIuKlU4j6KQi" />
       
       <!-- 百度定位 Service -->
       <service
