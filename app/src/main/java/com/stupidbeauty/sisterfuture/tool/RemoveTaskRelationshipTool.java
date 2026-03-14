@@ -30,24 +30,29 @@ public class RemoveTaskRelationshipTool implements Tool {
     }
 
     @Override
-    public JSONObject getDefinition() throws Exception {
-        JSONObject functionDef = new JSONObject();
-        functionDef.put("name", "remove_task_relationship");
-        functionDef.put("description", "删除 Redmine 任务之间的阻塞关系。支持通过 relation_id 删除指定关系，或批量删除某任务的所有阻塞关系。");
+    public JSONObject getDefinition() {
+        try {
+            JSONObject functionDef = new JSONObject();
+            functionDef.put("name", "remove_task_relationship");
+            functionDef.put("description", "删除 Redmine 任务之间的阻塞关系。支持通过 relation_id 删除指定关系，或批量删除某任务的所有阻塞关系。");
 
-        JSONObject parameters = new JSONObject();
-        parameters.put("type", "object");
-        JSONObject props = new JSONObject();
-        props.put("task_id", new JSONObject().put("type", "integer").put("description", "目标任务的 ID"));
-        props.put("relation_id", new JSONObject().put("type", "integer").put("description", "要删除的关系 ID（可选）"));
-        props.put("redmine_url", new JSONObject().put("type", "string").put("description", "Redmine 实例 URL"));
-        props.put("username", new JSONObject().put("type", "string").put("description", "用户名"));
-        props.put("password", new JSONObject().put("type", "string").put("description", "密码"));
-        parameters.put("properties", props);
-        parameters.put("required", new JSONArray().put("task_id"));
+            JSONObject parameters = new JSONObject();
+            parameters.put("type", "object");
+            JSONObject props = new JSONObject();
+            props.put("task_id", new JSONObject().put("type", "integer").put("description", "目标任务的 ID"));
+            props.put("relation_id", new JSONObject().put("type", "integer").put("description", "要删除的关系 ID（可选）"));
+            props.put("redmine_url", new JSONObject().put("type", "string").put("description", "Redmine 实例 URL"));
+            props.put("username", new JSONObject().put("type", "string").put("description", "用户名"));
+            props.put("password", new JSONObject().put("type", "string").put("description", "密码"));
+            parameters.put("properties", props);
+            parameters.put("required", new JSONArray().put("task_id"));
 
-        functionDef.put("parameters", parameters);
-        return new JSONObject().put("type", "function").put("function", functionDef);
+            functionDef.put("parameters", parameters);
+            return new JSONObject().put("type", "function").put("function", functionDef);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to build definition", e);
+            return new JSONObject();
+        }
     }
 
     @Override
