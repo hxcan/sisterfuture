@@ -14,6 +14,7 @@ import java.net.NetworkInterface;
 import java.util.Collections;
 import java.util.List;
 
+
 /**
  * 获取当前无线网络信息工具
  * 实现 Tool 接口，可被 AI 助手调用
@@ -40,16 +41,21 @@ public class NetworkInfoTool implements Tool
     JSONObject definition = new JSONObject();
     try
     {
-      definition.put("type", "function");
-      definition.put("name", getName());
-      definition.put("description", "获取当前无线网络详细信息，包括 SSID、IP 地址、信号强度、网关等");
+      // 🔥 修复：创建 function 对象嵌套结构，符合 OpenAI 兼容 API 规范
+      JSONObject functionDef = new JSONObject();
+      functionDef.put("name", getName());
+      functionDef.put("description", "获取当前无线网络详细信息，包括 SSID、IP 地址、信号强度、网关等");
       
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
       parameters.put("properties", new JSONObject());
       parameters.put("required", new JSONArray());
       
-      definition.put("parameters", parameters);
+      functionDef.put("parameters", parameters);
+      
+      // 🔥 关键修复：将 function 对象嵌套到根定义中
+      definition.put("type", "function");
+      definition.put("function", functionDef);
     }
     catch (Exception e)
     {
@@ -123,7 +129,7 @@ public class NetworkInfoTool implements Tool
         {
           try
           {
-            // 使用反射调用 getSubnetMask() 避免编译错误
+            // 使用反射调用 getSubnetMask() 避免 API 级别编译错误
             java.lang.reflect.Method method = wifiInfo.getClass().getMethod("getSubnetMask");
             int subnetMask = (Integer) method.invoke(wifiInfo);
             result.put("subnetMask", intToIp(subnetMask));
