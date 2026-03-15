@@ -40,6 +40,7 @@ public class NetworkInfoTool implements Tool
     JSONObject definition = new JSONObject();
     try
     {
+      definition.put("type", "function");
       definition.put("name", getName());
       definition.put("description", "获取当前无线网络详细信息，包括 SSID、IP 地址、信号强度、网关等");
       
