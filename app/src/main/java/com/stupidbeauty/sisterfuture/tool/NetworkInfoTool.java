@@ -35,18 +35,25 @@ public class NetworkInfoTool implements Tool
   }
 
   @Override
-  public JSONObject getDefinition() throws Exception
+  public JSONObject getDefinition()
   {
     JSONObject definition = new JSONObject();
-    definition.put("name", getName());
-    definition.put("description", "获取当前无线网络详细信息，包括 SSID、IP 地址、信号强度、网关等");
-    
-    JSONObject parameters = new JSONObject();
-    parameters.put("type", "object");
-    parameters.put("properties", new JSONObject());
-    parameters.put("required", new JSONArray());
-    
-    definition.put("parameters", parameters);
+    try
+    {
+      definition.put("name", getName());
+      definition.put("description", "获取当前无线网络详细信息，包括 SSID、IP 地址、信号强度、网关等");
+      
+      JSONObject parameters = new JSONObject();
+      parameters.put("type", "object");
+      parameters.put("properties", new JSONObject());
+      parameters.put("required", new JSONArray());
+      
+      definition.put("parameters", parameters);
+    }
+    catch (Exception e)
+    {
+      Log.e(TAG, "创建工具定义失败", e);
+    }
     return definition;
   }
 
