@@ -117,5 +117,8 @@ public class ToolRegistry
 
     // === GitHub 文件搜索工具 ===
     toolManager.registerTool(new SearchFileInRepoTool(context));
+
+    // === 网络信息工具 ===
+    toolManager.registerTool(new NetworkInfoTool(context));
   }
 }
