@@ -163,8 +163,15 @@ public class NetworkInfoTool implements Tool
     catch (Exception e)
     {
       Log.e(TAG, "获取网络信息失败", e);
-      result.put("status", "error");
-      result.put("message", "获取失败：" + e.getMessage());
+      try
+      {
+        result.put("status", "error");
+        result.put("message", "获取失败：" + e.getMessage());
+      }
+      catch (Exception ex)
+      {
+        Log.e(TAG, "创建错误响应失败", ex);
+      }
     }
     return result;
   }
@@ -236,8 +243,15 @@ public class NetworkInfoTool implements Tool
     catch (Exception e)
     {
       Log.e(TAG, "获取网络接口失败", e);
-      result.put("status", "error");
-      result.put("message", e.getMessage());
+      try
+      {
+        result.put("status", "error");
+        result.put("message", e.getMessage());
+      }
+      catch (Exception ex)
+      {
+        Log.e(TAG, "创建错误响应失败", ex);
+      }
     }
     return result;
   }
