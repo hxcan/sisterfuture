@@ -9,6 +9,5 @@
            errorMessage.contains("context length") ||
            errorMessage.contains("exceeds the available context size") ||
            errorMessage.contains("exceeds maximum context length") ||
-           errorMessage.contains("context window exceeds limit") ||  // ✅ MiniMax 错误
-           errorMessage.contains("(2013)");  // ✅ MiniMax 特定错误码
+           errorMessage.contains("context window exceeds limit");  // ✅ MiniMax 错误
   }
