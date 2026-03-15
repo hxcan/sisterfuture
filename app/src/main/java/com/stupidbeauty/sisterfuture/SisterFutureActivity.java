@@ -328,7 +328,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   /**
    * 显示历史消息记录（重构版）
    * 修复：#3741 #3743 - 启动时正确显示工具调用和工具回复消息
-   */
+  **/
   private void displayExistingContext()
   {
     List<JSONObject> history = contextManager.getHistory();
@@ -946,10 +946,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private boolean isContextLengthError(String errorMessage)
   {
     if (errorMessage == null) return false;
+    // 根据你日志里的实际错误信息匹配
     return errorMessage.contains("Range of input length should be") ||
            errorMessage.contains("context length") ||
            errorMessage.contains("exceeds the available context size") ||
-           errorMessage.contains("exceeds maximum context length");
+           errorMessage.contains("exceeds maximum context length") ||
+           errorMessage.contains("context window exceeds limit");  // ✅ MiniMax 错误
   }
 
   private void scrollToBottom()
@@ -1187,7 +1189,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   /**
    * 初始化工具管理器
    * 重构：委托给 ToolRegistry 集中管理工具注册 (#4670)
-   */
+  **/
   private void initTools()
   {
     toolManager = new ToolManager();
