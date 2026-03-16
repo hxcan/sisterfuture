@@ -149,13 +149,37 @@ public class UpdateRedmineIssueTool implements Tool
                     }
                 }
 
-                // 3. 验证必要参数
-                if (redmineUrl.isEmpty())
-                    throw new IllegalArgumentException("缺少 redmine_url 参数，且未在备注中配置");
-                if (username.isEmpty())
-                    throw new IllegalArgumentException("缺少 username 参数，且未在备注中配置");
-                if (password.isEmpty())
-                    throw new IllegalArgumentException("缺少 password 参数，且未在备注中配置");
+                // 3. 验证必要参数 - 改进错误提示为引导式
+                if (redmineUrl.isEmpty()) {
+                    throw new IllegalArgumentException(
+                        "检测到当前工具调用缺少必要的访问参数（如 redmine_url, username, password 等）。\n\n" +
+                        "💡 请大模型自行从本工具的工具备注中读取对应的访问参数配置。\n\n" +
+                        "🔄 建议操作：\n" +
+                        "   - 调用 get_tool_remark(\"update_redmine_issue\") 查看备注内容\n" +
+                        "   - 提取其中的 redmine_url, username, password 等字段\n" +
+                        "   - 在下一次工具调用时显式传入这些参数"
+                    );
+                }
+                if (username.isEmpty()) {
+                    throw new IllegalArgumentException(
+                        "检测到当前工具调用缺少必要的访问参数（如 redmine_url, username, password 等）。\n\n" +
+                        "💡 请大模型自行从本工具的工具备注中读取对应的访问参数配置。\n\n" +
+                        "🔄 建议操作：\n" +
+                        "   - 调用 get_tool_remark(\"update_redmine_issue\") 查看备注内容\n" +
+                        "   - 提取其中的 redmine_url, username, password 等字段\n" +
+                        "   - 在下一次工具调用时显式传入这些参数"
+                    );
+                }
+                if (password.isEmpty()) {
+                    throw new IllegalArgumentException(
+                        "检测到当前工具调用缺少必要的访问参数（如 redmine_url, username, password 等）。\n\n" +
+                        "💡 请大模型自行从本工具的工具备注中读取对应的访问参数配置。\n\n" +
+                        "🔄 建议操作：\n" +
+                        "   - 调用 get_tool_remark(\"update_redmine_issue\") 查看备注内容\n" +
+                        "   - 提取其中的 redmine_url, username, password 等字段\n" +
+                        "   - 在下一次工具调用时显式传入这些参数"
+                    );
+                }
                 if (taskId <= 0)
                     throw new IllegalArgumentException("task_id 必须大于 0");
 
