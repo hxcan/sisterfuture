@@ -158,12 +158,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
-  // 🔥 #4657 接入点死循环救援 - 熔断机制字段
-  private int consecutiveFailures = 0;
-  
-  // 🔥 #4657 死循环救援状态标记
-  private boolean isDeadlockRescueMode = false;
-
 	@Override
   public void onInit(int arg0)
   {
@@ -374,31 +368,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
     contextManager.addUserMessage(message);
     
-    if (isDeadlockRescueMode) {
-      guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
-        @Override
-        public void onResponse(String response) {
-          runOnUiThread(() -> {
-            messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
-            scrollToBottom();
-            ttsSayReply(response);
-            if (response.contains("✅")) {
-              isDeadlockRescueMode = false;
-            }
-          });
-        }
-
-        @Override
-        public void onError(String error) {
-          runOnUiThread(() -> {
-            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-            scrollToBottom();
-          });
-        }
-      });
-      return;
-    }
-    
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
       guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
@@ -440,31 +409,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void sendChatRequest() 
   {
     recognizeResulttextView.setText("");
-    
-    if (isDeadlockRescueMode) {
-      guideManager.handleDeadlockRescueApiKey(voiceRecognizeResultString, new GuideManager.ChatCallback() {
-        @Override
-        public void onResponse(String response) {
-          runOnUiThread(() -> {
-            messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
-            scrollToBottom();
-            ttsSayReply(response);
-            if (response.contains("✅")) {
-              isDeadlockRescueMode = false;
-            }
-          });
-        }
-
-        @Override
-        public void onError(String error) {
-          runOnUiThread(() -> {
-            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-            scrollToBottom();
-          });
-        }
-      });
-      return;
-    }
     
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
@@ -642,53 +586,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           if (isAccessPointUnavailable)
           {
-            consecutiveFailures++;
-            
-            int totalAccessPoints = modelAccessPointManager.getAllAccessPoints().size();
-            int failureThreshold = totalAccessPoints * 3;
-            
-            Log.d(TAG, "🔥 连续失败次数：" + consecutiveFailures + " / " + failureThreshold + " (接入点数量：" + totalAccessPoints + ")");
-            
-            if (consecutiveFailures >= failureThreshold)
-            {
-              Log.w(TAG, "⚠️ 熔断触发！失败 " + consecutiveFailures + " 次 >= 阈值 " + failureThreshold);
-              
-              runOnUiThread(() ->
-              {
-                Toast.makeText(SisterFutureActivity.this, 
-                    "⚠️ 所有接入点均已失败 " + consecutiveFailures + " 次\n正在启动备用接入点配置向导...", 
-                    Toast.LENGTH_LONG).show();
-                
-                isDeadlockRescueMode = true;
-                consecutiveFailures = 0;
-                
-                guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
-                  @Override
-                  public void onResponse(String message) {
-                    messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
-                    scrollToBottom();
-                    ttsSayReply(message);
-                  }
-
-                  @Override
-                  public void onError(String error) {
-                    messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-                    scrollToBottom();
-                  }
-                });
-              });
-              
-              return;
-            }
-            
-            Log.d(TAG, "未达到阈值，切换接入点并重试...");
+            Log.d(TAG, "切换接入点并重试...");
             modelAccessPointManager.reportCurrentAccessPointUnavailable();
             sendChatRequestTongYi();
-          }
-          else
-          {
-            Log.d(TAG, "非接入点不可用错误，重置计数器");
-            consecutiveFailures = 0;
           }
         }
       },
