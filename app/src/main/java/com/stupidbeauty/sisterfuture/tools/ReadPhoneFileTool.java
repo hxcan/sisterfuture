@@ -7,10 +7,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 
 import com.stupidbeauty.sisterfuture.tool.Tool;
 
@@ -113,14 +112,23 @@ public class ReadPhoneFileTool implements Tool
 
         if ("utf-8".equalsIgnoreCase(encoding))
         {
-            // 文本模式
-            content = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+            // 文本模式 - 使用兼容 API 22+ 的方式
+            byte[] fileBytes = new byte[(int) file.length()];
+            try (FileInputStream fis = new FileInputStream(file))
+            {
+                fis.read(fileBytes);
+            }
+            content = new String(fileBytes, StandardCharsets.UTF_8);
             actualEncoding = "utf-8";
         }
         else
         {
-            // Base64 模式（默认）
-            byte[] fileBytes = Files.readAllBytes(Paths.get(path));
+            // Base64 模式（默认）- 使用兼容 API 22+ 的方式
+            byte[] fileBytes = new byte[(int) file.length()];
+            try (FileInputStream fis = new FileInputStream(file))
+            {
+                fis.read(fileBytes);
+            }
             content = Base64.encodeToString(fileBytes, Base64.NO_WRAP);
             actualEncoding = "base64";
         }
