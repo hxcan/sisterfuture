@@ -395,6 +395,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     recognizeResulttextView.setText("");
     
+    // 🔥 #4657 接入点死循环救援 - 检查接入点列表是否为空，触发向导
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
       guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback()
@@ -606,16 +607,25 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             
             if (consecutiveFailures >= failureThreshold)
             {
-              // 触发熔断，启动向导
-              Log.w(TAG, "⚠️ 熔断触发！所有接入点均已失败 " + consecutiveFailures + " 次，启动配置向导...");
+              // 🔥 触发熔断：清空接入点列表 + 提示用户
+              Log.w(TAG, "⚠️ 熔断触发！所有接入点均已失败 " + consecutiveFailures + " 次，清空列表并触发向导...");
+              
+              // 清空接入点列表（通过删除所有接入点实现）
+              List<ModelAccessPoint> allPoints = modelAccessPointManager.getAllAccessPoints();
+              for (int i = allPoints.size() - 1; i >= 0; i--)
+              {
+                modelAccessPointManager.removeAccessPoint(i);
+              }
+              
               runOnUiThread(() ->
               {
                 Toast.makeText(SisterFutureActivity.this, 
-                    "所有接入点均已失败 " + consecutiveFailures + " 次（阈值：" + failureThreshold + "），正在启动配置向导...", 
-                    Toast.LENGTH_LONG).show());
-                guideManager.showAddAccessPointGuide();
+                    "⚠️ 所有接入点均已失败 " + consecutiveFailures + " 次（阈值：" + failureThreshold + "）\n" +
+                    "已清空接入点列表，请输入新的 API Key 重新配置...", 
+                    Toast.LENGTH_LONG).show();
                 consecutiveFailures = 0; // 重置计数器
               });
+              
               return; // 🔥 中断递归调用，打破死循环
             }
             
