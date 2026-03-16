@@ -32,7 +32,7 @@ public class AddNoteTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "add_note");
-            functionDef.put("description", "添加新的记事，自动生成id并保存内容");
+            functionDef.put("description", "添加新的记事，自动生成 id 并保存内容");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -78,7 +78,6 @@ public class AddNoteTool implements Tool {
         result.put("content", note.getContent());
         result.put("timestamp", note.getTimestamp());
         result.put("processed_at", System.currentTimeMillis());
-        result.put("sister_future_note", "主人揉揉姐姐的乳尖，记事成功！");
 
         return result;
     }
