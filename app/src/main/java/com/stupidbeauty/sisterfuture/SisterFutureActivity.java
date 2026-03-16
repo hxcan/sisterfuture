@@ -483,6 +483,32 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     Log.d(TAG, "开始发送请求，当前接入点：" + modelAccessPointManager.getCurrentAccessPoint().getName());
 
+    // 🔥 #4657 请求前检查是否超过阈值
+    if (modelAccessPointManager.checkFailureThreshold()) {
+      Log.w(TAG, "🔥 连续失败超过阈值，触发备用接入点向导");
+      runOnUiThread(() -> {
+        Toast.makeText(SisterFutureActivity.this, 
+          "⚠️ 所有接入点连续失败，正在启动备用接入点配置向导...", 
+          Toast.LENGTH_LONG).show();
+        
+        guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
+          @Override
+          public void onResponse(String message) {
+            messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(message);
+          }
+
+          @Override
+          public void onError(String error) {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          }
+        });
+      });
+      return; // 阻止继续请求
+    }
+
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
       accumulatedAnswer.setLength(0);
@@ -579,9 +605,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           if (isAccessPointUnavailable)
           {
-            Log.d(TAG, "切换接入点并重试...");
-            modelAccessPointManager.reportCurrentAccessPointUnavailable();
-            sendChatRequestTongYi();
+            int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
+            Log.d(TAG, "🔥 接入点不可用，切换并重试，当前失败次数：" + failures);
+            sendChatRequestTongYi(); // 继续重试
           }
         }
       },
@@ -837,6 +863,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           ttsSayReply(fullAnswer);
           contextManager.addAssistantMessage(fullAnswer);
           contextManager.increaseMaxRounds();
+          
+          // ✅ #4657 请求成功，重置连续失败计数器
+          modelAccessPointManager.resetFailureCount();
         });
       }
     }
