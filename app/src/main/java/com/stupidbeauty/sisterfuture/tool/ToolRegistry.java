@@ -120,5 +120,9 @@ public class ToolRegistry
 
     // === 网络信息工具 ===
     toolManager.registerTool(new NetworkInfoTool(context));
+
+    // === 手机文件访问工具（新增） ===
+    toolManager.registerTool(new ListPhoneDirectoryTool(context));
+    toolManager.registerTool(new ReadPhoneFileTool(context));
   }
 }
