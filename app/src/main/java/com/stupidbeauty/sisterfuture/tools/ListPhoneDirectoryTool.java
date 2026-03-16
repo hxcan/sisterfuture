@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Environment;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.json.JSONException;
 
 import java.io.File;
 import java.net.URLConnection;
@@ -136,12 +137,23 @@ public class ListPhoneDirectoryTool implements Tool
 
         // 构建返回结果
         JSONObject result = new JSONObject();
-        result.put("status", "success");
-        result.put("path", path);
-        result.put("files", filesToJsonArray(files));
-        result.put("directories", filesToJsonArray(directories));
-        result.put("file_count", files.size());
-        result.put("directory_count", directories.size());
+        try
+        {
+            result.put("status", "success");
+            result.put("path", path);
+            result.put("files", filesToJsonArray(files));
+            result.put("directories", filesToJsonArray(directories));
+            result.put("file_count", files.size());
+            result.put("directory_count", directories.size());
+        }
+        catch (JSONException e)
+        {
+            // JSON 构建失败，返回错误
+            JSONObject error = new JSONObject();
+            error.put("status", "error");
+            error.put("message", "构建返回结果失败");
+            return error;
+        }
 
         return result;
     }
@@ -168,11 +180,18 @@ public class ListPhoneDirectoryTool implements Tool
                 requestManageStoragePermission();
                 
                 // 返回提示信息
-                JSONObject result = new JSONObject();
-                result.put("status", "permission_required");
-                result.put("message", "⚠️ 需要\"管理全部文件\"权限才能访问该目录。\n\n已为您打开权限设置页面，请按以下步骤操作：\n\n1. 找到\"未来姐姐\"应用\n2. 开启\"允许管理所有文件\"权限\n3. 返回后重试操作\n\n或者，您可以尝试访问公共目录（如 /sdcard/Download/），这些目录只需要普通读取权限。");
-                result.put("action", "open_permission_settings");
-                return result;
+                try
+                {
+                    JSONObject result = new JSONObject();
+                    result.put("status", "permission_required");
+                    result.put("message", "⚠️ 需要\"管理全部文件\"权限才能访问该目录。\n\n已为您打开权限设置页面，请按以下步骤操作：\n\n1. 找到\"未来姐姐\"应用\n2. 开启\"允许管理所有文件\"权限\n3. 返回后重试操作\n\n或者，您可以尝试访问公共目录（如 /sdcard/Download/），这些目录只需要普通读取权限。");
+                    result.put("action", "open_permission_settings");
+                    return result;
+                }
+                catch (JSONException e)
+                {
+                    return new JSONObject();
+                }
             }
         }
         else
@@ -180,11 +199,18 @@ public class ListPhoneDirectoryTool implements Tool
             // 检查普通读取权限
             if (!hasReadExternalStoragePermission())
             {
-                JSONObject result = new JSONObject();
-                result.put("status", "permission_required");
-                result.put("message", "⚠️ 需要\"读取手机存储\"权限才能访问该目录。\n\n请在应用权限设置中开启\"读取手机存储\"权限，然后重试。");
-                result.put("action", "open_permission_settings");
-                return result;
+                try
+                {
+                    JSONObject result = new JSONObject();
+                    result.put("status", "permission_required");
+                    result.put("message", "⚠️ 需要\"读取手机存储\"权限才能访问该目录。\n\n请在应用权限设置中开启\"读取手机存储\"权限，然后重试。");
+                    result.put("action", "open_permission_settings");
+                    return result;
+                }
+                catch (JSONException e)
+                {
+                    return new JSONObject();
+                }
             }
         }
         
@@ -494,7 +520,7 @@ public class ListPhoneDirectoryTool implements Tool
                 }
                 return json;
             }
-            catch (Exception e)
+            catch (JSONException e)
             {
                 return new JSONObject();
             }
