@@ -1,7 +1,7 @@
+// com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool.java
 package com.stupidbeauty.sisterfuture.tools;
 
-import com.stupidbeauty.sisterfuture.tool.ToolParams;
-import com.stupidbeauty.sisterfuture.tool.ToolResult;
+import android.content.Context;
 import android.util.Base64;
 import org.json.JSONObject;
 
@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
+import com.stupidbeauty.sisterfuture.tool.Tool;
+
 /**
  * 手机文件读取工具。
  * 用于自动化读取手机外置存储上的任意文件内容。
@@ -19,99 +21,135 @@ import java.nio.file.Paths;
  * @version 1.0
  * @since 2026-03-16
  */
-public class ReadPhoneFileTool
+public class ReadPhoneFileTool implements Tool
 {
-    /**
-     * 执行文件读取。
-     * 
-     * @param params 工具参数，包含：
-     *               - path: 要读取的文件路径（必填）
-     *               - encoding: 编码方式（可选，默认 "base64"）
-     *                 - "base64": Base64 编码，适用于二进制文件
-     *                 - "utf-8": UTF-8 文本，适用于文本文件
-     * @return ToolResult 包含文件内容或错误信息
-     */
-    public static ToolResult execute(ToolParams params)
+    private final Context context;
+
+    public ReadPhoneFileTool(Context context)
+    {
+        this.context = context;
+    }
+
+    @Override
+    public String getName()
+    {
+        return "read_phone_file";
+    }
+
+    @Override
+    public JSONObject getDefinition()
     {
         try
         {
-            // 获取参数
-            String path = params.getString("path");
-            String encoding = params.getString("encoding", "base64");
+            JSONObject functionDef = new JSONObject();
+            functionDef.put("name", "read_phone_file");
+            functionDef.put("description", "读取手机外置存储上的文件内容。支持 Base64 编码（二进制文件）和 UTF-8 文本（文本文件）");
+
+            JSONObject parameters = new JSONObject();
+            parameters.put("type", "object");
             
-            // 验证文件
-            File file = new File(path);
-            if (!file.exists())
-            {
-                return ToolResult.error("文件不存在：" + path);
-            }
-            if (!file.isFile())
-            {
-                return ToolResult.error("路径不是文件：" + path);
-            }
+            JSONObject properties = new JSONObject();
             
-            // 检查读取权限
-            if (!file.canRead())
-            {
-                return ToolResult.error("无权限读取文件：" + path);
-            }
+            // path 参数（必填）
+            properties.put("path", new JSONObject()
+                .put("type", "string")
+                .put("description", "要读取的文件路径"));
             
-            // 检查文件大小（限制 100MB）
-            long fileSize = file.length();
-            if (fileSize > 100 * 1024 * 1024)
-            {
-                return ToolResult.error("文件过大（最大支持 100MB）：" + formatFileSize(fileSize));
-            }
+            // encoding 参数（可选）
+            properties.put("encoding", new JSONObject()
+                .put("type", "string")
+                .put("description", "编码方式：\"base64\"（默认，适用于二进制文件）或 \"utf-8\"（适用于文本文件）"));
             
-            // 检测文件类型
-            String mimeType = URLConnection.guessContentTypeFromName(file.getName());
-            
-            // 读取文件内容
-            String content;
-            String actualEncoding;
-            
-            if ("utf-8".equalsIgnoreCase(encoding))
-            {
-                // 文本模式
-                content = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
-                actualEncoding = "utf-8";
-            }
-            else
-            {
-                // Base64 模式（默认）
-                byte[] fileBytes = Files.readAllBytes(Paths.get(path));
-                content = Base64.encodeToString(fileBytes, Base64.NO_WRAP);
-                actualEncoding = "base64";
-            }
-            
-            // 构建返回结果
-            JSONObject result = new JSONObject();
-            result.put("status", "success");
-            result.put("content", content);
-            result.put("encoding", actualEncoding);
-            result.put("size", fileSize);
-            result.put("path", path);
-            if (mimeType != null)
-            {
-                result.put("mime_type", mimeType);
-            }
-            result.put("file_name", file.getName());
-            
-            return ToolResult.success(result);
+            parameters.put("properties", properties);
+            parameters.put("required", new JSONArray(new String[]{"path"}));
+
+            functionDef.put("parameters", parameters);
+            return new JSONObject().put("type", "function").put("function", functionDef);
         }
         catch (Exception e)
         {
-            return ToolResult.error("读取失败：" + e.getMessage());
+            return new JSONObject();
         }
     }
-    
+
+    @Override
+    public boolean shouldInclude()
+    {
+        return true;
+    }
+
+    @Override
+    public JSONObject execute(JSONObject arguments) throws Exception
+    {
+        // 解析参数
+        String path = arguments.getString("path");
+        String encoding = arguments.optString("encoding", "base64");
+
+        // 验证文件
+        File file = new File(path);
+        if (!file.exists())
+        {
+            throw new IllegalArgumentException("文件不存在：" + path);
+        }
+        if (!file.isFile())
+        {
+            throw new IllegalArgumentException("路径不是文件：" + path);
+        }
+
+        // 检查文件大小（限制 100MB）
+        long fileSize = file.length();
+        if (fileSize > 100 * 1024 * 1024)
+        {
+            throw new IllegalArgumentException("文件过大（最大支持 100MB）: " + formatFileSize(fileSize));
+        }
+
+        // 检测文件类型
+        String mimeType = URLConnection.guessContentTypeFromName(file.getName());
+
+        // 读取文件内容
+        String content;
+        String actualEncoding;
+
+        if ("utf-8".equalsIgnoreCase(encoding))
+        {
+            // 文本模式
+            content = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+            actualEncoding = "utf-8";
+        }
+        else
+        {
+            // Base64 模式（默认）
+            byte[] fileBytes = Files.readAllBytes(Paths.get(path));
+            content = Base64.encodeToString(fileBytes, Base64.NO_WRAP);
+            actualEncoding = "base64";
+        }
+
+        // 构建返回结果
+        JSONObject result = new JSONObject();
+        result.put("status", "success");
+        result.put("content", content);
+        result.put("encoding", actualEncoding);
+        result.put("size", fileSize);
+        result.put("path", path);
+        if (mimeType != null)
+        {
+            result.put("mime_type", mimeType);
+        }
+        result.put("file_name", file.getName());
+
+        return result;
+    }
+
+    @Override
+    public String getDefaultSystemPromptEnhancement()
+    {
+        return "必须在用户明确要求读取手机文件时才调用此工具。需要提供文件路径。对于二进制文件（如图片、PDF）使用 base64 编码，对于文本文件可以使用 utf-8 编码。";
+    }
+
     /**
      * 格式化文件大小。
-     * 
-     * @param bytes 字节数
-     * @return 格式化后的大小字符串
      */
-    private static String formatFileSize(long bytes)
+    private String formatFileSize(long bytes)
     {
         if (bytes < 1024)
         {
