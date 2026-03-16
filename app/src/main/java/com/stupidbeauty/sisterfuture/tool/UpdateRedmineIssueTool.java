@@ -133,19 +133,33 @@ public class UpdateRedmineIssueTool implements Tool
                 String password = arguments.optString("password", "").trim();
                 int taskId = arguments.getInt("task_id");
 
-                // 2. 尝试从备注恢复凭证
+                // 2. 尝试从备注恢复凭证 - 改进 JSON 解析错误处理
                 if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty())
                 {
                     String noteJson = getNote(context);
                     if (!noteJson.isEmpty())
                     {
-                        JSONObject saved = new JSONObject(noteJson);
-                        if (redmineUrl.isEmpty() && saved.has("redmine_url"))
-                            redmineUrl = saved.getString("redmine_url");
-                        if (username.isEmpty() && saved.has("username"))
-                            username = saved.getString("username");
-                        if (password.isEmpty() && saved.has("password"))
-                            password = saved.getString("password");
+                        try {
+                            JSONObject saved = new JSONObject(noteJson);
+                            if (redmineUrl.isEmpty() && saved.has("redmine_url"))
+                                redmineUrl = saved.getString("redmine_url");
+                            if (username.isEmpty() && saved.has("username"))
+                                username = saved.getString("username");
+                            if (password.isEmpty() && saved.has("password"))
+                                password = saved.getString("password");
+                        } catch (Exception parseEx) {
+                            // JSON 解析失败时，返回引导式提示
+                            throw new IllegalArgumentException(
+                                "检测到当前工具调用缺少必要的访问参数，且工具备注中的配置无法解析。\n\n" +
+                                "💡 请大模型自行检查并确保：\n" +
+                                "   1. 工具备注中的 JSON 格式正确（无多余标点/引号匹配等）\n" +
+                                "   2. 键名与字段名一致（如 redmine_url, username, password）\n" +
+                                "   3. 值类型正确（URL、字符串等）\n\n" +
+                                "🔄 建议操作：\n" +
+                                "   - 调用 get_tool_remark(\"update_redmine_issue\") 查看当前备注内容\n" +
+                                "   - 修正备注为正确的 JSON 格式，或在下一次工具调用中显式传入所有必填参数"
+                            );
+                        }
                     }
                 }
 
