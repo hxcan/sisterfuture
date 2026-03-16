@@ -104,6 +104,26 @@ public class GuideManager {
     }
 
     /**
+     * 🔥 #4657 在接入点死循环时触发添加新接入点的向导
+     * 不删除现有接入点，只是引导用户添加新的备用接入点
+     * @param callback 回调接口
+     */
+    public void showAddAccessPointGuideForDeadlock(ChatCallback callback) {
+        int existingCount = modelAccessPointManager.getAllAccessPoints().size();
+        
+        callback.onResponse(
+            "⚠️ **检测到所有接入点连续失败！**\n\n" +
+            "当前已配置的 " + existingCount + " 个接入点可能暂时不可用（例如：欠费、云端算力不足等）。\n\n" +
+            "💡 **建议操作**：\n" +
+            "1️⃣ 输入新的 API Key 添加备用接入点\n" +
+            "2️⃣ 系统会在新旧接入点间自动切换\n" +
+            "3️⃣ 原有接入点保留，恢复后可继续使用\n\n" +
+            "📝 **请直接粘贴新的 API Key**（sk- 开头，或 cp_/plan_/sf_ 前缀）：\n\n" +
+            "✨ 准备好了吗？"
+        );
+    }
+
+    /**
      * 统一方法：创建接入点（支持普通模式/备用模式）
      * 
      * @param apiKey API Key
