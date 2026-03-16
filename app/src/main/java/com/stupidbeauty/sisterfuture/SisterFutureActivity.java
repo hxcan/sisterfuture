@@ -160,6 +160,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   // 🔥 #4657 接入点死循环救援 - 熔断机制字段
   private int consecutiveFailures = 0;
+  
+  // 🔥 #4657 死循环救援状态标记
+  private boolean isDeadlockRescueMode = false;
 
 	@Override
   public void onInit(int arg0)
@@ -381,7 +384,64 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
     contextManager.addUserMessage(message);
-    sendChatRequest();
+    
+    // 🔥 #4657 死循环救援模式：优先处理 API Key 输入
+    if (isDeadlockRescueMode) {
+      guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
+        @Override
+        public void onResponse(String response) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(response);
+            // 救援成功后退出救援模式
+            if (response.contains("✅")) {
+              isDeadlockRescueMode = false;
+            }
+          });
+        }
+
+        @Override
+        public void onError(String error) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          });
+        }
+      });
+      return;
+    }
+    
+    // 正常模式：检查接入点列表是否为空
+    if (guideManager != null && guideManager.isEmptyAccessPointList())
+    {
+      guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
+      {
+        @Override
+        public void onResponse(String message)
+        {
+          runOnUiThread(() ->
+          {
+            messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(message);
+          });
+        }
+
+        @Override
+        public void onError(String error)
+        {
+          runOnUiThread(() ->
+          {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          });
+        }
+      });
+      return;
+    }
+
+    sendChatRequestTongYi();
   }
   
   @OnClick(R.id.sendButtonn2)
@@ -395,7 +455,34 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     recognizeResulttextView.setText("");
     
-    // 🔥 #4657 接入点死循环救援 - 检查接入点列表是否为空，触发向导
+    // 🔥 #4657 死循环救援模式：优先处理 API Key 输入
+    if (isDeadlockRescueMode) {
+      guideManager.handleDeadlockRescueApiKey(voiceRecognizeResultString, new GuideManager.ChatCallback() {
+        @Override
+        public void onResponse(String response) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(response);
+            // 救援成功后退出救援模式
+            if (response.contains("✅")) {
+              isDeadlockRescueMode = false;
+            }
+          });
+        }
+
+        @Override
+        public void onError(String error) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          });
+        }
+      });
+      return;
+    }
+    
+    // 正常模式：检查接入点列表是否为空
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
       guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback()
@@ -607,23 +694,35 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             
             if (consecutiveFailures >= failureThreshold)
             {
-              // 🔥 触发熔断：清空接入点列表 + 提示用户
-              Log.w(TAG, "⚠️ 熔断触发！所有接入点均已失败 " + consecutiveFailures + " 次，清空列表并触发向导...");
-              
-              // 清空接入点列表（通过删除所有接入点实现）
-              List<ModelAccessPoint> allPoints = modelAccessPointManager.getAllAccessPoints();
-              for (int i = allPoints.size() - 1; i >= 0; i--)
-              {
-                modelAccessPointManager.removeAccessPoint(i);
-              }
+              // 🔥 触发熔断：启动添加备用接入点的向导
+              Log.w(TAG, "⚠️ 熔断触发！所有接入点均已失败 " + consecutiveFailures + " 次，启动救援向导...");
               
               runOnUiThread(() ->
               {
                 Toast.makeText(SisterFutureActivity.this, 
                     "⚠️ 所有接入点均已失败 " + consecutiveFailures + " 次（阈值：" + failureThreshold + "）\n" +
-                    "已清空接入点列表，请输入新的 API Key 重新配置...", 
+                    "正在启动备用接入点配置向导...", 
                     Toast.LENGTH_LONG).show();
-                consecutiveFailures = 0; // 重置计数器
+                
+                // 进入救援模式
+                isDeadlockRescueMode = true;
+                consecutiveFailures = 0;
+                
+                // 触发向导
+                guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
+                  @Override
+                  public void onResponse(String message) {
+                    messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+                    scrollToBottom();
+                    ttsSayReply(message);
+                  }
+
+                  @Override
+                  public void onError(String error) {
+                    messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+                    scrollToBottom();
+                  }
+                });
               });
               
               return; // 🔥 中断递归调用，打破死循环
