@@ -2,25 +2,28 @@
 package com.stupidbeauty.sisterfuture.tools;
 
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.json.JSONException;
 
 import java.io.File;
 import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.stupidbeauty.sisterfuture.tool.Tool;
-
 /**
  * 手机目录扫描工具。
  * 用于自动化扫描手机外置存储目录，返回文件列表。
  * 
  * @author 未来姐姐
- * @version 1.0
+ * @version 1.1
  * @since 2026-03-16
  */
-public class ListPhoneDirectoryTool implements Tool
+public class ListPhoneDirectoryTool
 {
     private final Context context;
 
@@ -52,7 +55,7 @@ public class ListPhoneDirectoryTool implements Tool
             // path 参数（必填）
             properties.put("path", new JSONObject()
                 .put("type", "string")
-                .put("description", "要扫描的目录路径，如 /sdcard/Download/"));
+                .put("description", "要扫描的目录路径"));
             
             // recursive 参数（可选）
             properties.put("recursive", new JSONObject()
@@ -79,14 +82,12 @@ public class ListPhoneDirectoryTool implements Tool
             
             filterDef.put("properties", filterProperties);
             properties.put("filter", filterDef);
-            
-            parameters.put("properties", properties);
-            parameters.put("required", new JSONArray(new String[]{"path"}));
+            properties.put("required", new JSONArray(new String[]{"path"}));
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         }
-        catch (Exception e)
+        catch (JSONException e)
         {
             return new JSONObject();
         }
@@ -106,6 +107,14 @@ public class ListPhoneDirectoryTool implements Tool
         boolean recursive = arguments.optBoolean("recursive", false);
         JSONObject filter = arguments.optJSONObject("filter");
 
+        // 检查并请求权限
+        JSONObject permissionResult = checkAndRequestPermission(path);
+        if (permissionResult != null)
+        {
+            // 权限不足，返回提示信息
+            return permissionResult;
+        }
+
         // 验证目录
         File directory = new File(path);
         if (!directory.exists())
@@ -124,12 +133,23 @@ public class ListPhoneDirectoryTool implements Tool
 
         // 构建返回结果
         JSONObject result = new JSONObject();
-        result.put("status", "success");
-        result.put("path", path);
-        result.put("files", filesToJsonArray(files));
-        result.put("directories", filesToJsonArray(directories));
-        result.put("file_count", files.size());
-        result.put("directory_count", directories.size());
+        try
+        {
+            result.put("status", "success");
+            result.put("path", path);
+            result.put("files", filesToJsonArray(files));
+            result.put("directories", filesToJsonArray(directories));
+            result.put("file_count", files.size());
+            result.put("directory_count", directories.size());
+        }
+        catch (JSONException e)
+        {
+            // JSON 构建失败，返回错误
+            JSONObject error = new JSONObject();
+            error.put("status", "error");
+            error.put("message", "构建返回结果失败");
+            return error;
+        }
 
         return result;
     }
@@ -137,7 +157,159 @@ public class ListPhoneDirectoryTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求扫描手机目录时才调用此工具。需要提供要扫描的目录路径。支持可选的递归和过滤参数。";
+        return "必须在用户明确要求扫描手机目录时才调用此工具。需要提供要扫描的目录路径。支持可选的递归和过滤参数。注意：在 Android 11+ 上访问某些目录需要\"管理全部文件\"权限，工具会自动检查并引导用户授权。";
+    }
+
+    /**
+     * 检查并请求存储权限。
+     * @param path 要访问的路径
+     * @return 如果权限不足返回提示信息，否则返回 null
+     */
+    private JSONObject checkAndRequestPermission(String path)
+    {
+        // 检查是否需要 MANAGE_EXTERNAL_STORAGE 权限
+        if (needsManageStoragePermission(path))
+        {
+            if (!hasManageStoragePermission())
+            {
+                // 权限不足，引导用户授权
+                requestManageStoragePermission();
+                
+                // 返回提示信息
+                try
+                {
+                    JSONObject result = new JSONObject();
+                    result.put("status", "permission_required");
+                    result.put("message", "⚠️ 需要\"管理全部文件\"权限才能访问该目录。\n\n已为您打开权限设置页面，请按以下步骤操作：\n\n1. 找到\"未来姐姐\"应用\n2. 开启\"允许管理所有文件\"权限\n3. 返回后重试操作\n\n或者，您可以尝试访问公共目录（如 /sdcard/Download/），这些目录只需要普通读取权限。");
+                    result.put("action", "open_permission_settings");
+                    return result;
+                }
+                catch (JSONException e)
+                {
+                    return new JSONObject();
+                }
+            }
+        }
+        else
+        {
+            // 检查普通读取权限
+            if (!hasReadExternalStoragePermission())
+            {
+                try
+                {
+                    JSONObject result = new JSONObject();
+                    result.put("status", "permission_required");
+                    result.put("message", "⚠️ 需要\"读取手机存储\"权限才能访问该目录。\n\n请在应用权限设置中开启\"读取手机存储\"权限，然后重试。");
+                    result.put("action", "open_permission_settings");
+                    return result;
+                }
+                catch (JSONException e)
+                {
+                    return new JSONObject();
+                }
+            }
+        }
+        
+        return null; // 权限充足
+    }
+
+    /**
+     * 检查路径是否需要 MANAGE_EXTERNAL_STORAGE 权限。
+     */
+    private boolean needsManageStoragePermission(String path)
+    {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+        {
+            // Android 10 及以下不需要
+            return false;
+        }
+        
+        // Android 11+ 检查是否在受限目录
+        if (path.startsWith("/sdcard/Android/data/") || 
+            path.startsWith("/sdcard/Android/obb/") ||
+            path.startsWith("/Android/data/") ||
+            path.startsWith("/Android/obb/"))
+        {
+            return true;
+        }
+        
+        // 检查是否是应用私有目录
+        try
+        {
+            File file = new File(path);
+            File externalStorage = Environment.getExternalStorageDirectory();
+            String relativePath = file.getAbsolutePath().substring(externalStorage.getAbsolutePath().length());
+            
+            if (relativePath.startsWith("/Android/data/") || 
+                relativePath.startsWith("/Android/obb/"))
+            {
+                return true;
+            }
+        }
+        catch (Exception e)
+        {
+            // 解析失败，保守起见要求权限
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * 检查是否有 MANAGE_EXTERNAL_STORAGE 权限。
+     */
+    private boolean hasManageStoragePermission()
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+        {
+            return Environment.isExternalStorageManager();
+        }
+        return true; // 低版本不需要此权限
+    }
+
+    /**
+     * 检查是否有 READ_EXTERNAL_STORAGE 权限。
+     */
+    private boolean hasReadExternalStoragePermission()
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+        {
+            return context.checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) 
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        }
+        return true; // 低版本默认有权限
+    }
+
+    /**
+     * 请求 MANAGE_EXTERNAL_STORAGE 权限。
+     */
+    private void requestManageStoragePermission()
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+        {
+            try
+            {
+                Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.setData(Uri.parse("package:" + context.getPackageName()));
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(intent);
+            }
+            catch (Exception e)
+            {
+                // 如果特定包名方式失败，尝试通用方式
+                try
+                {
+                    Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(intent);
+                }
+                catch (Exception e2)
+                {
+                    // 无法打开权限页面，记录日志
+                    e2.printStackTrace();
+                }
+            }
+        }
     }
 
     /**
@@ -161,7 +333,7 @@ public class ListPhoneDirectoryTool implements Tool
                 {
                     continue;
                 }
-
+                
                 directories.add(FileEntry.fromFile(file));
 
                 // 递归扫描子目录
@@ -344,7 +516,7 @@ public class ListPhoneDirectoryTool implements Tool
                 }
                 return json;
             }
-            catch (Exception e)
+            catch (JSONException e)
             {
                 return new JSONObject();
             }
