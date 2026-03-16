@@ -1,7 +1,8 @@
 package com.stupidbeauty.sisterfuture.tools;
 
+import com.stupidbeauty.sisterfuture.tool.ToolParams;
+import com.stupidbeauty.sisterfuture.tool.ToolResult;
 import android.util.Base64;
-
 import org.json.JSONObject;
 
 import java.io.File;
