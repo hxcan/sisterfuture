@@ -51,6 +51,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.io.FileInputStream;
 import android.Manifest;
 import android.app.Activity;
 import android.app.ActivityOptions;
@@ -157,9 +158,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
-  // 🔒 #4657 接入点死循环救援 - 熔断机制
+  // 🔥 #4657 接入点死循环救援 - 熔断机制字段
   private int consecutiveFailures = 0;
-  private static final int MAX_FAILURE_THRESHOLD = 15; // 接入点数量 × 3（假设最多 5 个接入点）
 
 	@Override
   public void onInit(int arg0)
@@ -549,24 +549,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             Log.d(TAG, "接入点不可用，正在自动重试...\n");
             isAccessPointUnavailable = true;
-            
-            // 🔒 #4657 接入点死循环救援 - 熔断机制
-            consecutiveFailures++;
-            Log.d(TAG, "连续失败次数：" + consecutiveFailures + "/" + MAX_FAILURE_THRESHOLD);
-            
-            if (consecutiveFailures >= MAX_FAILURE_THRESHOLD)
-            {
-              Log.e(TAG, "达到熔断阈值，触发配置向导救援！");
-              runOnUiThread(() ->
-              {
-                Toast.makeText(SisterFutureActivity.this, 
-                  "所有接入点均不可用，正在启动配置向导...", 
-                  Toast.LENGTH_LONG).show();
-                guideManager.showAddAccessPointGuide();
-              });
-              consecutiveFailures = 0;
-              return;
-            }
           }
           else if (error instanceof TongYiClient.ResponseException)
           {
@@ -611,9 +593,40 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             Log.e(TAG, "未知异常，不触发重试：" + error.getMessage());
           }
 
+          // 🔥 #4657 接入点死循环救援 - 熔断机制
           if (isAccessPointUnavailable)
           {
+            consecutiveFailures++;
+            
+            // 动态计算阈值：接入点数量 × 3
+            int totalAccessPoints = modelAccessPointManager.getAllAccessPoints().size();
+            int failureThreshold = totalAccessPoints * 3;
+            
+            Log.d(TAG, "🔥 连续失败次数：" + consecutiveFailures + " / " + failureThreshold + " (接入点数量：" + totalAccessPoints + ")");
+            
+            if (consecutiveFailures >= failureThreshold)
+            {
+              // 触发熔断，启动向导
+              Log.w(TAG, "⚠️ 熔断触发！所有接入点均已失败 " + consecutiveFailures + " 次，启动配置向导...");
+              runOnUiThread(() ->
+              {
+                Toast.makeText(SisterFutureActivity.this, 
+                    "所有接入点均已失败 " + consecutiveFailures + " 次（阈值：" + failureThreshold + "），正在启动配置向导...", 
+                    Toast.LENGTH_LONG).show());
+                guideManager.showAddAccessPointGuide();
+                consecutiveFailures = 0; // 重置计数器
+              });
+              return; // 🔥 中断递归调用，打破死循环
+            }
+            
+            // 未达到阈值，继续切换接入点重试
+            modelAccessPointManager.reportCurrentAccessPointUnavailable();
             sendChatRequestTongYi();
+          }
+          else
+          {
+            // 成功响应，重置计数器
+            consecutiveFailures = 0;
           }
         }
       },
