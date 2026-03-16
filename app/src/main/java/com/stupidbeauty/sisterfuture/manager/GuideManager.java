@@ -124,6 +124,27 @@ public class GuideManager {
     }
 
     /**
+     * 🔥 #4657 处理死循环救援时的 API Key 输入
+     * @param apiKey 用户输入的新 API Key
+     * @param callback 回调接口
+     */
+    public void handleDeadlockRescueApiKey(String apiKey, ChatCallback callback) {
+        if (isValidApiKey(apiKey)) {
+            // 创建新的备用接入点（带"-备用"后缀）
+            createAccessPoints(apiKey, callback, "-备用");
+        } else {
+            callback.onResponse(
+                "❌ **无效的 API Key 格式**\n\n" +
+                "📝 您输入的密钥长度：" + apiKey.length() + " 字符 (有效范围：20-64)\n\n" +
+                "✅ **有效格式**：\n" +
+                "- 百炼标准：`sk-` 开头\n" +
+                "- Code Plan：`cp_` / `plan_` / `sf_` 开头\n\n" +
+                "请重新输入正确的 API Key："
+            );
+        }
+    }
+
+    /**
      * 统一方法：创建接入点（支持普通模式/备用模式）
      * 
      * @param apiKey API Key
