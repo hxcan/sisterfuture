@@ -77,7 +77,6 @@ public class TongYiClient
     @Override
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete)
     {
-      // Get apiKey from access point - use empty string if not configured (for local APs without auth)
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
       String apiKey = null;
       
@@ -85,11 +84,9 @@ public class TongYiClient
           apiKey = currentAccessPoint.getApiKey();
       }
       
-      // Use apiKey or empty string (no exception thrown for local access points)
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
           
-      Log.d(TAG, "Using API Key source: " + 
-          ((apiKey != null && !apiKey.isEmpty()) ? "Access Point (dynamic)" : "No authentication (local)"));
+      Log.d(TAG, "Using API Key: " + (apiKey != null && !apiKey.isEmpty() ? "Access Point" : "No auth"));
 
       try
       {
@@ -98,29 +95,26 @@ public class TongYiClient
         requestBody.put("messages", messages);
         requestBody.put("stream", true);
 
-            // Include tools based on parameter
-    if (includeTools)
-    {
-
-        // Inject tool definitions dynamically filtered by Tool.shouldInclude()
-        JSONArray toolsArray = new JSONArray();
-        for (Tool tool : toolManager.getRegisteredTools())
+        if (includeTools)
         {
-          if (tool.shouldInclude())
-          {
-            JSONObject toolDef = tool.getDefinition();
-            if (toolDef != null && !toolDef.toString().isEmpty())
+            JSONArray toolsArray = new JSONArray();
+            for (Tool tool : toolManager.getRegisteredTools())
             {
-              toolsArray.put(toolDef);
+              if (tool.shouldInclude())
+              {
+                JSONObject toolDef = tool.getDefinition();
+                if (toolDef != null && !toolDef.toString().isEmpty())
+                {
+                  toolsArray.put(toolDef);
+                }
+              }
             }
-          }
-        }
 
-        if (toolsArray.length() > 0)
-        {
-          requestBody.put("tools", toolsArray);
-          requestBody.put("tool_choice", "auto");
-        }
+            if (toolsArray.length() > 0)
+            {
+              requestBody.put("tools", toolsArray);
+              requestBody.put("tool_choice", "auto");
+            }
         }
 
         RequestBody body = RequestBody.create
@@ -129,25 +123,15 @@ public class TongYiClient
           requestBody.toString()
         );
 
-        // Construct URL
         String baseUrl = accessPointManager.getCurrentBaseUrl();
         String endpoint = accessPointManager.getCurrentChatEndpoint();
         String fullUrl = baseUrl + endpoint;
         
-        // Debug logging
-        Log.d(TAG, "Base URL: " + baseUrl);
-        Log.d(TAG, "Endpoint: " + endpoint);
-        Log.d(TAG, "Full URL: " + fullUrl);
-        Log.d(TAG, "Request body length: " + requestBody.toString().length());
-        Log.d(TAG, "Authorization Header: Bearer " + effectiveApiKey);
-        
-        // Check for URL issues
+        Log.d(TAG, "URL: " + fullUrl);
+        Log.d(TAG, "Body length: " + requestBody.toString().length());
+
         if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
-            Log.w(TAG, "⚠️ WARNING: Double slash in URL!");
-        }
-        
-        if (!endpoint.startsWith("/")) {
-            Log.w(TAG, "⚠️ WARNING: Endpoint does not start with '/'");
+            Log.w(TAG, "⚠️ Double slash in URL!");
         }
 
         Request request = new Request.Builder()
@@ -172,11 +156,10 @@ public class TongYiClient
           {
             if (!response.isSuccessful())
             {
-              // Read error response body
               String errorBody = "";
               try {
                 errorBody = response.body().string();
-                Log.e(TAG, "Unexpected code " + response.code() + ", Error body: " + errorBody);
+                Log.e(TAG, "HTTP " + response.code() + ": " + errorBody);
               } catch (Exception e) {
                 Log.e(TAG, "Failed to read error body: " + e.getMessage());
               }
@@ -201,26 +184,6 @@ public class TongYiClient
         e.printStackTrace();
         listener.onError(e);
       }
-    }
-  }
-
-  private static void printErrorContent(java.io.Reader reader, OnResponseListener listener)
-  {
-    try (java.io.BufferedReader bufferedReader = new java.io.BufferedReader(reader))
-    {
-      String line;
-      while ((line = bufferedReader.readLine()) != null)
-      {
-        Log.e(TAG, " " + line);
-      }
-    }
-    catch (IOException e)
-    {
-      listener.onError(e);
-    }
-    catch (IllegalStateException e)
-    {
-      Log.e(TAG, "Reader closed, cannot read error content: " + e.getMessage());
     }
   }
 
@@ -250,8 +213,6 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
 
     while ((line = bufferedReader.readLine()) != null)
     {
-      Log.d(TAG, CodePosition.newInstance().toString() + ", line: " + line);
-
       if (!htmlChecked)
       {
         htmlChecked = true;
@@ -260,11 +221,9 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
         String preview = firstLineBuffer.length() > 500 ? firstLineBuffer.substring(0, 500) : firstLineBuffer.toString();
         if (isHtmlResponse(preview))
         {
-          Log.e(TAG, "API 返回非预期内容：HTML 页面，可能是认证失败或服务不可用。");
-          Log.e(TAG, "原始响应预览（前 500 字符）: " + 
-              (preview.length() > 500 ? preview.substring(0, 500) + "..." : preview));
+          Log.e(TAG, "API returned HTML page");
           accessPointManager.reportCurrentAccessPointUnavailable();
-          listener.onError(new ResponseException(null, "API 服务异常或未正确配置，返回了 HTML 页面而非 JSON。请检查接入点设置。"));
+          listener.onError(new ResponseException(null, "API returned HTML page"));
           return;
         }
       }
@@ -295,7 +254,7 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
   catch (IOException e)
   {
     accessPointManager.reportCurrentAccessPointUnavailable();
-    listener.onError(new AccessPointUnavailableException("Stream reading failed, access point unavailable", e));
+    listener.onError(new AccessPointUnavailableException("Stream failed", e));
   }
 }
 
@@ -319,14 +278,14 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
 
     public ResponseException(Response response)
     {
-      super("HTTP request failed with code: " + response.code());
+      super("HTTP " + response.code());
       this.response = response;
       this.customMessage = null;
     }
 
     public ResponseException(Response response, String customMessage)
     {
-      super("HTTP request failed with code: " + response.code() + " - " + customMessage);
+      super("HTTP " + response.code() + " - " + customMessage);
       this.response = response;
       this.customMessage = customMessage;
     }
