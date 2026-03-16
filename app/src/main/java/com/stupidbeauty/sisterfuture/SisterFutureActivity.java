@@ -300,7 +300,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
 
     mIat.setParameter(SpeechConstant.AUDIO_FORMAT, "wav");
-    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "\/msc\/asr.wav");
+    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
 
     return result;
   }
@@ -1031,9 +1031,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     AsyncHttpServer server=new AsyncHttpServer();
     CommitTextCallback commitTextCallback=new CommitTextCallback();
-    server.get("\/commitText\/", commitTextCallback);
+    server.get("/commitText/", commitTextCallback);
     PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback();
-    server.get("\/phoneInformation\/", phoneInformationCallback);
+    server.get("/phoneInformation/", phoneInformationCallback);
     server.listen(LanServicePort);
   }
 
@@ -1088,7 +1088,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
-      promptBuilder.append("\n\/no_think\n");
+      promptBuilder.append("\n/no_think\n");
     }
     return promptBuilder.toString();
   }
