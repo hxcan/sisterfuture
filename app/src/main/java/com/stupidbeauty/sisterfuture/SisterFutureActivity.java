@@ -158,6 +158,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
+  // 🔥 #4657 死循环救援模式标记
+  private boolean isDeadlockRescueMode = false;
+
 	@Override
   public void onInit(int arg0)
   {
@@ -368,6 +371,35 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
     contextManager.addUserMessage(message);
     
+    // 🔥 #4657 检查是否处于死循环救援模式
+    if (isDeadlockRescueMode) {
+      Log.d(TAG, "🔥 处于死循环救援模式，处理 API Key 输入");
+      guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
+        @Override
+        public void onResponse(String response) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(response);
+            // 如果响应包含成功标记，退出救援模式
+            if (response.contains("✅")) {
+              Log.i(TAG, "✅ 备用接入点配置成功，退出救援模式");
+              isDeadlockRescueMode = false;
+            }
+          });
+        }
+
+        @Override
+        public void onError(String error) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          });
+        }
+      });
+      return;
+    }
+    
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
       guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
@@ -486,6 +518,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // 🔥 #4657 请求前检查是否超过阈值
     if (modelAccessPointManager.checkFailureThreshold()) {
       Log.w(TAG, "🔥 连续失败超过阈值，触发备用接入点向导");
+      isDeadlockRescueMode = true; // ✅ 设置救援模式
       runOnUiThread(() -> {
         Toast.makeText(SisterFutureActivity.this, 
           "⚠️ 所有接入点连续失败，正在启动备用接入点配置向导...", 
