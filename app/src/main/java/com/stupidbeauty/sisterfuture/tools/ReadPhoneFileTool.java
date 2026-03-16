@@ -1,4 +1,4 @@
-package com.stupidbeatura.sisterfuture.tools;
+package com.stupidbeauty.sisterfuture.tools;
 
 import android.util.Base64;
 
