@@ -4,6 +4,8 @@ import com.stupidbeauty.sisterfuture.ContextManager;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
+import com.stupidbeauty.sisterfuture.tools.ListPhoneDirectoryTool;
+import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
 import android.content.Context;
 
 
