@@ -113,6 +113,11 @@ android
         noCompress "tflite"
     }
 
+    // 抑制 D8 编译器对第三方库的警告
+    dexOptions {
+        additionalParameters = ['--no-warnings']
+    }
+
 }
 
 // # https://stackoverflow.com/questions/65380359/lomboks-access-to-jdk-compilers-internal-packages-incompatible-with-java-16
