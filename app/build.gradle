@@ -91,8 +91,8 @@ android
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 22  // 百度地图 SDK 要求最低 API 22
     targetSdkVersion 28
-    versionCode 932
-    versionName "2026.3.5"
+    versionCode 933
+    versionName "2026.3.16"
     multiDexEnabled true
     
     // 配置支持的 SO 库架构
