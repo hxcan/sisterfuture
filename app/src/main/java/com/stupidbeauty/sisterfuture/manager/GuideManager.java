@@ -103,6 +103,47 @@ public class GuideManager {
     }
 
     /**
+     * 🔥 #4657 新增：在接入点死循环时触发添加新接入点的向导
+     * 不删除现有接入点，只是引导用户添加新的备用接入点
+     * @param callback 回调接口
+     */
+    public void showAddAccessPointGuideForDeadlock(ChatCallback callback) {
+        int existingCount = modelAccessPointManager.getAllAccessPoints().size();
+        
+        callback.onResponse(
+            "⚠️ **检测到所有接入点连续失败！**\n\n" +
+            "当前已配置的 " + existingCount + " 个接入点可能暂时不可用（例如：欠费、云端算力不足等）。\n\n" +
+            "💡 **建议操作**：\n" +
+            "1️⃣ 输入新的 API Key 添加备用接入点\n" +
+            "2️⃣ 系统会在新旧接入点间自动切换\n" +
+            "3️⃣ 原有接入点保留，恢复后可继续使用\n\n" +
+            "📝 **请直接粘贴新的 API Key**（sk- 开头，或 cp_/plan_/sf_ 前缀）：\n\n" +
+            "✨ 准备好了吗？"
+        );
+    }
+
+    /**
+     * 🔥 #4657 处理死循环救援时的 API Key 输入
+     * @param apiKey 用户输入的新 API Key
+     * @param callback 回调接口
+     */
+    public void handleDeadlockRescueApiKey(String apiKey, ChatCallback callback) {
+        if (isValidApiKey(apiKey)) {
+            // 创建新的备用接入点
+            createBackupAccessPoints(apiKey, callback);
+        } else {
+            callback.onResponse(
+                "❌ **无效的 API Key 格式**\n\n" +
+                "📝 您输入的密钥长度：" + apiKey.length() + " 字符 (有效范围：20-64)\n\n" +
+                "✅ **有效格式**：\n" +
+                "- 百炼标准：`sk-` 开头\n" +
+                "- Code Plan：`cp_` / `plan_` / `sf_` 开头\n\n" +
+                "请重新输入正确的 API Key："
+            );
+        }
+    }
+
+    /**
      * 自动创建两个接入点：百炼 397B + CodePlan
      * 系统会自动切换使用有效的接入点
      */
@@ -169,6 +210,82 @@ public class GuideManager {
             });
 
             callback.onResponse("🔧 正在配置双接入点，请稍候...");
+
+        } catch (Exception e) {
+            callback.onError("❌ 处理过程中发生错误：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 🔥 #4657 创建备用接入点（不删除现有接入点）
+     */
+    private void createBackupAccessPoints(String apiKey, ChatCallback callback) {
+        try {
+            AddModelAccessPointTool addTool = (AddModelAccessPointTool) toolManager.getTool("add_model_access_point");
+            if (addTool == null) {
+                callback.onError("❌ 工具未找到：add_model_access_point");
+                return;
+            }
+
+            // 1. 创建百炼标准接入点 (397B 大模型) - 备用
+            JSONObject args1 = new JSONObject();
+            args1.put("api_key", apiKey);
+            args1.put("name", "Qwen-百炼标准 -397B-备用");
+            args1.put("base_url", DASHSCOPE_BASE_URL);
+            args1.put("endpoint", DASHSCOPE_ENDPOINT);
+            args1.put("model_name", DASHSCOPE_MODEL);
+
+            // 2. 创建 Code Plan 接入点 - 备用
+            JSONObject args2 = new JSONObject();
+            args2.put("api_key", apiKey);
+            args2.put("name", "Qwen-CodePlan-备用");
+            args2.put("base_url", CODEPLAN_BASE_URL);
+            args2.put("endpoint", CODEPLAN_ENDPOINT);
+            args2.put("model_name", CODEPLAN_MODEL);
+
+            int existingCount = modelAccessPointManager.getAllAccessPoints().size();
+
+            // 异步执行：先创建百炼接入点
+            toolManager.executeToolAsync("add_model_access_point", args1, new Tool.OnResultCallback() {
+                @Override
+                public void onResult(JSONObject result1) {
+                    // 百炼接入点创建成功，继续创建 Code Plan 接入点
+                    toolManager.executeToolAsync("add_model_access_point", args2, new Tool.OnResultCallback() {
+                        @Override
+                        public void onResult(JSONObject result2) {
+                            // ✅ 两个备用接入点都创建成功
+                            callback.onResponse(
+                                "✅ **备用接入点配置成功！**\n\n" +
+                                "🔹 已添加两个新接入点：\n" +
+                                "  1. Qwen-百炼标准 -397B-备用\n" +
+                                "  2. Qwen-CodePlan-备用\n\n" +
+                                "📊 当前共有 " + (existingCount + 2) + " 个接入点\n" +
+                                "🚀 系统会自动在新旧接入点间切换，优先使用可用的接入点\n\n" +
+                                "💡 原有接入点已保留，恢复后可继续使用！"
+                            );
+                        }
+
+                        @Override
+                        public void onError(Exception e) {
+                            // Code Plan 创建失败，但百炼已成功
+                            callback.onResponse(
+                                "⚠️ 部分配置成功：\n" +
+                                "✅ Qwen-百炼标准 -397B-备用 已创建\n" +
+                                "❌ Qwen-CodePlan-备用 配置失败：" + e.getMessage() + "\n\n" +
+                                "仍可正常使用新创建的百炼接入点。"
+                            );
+                        }
+                    });
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    // 百炼接入点创建失败
+                    callback.onError("❌ 备用接入点配置失败：" + e.getMessage());
+                }
+            });
+
+            callback.onResponse("🔧 正在配置备用接入点，请稍候...");
 
         } catch (Exception e) {
             callback.onError("❌ 处理过程中发生错误：" + e.getMessage());
