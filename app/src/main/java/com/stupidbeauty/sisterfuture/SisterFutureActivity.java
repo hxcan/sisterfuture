@@ -311,10 +311,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     return result;
   }
   
-  /**
-   * 显示历史消息记录（重构版）
-   * 修复：#3741 #3743 - 启动时正确显示工具调用和工具回复消息
-  **/
   private void displayExistingContext()
   {
     List<JSONObject> history = contextManager.getHistory();
@@ -325,23 +321,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       String toolCallId = msg.optString("tool_call_id");
       JSONArray toolCalls = msg.optJSONArray("tool_calls");
 
-      // 1. 工具回复消息 (tool_call_result) - #3743
       if ("tool".equals(role) && !toolCallId.isEmpty())
       {
         String toolName = msg.optString("name", "unknown_tool");
         String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
         messageAdapter.addMessage(new MessageItem(displayText, MessageType.TOOL_CALL_RESULT));
-        Log.d(TAG, "✅ 启动时加载工具回复消息：ID=" + toolCallId + ", Name=" + toolName);
       }
-      // 2. 用户消息
       else if ("user".equals(role) && !content.isEmpty())
       {
         messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
       }
-      // 3. AI 消息（含工具调用）- #3741
       else if ("assistant".equals(role))
       {
-        // 3.1 包含工具调用的 AI 消息
         if (toolCalls != null && toolCalls.length() > 0)
         {
           StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
@@ -363,16 +354,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             }
           }
           messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
-          Log.d(TAG, "✅ 启动时加载工具调用消息，数量=" + toolCalls.length());
         }
-        // 3.2 普通 AI 文本消息
         else if (!content.isEmpty())
         {
           messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
         }
       }
     }
-    Log.d(TAG, "✅ 历史消息加载完成，总数=" + history.size());
+    Log.d(TAG, "历史消息加载完成，总数=" + history.size());
   }
 
   public void sendMessageToSister(String message)
@@ -385,7 +374,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
     contextManager.addUserMessage(message);
     
-    // 🔥 #4657 死循环救援模式：优先处理 API Key 输入
     if (isDeadlockRescueMode) {
       guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
         @Override
@@ -394,7 +382,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
             scrollToBottom();
             ttsSayReply(response);
-            // 救援成功后退出救援模式
             if (response.contains("✅")) {
               isDeadlockRescueMode = false;
             }
@@ -412,7 +399,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       return;
     }
     
-    // 正常模式：检查接入点列表是否为空
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
       guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
@@ -455,7 +441,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     recognizeResulttextView.setText("");
     
-    // 🔥 #4657 死循环救援模式：优先处理 API Key 输入
     if (isDeadlockRescueMode) {
       guideManager.handleDeadlockRescueApiKey(voiceRecognizeResultString, new GuideManager.ChatCallback() {
         @Override
@@ -464,7 +449,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
             scrollToBottom();
             ttsSayReply(response);
-            // 救援成功后退出救援模式
             if (response.contains("✅")) {
               isDeadlockRescueMode = false;
             }
@@ -482,7 +466,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       return;
     }
     
-    // 正常模式：检查接入点列表是否为空
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
       guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback()
@@ -554,14 +537,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void sendChatRequestTongYi()
   {
-    Log.d(TAG, CodePosition.newInstance().toString());
+    Log.d(TAG, "开始发送请求，当前接入点：" + modelAccessPointManager.getCurrentAccessPoint().getName());
 
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
       accumulatedAnswer.setLength(0);
       showThinkingOverlay();
 
-      String currentApName = modelAccessPointManager.getCurrentAccessPoint().getName();
       JSONArray historyArray = contextManager.getMessagesArray();
       JSONArray messagesArray = new JSONArray();
 
@@ -575,27 +557,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
         for (int i = 0; i < historyArray.length(); i++)
         {
-          String messageContent = historyArray.getJSONObject(i).optString("content");
-          String messageRole = historyArray.getJSONObject(i).optString("role");
-          String toolCAllId = historyArray.getJSONObject(i).optString("tool_call_id");
-
-          if (messageRole.equals("assistant") || messageRole.equals("user"))
-          {
-            String[] parts = messageContent.split("\n");
-            if (parts.length >1)
-            {
-              String maxWidthStr = parts[0];
-              messageContent = maxWidthStr + " ...";
-            }
-          }
-
-          if ((messageContent.isEmpty()) && (messageRole.equals("assistant")) )
-          {
-            messageContent = historyArray.getJSONObject(i).toString();
-          }
-
-          Log.d(TAG, CodePosition.newInstance().toString() + ", adding message with role: " + messageRole + ", content: " + messageContent + ", tool call id: " + toolCAllId);
-
           messagesArray.put(historyArray.getJSONObject(i));
         }
       }
@@ -628,65 +589,61 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         @Override
         public void onError(Exception error)
         {
-          Log.e(TAG, CodePosition.newInstance().toString() + ", Error sending request to TongYi", error);
+          Log.e(TAG, "请求出错：" + error.getClass().getSimpleName() + " - " + error.getMessage());
           hideThinkingOverlay();
 
           boolean isAccessPointUnavailable = false;
 
           if (error instanceof TongYiClient.AccessPointUnavailableException)
           {
-            Log.d(TAG, "接入点不可用，正在自动重试...\n");
+            Log.d(TAG, "接入点不可用异常，准备切换");
             isAccessPointUnavailable = true;
           }
           else if (error instanceof TongYiClient.ResponseException)
           {
             TongYiClient.ResponseException responseException = (TongYiClient.ResponseException) error;
             Response response = responseException.getResponse();
+            if (response != null) {
+              int statusCode = response.code();
+              Log.d(TAG, "HTTP 响应异常，状态码：" + statusCode);
+              
+              // 401/403/500/503 等表示接入点不可用，应该切换
+              if (statusCode == 401 || statusCode == 403 || statusCode == 500 || statusCode == 503) {
+                Log.d(TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换");
+                isAccessPointUnavailable = true;
+              }
+            }
+            
             try
             {
               String errorBody = response.body().string();
-              Log.e(TAG, "Error body: " + errorBody);
+              Log.e(TAG, "HTTP " + (response != null ? response.code() : 0) + ": " + errorBody);
               
               if (isHtmlResponse(errorBody))
               {
-                Log.e(TAG, "API 返回 HTML 页面而非 JSON，跳过 Gson 解析，防止崩溃。");
+                Log.e(TAG, "API 返回 HTML 页面，防止崩溃");
                 runOnUiThread(() ->
                 {
-                  messageAdapter.addMessage(new MessageItem("API 服务异常：返回了 HTML 页面而非 JSON。请检查接入点配置。", MessageType.AI));
+                  messageAdapter.addMessage(new MessageItem("API 返回 HTML 页面", MessageType.AI));
                   scrollToBottom();
                 });
                 return;
               }
-              
-              TongYiResponse errResp = new Gson().fromJson(errorBody, TongYiResponse.class);
-              if (errResp != null && errResp.getError() != null)
-              {
-                if (isContextLengthError(errResp.getError().getMessage()))
-                {
-                  contextManager.decreaseMaxRounds();
-                }
-              }
             }
             catch (IOException e)
             {
-              Log.e(TAG, "Error reading response body: " + e.getMessage());
-            }
-            catch (IllegalStateException e)
-            {
-              Log.e(TAG, "Error reading response body: " + e.getMessage());
+              Log.e(TAG, "读取错误体失败：" + e.getMessage());
             }
           }
           else
           {
-            Log.e(TAG, "未知异常，不触发重试：" + error.getMessage());
+            Log.e(TAG, "未知异常，不触发切换：" + error.getMessage());
           }
 
-          // 🔥 #4657 接入点死循环救援 - 熔断机制
           if (isAccessPointUnavailable)
           {
             consecutiveFailures++;
             
-            // 动态计算阈值：接入点数量 × 3
             int totalAccessPoints = modelAccessPointManager.getAllAccessPoints().size();
             int failureThreshold = totalAccessPoints * 3;
             
@@ -694,21 +651,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             
             if (consecutiveFailures >= failureThreshold)
             {
-              // 🔥 触发熔断：启动添加备用接入点的向导
-              Log.w(TAG, "⚠️ 熔断触发！所有接入点均已失败 " + consecutiveFailures + " 次，启动救援向导...");
+              Log.w(TAG, "⚠️ 熔断触发！失败 " + consecutiveFailures + " 次 >= 阈值 " + failureThreshold);
               
               runOnUiThread(() ->
               {
                 Toast.makeText(SisterFutureActivity.this, 
-                    "⚠️ 所有接入点均已失败 " + consecutiveFailures + " 次（阈值：" + failureThreshold + "）\n" +
-                    "正在启动备用接入点配置向导...", 
+                    "⚠️ 所有接入点均已失败 " + consecutiveFailures + " 次\n正在启动备用接入点配置向导...", 
                     Toast.LENGTH_LONG).show();
                 
-                // 进入救援模式
                 isDeadlockRescueMode = true;
                 consecutiveFailures = 0;
                 
-                // 触发向导
                 guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
                   @Override
                   public void onResponse(String message) {
@@ -725,16 +678,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 });
               });
               
-              return; // 🔥 中断递归调用，打破死循环
+              return;
             }
             
-            // 未达到阈值，继续切换接入点重试
+            Log.d(TAG, "未达到阈值，切换接入点并重试...");
             modelAccessPointManager.reportCurrentAccessPointUnavailable();
             sendChatRequestTongYi();
           }
           else
           {
-            // 成功响应，重置计数器
+            Log.d(TAG, "非接入点不可用错误，重置计数器");
             consecutiveFailures = 0;
           }
         }
@@ -746,7 +699,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     else
     {
-      Log.w(TAG, "Voice recognition result is empty or null.\n");
+      Log.w(TAG, "语音识别结果为空");
     }
   }
 
@@ -767,7 +720,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   protected void parseTongYiResponse(String jsonString)
   {
-    Log.d(TAG, "JSON Answer: " + jsonString);
+    Log.d(TAG, "收到响应");
     try
     {
       TongYiResponse response = new Gson().fromJson(jsonString, TongYiResponse.class);
@@ -795,7 +748,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       if (response == null || response.getChoices() == null || response.getChoices().isEmpty())
       {
-        Log.e(TAG, "Parsed response is null or choices empty");
+        Log.e(TAG, "响应为空或 choices 为空");
         return;
       }
 
@@ -817,7 +770,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
             if (finalCalls == null || finalCalls.isEmpty())
             {
-              Log.w(TAG, "No valid tool calls generated, skipping execution.");
+              Log.w(TAG, "没有有效的工具调用，跳过执行");
               return;
             }
 
@@ -837,7 +790,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
               if (toolName == null || toolCallId == null)
               {
-                Log.w(TAG, "Invalid tool call: name or id is null");
+                Log.w(TAG, "工具调用无效：name 或 id 为空");
                 continue;
               }
 
@@ -877,7 +830,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                       }
                       catch (Exception e)
                       {
-                        Log.e(TAG, "Failed to wrap async result", e);
+                        Log.e(TAG, "封装异步结果失败", e);
                       }
 
                       if (pendingResults.size() == toolCallsArray.length())
@@ -890,7 +843,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   @Override
                   public void onError(Exception e)
                   {
-                    Log.e(TAG, "Async tool failed: " + toolName, e);
+                    Log.e(TAG, "异步工具失败：" + toolName, e);
                     postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
                   }
                 });
@@ -956,7 +909,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           }
           catch (Exception e)
           {
-            Log.e(TAG, "Error handling tool_calls", e);
+            Log.e(TAG, "处理工具调用失败", e);
           }
         });
         return;
@@ -996,7 +949,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     catch (Exception e)
     {
-      Log.e(TAG, "Error parsing JSON response: " + e.getMessage());
+      Log.e(TAG, "解析 JSON 响应失败：" + e.getMessage());
     }
   }
 
@@ -1020,7 +973,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             JSONObject result = wrapper.getJSONObject("result");
 
             contextManager.addToolMessage(id, name, result.toString());
-            Log.d(TAG, "✅ Tool message added: ID=" + id + ", Name=" + name);
+            Log.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
             messageAdapter.addMessage(
               new MessageItem(
                 "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
@@ -1032,36 +985,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
         clearAccumulatedToolCalls();
 
-        int messagesAmount = contextManager.getHistory().size();
-        Log.d(TAG, "Final messages array before sending request: amount: " + messagesAmount);
-        int startEndMessagsOutputAmount = 5;
-        boolean outputDotsDone = false;
-
-        for (int i = 0; i < messagesAmount; i++)
-        {
-          if ((i >= startEndMessagsOutputAmount) && (i < (messagesAmount-startEndMessagsOutputAmount) ))
-          {
-            if (!outputDotsDone)
-            {
-              Log.d(TAG, "  [...] ");
-              outputDotsDone = true;
-            }
-          }
-          else
-          {
-            JSONObject msg = contextManager.getHistory().get(i);
-            if (msg!=null)
-            {
-              Log.d(TAG, "  [" + i + "] " + msg.toString(2));
-            }
-          }
-        }
-
         sendChatRequestTongYi();
       }
       catch (Exception e)
       {
-        Log.e(TAG, "Error in postProcessToolResults", e);
+        Log.e(TAG, "postProcessToolResults 出错", e);
       }
     });
   }
@@ -1069,12 +997,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private boolean isContextLengthError(String errorMessage)
   {
     if (errorMessage == null) return false;
-    // 根据你日志里的实际错误信息匹配
     return errorMessage.contains("Range of input length should be") ||
            errorMessage.contains("context length") ||
            errorMessage.contains("exceeds the available context size") ||
            errorMessage.contains("exceeds maximum context length") ||
-           errorMessage.contains("context window exceeds limit");  // ✅ MiniMax 错误
+           errorMessage.contains("context window exceeds limit");
   }
 
   private void scrollToBottom()
@@ -1245,7 +1172,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
         catch (Exception e)
         {
-          Log.e("SisterFutureActivity", "Failed to extract description for tool: " + name, e);
+          Log.e("SisterFutureActivity", "提取工具描述失败：" + name, e);
         }
 
         promptBuilder.append("- ").append(name).append(":").append(description).append("\n");
@@ -1281,13 +1208,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     connectSignals();
     displayExistingContext();
     
-    // #4713 冷启动时自动滚动到聊天记录最底部
     if (savedInstanceState == null)
     {
       articleListmyRecyclerView.post(() -> 
       {
         scrollToBottom();
-        Log.d(TAG, "#4713 冷启动完成，已自动滚动到最新消息");
+        Log.d(TAG, "冷启动完成，已自动滚动到最新消息");
       });
     }
 	}
@@ -1309,10 +1235,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     memoryManager = new MemoryManager(this);
   }
 
-  /**
-   * 初始化工具管理器
-   * 重构：委托给 ToolRegistry 集中管理工具注册 (#4670)
-  **/
   private void initTools()
   {
     toolManager = new ToolManager();
@@ -1374,12 +1296,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         
       for(String permissionString: articleInfoArrayList)
       {
-        Log.d(TAG, CodePosition.newInstance().toString() + ", permission: " + permissionString);
         result=(checkSelfPermission(permissionString) == PackageManager.PERMISSION_GRANTED);
           
         if (!result)
         {
-          Log.d(TAG, CodePosition.newInstance().toString() + ", permission: " + permissionString + ", no permission");
+          Log.d(TAG, "权限不足：" + permissionString);
           break;
         }
       }
@@ -1398,9 +1319,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       if ( shouldShowRequestPermissionRationale(PERMISSION_STORAGE)  || shouldShowRequestPermissionRationale(PERMISSION_RECORD_AUDIO) || shouldShowRequestPermissionRationale(PERMISSION_FINE_LOCATIN)  || shouldShowRequestPermissionRationale(PERMISSION_INSTALL_PACKAGE))
       {
-        Toast.makeText(this, "Camera AND storage permission are required for this demo", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "需要存储和录音权限", Toast.LENGTH_LONG).show();
       }
-      Log.d(TAG, CodePosition.newInstance().toString() );
 
       requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN}, PERMISSIONS_REQUEST);
     }
