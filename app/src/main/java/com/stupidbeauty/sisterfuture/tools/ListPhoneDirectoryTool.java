@@ -1,5 +1,7 @@
 package com.stupidbeauty.sisterfuture.tools;
 
+import com.stupidbeauty.sisterfuture.tool.ToolParams;
+import com.stupidbeauty.sisterfuture.tool.ToolResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
