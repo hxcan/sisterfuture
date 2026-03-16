@@ -120,13 +120,8 @@ public class TongYiClient
         {
           requestBody.put("tools", toolsArray);
           requestBody.put("tool_choice", "auto");
-
-          // Log tool definitions for debugging
-          Log.d(TAG, "Sending tools definition (filtered by shouldInclude):\n" + toolsArray.toString(2));
         }
         }
-
-
 
         RequestBody body = RequestBody.create
         (
@@ -134,29 +129,25 @@ public class TongYiClient
           requestBody.toString()
         );
 
-        // DEBUG: Construct URL first for logging
+        // Construct URL
         String baseUrl = accessPointManager.getCurrentBaseUrl();
         String endpoint = accessPointManager.getCurrentChatEndpoint();
         String fullUrl = baseUrl + endpoint;
         
-        // Debug logging: Check for common URL concatenation issues
-        Log.d(TAG, "=== REQUEST DEBUG INFO ===");
+        // Debug logging
         Log.d(TAG, "Base URL: " + baseUrl);
         Log.d(TAG, "Endpoint: " + endpoint);
-        Log.d(TAG, "Full URL (concatenated): " + fullUrl);
+        Log.d(TAG, "Full URL: " + fullUrl);
         Log.d(TAG, "Request body length: " + requestBody.toString().length());
-        Log.d(TAG, "Raw JSON Body:\n" + requestBody.toString(2));
         Log.d(TAG, "Authorization Header: Bearer " + effectiveApiKey);
-        Log.d(TAG, "=========================");
         
-        // Potential issue check: trailing slash in base_url?
+        // Check for URL issues
         if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
-            Log.w(TAG, "⚠️ WARNING: Double slash detected! baseUrl ends with '/' and endpoint starts with '/'");
+            Log.w(TAG, "⚠️ WARNING: Double slash in URL!");
         }
         
-        // Potential issue check: missing slash in endpoint?
         if (!endpoint.startsWith("/")) {
-            Log.w(TAG, "⚠️ WARNING: Endpoint does not start with '/'. May cause wrong path.");
+            Log.w(TAG, "⚠️ WARNING: Endpoint does not start with '/'");
         }
 
         Request request = new Request.Builder()
@@ -181,7 +172,7 @@ public class TongYiClient
           {
             if (!response.isSuccessful())
             {
-              // FIX: Read and log complete error response body before creating exceptions
+              // Read error response body
               String errorBody = "";
               try {
                 errorBody = response.body().string();
@@ -199,7 +190,6 @@ public class TongYiClient
               ResponseBody responseBody = response.body();
               if (responseBody != null)
               {
-                // 正常处理 SSE 流，HTML 检测在流处理内部进行
                 processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete);
               }
             }
@@ -230,15 +220,10 @@ public class TongYiClient
     }
     catch (IllegalStateException e)
     {
-      // Reader closed (like response body already read), expected scenario
       Log.e(TAG, "Reader closed, cannot read error content: " + e.getMessage());
     }
   }
 
-  /**
-   * 检测响应内容是否为 HTML 页面
-   * 用于防止 API 返回错误页面（如登录页、404 页）时客户端解析崩溃
-   */
   private static boolean isHtmlResponse(String content)
   {
     if (content == null || content.isEmpty())
@@ -267,13 +252,11 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
     {
       Log.d(TAG, CodePosition.newInstance().toString() + ", line: " + line);
 
-      // 首次读取时检测是否为 HTML 响应
       if (!htmlChecked)
       {
         htmlChecked = true;
         firstLineBuffer.append(line);
         
-        // 检查前 500 字符是否包含 HTML 标记
         String preview = firstLineBuffer.length() > 500 ? firstLineBuffer.substring(0, 500) : firstLineBuffer.toString();
         if (isHtmlResponse(preview))
         {
@@ -304,7 +287,6 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
       }
     }
 
-    // Only trigger completion callback after [DONE] is received
     if (isDone && onStreamComplete != null)
     {
       onStreamComplete.run();
