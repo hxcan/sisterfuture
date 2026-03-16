@@ -15,6 +15,8 @@ import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.stupidbeauty.sisterfuture.tool.Tool;
+
 /**
  * 手机目录扫描工具。
  * 用于自动化扫描手机外置存储目录，返回文件列表。
@@ -23,7 +25,7 @@ import java.util.List;
  * @version 1.1
  * @since 2026-03-16
  */
-public class ListPhoneDirectoryTool
+public class ListPhoneDirectoryTool implements Tool
 {
     private final Context context;
 
@@ -55,7 +57,7 @@ public class ListPhoneDirectoryTool
             // path 参数（必填）
             properties.put("path", new JSONObject()
                 .put("type", "string")
-                .put("description", "要扫描的目录路径"));
+                .put("description", "要扫描的目录路径，如 /sdcard/Download/"));
             
             // recursive 参数（可选）
             properties.put("recursive", new JSONObject()
@@ -82,12 +84,14 @@ public class ListPhoneDirectoryTool
             
             filterDef.put("properties", filterProperties);
             properties.put("filter", filterDef);
-            properties.put("required", new JSONArray(new String[]{"path"}));
+            
+            parameters.put("properties", properties);
+            parameters.put("required", new JSONArray(new String[]{"path"}));
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         }
-        catch (JSONException e)
+        catch (Exception e)
         {
             return new JSONObject();
         }
@@ -333,7 +337,7 @@ public class ListPhoneDirectoryTool
                 {
                     continue;
                 }
-                
+
                 directories.add(FileEntry.fromFile(file));
 
                 // 递归扫描子目录
