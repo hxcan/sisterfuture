@@ -24,7 +24,6 @@ import butterknife.OnClick;
 import com.iflytek.cloud.SpeechRecognizer;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
@@ -34,7 +33,6 @@ import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
 import com.stupidbeauty.sisterfuture.tool.Tool;
 import com.stupidbeauty.sisterfuture.bean.ToolCall;
 import com.stupidbeauty.sisterfuture.bean.Function;
-import androidx.recyclerview.widget.RecyclerView;
 import butterknife.ButterKnife;
 import com.stupidbeauty.sisterfuture.R;
 import android.view.KeyEvent;
@@ -46,26 +44,20 @@ import android.widget.RadioGroup;
 import net.tatans.tensorflowtts.utils.ThreadPoolManager;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import net.tatans.tensorflowtts.tts.TtsManager;
-import org.json.JSONObject;
-import org.json.JSONArray;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
-import com.stupidbeauty.codeposition.CodePosition;
-import java.io.FileDescriptor;
+import java.util.Map;
 import java.io.FileInputStream;
 import android.Manifest;
-
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.app.WallpaperManager;
 import android.media.MediaScannerConnection;
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -77,14 +69,8 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.LocaleList;
 import android.os.PowerManager;
-import com.stupidbeauty.codeposition.CodePosition;
-import java.io.FileDescriptor;
-import android.os.Build;
-import android.os.Bundle;
-import android.os.Environment;
 import android.os.Vibrator;
 import android.speech.tts.TextToSpeech;
-import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
@@ -95,26 +81,20 @@ import android.widget.Toast;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.VolleyError;
-import com.google.gson.Gson;
 import com.stupidbeauty.msclearnfootball.VoiceRecognizeResult;
 import com.iflytek.cloud.ErrorCode;
 import com.iflytek.cloud.RecognizerListener;
 import com.iflytek.cloud.RecognizerResult;
 import com.iflytek.cloud.SpeechConstant;
 import com.iflytek.cloud.SpeechError;
-import com.iflytek.cloud.SpeechRecognizer;
 import com.iflytek.cloud.SpeechUtility;
 import com.stupidbeauty.sisterfuture.network.TongYiClient;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HashMap;
-import java.util.Map;
 import butterknife.BindView;
-import butterknife.ButterKnife;
 import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
 import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
@@ -177,6 +157,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
+
+  // 🔥 #4657 接入点死循环救援 - 熔断机制字段
+  private int consecutiveFailures = 0;
+  
+  // 🔥 #4657 死循环救援状态标记
+  private boolean isDeadlockRescueMode = false;
 
 	@Override
   public void onInit(int arg0)
@@ -398,7 +384,64 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
     contextManager.addUserMessage(message);
-    sendChatRequest();
+    
+    // 🔥 #4657 死循环救援模式：优先处理 API Key 输入
+    if (isDeadlockRescueMode) {
+      guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
+        @Override
+        public void onResponse(String response) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(response);
+            // 救援成功后退出救援模式
+            if (response.contains("✅")) {
+              isDeadlockRescueMode = false;
+            }
+          });
+        }
+
+        @Override
+        public void onError(String error) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          });
+        }
+      });
+      return;
+    }
+    
+    // 正常模式：检查接入点列表是否为空
+    if (guideManager != null && guideManager.isEmptyAccessPointList())
+    {
+      guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
+      {
+        @Override
+        public void onResponse(String message)
+        {
+          runOnUiThread(() ->
+          {
+            messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(message);
+          });
+        }
+
+        @Override
+        public void onError(String error)
+        {
+          runOnUiThread(() ->
+          {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          });
+        }
+      });
+      return;
+    }
+
+    sendChatRequestTongYi();
   }
   
   @OnClick(R.id.sendButtonn2)
@@ -412,6 +455,34 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     recognizeResulttextView.setText("");
     
+    // 🔥 #4657 死循环救援模式：优先处理 API Key 输入
+    if (isDeadlockRescueMode) {
+      guideManager.handleDeadlockRescueApiKey(voiceRecognizeResultString, new GuideManager.ChatCallback() {
+        @Override
+        public void onResponse(String response) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(response);
+            // 救援成功后退出救援模式
+            if (response.contains("✅")) {
+              isDeadlockRescueMode = false;
+            }
+          });
+        }
+
+        @Override
+        public void onError(String error) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          });
+        }
+      });
+      return;
+    }
+    
+    // 正常模式：检查接入点列表是否为空
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
       guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback()
@@ -610,9 +681,61 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             Log.e(TAG, "未知异常，不触发重试：" + error.getMessage());
           }
 
+          // 🔥 #4657 接入点死循环救援 - 熔断机制
           if (isAccessPointUnavailable)
           {
+            consecutiveFailures++;
+            
+            // 动态计算阈值：接入点数量 × 3
+            int totalAccessPoints = modelAccessPointManager.getAllAccessPoints().size();
+            int failureThreshold = totalAccessPoints * 3;
+            
+            Log.d(TAG, "🔥 连续失败次数：" + consecutiveFailures + " / " + failureThreshold + " (接入点数量：" + totalAccessPoints + ")");
+            
+            if (consecutiveFailures >= failureThreshold)
+            {
+              // 🔥 触发熔断：启动添加备用接入点的向导
+              Log.w(TAG, "⚠️ 熔断触发！所有接入点均已失败 " + consecutiveFailures + " 次，启动救援向导...");
+              
+              runOnUiThread(() ->
+              {
+                Toast.makeText(SisterFutureActivity.this, 
+                    "⚠️ 所有接入点均已失败 " + consecutiveFailures + " 次（阈值：" + failureThreshold + "）\n" +
+                    "正在启动备用接入点配置向导...", 
+                    Toast.LENGTH_LONG).show();
+                
+                // 进入救援模式
+                isDeadlockRescueMode = true;
+                consecutiveFailures = 0;
+                
+                // 触发向导
+                guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
+                  @Override
+                  public void onResponse(String message) {
+                    messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+                    scrollToBottom();
+                    ttsSayReply(message);
+                  }
+
+                  @Override
+                  public void onError(String error) {
+                    messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+                    scrollToBottom();
+                  }
+                });
+              });
+              
+              return; // 🔥 中断递归调用，打破死循环
+            }
+            
+            // 未达到阈值，继续切换接入点重试
+            modelAccessPointManager.reportCurrentAccessPointUnavailable();
             sendChatRequestTongYi();
+          }
+          else
+          {
+            // 成功响应，重置计数器
+            consecutiveFailures = 0;
           }
         }
       },
