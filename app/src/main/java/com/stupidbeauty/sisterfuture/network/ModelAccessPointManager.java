@@ -27,6 +27,10 @@ public class ModelAccessPointManager
   private static final String PERSISTENT_FILE_NAME = "model_access_points.json"; // 持久化存储文件名
   private Context context; // 上下文用于访问应用私有目录
   
+  // 🔥 #4657 接入点死循环修复 v2 - 连续失败计数器
+  private int consecutiveFailures = 0;
+  private static final int FAILURE_THRESHOLD_MULTIPLIER = 2; // 阈值 = 接入点数量 × 2
+  
   /** 
    * 获取当前接入点数量 
    * @return 接入点数量 
@@ -75,6 +79,7 @@ public class ModelAccessPointManager
     }
 
     this.currentAccessPointIndex = 0; // 默认指向第一个访问点
+    this.consecutiveFailures = 0; // 初始化计数器
   }
 
   /**
@@ -249,11 +254,30 @@ public class ModelAccessPointManager
   }
 
   /**
-   * 报告当前接入点不可用，切换到下一个
-   * 当到达末尾时循环回到第一个
+   * 🔥 #4657 检查连续失败次数是否超过阈值
+   * @return true 如果超过阈值，需要触发备用接入点向导
    */
-  public void reportCurrentAccessPointUnavailable()
+  public boolean checkFailureThreshold() {
+    int threshold = Math.max(1, accessPoints.size() * FAILURE_THRESHOLD_MULTIPLIER);
+    boolean exceeded = consecutiveFailures >= threshold;
+    
+    if (exceeded) {
+      Log.w(TAG, "🔥 连续失败次数超过阈值：" + consecutiveFailures + " >= " + threshold + " (接入点数量：" + accessPoints.size() + ")");
+    }
+    
+    return exceeded;
+  }
+
+  /**
+   * 🔥 #4657 报告当前接入点不可用，切换到下一个并增加计数器
+   * @return 当前连续失败次数
+   */
+  public int reportCurrentAccessPointUnavailable()
   {
+    // 递增计数器
+    consecutiveFailures++;
+    
+    // 切换到下一个接入点
     if (currentAccessPointIndex < accessPoints.size() - 1)
     {
       currentAccessPointIndex++;
@@ -262,7 +286,29 @@ public class ModelAccessPointManager
     {
       currentAccessPointIndex = 0; // 循环回到第一个访问点
     }
-    Log.i(TAG, "reportCurrentAccessPointUnavailable, access point index: " + currentAccessPointIndex);
+    
+    int threshold = Math.max(1, accessPoints.size() * FAILURE_THRESHOLD_MULTIPLIER);
+    Log.i(TAG, "🔥 接入点不可用，切换索引：" + currentAccessPointIndex + ", 连续失败次数：" + consecutiveFailures + "/" + threshold);
+    
+    return consecutiveFailures;
+  }
+
+  /**
+   * 🔥 #4657 重置连续失败计数器（请求成功时调用）
+   */
+  public void resetFailureCount() {
+    if (consecutiveFailures > 0) {
+      Log.i(TAG, "✅ 请求成功，重置连续失败计数器：" + consecutiveFailures + " → 0");
+      consecutiveFailures = 0;
+    }
+  }
+
+  /**
+   * 🔥 #4657 获取当前连续失败次数（用于调试）
+   * @return 连续失败次数
+   */
+  public int getConsecutiveFailures() {
+    return consecutiveFailures;
   }
 
   /**

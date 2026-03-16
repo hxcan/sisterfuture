@@ -104,6 +104,47 @@ public class GuideManager {
     }
 
     /**
+     * 🔥 #4657 在接入点死循环时触发添加新接入点的向导
+     * 不删除现有接入点，只是引导用户添加新的备用接入点
+     * @param callback 回调接口
+     */
+    public void showAddAccessPointGuideForDeadlock(ChatCallback callback) {
+        int existingCount = modelAccessPointManager.getAllAccessPoints().size();
+        
+        callback.onResponse(
+            "⚠️ **检测到所有接入点连续失败！**\n\n" +
+            "当前已配置的 " + existingCount + " 个接入点可能暂时不可用（例如：欠费、云端算力不足等）。\n\n" +
+            "💡 **建议操作**：\n" +
+            "1️⃣ 输入新的 API Key 添加备用接入点\n" +
+            "2️⃣ 系统会在新旧接入点间自动切换\n" +
+            "3️⃣ 原有接入点保留，恢复后可继续使用\n\n" +
+            "📝 **请直接粘贴新的 API Key**（sk- 开头，或 cp_/plan_/sf_ 前缀）：\n\n" +
+            "✨ 准备好了吗？"
+        );
+    }
+
+    /**
+     * 🔥 #4657 处理死循环救援时的 API Key 输入
+     * @param apiKey 用户输入的新 API Key
+     * @param callback 回调接口
+     */
+    public void handleDeadlockRescueApiKey(String apiKey, ChatCallback callback) {
+        if (isValidApiKey(apiKey)) {
+            // 创建新的备用接入点（带"-备用"后缀）
+            createAccessPoints(apiKey, callback, "-备用");
+        } else {
+            callback.onResponse(
+                "❌ **无效的 API Key 格式**\n\n" +
+                "📝 您输入的密钥长度：" + apiKey.length() + " 字符 (有效范围：20-64)\n\n" +
+                "✅ **有效格式**：\n" +
+                "- 百炼标准：`sk-` 开头\n" +
+                "- Code Plan：`cp_` / `plan_` / `sf_` 开头\n\n" +
+                "请重新输入正确的 API Key："
+            );
+        }
+    }
+
+    /**
      * 统一方法：创建接入点（支持普通模式/备用模式）
      * 
      * @param apiKey API Key

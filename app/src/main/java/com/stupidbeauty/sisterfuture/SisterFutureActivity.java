@@ -158,6 +158,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
+  // 🔥 #4657 死循环救援模式标记
+  private boolean isDeadlockRescueMode = false;
+
 	@Override
   public void onInit(int arg0)
   {
@@ -368,6 +371,35 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
     contextManager.addUserMessage(message);
     
+    // 🔥 #4657 检查是否处于死循环救援模式
+    if (isDeadlockRescueMode) {
+      Log.d(TAG, "🔥 处于死循环救援模式，处理 API Key 输入");
+      guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
+        @Override
+        public void onResponse(String response) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(response);
+            // 如果响应包含成功标记，退出救援模式
+            if (response.contains("✅")) {
+              Log.i(TAG, "✅ 备用接入点配置成功，退出救援模式");
+              isDeadlockRescueMode = false;
+            }
+          });
+        }
+
+        @Override
+        public void onError(String error) {
+          runOnUiThread(() -> {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          });
+        }
+      });
+      return;
+    }
+    
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
       guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
@@ -483,6 +515,33 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     Log.d(TAG, "开始发送请求，当前接入点：" + modelAccessPointManager.getCurrentAccessPoint().getName());
 
+    // 🔥 #4657 请求前检查是否超过阈值
+    if (modelAccessPointManager.checkFailureThreshold()) {
+      Log.w(TAG, "🔥 连续失败超过阈值，触发备用接入点向导");
+      isDeadlockRescueMode = true; // ✅ 设置救援模式
+      runOnUiThread(() -> {
+        Toast.makeText(SisterFutureActivity.this, 
+          "⚠️ 所有接入点连续失败，正在启动备用接入点配置向导...", 
+          Toast.LENGTH_LONG).show();
+        
+        guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
+          @Override
+          public void onResponse(String message) {
+            messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(message);
+          }
+
+          @Override
+          public void onError(String error) {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          }
+        });
+      });
+      return; // 阻止继续请求
+    }
+
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
       accumulatedAnswer.setLength(0);
@@ -551,32 +610,25 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               int statusCode = response.code();
               Log.d(TAG, "HTTP 响应异常，状态码：" + statusCode);
               
-              // 401/403/500/503 等表示接入点不可用，应该切换
               if (statusCode == 401 || statusCode == 403 || statusCode == 500 || statusCode == 503) {
                 Log.d(TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换");
                 isAccessPointUnavailable = true;
               }
             }
             
-            try
+            // ✅ 修复：避免重复读取 ResponseBody（OkHttp 只能读取一次）
+            String errorBody = responseException.getCustomMessage();
+            Log.e(TAG, "HTTP " + (response != null ? response.code() : 0) + ": " + errorBody);
+            
+            if (isHtmlResponse(errorBody))
             {
-              String errorBody = response.body().string();
-              Log.e(TAG, "HTTP " + (response != null ? response.code() : 0) + ": " + errorBody);
-              
-              if (isHtmlResponse(errorBody))
+              Log.e(TAG, "API 返回 HTML 页面，防止崩溃");
+              runOnUiThread(() ->
               {
-                Log.e(TAG, "API 返回 HTML 页面，防止崩溃");
-                runOnUiThread(() ->
-                {
-                  messageAdapter.addMessage(new MessageItem("API 返回 HTML 页面", MessageType.AI));
-                  scrollToBottom();
-                });
-                return;
-              }
-            }
-            catch (IOException e)
-            {
-              Log.e(TAG, "读取错误体失败：" + e.getMessage());
+                messageAdapter.addMessage(new MessageItem("API 返回 HTML 页面", MessageType.AI));
+                scrollToBottom();
+              });
+              return;
             }
           }
           else
@@ -586,9 +638,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           if (isAccessPointUnavailable)
           {
-            Log.d(TAG, "切换接入点并重试...");
-            modelAccessPointManager.reportCurrentAccessPointUnavailable();
-            sendChatRequestTongYi();
+            int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
+            Log.d(TAG, "🔥 接入点不可用，切换并重试，当前失败次数：" + failures);
+            sendChatRequestTongYi(); // 继续重试
           }
         }
       },
@@ -844,6 +896,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           ttsSayReply(fullAnswer);
           contextManager.addAssistantMessage(fullAnswer);
           contextManager.increaseMaxRounds();
+          
+          // ✅ #4657 请求成功，重置连续失败计数器
+          modelAccessPointManager.resetFailureCount();
         });
       }
     }
