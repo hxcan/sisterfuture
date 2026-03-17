@@ -633,6 +633,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 String errorBody = responseException.getCustomMessage();
                 if (ContextLengthUtils.isContextLengthError(errorBody)) {
                   Log.w(TAG, "🔍 检测到上下文超长错误（HTTP 400），自动缩短上下文");
+                  
+                  // ✅ #4827 新增：在界面上显示错误提示
+                  runOnUiThread(() -> {
+                    messageAdapter.addMessage(new MessageItem("⚠️ 上下文超长，自动缩短后重试", MessageType.AI));
+                    scrollToBottom();
+                    ttsSayReply("上下文超长，自动缩短后重试");
+                  });
+                  
                   contextManager.decreaseMaxRounds();
                   sendChatRequestTongYi(); // 重试
                   return; // 直接返回，不继续处理
