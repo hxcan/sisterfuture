@@ -617,6 +617,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 Log.d(TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换");
                 isAccessPointUnavailable = true;
               }
+              // ✅ #4823 新增：HTTP 400 → 检查是否上下文超长
+              else if (statusCode == 400) {
+                String errorBody = responseException.getCustomMessage();
+                if (isContextLengthError(errorBody)) {
+                  Log.w(TAG, "🔍 检测到上下文超长错误（HTTP 400），自动缩短上下文");
+                  contextManager.decreaseMaxRounds();
+                  sendChatRequestTongYi(); // 重试
+                  return; // 直接返回，不继续处理
+                }
+              }
             }
             
             // ✅ 修复：避免重复读取 ResponseBody（OkHttp 只能读取一次）
