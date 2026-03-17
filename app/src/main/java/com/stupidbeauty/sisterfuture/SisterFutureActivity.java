@@ -6,6 +6,7 @@ import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.ContextManager;
 import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
+import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
 import android.os.Handler;
 import android.os.Looper;
 import com.stupidbeauty.codeposition.CodePosition;
@@ -620,7 +621,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               // ✅ #4823 新增：HTTP 400 → 检查是否上下文超长
               else if (statusCode == 400) {
                 String errorBody = responseException.getCustomMessage();
-                if (isContextLengthError(errorBody)) {
+                if (ContextLengthUtils.isContextLengthError(errorBody)) {
                   Log.w(TAG, "🔍 检测到上下文超长错误（HTTP 400），自动缩短上下文");
                   contextManager.decreaseMaxRounds();
                   sendChatRequestTongYi(); // 重试
@@ -693,7 +694,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       if (response != null && response.getError() != null)
       {
         String errorMessage = response.getError().getMessage();
-        boolean isContextTooLong = isContextLengthError(errorMessage);
+        boolean isContextTooLong = ContextLengthUtils.isContextLengthError(errorMessage);
 
         runOnUiThread(() ->
         {
@@ -960,16 +961,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         Log.e(TAG, "postProcessToolResults 出错", e);
       }
     });
-  }
-
-  private boolean isContextLengthError(String errorMessage)
-  {
-    if (errorMessage == null) return false;
-    return errorMessage.contains("Range of input length should be") ||
-           errorMessage.contains("context length") ||
-           errorMessage.contains("exceeds the available context size") ||
-           errorMessage.contains("exceeds maximum context length") ||
-           errorMessage.contains("context window exceeds limit");
   }
 
   private void scrollToBottom()
