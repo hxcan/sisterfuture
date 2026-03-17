@@ -444,6 +444,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     voiceRecognizeResultString = recognizeResulttextView.getText().toString();
     sendMessageToSister(voiceRecognizeResultString);
+    // ✅ #4835 修复：发送消息后清空输入框
+    recognizeResulttextView.setText("");
   }
 
   private void sendChatRequest() 
@@ -705,10 +707,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
-  /**
-   * #4824 处理 HTTP 429 限流错误
-   * 实现指数退避重试策略：1s → 2s → 4s
-   */
+  
+/**
+ * #4824 处理 HTTP 429 限流错误
+ * 实现指数退避重试策略：1s → 2s → 4s
+ */
   private void handleRateLimitError() {
     if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES) {
       Log.e(TAG, "❌ 限流重试次数过多（" + rateLimitRetryCount + " >= " + MAX_RATE_LIMIT_RETRIES + "），放弃");
