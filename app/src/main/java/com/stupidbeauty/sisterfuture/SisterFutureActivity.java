@@ -532,8 +532,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       scrollToBottom();
       ttsSayReply("上下文超长，自动缩短后重试");
       
-      // 2. 将错误消息添加到上下文（关键！这样 decreaseMaxRounds 才能删除它）
-      contextManager.addAssistantMessage(errorMessage);
+      // 2. 上下文中只添加简短标记（关键修改！避免上下文因错误消息增长）
+      contextManager.addAssistantMessage("⚠️ 上下文超长，已自动缩短");
       
       // 3. 减少最大轮数并立即清理旧消息
       contextManager.decreaseMaxRounds();
