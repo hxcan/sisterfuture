@@ -159,11 +159,20 @@ public class TongYiClient
               String errorBody = "";
               try {
                 errorBody = response.body().string();
-                Log.e(TAG, "HTTP " + response.code() + ": " + errorBody);
+                int statusCode = response.code();
+                Log.e(TAG, "HTTP " + statusCode + ": " + errorBody);
+                
+                // ✅ #4823 新增：HTTP 400 且是上下文超长 → 不标记为接入点不可用
+                if (statusCode == 400 && isContextLengthError(errorBody)) {
+                  Log.w(TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点");
+                  listener.onError(new ResponseException(response, errorBody));
+                  return; // 直接返回，不标记为不可用
+                }
               } catch (Exception e) {
                 Log.e(TAG, "Failed to read error body: " + e.getMessage());
               }
               
+              // 其他错误 → 标记为接入点不可用
               accessPointManager.reportCurrentAccessPointUnavailable();
               listener.onError(new AccessPointUnavailableException("Error: " + errorBody));
               listener.onError(new ResponseException(response, errorBody));
@@ -185,6 +194,20 @@ public class TongYiClient
         listener.onError(e);
       }
     }
+  }
+
+  /**
+   * #4823 检测错误信息是否为上下文超长错误
+   * 复用与 SisterFutureActivity 中相同的检测逻辑
+   */
+  private static boolean isContextLengthError(String errorMessage)
+  {
+    if (errorMessage == null) return false;
+    return errorMessage.contains("Range of input length should be") ||
+           errorMessage.contains("context length") ||
+           errorMessage.contains("exceeds the available context size") ||
+           errorMessage.contains("exceeds maximum context length") ||
+           errorMessage.contains("context window exceeds limit");
   }
 
   private static boolean isHtmlResponse(String content)
