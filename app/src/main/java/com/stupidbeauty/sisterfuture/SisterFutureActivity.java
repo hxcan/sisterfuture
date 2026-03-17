@@ -381,10 +381,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
             scrollToBottom();
             ttsSayReply(response);
-            // 如果响应包含成功标记，退出救援模式
+            // 如果响应包含成功标记，退出救援模式并重置计数器
             if (response.contains("✅")) {
               Log.i(TAG, "✅ 备用接入点配置成功，退出救援模式");
               isDeadlockRescueMode = false;
+              // ✅ #4657 救援成功后重置计数器，防止立即再次触发
+              modelAccessPointManager.resetFailureCount();
+              Log.i(TAG, "✅ 救援成功，计数器已重置：" + modelAccessPointManager.getConsecutiveFailures());
             }
           });
         }
