@@ -161,6 +161,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   // 🔥 #4657 死循环救援模式标记
   private boolean isDeadlockRescueMode = false;
+  
+  // ⚠️ #4824 HTTP 429 限流重试计数器
+  private int rateLimitRetryCount = 0;
+  private static final int MAX_RATE_LIMIT_RETRIES = 3;
 
 	@Override
   public void onInit(int arg0)
@@ -606,6 +610,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             Log.d(TAG, "接入点不可用异常，准备切换");
             isAccessPointUnavailable = true;
           }
+          // ⚠️ #4824 处理 HTTP 429 限流错误
+          else if (error instanceof TongYiClient.RateLimitException) {
+            Log.w(TAG, "⚠️ 限流错误，等待后重试 #" + rateLimitRetryCount);
+            handleRateLimitError();
+            return;
+          }
           else if (error instanceof TongYiClient.ResponseException)
           {
             TongYiClient.ResponseException responseException = (TongYiClient.ResponseException) error;
@@ -667,6 +677,31 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       Log.w(TAG, "语音识别结果为空");
     }
+  }
+
+  /**
+   * #4824 处理 HTTP 429 限流错误
+   * 实现指数退避重试策略：1s → 2s → 4s
+   */
+  private void handleRateLimitError() {
+    if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES) {
+      Log.e(TAG, "❌ 限流重试次数过多（" + rateLimitRetryCount + " >= " + MAX_RATE_LIMIT_RETRIES + "），放弃");
+      rateLimitRetryCount = 0;
+      runOnUiThread(() -> {
+        messageAdapter.addMessage(new MessageItem("⚠️ 请求过于频繁，请稍后再试", MessageType.AI));
+        scrollToBottom();
+      });
+      return;
+    }
+    
+    // 指数退避：1s, 2s, 4s
+    int delayMs = 1000 * (1 << rateLimitRetryCount);
+    Log.w(TAG, "⏳ 限流重试 #" + rateLimitRetryCount + "，等待 " + delayMs + "ms");
+    
+    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+      rateLimitRetryCount++;
+      sendChatRequestTongYi();
+    }, delayMs);
   }
 
   private boolean isHtmlResponse(String content)
@@ -913,6 +948,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           // ✅ #4657 请求成功，重置连续失败计数器
           modelAccessPointManager.resetFailureCount();
+          // ⚠️ #4824 重置限流重试计数器
+          rateLimitRetryCount = 0;
         });
       }
     }

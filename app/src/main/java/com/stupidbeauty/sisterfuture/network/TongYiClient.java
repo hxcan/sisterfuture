@@ -169,6 +169,13 @@ public class TongYiClient
                   listener.onError(new ResponseException(response, errorBody));
                   return; // 直接返回，不标记为不可用
                 }
+                
+                // ✅ #4824 新增：HTTP 429 限流错误 → 不标记为接入点不可用
+                if (statusCode == 429) {
+                  Log.w(TAG, "⚠️ 检测到 HTTP 429 限流错误，不切换接入点");
+                  listener.onError(new RateLimitException(response, errorBody));
+                  return; // 直接返回，不标记为不可用
+                }
               } catch (Exception e) {
                 Log.e(TAG, "Failed to read error body: " + e.getMessage());
               }
@@ -278,6 +285,33 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
     public AccessPointUnavailableException(String message, Throwable cause)
     {
       super(message, cause);
+    }
+  }
+
+  /**
+   * #4824 HTTP 429 限流异常
+   * 表示 API 请求速率过快，需要延迟重试
+   */
+  public static class RateLimitException extends Exception
+  {
+    private final Response response;
+    private final String customMessage;
+
+    public RateLimitException(Response response, String customMessage)
+    {
+      super("HTTP " + response.code() + " - Rate Limit");
+      this.response = response;
+      this.customMessage = customMessage;
+    }
+
+    public Response getResponse()
+    {
+      return response;
+    }
+
+    public String getCustomMessage()
+    {
+      return customMessage;
     }
   }
 
