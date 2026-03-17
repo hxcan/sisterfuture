@@ -299,6 +299,10 @@ public class ContextManager
     if (idealMaxRounds > INITIAL_MAX_ROUNDS)
     {
       currentMaxRounds = idealMaxRounds;
+      
+      // ✅ #4829 新增：立即清理超出最新范围的历史旧消息
+      history = removeOldHistoryEntries(history);
+      
       saveHistory(history);
     }
     Log.i(TAG, "decrease max rounds to: " + currentMaxRounds);

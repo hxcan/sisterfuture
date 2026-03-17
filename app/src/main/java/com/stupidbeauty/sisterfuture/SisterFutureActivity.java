@@ -519,6 +519,33 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     });
   }
 
+  // ✅ #4829 新增：统一的上下文超长错误处理方法
+  private void handleContextLengthError(String errorMessage, final boolean isRetry)
+  {
+    Log.w(TAG, "🔍 检测到上下文超长错误，自动缩短上下文");
+    
+    // 1. 在界面显示错误消息（包含实际错误内容和处置提示）
+    runOnUiThread(() ->
+    {
+      String displayMessage = errorMessage + "\n⚠️ 上下文超长，自动缩短后重试";
+      messageAdapter.addMessage(new MessageItem(displayMessage, MessageType.AI));
+      scrollToBottom();
+      ttsSayReply("上下文超长，自动缩短后重试");
+      
+      // 2. 将错误消息添加到上下文（关键！这样 decreaseMaxRounds 才能删除它）
+      contextManager.addAssistantMessage(errorMessage);
+      
+      // 3. 减少最大轮数并立即清理旧消息
+      contextManager.decreaseMaxRounds();
+      
+      // 4. 重试
+      if (isRetry)
+      {
+        sendChatRequestTongYi();
+      }
+    });
+  }
+
   private void sendChatRequestTongYi()
   {
     Log.d(TAG, "开始发送请求，当前接入点：" + modelAccessPointManager.getCurrentAccessPoint().getName());
@@ -632,17 +659,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               else if (statusCode == 400) {
                 String errorBody = responseException.getCustomMessage();
                 if (ContextLengthUtils.isContextLengthError(errorBody)) {
-                  Log.w(TAG, "🔍 检测到上下文超长错误（HTTP 400），自动缩短上下文");
-                  
-                  // ✅ #4827 新增：在界面上显示错误提示
-                  runOnUiThread(() -> {
-                    messageAdapter.addMessage(new MessageItem("⚠️ 上下文超长，自动缩短后重试", MessageType.AI));
-                    scrollToBottom();
-                    ttsSayReply("上下文超长，自动缩短后重试");
-                  });
-                  
-                  contextManager.decreaseMaxRounds();
-                  sendChatRequestTongYi(); // 重试
+                  // ✅ #4829 使用统一处理方法（缩短后重试）
+                  handleContextLengthError(errorBody, true);
                   return; // 直接返回，不继续处理
                 }
               }
@@ -739,18 +757,21 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         String errorMessage = response.getError().getMessage();
         boolean isContextTooLong = ContextLengthUtils.isContextLengthError(errorMessage);
 
-        runOnUiThread(() ->
-        {
-          messageAdapter.addMessage(new MessageItem(errorMessage, MessageType.AI));
-          scrollToBottom();
-          ttsSayReply(errorMessage);
-          contextManager.addAssistantMessage(errorMessage);
-        });
-
         if (isContextTooLong)
         {
-          contextManager.decreaseMaxRounds();
-          sendChatRequestTongYi();
+          // ✅ #4829 使用统一处理方法
+          handleContextLengthError(errorMessage, true);
+        }
+        else
+        {
+          // 非上下文超长错误，正常显示
+          runOnUiThread(() ->
+          {
+            messageAdapter.addMessage(new MessageItem(errorMessage, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(errorMessage);
+            contextManager.addAssistantMessage(errorMessage);
+          });
         }
         return;
       }
