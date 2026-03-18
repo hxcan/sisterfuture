@@ -117,10 +117,24 @@ public class ContextManager
 
     return history;
   } // private List<JSONObject> removeOldHistoryEntries(List<JSONObject> oldHistory)
+  
   // ContextManager.java —— 新增方法
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
+    Log.i(TAG, "🔧 [addToolMessage] 开始添加工具回复 - toolCallId=" + toolCallId + ", toolName=" + toolName);
+    
     List<JSONObject> history = getHistory();
+    Log.i(TAG, "🔧 [addToolMessage] 当前历史消息数：" + history.size());
+    
+    // 🔍 #4855 调试：输出当前历史中的所有消息
+    for (int i = 0; i < history.size(); i++)
+    {
+      JSONObject msg = history.get(i);
+      String role = msg.optString("role", "unknown");
+      String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " 个" : "无";
+      String toolId = msg.optString("tool_call_id", "无");
+      Log.i(TAG, "📋 [addToolMessage] 历史[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
+    }
 
     JSONObject toolMessage = new JSONObject();
     try
@@ -137,11 +151,27 @@ public class ContextManager
     }
 
     history.add(toolMessage);
+    Log.i(TAG, "🔧 [addToolMessage] 已添加 tool 消息，当前消息数：" + history.size());
 
     history = removeOldHistoryEntries(history);
+    
+    // 🔍 #4855 调试：normalize 前后对比
+    Log.i(TAG, "🔧 [addToolMessage] normalize 前消息数：" + history.size());
     history = normalizeToolCallMessages(history); // NOrmalize tool calls messages
+    Log.i(TAG, "🔧 [addToolMessage] normalize 后消息数：" + history.size());
+    
+    // 🔍 #4855 调试：输出 normalize 后的历史
+    for (int i = 0; i < history.size(); i++)
+    {
+      JSONObject msg = history.get(i);
+      String role = msg.optString("role", "unknown");
+      String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " 个" : "无";
+      String toolId = msg.optString("tool_call_id", "无");
+      Log.i(TAG, "📋 [addToolMessage] normalize 后历史[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
+    }
 
     saveHistory(history);
+    Log.i(TAG, "🔧 [addToolMessage] 已保存历史");
   }
 
   public void addUserMessage(String message)
@@ -259,6 +289,16 @@ public class ContextManager
       {
         list.add(array.getJSONObject(i));
       }
+      
+      // 🔍 #4855 调试：输出加载的历史消息
+      for (int i = 0; i < list.size(); i++)
+      {
+        JSONObject msg = list.get(i);
+        String role = msg.optString("role", "unknown");
+        String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " 个" : "无";
+        String toolId = msg.optString("tool_call_id", "无");
+        Log.d(TAG, "📋 [getHistory] 历史[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
+      }
     }
     catch (Exception e)
     {
@@ -329,6 +369,8 @@ public class ContextManager
   private List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory)
   // private void normalizeToolCallMessages()
   {
+    Log.i(TAG, "🔧 [normalizeToolCallMessages] 开始规范化，输入消息数：" + oldHistory.size());
+    
     List<JSONObject> history = oldHistory;
     // history.add(message);
 
@@ -349,12 +391,31 @@ public class ContextManager
         JSONObject currentObject =  history.get(i);
         String roleString = currentObject.getString("role"); // Get the role
 
+        // 🔍 #4855 调试：输出当前处理的消息
+        String toolCallIds = currentObject.has("tool_calls") ? String.valueOf(currentObject.optJSONArray("tool_calls").length()) + " 个" : "无";
+        String toolId = currentObject.optString("tool_call_id", "无");
+        Log.d(TAG, "🔧 [normalize] 处理[" + i + "] role=" + roleString + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
+
 
 
         if (roleString.equals("assistant")) // Assistant message
         {
           if (currentObject.has("tool_calls")) // Has tool calls
           {
+            // 🔍 #4855 调试：获取 tool_call id
+            String toolCallId = "未知";
+            try
+            {
+              JSONArray toolCalls = currentObject.getJSONArray("tool_calls");
+              if (toolCalls.length() > 0)
+              {
+                JSONObject firstToolCall = toolCalls.getJSONObject(0);
+                toolCallId = firstToolCall.optString("id", "未知");
+              }
+            }
+            catch (Exception e) {}
+            
+            Log.d(TAG, "🔧 [normalize] 发现 assistant(tool_calls), id=" + toolCallId);
             pendingToolCallsObject = currentObject; // Remmber pending tool call object.
             continue; // Not adding this object. We has to wait for the next message.
           } // if (currentObject.has("tool_calls")) // Has tool calls
@@ -362,6 +423,10 @@ public class ContextManager
         } // if (roleString.equals("assistant")) // Assistant message
         else if (roleString.equals("tool")) // tool message
         {
+          // 🔍 #4855 调试：获取 tool_call_id
+          String answeringtoolCAllId = currentObject.optString("tool_call_id", "无");
+          Log.d(TAG, "🔧 [normalize] 发现 tool 回复，tool_call_id=" + answeringtoolCAllId);
+          
           // Add the previous pending tool calls message.
           if (pendingToolCallsObject!=null)
           {
@@ -369,15 +434,17 @@ public class ContextManager
             JSONObject toolCallsFirst = toolCALLSArray.getJSONObject(0);
             String toolCAllsId = toolCallsFirst.getString("id"); // Ge the id.
 
-            String answeringtoolCAllId = currentObject.optString("tool_call_id");
+            Log.d(TAG, "🔧 [normalize] 配对检查：pending id=" + toolCAllsId + ", tool id=" + answeringtoolCAllId);
 
             if (toolCAllsId.equals(answeringtoolCAllId)) // Matching messages.
             {
+              Log.d(TAG, "🔧 [normalize] ✅ 配对成功，添加 assistant(tool_calls)");
               list.add(pendingToolCallsObject);
               pendingToolCallsObject = null;
             } // if (toolCAllsId.equals(answeringtoolCAllId)) // Matching messages.
             else // Not matching.
             {
+              Log.w(TAG, "🔧 [normalize] ❌ 配对失败，清空 pending");
               pendingToolCallsObject = null;
               continue;
             } //else // Not matching.
@@ -385,6 +452,7 @@ public class ContextManager
           } // if (pendingToolCallsObject!=null)
           else // NO pending tool calls message
           {
+            Log.w(TAG, "🔧 [normalize] ❌ orphan tool 回复，跳过");
             continue;
           }
         } // else if (roleString.equals("tool")) // tool message
@@ -399,6 +467,8 @@ public class ContextManager
     {
       e.printStackTrace();
     }
+    
+    Log.i(TAG, "🔧 [normalizeToolCallMessages] 规范化完成，输出消息数：" + list.size());
     return list;
   }
 
@@ -409,6 +479,7 @@ public class ContextManager
         .putString(KEY_HISTORY, historyArray.toString())
         .putInt("current_max_rounds", currentMaxRounds)
         .apply();
+    Log.d(TAG, "💾 [saveHistory] 已保存历史，消息数：" + history.size());
   }
 
   private JSONObject createMessage(String role, String content)
