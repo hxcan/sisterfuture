@@ -1113,6 +1113,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       if (isLast) 
       {
         sendMessageToSister(voiceRecognizeResultString);
+        // ✅ #4835 修复：语音输入发送后清空输入框
+        recognizeResulttextView.setText("");
       }
     }
 
