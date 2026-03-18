@@ -32,6 +32,64 @@ public class ContextManager
   {
     sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     currentMaxRounds = sharedPreferences.getInt("current_max_rounds", INITIAL_MAX_ROUNDS);
+    
+    // ✅ #4844 修复：在构造函数中执行一次初始清理（仅在启动时）
+    cleanupInvalidToolCallsOnStartup();
+  }
+
+  // ✅ #4844 新增：只在启动时调用一次的清理方法
+  private void cleanupInvalidToolCallsOnStartup()
+  {
+    // 直接从文件加载历史，不调用 getHistory() 避免递归
+    String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
+    
+    if (historyStr.isEmpty())
+    {
+      Log.d(TAG, "🧹 [启动清理] 历史为空，跳过清理");
+      return;
+    }
+    
+    List<JSONObject> history = new ArrayList<>();
+    int invalidCount = 0;
+    
+    try
+    {
+      JSONArray array = new JSONArray(historyStr);
+      Log.i(TAG, "🧹 [启动清理] 开始清理历史记录，原始消息数：" + array.length());
+      
+      // 第一步：过滤非法 JSON 的 tool_call
+      for (int i = 0; i < array.length(); i++)
+      {
+        JSONObject currentObject = array.getJSONObject(i);
+        if (isValidToolCallMessage(currentObject))
+        {
+          history.add(currentObject);
+        }
+        else
+        {
+          invalidCount++;
+          Log.w(TAG, "⚠️ [启动清理] 跳过非法 JSON 的消息 (索引：" + i + ")");
+        }
+      }
+      
+      // 第二步：规范化配对关系（清理 orphan 的 tool 回复）← 这一步不能少！
+      history = normalizeToolCallMessages(history);
+      
+      // 第三步：如果有清理，保存结果
+      if (invalidCount > 0 || history.size() < array.length())
+      {
+        Log.w(TAG, "🧹 [启动清理] 共清理 " + invalidCount + " 条非法 JSON 的历史消息");
+        saveHistory(history);
+      }
+      else
+      {
+        Log.d(TAG, "✅ [启动清理] 历史干净，无需清理");
+      }
+    }
+    catch (Exception e)
+    {
+      Log.e(TAG, "[启动清理] 出错：" + e.getMessage(), e);
+    }
   }
 
   private List<JSONObject> removeOldHistoryEntries(List<JSONObject> oldHistory)
@@ -176,7 +234,7 @@ public class ContextManager
     return new JSONArray(history);
   }
 
-  // ✅ 修复：改为 public，供 ConversationResetTool 调用
+  // ✅ #4844 修复：getHistory 只做加载，不做任何清理
   public List<JSONObject> getHistory()
   {
     String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
@@ -188,48 +246,19 @@ public class ContextManager
 
     Log.d(TAG, CodePosition.newInstance().toString() + ", history string: " + historyStr); // Debug.
     List<JSONObject> list = new ArrayList<>();
-    int invalidCount = 0; // 🔍 #4844 统计非法消息数量
 
     try
     {
       JSONArray array = new JSONArray(historyStr);
 
       // 🔍 #4846 新增：入口日志
-      Log.i(TAG, "🔍 #4844 开始加载历史记录，原始消息数：" + array.length());
+      Log.d(TAG, "📋 [getHistory] 加载历史记录，消息数：" + array.length());
 
-      // 🔍 #4844 第一步：过滤掉非法 JSON 的 tool_call 消息
+      // ✅ #4844 修复：直接加载，不做任何清理或修改
       for (int i = 0; i < array.length(); i++)
       {
-        JSONObject currentObject = array.getJSONObject(i);
-
-        // 🔍 #4846 新增：遍历日志
-        String role = currentObject.optString("role", "unknown");
-        Log.d(TAG, "📋 检查消息[" + i + "] role=" + role);
-
-        // 校验并过滤非法 JSON 的 tool_calls
-        if (isValidToolCallMessage(currentObject))
-        {
-          list.add(currentObject);
-        }
-        else
-        {
-          Log.w(TAG, "⚠️ 跳过历史中非法 JSON 的消息 (索引：" + i + ")");
-          invalidCount++;
-        }
+        list.add(array.getJSONObject(i));
       }
-
-      // 🔍 #4844 第二步：调用 normalizeToolCallMessages 清理 orphan 的 tool 回复消息
-      list = normalizeToolCallMessages(list);
-
-      // 🔍 #4844 如果有非法消息被过滤，保存清理后的历史
-      if (invalidCount > 0)
-      {
-        Log.w(TAG, "🧹 共清理 " + invalidCount + " 条非法 JSON 的历史消息");
-        saveHistory(list); // 持久化清理结果
-      }
-
-      // 🔍 #4846 新增：完成日志
-      Log.i(TAG, "🧹 历史加载完成 - 原始：" + array.length() + " 条，清理后：" + list.size() + " 条，清理：" + invalidCount + " 条");
     }
     catch (Exception e)
     {
@@ -245,12 +274,10 @@ public class ContextManager
     {
       if (!message.has("tool_calls"))
       {
-        Log.d(TAG, "  ✅ 非 tool_call 消息，跳过检查");
         return true; // 非 tool_call 消息，直接通过
       }
 
       JSONArray toolCalls = message.getJSONArray("tool_calls");
-      Log.d(TAG, "  🔧 消息包含 " + toolCalls.length() + " 个 tool_calls");
 
       for (int i = 0; i < toolCalls.length(); i++)
       {
@@ -262,12 +289,6 @@ public class ContextManager
           {
             String argumentsStr = function.getString("arguments");
             
-            // 🔍 #4846 新增：输出详细信息
-            Log.d(TAG, "    tool_call[" + i + "] name=" + function.optString("name", "unknown"));
-            Log.d(TAG, "    arguments 长度=" + argumentsStr.length());
-            Log.d(TAG, "    arguments 内容=\"" + argumentsStr + "\"");
-            Log.d(TAG, "  🔍 检查 tool_call[" + i + "] arguments: \"" + argumentsStr + "\"");
-            
             // 🔍 #4846 修复：使用 JSONTokener 进行严格验证
             try
             {
@@ -277,33 +298,30 @@ public class ContextManager
               // 检查是否还有剩余内容（如 "{}{}" 的情况）
               if (tokener.more())
               {
-                Log.w(TAG, "  ❌ 非法 JSON: 存在额外数据 - \"" + argumentsStr + "\"");
+                Log.w(TAG, "❌ 非法 JSON: 存在额外数据 - \"" + argumentsStr + "\"");
                 return false;
               }
               
               // 验证是否为 JSONObject 类型
               if (!(parsed instanceof JSONObject))
               {
-                Log.w(TAG, "  ❌ 非法 JSON: 不是 JSON 对象，类型=" + parsed.getClass().getName());
+                Log.w(TAG, "❌ 非法 JSON: 不是 JSON 对象，类型=" + parsed.getClass().getName());
                 return false;
               }
-              
-              Log.d(TAG, "  ✅ 合法 JSON");
             }
             catch (JSONException e)
             {
-              Log.w(TAG, "  ❌ 非法 JSON: " + e.getMessage());
+              Log.w(TAG, "❌ 非法 JSON: " + e.getMessage());
               return false; // 非法消息，过滤掉
             }
           }
         }
       }
-      Log.d(TAG, "  ✅ 所有 arguments 都是合法 JSON");
       return true; // 所有 arguments 都是合法 JSON
     }
     catch (JSONException e)
     {
-      Log.w(TAG, "  ❌ 检查过程出错：" + e.getMessage());
+      Log.w(TAG, "❌ 检查过程出错：" + e.getMessage());
       return false; // 非法消息，过滤掉
     }
   }
