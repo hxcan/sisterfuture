@@ -187,6 +187,7 @@ public class ContextManager
 
     Log.d(TAG, CodePosition.newInstance().toString() + ", history string: " + historyStr); // Debug.
     List<JSONObject> list = new ArrayList<>();
+    int invalidCount = 0; // 🔍 #4844 统计非法消息数量
 
     try
     {
@@ -194,9 +195,25 @@ public class ContextManager
 
       for (int i = 0; i < array.length(); i++)
       {
-        JSONObject currentObject =  array.getJSONObject(i);
+        JSONObject currentObject = array.getJSONObject(i);
 
-        list.add(currentObject);
+        // 🔍 #4844 新增：校验并过滤非法 JSON 的 tool_calls
+        if (isValidToolCallMessage(currentObject))
+        {
+          list.add(currentObject);
+        }
+        else
+        {
+          Log.w(TAG, "⚠️ 跳过历史中非法 JSON 的消息 (索引: " + i + ")");
+          invalidCount++;
+        }
+      }
+
+      // 🔍 #4844 如果有非法消息被过滤，保存清理后的历史
+      if (invalidCount > 0)
+      {
+        Log.w(TAG, "🧹 共清理 " + invalidCount + " 条非法 JSON 的历史消息");
+        saveHistory(list); // 持久化清理结果
       }
     }
     catch (Exception e)
@@ -204,6 +221,40 @@ public class ContextManager
       e.printStackTrace();
     }
     return list;
+  }
+
+  // 🔍 #4844 新增：校验 tool_call 消息的 arguments 是否为合法 JSON
+  private boolean isValidToolCallMessage(JSONObject message)
+  {
+    try
+    {
+      if (!message.has("tool_calls"))
+      {
+        return true; // 非 tool_call 消息，直接通过
+      }
+
+      JSONArray toolCalls = message.getJSONArray("tool_calls");
+      for (int i = 0; i < toolCalls.length(); i++)
+      {
+        JSONObject toolCall = toolCalls.getJSONObject(i);
+        if (toolCall.has("function"))
+        {
+          JSONObject function = toolCall.getJSONObject("function");
+          if (function.has("arguments"))
+          {
+            String argumentsStr = function.getString("arguments");
+            // 尝试解析，失败则抛出异常
+            new JSONObject(argumentsStr);
+          }
+        }
+      }
+      return true; // 所有 arguments 都是合法 JSON
+    }
+    catch (JSONException e)
+    {
+      Log.w(TAG, "检测到非法 JSON 的 tool_call: " + e.getMessage());
+      return false; // 非法消息，过滤掉
+    }
   }
 
   private List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory)
