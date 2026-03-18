@@ -121,6 +121,33 @@ public class ContextManager
           Log.w(TAG, "检测到空的 tool_calls 消息，已过滤");
           return; // 直接返回，不添加到历史中
         }
+
+        // 🔍 #4841 新增：校验每个 tool_call 的 arguments 字段是否为合法 JSON
+        for (int i = 0; i < toolCalls.length(); i++)
+        {
+          JSONObject toolCall = toolCalls.getJSONObject(i);
+          if (toolCall.has("function"))
+          {
+            JSONObject function = toolCall.getJSONObject("function");
+            if (function.has("arguments"))
+            {
+              String argumentsStr = function.getString("arguments");
+              try
+              {
+                // 尝试解析为 JSON 对象，验证合法性
+                new JSONObject(argumentsStr);
+                // ✅ 合法 JSON，保留
+              }
+              catch (JSONException e)
+              {
+                // ❌ 非法 JSON，记录警告并跳过此条消息
+                Log.w(TAG, "⚠️ 跳过非法 JSON 的 tool_call arguments: " + argumentsStr);
+                Log.w(TAG, "   tool_call name: " + function.optString("name", "unknown"));
+                return; // 直接返回，不将此 assistant 消息添加到历史
+              }
+            }
+          }
+        }
       }
     }
     catch (JSONException e)
