@@ -193,21 +193,25 @@ public class ContextManager
     {
       JSONArray array = new JSONArray(historyStr);
 
+      // 🔍 #4844 第一步：过滤掉非法 JSON 的 tool_call 消息
       for (int i = 0; i < array.length(); i++)
       {
         JSONObject currentObject = array.getJSONObject(i);
 
-        // 🔍 #4844 新增：校验并过滤非法 JSON 的 tool_calls
+        // 校验并过滤非法 JSON 的 tool_calls
         if (isValidToolCallMessage(currentObject))
         {
           list.add(currentObject);
         }
         else
         {
-          Log.w(TAG, "⚠️ 跳过历史中非法 JSON 的消息 (索引: " + i + ")");
+          Log.w(TAG, "⚠️ 跳过历史中非法 JSON 的消息 (索引：" + i + ")");
           invalidCount++;
         }
       }
+
+      // 🔍 #4844 第二步：调用 normalizeToolCallMessages 清理 orphan 的 tool 回复消息
+      list = normalizeToolCallMessages(list);
 
       // 🔍 #4844 如果有非法消息被过滤，保存清理后的历史
       if (invalidCount > 0)
