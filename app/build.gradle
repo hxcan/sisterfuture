@@ -6,7 +6,7 @@ dependencies
 {
   implementation fileTree(include: ['*.jar'], dir: 'libs')
   implementation 'com.jakewharton:butterknife:10.2.3'
-  annotationProcessor 'com.jakewharton:butterknife-compiler:10.2.3'  // ✅ 注意是 -compiler
+  annotationProcessor 'com.jakewharton:butterknife-compiler:10.2.3'  // ✄ 注意是 -compiler
   implementation 'com.google.code.gson:gson:2.8.2'
   implementation 'org.apache.commons:commons-lang3:3.4'
   implementation 'org.apache.commons:commons-io:1.3.2'
@@ -32,18 +32,18 @@ dependencies
   implementation 'androidx.recyclerview:recyclerview:1.3.0' // 或者使用最新的版本
   implementation 'com.github.hxcan:victoriafresh.android:2026.3.8'
   implementation 'com.upokecenter:cbor:4.4.4'
-  // 在 dependencies 里加上 ObjectBox
+  // 在 dependencies 里媠上 ObjectBox
   implementation 'io.objectbox:objectbox-android:5.1.0'
   // 添加注解处理器
   annotationProcessor 'io.objectbox:objectbox-processor:5.1.0'
   implementation 'commons-net:commons-net:3.8.0'
   
-  // #3088 百度地图 SDK 依赖（降级到 7.5.4，与旅行盲盒一致）
+  // #3088 百度地图 SDK 依赖（降级到 7.5.4，伎旅行盲盒一致）
   // 地图组件
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Map:7.5.4'
   // 检索组件（含反向地理编码）
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Search:7.5.4'
-  // 工具组件
+  // 组件充具组件
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Util:7.5.4'
   // 全量定位组件
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Location_All:9.3.7'
@@ -91,8 +91,8 @@ android
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 22  // 百度地图 SDK 要求最低 API 22
     targetSdkVersion 28
-    versionCode 933
-    versionName "2026.3.16"
+    versionCode 934
+    versionName "2026.3.18"
     multiDexEnabled true
     
     // 配置支持的 SO 库架构
