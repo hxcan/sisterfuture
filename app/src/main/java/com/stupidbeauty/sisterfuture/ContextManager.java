@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 import java.io.IOException;
 import butterknife.OnClick;
 import com.iflytek.cloud.SpeechRecognizer;
@@ -267,10 +268,26 @@ public class ContextManager
             Log.d(TAG, "    arguments 内容=\"" + argumentsStr + "\"");
             Log.d(TAG, "  🔍 检查 tool_call[" + i + "] arguments: \"" + argumentsStr + "\"");
             
-            // 尝试解析，失败则抛出异常
+            // 🔍 #4846 修复：使用 JSONTokener 进行严格验证
             try
             {
-              new JSONObject(argumentsStr);
+              JSONTokener tokener = new JSONTokener(argumentsStr);
+              Object parsed = tokener.nextValue();
+              
+              // 检查是否还有剩余内容（如 "{}{}" 的情况）
+              if (tokener.more())
+              {
+                Log.w(TAG, "  ❌ 非法 JSON: 存在额外数据 - \"" + argumentsStr + "\"");
+                return false;
+              }
+              
+              // 验证是否为 JSONObject 类型
+              if (!(parsed instanceof JSONObject))
+              {
+                Log.w(TAG, "  ❌ 非法 JSON: 不是 JSON 对象，类型=" + parsed.getClass().getName());
+                return false;
+              }
+              
               Log.d(TAG, "  ✅ 合法 JSON");
             }
             catch (JSONException e)
