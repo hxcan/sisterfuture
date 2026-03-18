@@ -617,6 +617,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
+      // 🔍 #4839 调试：输出请求内容，检查 tool_calls 参数格式
+      logRequestMessages(messagesArray);
+
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
         @Override
@@ -1406,5 +1409,45 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     SpeechUtility.createUtility(this, SpeechConstant.APPID+"=56e142d3");
     mIat= SpeechRecognizer.createRecognizer(this, null);
+  }
+
+  // 🔍 #4839 调试：输出请求内容，检查 tool_calls 参数格式
+  private void logRequestMessages(JSONArray messagesArray)
+  {
+    Log.d(TAG, "📋 请求消息总数：" + messagesArray.length());
+    for (int i = 0; i < messagesArray.length(); i++) {
+      try {
+        JSONObject msg = messagesArray.getJSONObject(i);
+        String role = msg.optString("role", "unknown");
+        Log.d(TAG, "  消息[" + i + "] role=" + role);
+        
+        // 检查 assistant 消息中的 tool_calls
+        if ("assistant".equals(role) && msg.has("tool_calls")) {
+          JSONArray toolCalls = msg.getJSONArray("tool_calls");
+          Log.d(TAG, "    🔧 tool_calls 数量：" + toolCalls.length());
+          for (int j = 0; j < toolCalls.length(); j++) {
+            JSONObject toolCall = toolCalls.getJSONObject(j);
+            JSONObject func = toolCall.optJSONObject("function");
+            if (func != null) {
+              String funcName = func.optString("name", "unknown");
+              Object args = func.opt("arguments");
+              String argsType = (args == null) ? "null" : args.getClass().getSimpleName();
+              String argsValue = (args == null) ? "null" : args.toString();
+              Log.d(TAG, "      tool_call[" + j + "] name=" + funcName + ", arguments 类型=" + argsType);
+              Log.d(TAG, "      arguments 值：" + argsValue);
+              
+              // ⚠️ 检测类型
+              if (args instanceof String) {
+                Log.w(TAG, "      ⚠️ 警告：arguments 是 String 类型，Code 模型可能拒绝！");
+              } else if (args instanceof JSONObject) {
+                Log.d(TAG, "      ✅ arguments 是 JSONObject 类型，格式正确");
+              }
+            }
+          }
+        }
+      } catch (Exception e) {
+        Log.e(TAG, "  解析消息[" + i + "] 失败", e);
+      }
+    }
   }
 }
