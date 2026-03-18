@@ -193,10 +193,17 @@ public class ContextManager
     {
       JSONArray array = new JSONArray(historyStr);
 
+      // 🔍 #4846 新增：入口日志
+      Log.i(TAG, "🔍 #4844 开始加载历史记录，原始消息数：" + array.length());
+
       // 🔍 #4844 第一步：过滤掉非法 JSON 的 tool_call 消息
       for (int i = 0; i < array.length(); i++)
       {
         JSONObject currentObject = array.getJSONObject(i);
+
+        // 🔍 #4846 新增：遍历日志
+        String role = currentObject.optString("role", "unknown");
+        Log.d(TAG, "📋 检查消息[" + i + "] role=" + role);
 
         // 校验并过滤非法 JSON 的 tool_calls
         if (isValidToolCallMessage(currentObject))
@@ -219,6 +226,9 @@ public class ContextManager
         Log.w(TAG, "🧹 共清理 " + invalidCount + " 条非法 JSON 的历史消息");
         saveHistory(list); // 持久化清理结果
       }
+
+      // 🔍 #4846 新增：完成日志
+      Log.i(TAG, "🧹 历史加载完成 - 原始：" + array.length() + " 条，清理后：" + list.size() + " 条，清理：" + invalidCount + " 条");
     }
     catch (Exception e)
     {
@@ -234,10 +244,13 @@ public class ContextManager
     {
       if (!message.has("tool_calls"))
       {
+        Log.d(TAG, "  ✅ 非 tool_call 消息，跳过检查");
         return true; // 非 tool_call 消息，直接通过
       }
 
       JSONArray toolCalls = message.getJSONArray("tool_calls");
+      Log.d(TAG, "  🔧 消息包含 " + toolCalls.length() + " 个 tool_calls");
+
       for (int i = 0; i < toolCalls.length(); i++)
       {
         JSONObject toolCall = toolCalls.getJSONObject(i);
@@ -247,16 +260,33 @@ public class ContextManager
           if (function.has("arguments"))
           {
             String argumentsStr = function.getString("arguments");
+            
+            // 🔍 #4846 新增：输出详细信息
+            Log.d(TAG, "    tool_call[" + i + "] name=" + function.optString("name", "unknown"));
+            Log.d(TAG, "    arguments 长度=" + argumentsStr.length());
+            Log.d(TAG, "    arguments 内容=\"" + argumentsStr + "\"");
+            Log.d(TAG, "  🔍 检查 tool_call[" + i + "] arguments: \"" + argumentsStr + "\"");
+            
             // 尝试解析，失败则抛出异常
-            new JSONObject(argumentsStr);
+            try
+            {
+              new JSONObject(argumentsStr);
+              Log.d(TAG, "  ✅ 合法 JSON");
+            }
+            catch (JSONException e)
+            {
+              Log.w(TAG, "  ❌ 非法 JSON: " + e.getMessage());
+              return false; // 非法消息，过滤掉
+            }
           }
         }
       }
+      Log.d(TAG, "  ✅ 所有 arguments 都是合法 JSON");
       return true; // 所有 arguments 都是合法 JSON
     }
     catch (JSONException e)
     {
-      Log.w(TAG, "检测到非法 JSON 的 tool_call: " + e.getMessage());
+      Log.w(TAG, "  ❌ 检查过程出错：" + e.getMessage());
       return false; // 非法消息，过滤掉
     }
   }
