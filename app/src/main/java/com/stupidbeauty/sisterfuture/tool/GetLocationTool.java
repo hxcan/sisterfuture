@@ -39,6 +39,11 @@ public class GetLocationTool implements Tool {
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private GeoCoder geoCoder;
+    
+    // #4847 优化：增加超时时间到 30 秒
+    private static final int LOCATION_TIMEOUT_MS = 30000;
+    // #4847 优化：最大重试次数
+    private static final int MAX_RETRY_COUNT = 2;
 
     public GetLocationTool(Context context) {
         this.context = context;
@@ -139,15 +144,15 @@ public class GetLocationTool implements Tool {
 
                 Log.d(TAG, "✅ [DEBUG] 位置权限已授权");
 
-                // 获取位置
+                // 获取位置 - #4847 优化：带重试机制
                 Log.d(TAG, "📍 [DEBUG] 开始获取位置...");
-                LocationResult locationResult = getCurrentLocation();
+                LocationResult locationResult = getCurrentLocationWithRetry();
                 
                 if (locationResult == null || locationResult.location == null) {
-                    Log.e(TAG, "❌ [DEBUG] 获取位置失败 - locationResult 为 null");
+                    Log.e(TAG, "❌ [DEBUG] 获取位置失败 - locationResult 为 null，已重试 " + MAX_RETRY_COUNT + " 次");
                     JSONObject result = new JSONObject();
                     result.put("status", "error");
-                    result.put("message", "无法获取当前位置，请检查 GPS 是否开启或网络连接是否正常。");
+                    result.put("message", "无法获取当前位置，请检查 GPS 是否开启或网络连接是否正常。如果在室内，请尝试到室外开阔地带重试。");
                     callback.onResult(result);
                     return;
                 }
@@ -229,6 +234,34 @@ public class GetLocationTool implements Tool {
         return true;
     }
 
+    /**
+     * #4847 优化：带重试机制的位置获取
+     */
+    private LocationResult getCurrentLocationWithRetry() {
+        LocationResult result = null;
+        
+        for (int attempt = 1; attempt <= MAX_RETRY_COUNT; attempt++) {
+            Log.d(TAG, "🔄 [DEBUG] 位置获取尝试 " + attempt + "/" + MAX_RETRY_COUNT);
+            result = getCurrentLocation();
+            
+            if (result != null && result.location != null) {
+                Log.d(TAG, "✅ [DEBUG] 位置获取成功（第 " + attempt + " 次尝试）");
+                return result;
+            }
+            
+            if (attempt < MAX_RETRY_COUNT) {
+                Log.w(TAG, "⚠️ [DEBUG] 第 " + attempt + " 次尝试失败，准备重试...");
+                try {
+                    Thread.sleep(1000); // 重试前等待 1 秒
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        
+        return result;
+    }
+
     private LocationResult getCurrentLocation() {
         Log.d(TAG, "📍 [DEBUG] getCurrentLocation() 开始执行");
         
@@ -239,22 +272,22 @@ public class GetLocationTool implements Tool {
             return null;
         }
         
-        // 尝试 GPS 定位
+        // #4847 优化：优先使用 GPS 或 network，而不是 fused
         List<String> providers = locationManager.getProviders(true);
         Log.d(TAG, "📡 [DEBUG] 可用的位置提供者：" + (providers != null ? providers.size() : 0) + " 个 - " + (providers != null ? providers.toString() : "null"));
         
-        String bestProvider = locationManager.getBestProvider(
-            new android.location.Criteria(), true
-        );
-        Log.d(TAG, "🎯 [DEBUG] 最佳位置提供者：" + bestProvider);
-
-        if (bestProvider == null && providers != null && providers.contains(LocationManager.GPS_PROVIDER)) {
+        // 优先选择 GPS（精度高），其次 network（室内可用），最后才是 fused
+        String bestProvider = null;
+        if (providers != null && providers.contains(LocationManager.GPS_PROVIDER)) {
             bestProvider = LocationManager.GPS_PROVIDER;
-            Log.d(TAG, "🎯 [DEBUG] 切换到 GPS_PROVIDER");
-        }
-        if (bestProvider == null && providers != null && providers.contains(LocationManager.NETWORK_PROVIDER)) {
+            Log.d(TAG, "🎯 [DEBUG] 优先选择 GPS_PROVIDER（精度高）");
+        } else if (providers != null && providers.contains(LocationManager.NETWORK_PROVIDER)) {
             bestProvider = LocationManager.NETWORK_PROVIDER;
-            Log.d(TAG, "🎯 [DEBUG] 切换到 NETWORK_PROVIDER");
+            Log.d(TAG, "🎯 [DEBUG] 选择 NETWORK_PROVIDER（室内可用）");
+        } else {
+            // 如果都没有，使用 getBestProvider
+            bestProvider = locationManager.getBestProvider(new android.location.Criteria(), true);
+            Log.d(TAG, "🎯 [DEBUG] 使用 getBestProvider: " + bestProvider);
         }
 
         if (bestProvider == null) {
@@ -291,7 +324,7 @@ public class GetLocationTool implements Tool {
         }
 
         // 请求更新位置（单次）
-        Log.d(TAG, "📡 [DEBUG] 请求单次位置更新，提供者：" + bestProvider);
+        Log.d(TAG, "📡 [DEBUG] 请求单次位置更新，提供者：" + bestProvider + ", 超时：" + LOCATION_TIMEOUT_MS + "ms");
         final LocationResult[] result = {null};
         final Object lock = new Object();
         
@@ -317,16 +350,16 @@ public class GetLocationTool implements Tool {
                 }
             }, Looper.getMainLooper());
 
-            // 等待最多 10 秒
-            Log.d(TAG, "⏱️ [DEBUG] 等待位置更新，最多 10 秒...");
+            // #4847 优化：等待超时从 10 秒增加到 30 秒
+            Log.d(TAG, "⏱️ [DEBUG] 等待位置更新，最多 " + (LOCATION_TIMEOUT_MS / 1000) + " 秒...");
             synchronized (lock) {
-                lock.wait(10000);
+                lock.wait(LOCATION_TIMEOUT_MS);
             }
             
             if (result[0] != null) {
                 Log.d(TAG, "✅ [DEBUG] 成功获取位置更新");
             } else {
-                Log.w(TAG, "⚠️ [DEBUG] 位置更新超时（10 秒）");
+                Log.w(TAG, "⚠️ [DEBUG] 位置更新超时（" + (LOCATION_TIMEOUT_MS / 1000) + " 秒）");
             }
         } catch (SecurityException e) {
             Log.e(TAG, "❌ [DEBUG] 请求位置更新失败 - 安全异常", e);
