@@ -9,6 +9,7 @@ import android.util.Log;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.tool.Tool;
 import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 import com.stupidbeauty.sisterfuture.bean.ToolCall;
 import com.stupidbeauty.sisterfuture.bean.Function;
@@ -40,6 +41,7 @@ public class TongYiClient
     this.accessPointManager = accessPointManager;
     this.toolManager = toolManager;
     this.networkRequester = new OkHttpNetworkRequester(this.accessPointManager, this.toolManager);
+    FileLogger.d(TAG, "TongYiClient 初始化完成");
   }
 
   public void sendChatRequest(JSONArray messages, boolean includeTools , OnResponseListener listener, Runnable onStreamComplete)
@@ -60,6 +62,7 @@ public class TongYiClient
 
   private static class OkHttpNetworkRequester implements NetworkRequester
   {
+    private static final String NETWORK_TAG = "TongYiClient.Network";
     private final OkHttpClient client;
     private final ModelAccessPointManager accessPointManager;
     private final ToolManager toolManager;
@@ -73,6 +76,7 @@ public class TongYiClient
         .build();
       this.accessPointManager = accessPointManager;
       this.toolManager = toolManager;
+      FileLogger.d(NETWORK_TAG, "OkHttpNetworkRequester 初始化完成");
     }
 
     @Override
@@ -87,7 +91,7 @@ public class TongYiClient
       
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
           
-      Log.d(TAG, "Using API Key: " + (apiKey != null && !apiKey.isEmpty() ? "Access Point" : "No auth"));
+      FileLogger.d(NETWORK_TAG, "Using API Key: " + (apiKey != null && !apiKey.isEmpty() ? "Access Point" : "No auth"));
 
       try
       {
@@ -128,11 +132,11 @@ public class TongYiClient
         String endpoint = accessPointManager.getCurrentChatEndpoint();
         String fullUrl = baseUrl + endpoint;
         
-        Log.d(TAG, "URL: " + fullUrl);
-        Log.d(TAG, "Body length: " + requestBody.toString().length());
+        FileLogger.d(NETWORK_TAG, "URL: " + fullUrl);
+        FileLogger.d(NETWORK_TAG, "Body length: " + requestBody.toString().length());
 
         if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
-            Log.w(TAG, "⚠️ Double slash in URL!");
+            FileLogger.w(NETWORK_TAG, "⚠️ Double slash in URL!");
         }
 
         Request request = new Request.Builder()
@@ -147,7 +151,7 @@ public class TongYiClient
           @Override
           public void onFailure(Call call, IOException e)
           {
-            Log.e(TAG, "Request failed: " + e.getMessage());
+            FileLogger.e(NETWORK_TAG, "Request failed: " + e.getMessage());
             accessPointManager.reportCurrentAccessPointUnavailable();
             listener.onError(new AccessPointUnavailableException("Current access point is unavailable", e));
           }
@@ -161,23 +165,23 @@ public class TongYiClient
               try {
                 errorBody = response.body().string();
                 int statusCode = response.code();
-                Log.e(TAG, "HTTP " + statusCode + ": " + errorBody);
+                FileLogger.e(NETWORK_TAG, "HTTP " + statusCode + ": " + errorBody);
                 
                 // ✅ #4823 新增：HTTP 400 且是上下文超长 → 不标记为接入点不可用
                 if (statusCode == 400 && ContextLengthUtils.isContextLengthError(errorBody)) {
-                  Log.w(TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点");
+                  FileLogger.w(NETWORK_TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点");
                   listener.onError(new ResponseException(response, errorBody));
                   return; // 直接返回，不标记为不可用
                 }
                 
                 // ✅ #4824 新增：HTTP 429 限流错误 → 不标记为接入点不可用
                 if (statusCode == 429) {
-                  Log.w(TAG, "⚠️ 检测到 HTTP 429 限流错误，不切换接入点");
+                  FileLogger.w(NETWORK_TAG, "⚠️ 检测到 HTTP 429 限流错误，不切换接入点");
                   listener.onError(new RateLimitException(response, errorBody));
                   return; // 直接返回，不标记为不可用
                 }
               } catch (Exception e) {
-                Log.e(TAG, "Failed to read error body: " + e.getMessage());
+                FileLogger.e(NETWORK_TAG, "Failed to read error body: " + e.getMessage());
               }
               
               // 其他错误 → 标记为接入点不可用
@@ -190,6 +194,7 @@ public class TongYiClient
               ResponseBody responseBody = response.body();
               if (responseBody != null)
               {
+                FileLogger.d(NETWORK_TAG, "开始处理 SSE 流式响应");
                 processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete);
               }
             }
@@ -198,6 +203,7 @@ public class TongYiClient
       }
       catch (Exception e)
       {
+        FileLogger.e(NETWORK_TAG, "请求构建失败", e);
         e.printStackTrace();
         listener.onError(e);
       }
@@ -238,7 +244,7 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
         String preview = firstLineBuffer.length() > 500 ? firstLineBuffer.substring(0, 500) : firstLineBuffer.toString();
         if (isHtmlResponse(preview))
         {
-          Log.e(TAG, "API returned HTML page");
+          FileLogger.e(TAG, "API returned HTML page");
           accessPointManager.reportCurrentAccessPointUnavailable();
           listener.onError(new ResponseException(null, "API returned HTML page"));
           return;
@@ -258,6 +264,7 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
           else
           {
             isDone = true;
+            FileLogger.d(TAG, "SSE 流处理完成 [DONE]");
           }
         }
       }
@@ -266,10 +273,12 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
     if (isDone && onStreamComplete != null)
     {
       onStreamComplete.run();
+      FileLogger.d(TAG, "流式响应处理完成，回调已执行");
     }
   }
   catch (IOException e)
   {
+    FileLogger.e(TAG, "SSE 流处理失败", e);
     accessPointManager.reportCurrentAccessPointUnavailable();
     listener.onError(new AccessPointUnavailableException("Stream failed", e));
   }
