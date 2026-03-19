@@ -211,7 +211,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             // #4794: Add click listener to toggle expand/collapse
             itemView.setOnClickListener(v -> {
                 isExpanded = !isExpanded;
-                bind(getAdapterPosition());
+                int position = getAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    bind(messages.get(position));
+                }
             });
             
             textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
