@@ -5,6 +5,7 @@ import com.stupidbeauty.sisterfuture.bean.MessageType;
 import androidx.recyclerview.widget.RecyclerView;
 import android.text.Spannable;
 import android.text.Selection;
+import android.text.TextUtils;
 import butterknife.ButterKnife;
 import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
 import com.koushikdutta.async.http.server.AsyncHttpServer;
@@ -201,10 +202,21 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
     public static class ToolCallResultViewHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.tool_call_result_text) TextView textView;
+        private static final int MAX_LINES = 10; // #4794: Maximum lines to display
 
         public ToolCallResultViewHolder(View itemView) {
             super(itemView);
             ButterKnife.bind(this, itemView);
+            
+            // #4794: Add click listener to toggle expand/collapse
+            itemView.setOnClickListener(v => {
+                MessageItem item = (MessageItem) textView.geTag();
+                if (item != null) {
+                    item.isExpanded = !item.isExpanded;
+                    bind(item); // Re-bind with new state
+                }
+            });
+            
             textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
                 @Override
                 public boolean onCreateActionMode(ActionMode mode, Menu menu) {
@@ -239,6 +251,16 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
         public void bind(MessageItem message) {
             textView.setText(message.getText());
+            textView.setTag(message); // #4794: Save reference for click
+            
+            // #4794: Apply line limit based on expanded state
+            if (message.isExpanded) {
+                textView.setMaxLines(Integer.MAX_VALUE);
+                textView.setEllipsize(null);
+            } else {
+                textView.setMaxLines(MAX_LINES);
+                textView.setEllipsize(TextUtils.TruncateAt.END);
+            }
         }
     }
 }
