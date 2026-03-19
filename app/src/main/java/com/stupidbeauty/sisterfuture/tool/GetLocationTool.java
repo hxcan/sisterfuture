@@ -46,14 +46,14 @@ public class GetLocationTool implements Tool {
         // 初始化百度地图 SDK
         // AK 已从 AndroidManifest.xml 自动读取，不需要手动设置
         try {
-            // 1. 同意隐私协议
-            SDKInitializer.setAgreePrivacy(context, true);
+            // 1. 同意隐私协议 - 修复 #4847：使用 ApplicationContext
+            SDKInitializer.setAgreePrivacy(context.getApplicationContext(), true);
             
             // 2. 设置坐标系为 BD09LL（百度经纬度坐标）
             SDKInitializer.setCoordType(CoordType.BD09LL);
             
-            // 3. 初始化 SDK（会自动从 Manifest 读取 AK）
-            SDKInitializer.initialize(context);
+            // 3. 初始化 SDK（会自动从 Manifest 读取 AK）- 修复 #4847：使用 ApplicationContext
+            SDKInitializer.initialize(context.getApplicationContext());
             
             // 4. 创建 GeoCoder 实例
             geoCoder = GeoCoder.newInstance();
