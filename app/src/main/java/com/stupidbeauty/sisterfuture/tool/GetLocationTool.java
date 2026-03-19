@@ -108,8 +108,11 @@ public class GetLocationTool implements Tool {
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
             try {
+                Log.d(TAG, "🔍 [DEBUG] 开始执行定位工具");
+                
                 // 检查权限
                 if (!hasLocationPermission()) {
+                    Log.w(TAG, "❌ [DEBUG] 位置权限未授权");
                     JSONObject result = new JSONObject();
                     result.put("status", "error");
                     result.put("message", "当前不具有位置权限，需要您授权才能访问地理位置。请允许权限请求，之后再重试此操作。");
@@ -134,10 +137,14 @@ public class GetLocationTool implements Tool {
                     return;
                 }
 
+                Log.d(TAG, "✅ [DEBUG] 位置权限已授权");
+
                 // 获取位置
+                Log.d(TAG, "📍 [DEBUG] 开始获取位置...");
                 LocationResult locationResult = getCurrentLocation();
                 
                 if (locationResult == null || locationResult.location == null) {
+                    Log.e(TAG, "❌ [DEBUG] 获取位置失败 - locationResult 为 null");
                     JSONObject result = new JSONObject();
                     result.put("status", "error");
                     result.put("message", "无法获取当前位置，请检查 GPS 是否开启或网络连接是否正常。");
@@ -150,15 +157,31 @@ public class GetLocationTool implements Tool {
                 String provider = locationResult.location.getProvider();
                 float accuracy = locationResult.location.getAccuracy();
 
+                Log.d(TAG, "✅ [DEBUG] 位置获取成功 - lat=" + latitude + ", lng=" + longitude + ", provider=" + provider + ", accuracy=" + accuracy);
+
                 // 使用百度地图进行反向地理编码（如果 SDK 已初始化）
                 String addressText = null;
                 if (geoCoder != null) {
+                    Log.d(TAG, "🗺️ [DEBUG] 开始百度反向地理编码...");
                     addressText = reverseGeocodeBaidu(latitude, longitude);
+                    if (addressText != null && !addressText.isEmpty()) {
+                        Log.d(TAG, "✅ [DEBUG] 百度反向地理编码成功：" + addressText);
+                    } else {
+                        Log.w(TAG, "⚠️ [DEBUG] 百度反向地理编码失败或返回空，将降级使用 Android Geocoder");
+                    }
+                } else {
+                    Log.w(TAG, "⚠️ [DEBUG] 百度 GeoCoder 未初始化，直接使用 Android Geocoder");
                 }
                 
                 // 备用方案：如果百度失败或 SDK 未初始化，使用 Android 原生 Geocoder
                 if (addressText == null || addressText.isEmpty()) {
+                    Log.d(TAG, "🗺️ [DEBUG] 开始 Android 反向地理编码...");
                     addressText = reverseGeocodeAndroid(latitude, longitude);
+                    if (addressText != null && !addressText.isEmpty()) {
+                        Log.d(TAG, "✅ [DEBUG] Android 反向地理编码成功：" + addressText);
+                    } else {
+                        Log.w(TAG, "⚠️ [DEBUG] Android 反向地理编码失败");
+                    }
                 }
 
                 JSONObject result = new JSONObject();
@@ -172,7 +195,7 @@ public class GetLocationTool implements Tool {
                 locationData.put("address", addressText != null ? addressText : "无法解析地址");
                 locationData.put("formatted_address", String.format(Locale.CHINA, "纬度：%.6f, 经度：%.6f", latitude, longitude));
                 
-                if (geoCoder != null) {
+                if (geoCoder != null && addressText != null && !addressText.isEmpty()) {
                     locationData.put("geocoder", "Baidu");
                 } else {
                     locationData.put("geocoder", "Android");
@@ -181,10 +204,11 @@ public class GetLocationTool implements Tool {
                 result.put("location", locationData);
                 result.put("message", "位置获取成功");
 
+                Log.d(TAG, "✅ [DEBUG] 定位工具执行完成，返回结果");
                 callback.onResult(result);
 
             } catch (Exception e) {
-                Log.e(TAG, "执行出错", e);
+                Log.e(TAG, "❌ [DEBUG] 执行出错", e);
                 try {
                     JSONObject error = new JSONObject();
                     error.put("status", "error");
@@ -197,30 +221,44 @@ public class GetLocationTool implements Tool {
 
     private boolean hasLocationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            return context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                   context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+            boolean fineLocation = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+            boolean coarseLocation = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+            Log.d(TAG, "🔐 [DEBUG] 权限检查 - FINE=" + fineLocation + ", COARSE=" + coarseLocation);
+            return fineLocation || coarseLocation;
         }
         return true;
     }
 
     private LocationResult getCurrentLocation() {
+        Log.d(TAG, "📍 [DEBUG] getCurrentLocation() 开始执行");
+        
         LocationManager locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        
+        if (locationManager == null) {
+            Log.e(TAG, "❌ [DEBUG] LocationManager 为 null");
+            return null;
+        }
         
         // 尝试 GPS 定位
         List<String> providers = locationManager.getProviders(true);
+        Log.d(TAG, "📡 [DEBUG] 可用的位置提供者：" + (providers != null ? providers.size() : 0) + " 个 - " + (providers != null ? providers.toString() : "null"));
+        
         String bestProvider = locationManager.getBestProvider(
             new android.location.Criteria(), true
         );
+        Log.d(TAG, "🎯 [DEBUG] 最佳位置提供者：" + bestProvider);
 
-        if (bestProvider == null && providers.contains(LocationManager.GPS_PROVIDER)) {
+        if (bestProvider == null && providers != null && providers.contains(LocationManager.GPS_PROVIDER)) {
             bestProvider = LocationManager.GPS_PROVIDER;
+            Log.d(TAG, "🎯 [DEBUG] 切换到 GPS_PROVIDER");
         }
-        if (bestProvider == null && providers.contains(LocationManager.NETWORK_PROVIDER)) {
+        if (bestProvider == null && providers != null && providers.contains(LocationManager.NETWORK_PROVIDER)) {
             bestProvider = LocationManager.NETWORK_PROVIDER;
+            Log.d(TAG, "🎯 [DEBUG] 切换到 NETWORK_PROVIDER");
         }
 
         if (bestProvider == null) {
-            Log.e(TAG, "没有可用的位置提供者");
+            Log.e(TAG, "❌ [DEBUG] 没有可用的位置提供者");
             return null;
         }
 
@@ -228,20 +266,32 @@ public class GetLocationTool implements Tool {
         Location lastKnownLocation = null;
         try {
             lastKnownLocation = locationManager.getLastKnownLocation(bestProvider);
+            if (lastKnownLocation != null) {
+                Log.d(TAG, "📍 [DEBUG] 获取到最后已知位置 - lat=" + lastKnownLocation.getLatitude() + ", lng=" + lastKnownLocation.getLongitude() + ", time=" + lastKnownLocation.getTime());
+            } else {
+                Log.w(TAG, "⚠️ [DEBUG] 最后已知位置为 null");
+            }
         } catch (SecurityException e) {
-            Log.e(TAG, "权限异常", e);
+            Log.e(TAG, "❌ [DEBUG] 权限异常", e);
         }
 
         if (lastKnownLocation != null) {
             // 检查位置是否过时（超过 2 分钟）
             long currentTime = System.currentTimeMillis();
             long locationTime = lastKnownLocation.getTime();
-            if (currentTime - locationTime < 120000) { // 2 分钟内
+            long age = currentTime - locationTime;
+            Log.d(TAG, "⏱️ [DEBUG] 位置年龄：" + age + "ms (限制 120000ms)");
+            
+            if (age < 120000) { // 2 分钟内
+                Log.d(TAG, "✅ [DEBUG] 使用最后已知位置（2 分钟内）");
                 return new LocationResult(lastKnownLocation);
+            } else {
+                Log.w(TAG, "⚠️ [DEBUG] 位置过时，尝试请求新位置");
             }
         }
 
         // 请求更新位置（单次）
+        Log.d(TAG, "📡 [DEBUG] 请求单次位置更新，提供者：" + bestProvider);
         final LocationResult[] result = {null};
         final Object lock = new Object();
         
@@ -249,26 +299,49 @@ public class GetLocationTool implements Tool {
             locationManager.requestSingleUpdate(bestProvider, new LocationListener() {
                 @Override
                 public void onLocationChanged(@NonNull Location location) {
+                    Log.d(TAG, "✅ [DEBUG] 位置更新回调 - lat=" + location.getLatitude() + ", lng=" + location.getLongitude());
                     result[0] = new LocationResult(location);
                     synchronized (lock) {
                         lock.notify();
                     }
                 }
 
-                @Override public void onProviderDisabled(@NonNull String provider) {}
-                @Override public void onProviderEnabled(@NonNull String provider) {}
-                @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+                @Override public void onProviderDisabled(@NonNull String provider) {
+                    Log.w(TAG, "⚠️ [DEBUG] 位置提供者被禁用：" + provider);
+                }
+                @Override public void onProviderEnabled(@NonNull String provider) {
+                    Log.d(TAG, "✅ [DEBUG] 位置提供者已启用：" + provider);
+                }
+                @Override public void onStatusChanged(String provider, int status, Bundle extras) {
+                    Log.d(TAG, "📡 [DEBUG] 位置提供者状态变化：" + provider + ", status=" + status);
+                }
             }, Looper.getMainLooper());
 
             // 等待最多 10 秒
+            Log.d(TAG, "⏱️ [DEBUG] 等待位置更新，最多 10 秒...");
             synchronized (lock) {
                 lock.wait(10000);
             }
-        } catch (SecurityException | InterruptedException e) {
-            Log.e(TAG, "请求位置更新失败", e);
+            
+            if (result[0] != null) {
+                Log.d(TAG, "✅ [DEBUG] 成功获取位置更新");
+            } else {
+                Log.w(TAG, "⚠️ [DEBUG] 位置更新超时（10 秒）");
+            }
+        } catch (SecurityException e) {
+            Log.e(TAG, "❌ [DEBUG] 请求位置更新失败 - 安全异常", e);
+        } catch (InterruptedException e) {
+            Log.e(TAG, "❌ [DEBUG] 请求位置更新失败 - 中断异常", e);
+            Thread.currentThread().interrupt();
         }
 
-        return result[0] != null ? result[0] : (lastKnownLocation != null ? new LocationResult(lastKnownLocation) : null);
+        LocationResult finalResult = result[0] != null ? result[0] : (lastKnownLocation != null ? new LocationResult(lastKnownLocation) : null);
+        if (finalResult != null) {
+            Log.d(TAG, "✅ [DEBUG] getCurrentLocation() 成功返回");
+        } else {
+            Log.e(TAG, "❌ [DEBUG] getCurrentLocation() 失败返回 null");
+        }
+        return finalResult;
     }
 
     /**
@@ -277,7 +350,7 @@ public class GetLocationTool implements Tool {
      */
     private String reverseGeocodeBaidu(double latitude, double longitude) {
         if (geoCoder == null) {
-            Log.w(TAG, "百度 GeoCoder 未初始化");
+            Log.w(TAG, "⚠️ [DEBUG] 百度 GeoCoder 未初始化");
             return null;
         }
 
@@ -290,16 +363,17 @@ public class GetLocationTool implements Tool {
                 @Override
                 public void onGetGeoCodeResult(com.baidu.mapapi.search.geocode.GeoCodeResult result) {
                     // 正向地理编码（地址→坐标），不使用
+                    Log.d(TAG, "🗺️ [DEBUG] 百度正向地理编码回调（不使用）");
                     latch.countDown();
                 }
 
                 @Override
                 public void onGetReverseGeoCodeResult(ReverseGeoCodeResult reverseGeoCodeResult) {
-                    Log.d(TAG, "百度反向地理编码结果：" + reverseGeoCodeResult);
+                    Log.d(TAG, "🗺️ [DEBUG] 百度反向地理编码回调");
                     
                     if (reverseGeoCodeResult == null || 
                         reverseGeoCodeResult.error != SearchResult.ERRORNO.NO_ERROR) {
-                        Log.w(TAG, "百度反向地理编码失败：" + 
+                        Log.w(TAG, "❌ [DEBUG] 百度反向地理编码失败：" + 
                             (reverseGeoCodeResult != null ? reverseGeoCodeResult.error : "null"));
                         latch.countDown();
                         return;
@@ -322,7 +396,7 @@ public class GetLocationTool implements Tool {
                     }
 
                     resultAddress.set(sb.toString());
-                    Log.d(TAG, "百度反向地理编码成功：" + sb.toString());
+                    Log.d(TAG, "✅ [DEBUG] 百度反向地理编码成功：" + sb.toString());
                     latch.countDown();
                 }
             });
@@ -336,30 +410,39 @@ public class GetLocationTool implements Tool {
                 // POI 召回半径，允许设置区间为 0-1000 米，超过 1000 米按 1000 米召回。默认值为 1000
                 .radius(200);
             
-            Log.d(TAG, "发起百度反向地理编码请求：lat=" + latitude + ", lng=" + longitude);
+            Log.d(TAG, "🗺️ [DEBUG] 发起百度反向地理编码请求：lat=" + latitude + ", lng=" + longitude);
             
             // 发起反向地理编码请求
             geoCoder.reverseGeoCode(option);
             
             // 等待回调（最多 5 秒）
+            Log.d(TAG, "⏱️ [DEBUG] 等待百度反向地理编码回调，最多 5 秒...");
             if (latch.await(5, TimeUnit.SECONDS)) {
-                return resultAddress.get();
+                String result = resultAddress.get();
+                if (result != null) {
+                    Log.d(TAG, "✅ [DEBUG] 百度反向地理编码完成：" + result);
+                } else {
+                    Log.w(TAG, "⚠️ [DEBUG] 百度反向地理编码返回 null");
+                }
+                return result;
             } else {
-                Log.w(TAG, "百度反向地理编码超时");
+                Log.w(TAG, "⚠️ [DEBUG] 百度反向地理编码超时（5 秒）");
                 return null;
             }
         } catch (Exception e) {
-            Log.e(TAG, "百度反向地理编码失败", e);
+            Log.e(TAG, "❌ [DEBUG] 百度反向地理编码失败", e);
             return null;
         }
     }
 
     private String reverseGeocodeAndroid(double latitude, double longitude) {
+        Log.d(TAG, "🗺️ [DEBUG] 开始 Android Geocoder 反向地理编码");
         try {
             Geocoder geocoder = new Geocoder(context, Locale.CHINA);
             List<Address> addresses = geocoder.getFromLocation(latitude, longitude, 1);
             
             if (addresses != null && !addresses.isEmpty()) {
+                Log.d(TAG, "✅ [DEBUG] Android Geocoder 返回 " + addresses.size() + " 个结果");
                 Address addr = addresses.get(0);
                 StringBuilder sb = new StringBuilder();
                 
@@ -368,12 +451,19 @@ public class GetLocationTool implements Tool {
                     sb.append(addr.getAddressLine(i));
                 }
                 
-                return sb.toString();
+                String result = sb.toString();
+                Log.d(TAG, "✅ [DEBUG] Android Geocoder 成功：" + result);
+                return result;
+            } else {
+                Log.w(TAG, "⚠️ [DEBUG] Android Geocoder 返回空列表");
             }
         } catch (IOException e) {
-            Log.e(TAG, "Android Geocoder 失败", e);
+            Log.e(TAG, "❌ [DEBUG] Android Geocoder 失败", e);
+        } catch (Exception e) {
+            Log.e(TAG, "❌ [DEBUG] Android Geocoder 异常", e);
         }
         
+        Log.w(TAG, "⚠️ [DEBUG] Android Geocoder 返回 null");
         return null;
     }
 
