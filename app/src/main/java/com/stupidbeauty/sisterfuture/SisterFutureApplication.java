@@ -11,6 +11,7 @@ import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Bundle;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 /**
  * 应用程序对象。
@@ -27,7 +28,7 @@ public class SisterFutureApplication extends Application
 	{
     super.attachBaseContext(base);
 
-    MultiDex.install(this); //启动MultiDex.
+    MultiDex.install(this); //启动 MultiDex.
 	}
 
 	@Override
@@ -38,6 +39,10 @@ public class SisterFutureApplication extends Application
 	{
 		super.onCreate(); //创建超类。
 		mContext = getApplicationContext(); //获取应用程序上下文。 
+		
+		// #4834 初始化文件日志系统
+		FileLogger.init(this);
+		Log.i("SisterFutureApplication", "✅ FileLogger 已初始化");
 	} //public void onCreate()
 
 	/**
@@ -50,7 +55,7 @@ public class SisterFutureApplication extends Application
 	}  //public static Context getAppContext()
 	
   public static void handleQuestion(Context context, String question) {
-      // 启动主Activity并传递问题
+      // 启动主 Activity 并传递问题
       Intent intent = new Intent(context, SisterFutureActivity.class);
       intent.putExtra("question", question);
       intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -58,4 +63,3 @@ public class SisterFutureApplication extends Application
   }
 
 } //public class SisterFutureApplication extends Application
-
