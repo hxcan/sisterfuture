@@ -37,11 +37,16 @@ import io.noties.markwon.Markwon;
 import io.noties.markwon.core.CorePlugin;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
 import io.noties.markwon.ext.tables.TablePlugin;
+import android.util.Log;
 
 public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final int TYPE_USER = 0;
     private static final int TYPE_AI = 1;
     private static final int TYPE_TOOL_CALL_RESULT = 2;
+    
+    // 🔥 #4881 救援模式：仅限制 TOOL_CALL_RESULT 类型消息的最大显示长度
+    private static final int MAX_TOOL_RESULT_DISPLAY_LENGTH = 10000; // 10KB 显示限制
+    private static final String TAG = "MessageAdapter";
 
     private List<MessageItem> messages = new ArrayList<>();
 
@@ -106,6 +111,18 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
     }
 
+    // 🔥 #4881 救援：仅截断工具调用结果消息的超长文本
+    private static String limitToolResultDisplayLength(String text) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() > MAX_TOOL_RESULT_DISPLAY_LENGTH) {
+            Log.w(TAG, "🔥 工具结果文本超长，截断显示：" + text.length() + " → " + MAX_TOOL_RESULT_DISPLAY_LENGTH + " 字符");
+            return text.substring(0, MAX_TOOL_RESULT_DISPLAY_LENGTH) + "\n\n... [内容过长，已截断显示 " + (text.length() - MAX_TOOL_RESULT_DISPLAY_LENGTH) + " 字符] ...";
+        }
+        return text;
+    }
+
     public static class UserMessageViewHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.user_text) TextView textView;
 
@@ -145,6 +162,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
+            // User 消息不限制长度
             textView.setText(message.getText());
         }
     }
@@ -195,6 +213,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
+            // AI 消息不限制长度
             markwon.setMarkdown(textView, message.getText());
         }
     }
@@ -252,7 +271,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
-            textView.setText(message.getText());
+            // 🔥 #4881 仅工具调用结果消息限制显示长度
+            String text = limitToolResultDisplayLength(message.getText());
+            textView.setText(text);
             // 重置状态 - 依赖布局文件中的 maxLines 和 ellipsize 设置
             isExpanded = false;
         }
