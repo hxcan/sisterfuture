@@ -89,7 +89,7 @@ android
   defaultConfig 
   {
     applicationId "com.stupidbeauty.sisterfuture"
-    minSdkVersion 22  // 百度地图 SDK 要求最低 API 22
+    minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
     targetSdkVersion 28
     versionCode 932
     versionName "2026.3.5"
