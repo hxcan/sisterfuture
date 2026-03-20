@@ -276,7 +276,8 @@ public class ContextManager
       return new ArrayList<>();
     }
 
-    FileLogger.d(TAG, CodePosition.newInstance().toString() + ", history string: " + historyStr); // Debug.
+    // 🔍 #4881 修复：注释掉输出超长 history 字符串的调试代码，防止日志单行过长导致 ANR
+    // FileLogger.d(TAG, CodePosition.newInstance().toString() + ", history string: " + historyStr); // Debug.
     List<JSONObject> list = new ArrayList<>();
 
     try
