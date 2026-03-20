@@ -293,14 +293,29 @@ public class ContextManager
         list.add(array.getJSONObject(i));
       }
       
-      // 🔍 #4855 调试：输出加载的历史消息
+      // 🔍 #4881 调试：输出每条消息的内容长度，定位超长消息
       for (int i = 0; i < list.size(); i++)
       {
         JSONObject msg = list.get(i);
         String role = msg.optString("role", "unknown");
         String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " 个" : "无";
         String toolId = msg.optString("tool_call_id", "无");
-        FileLogger.d(TAG, "📋 [getHistory] 历史[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
+        String content = msg.optString("content", "");
+        int contentLength = content.length();
+        
+        // 🔍 #4881 重点标记 tool 消息和长内容
+        if (role.equals("tool"))
+        {
+          FileLogger.i(TAG, "📏 [getHistory] 消息[" + i + "] role=tool, tool_call_id=" + toolId + ", content 长度=" + contentLength);
+        }
+        else if (contentLength > 1000)
+        {
+          FileLogger.w(TAG, "📏 [getHistory] 消息[" + i + "] role=" + role + ", content 长度=" + contentLength + " ⚠️超长");
+        }
+        else
+        {
+          FileLogger.d(TAG, "📏 [getHistory] 消息[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", content 长度=" + contentLength);
+        }
       }
     }
     catch (Exception e)
