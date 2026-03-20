@@ -112,7 +112,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     // 🔥 #4881 救援：仅截断工具调用结果消息的超长文本
-    private String limitToolResultDisplayLength(String text) {
+    private static String limitToolResultDisplayLength(String text) {
         if (text == null) {
             return "";
         }
