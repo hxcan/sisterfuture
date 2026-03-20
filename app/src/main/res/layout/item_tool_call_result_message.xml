@@ -14,5 +14,7 @@
         android:background="#FF6B6B" 
         android:padding="8dp" 
         android:textAlignment="viewStart" 
-        android:textIsSelectable="true"/>
+        android:textIsSelectable="true"
+        android:maxLines="5"
+        android:ellipsize="end"/>
 </LinearLayout>
