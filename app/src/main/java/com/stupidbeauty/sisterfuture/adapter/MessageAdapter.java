@@ -37,11 +37,16 @@ import io.noties.markwon.Markwon;
 import io.noties.markwon.core.CorePlugin;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
 import io.noties.markwon.ext.tables.TablePlugin;
+import android.util.Log;
 
 public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final int TYPE_USER = 0;
     private static final int TYPE_AI = 1;
     private static final int TYPE_TOOL_CALL_RESULT = 2;
+    
+    // 🔥 #4881 救援模式：限制 TextView 最大显示长度，防止超长文本导致 ANR
+    private static final int MAX_DISPLAY_LENGTH = 10000; // 10KB 显示限制
+    private static final String TAG = "MessageAdapter";
 
     private List<MessageItem> messages = new ArrayList<>();
 
@@ -106,6 +111,18 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
     }
 
+    // 🔥 #4881 救援：截断超长文本，防止 TextView 渲染崩溃
+    private String limitDisplayLength(String text) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() > MAX_DISPLAY_LENGTH) {
+            Log.w(TAG, "🔥 文本超长，截断显示：" + text.length() + " → " + MAX_DISPLAY_LENGTH + " 字符");
+            return text.substring(0, MAX_DISPLAY_LENGTH) + "\n\n... [内容过长，已截断显示 " + (text.length() - MAX_DISPLAY_LENGTH) + " 字符] ...";
+        }
+        return text;
+    }
+
     public static class UserMessageViewHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.user_text) TextView textView;
 
@@ -145,7 +162,8 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
-            textView.setText(message.getText());
+            String text = limitDisplayLength(message.getText());
+            textView.setText(text);
         }
     }
 
@@ -195,7 +213,8 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
-            markwon.setMarkdown(textView, message.getText());
+            String text = limitDisplayLength(message.getText());
+            markwon.setMarkdown(textView, text);
         }
     }
 
@@ -252,7 +271,8 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
-            textView.setText(message.getText());
+            String text = limitDisplayLength(message.getText());
+            textView.setText(text);
             // 重置状态 - 依赖布局文件中的 maxLines 和 ellipsize 设置
             isExpanded = false;
         }
