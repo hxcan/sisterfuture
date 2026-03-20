@@ -31,10 +31,11 @@ public class ContextLengthUtils {
                                    errorMessage.contains("context length") ||
                                    errorMessage.contains("exceeds the available context size") ||
                                    errorMessage.contains("exceeds maximum context length") ||
-                                   errorMessage.contains("context window exceeds limit");
+                                   errorMessage.contains("context window exceeds limit") ||
+                                   errorMessage.contains("Exceeded limit on max bytes to request body"); // ✅ #4884 阿里云请求体超长错误
         
         if (isContextTooLong) {
-            Log.d(TAG, "✅ 检测到上下文超长错误: " + errorMessage.substring(0, Math.min(100, errorMessage.length())));
+            Log.d(TAG, "✅ 检测到上下文超长错误：" + errorMessage.substring(0, Math.min(100, errorMessage.length())));
         }
         
         return isContextTooLong;
