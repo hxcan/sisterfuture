@@ -202,15 +202,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     public static class ToolCallResultViewHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.tool_call_result_text) TextView textView;
         private boolean isExpanded = false;
-        private static final int MAX_LINES = 5;
 
         public ToolCallResultViewHolder(View itemView) {
             super(itemView);
             ButterKnife.bind(this, itemView);
-            
-            // 设置初始显示行数限制
-            textView.setMaxLines(MAX_LINES);
-            textView.setEllipsize(android.text.TextUtils.TruncateAt.END);
             
             // 点击切换展开/收起状态
             itemView.setOnClickListener(v -> {
@@ -219,7 +214,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     textView.setMaxLines(Integer.MAX_VALUE);
                     textView.setEllipsize(null);
                 } else {
-                    textView.setMaxLines(MAX_LINES);
+                    textView.setMaxLines(5);
                     textView.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 }
             });
@@ -258,10 +253,8 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
         public void bind(MessageItem message) {
             textView.setText(message.getText());
-            // 重置状态
+            // 重置状态 - 依赖布局文件中的 maxLines 和 ellipsize 设置
             isExpanded = false;
-            textView.setMaxLines(MAX_LINES);
-            textView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         }
     }
 }
