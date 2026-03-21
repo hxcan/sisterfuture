@@ -108,6 +108,9 @@ import com.stupidbeauty.lanime.callback.CommitTextCallback;
 import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
+import android.content.pm.PackageManager;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
@@ -132,6 +135,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private StringBuilder accumulatedAnswer = new StringBuilder();
 
   private static final int PERMISSIONS_REQUEST =1;
+  private static final int NOTIFICATION_PERMISSION_REQUEST = 1001;
   private TongYiClient tongYiClient;
   private boolean isTtsSpeaking = false;
 
@@ -502,6 +506,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         recognizeResulttextView.setEnabled(false);
         sendButtonn2.setEnabled(false);
         commandRecognizebutton2.setEnabled(false);
+        
+        // #4895 更新通知状态：正在思考中
+        SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在思考中...");
       }
     });
   }
@@ -551,6 +558,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void sendChatRequestTongYi()
   {
     Log.d(TAG, "开始发送请求，当前接入点：" + modelAccessPointManager.getCurrentAccessPoint().getName());
+    
+    // #4895 更新通知状态：正在发送请求
+    SisterFutureService.updateNotificationStatus(this, "正在发送请求...");
 
     // 🔥 #4657 请求前检查是否超过阈值
     if (modelAccessPointManager.checkFailureThreshold()) {
@@ -626,6 +636,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         public void onResponse(String response)
         {
         hideThinkingOverlay();
+          // #4895 更新通知状态：收到响应，正在解析
+          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
           parseTongYiResponse(response);
         }
 
@@ -634,6 +646,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
           Log.e(TAG, "请求出错：" + error.getClass().getSimpleName() + " - " + error.getMessage());
           hideThinkingOverlay();
+          
+          // #4895 更新通知状态：请求出错
+          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "请求出错，请重试");
 
           boolean isAccessPointUnavailable = false;
 
@@ -849,6 +864,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
               if (toolManager.isToolAsync(toolName))
               {
+                // #4895 更新通知状态：正在执行工具
+                SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在执行：" + toolName);
+                
                 toolManager.executeToolAsync(toolName, args, new Tool.OnResultCallback()
                 {
                   @Override
@@ -980,6 +998,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           ttsSayReply(fullAnswer);
           contextManager.addAssistantMessage(fullAnswer);
           contextManager.increaseMaxRounds();
+          
+          // #4895 更新通知状态：回复完成
+          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "回复完成");
           
           // ✅ #4657 请求成功，重置连续失败计数器
           modelAccessPointManager.resetFailureCount();
@@ -1241,6 +1262,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     connectSignals();
     displayExistingContext();
     
+    // #4895 启动前台服务
+    SisterFutureService.startForegroundService(this);
+    requestNotificationPermission();
+    
     if (savedInstanceState == null)
     {
       articleListmyRecyclerView.post(() -> 
@@ -1367,6 +1392,39 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     else
     {
       requestPermission();
+    }
+  }
+
+  /**
+   * #4895 请求通知权限（Android 13+）
+   */
+  private void requestNotificationPermission() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+          != PackageManager.PERMISSION_GRANTED) {
+        Log.d(TAG, "请求 POST_NOTIFICATIONS 权限");
+        ActivityCompat.requestPermissions(this,
+            new String[]{Manifest.permission.POST_NOTIFICATIONS},
+            NOTIFICATION_PERMISSION_REQUEST);
+      } else {
+        Log.d(TAG, "POST_NOTIFICATIONS 权限已授予");
+      }
+    }
+  }
+
+  @Override
+  public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    
+    if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
+      if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        Log.d(TAG, "✅ POST_NOTIFICATIONS 权限已授予");
+      } else {
+        Log.w(TAG, "⚠️ POST_NOTIFICATIONS 权限被拒绝，通知功能可能不可用");
+        Toast.makeText(this, "通知权限被拒绝，后台通知可能无法显示", Toast.LENGTH_LONG).show();
+      }
+    } else if (requestCode == PERMISSIONS_REQUEST) {
+      // 原有权限请求处理
     }
   }
 
