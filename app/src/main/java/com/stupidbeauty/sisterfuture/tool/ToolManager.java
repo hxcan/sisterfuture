@@ -12,7 +12,7 @@ public class ToolManager
 {
   private static final String TAG = "ToolManager";
   private Map<String, Tool> toolRegistry = new HashMap<>();
-  private ToolCallTracker callTracker = new ToolCallTracker();  // 🔥 新增：幂等性追踪器
+  private ToolCallTracker callTracker = new ToolCallTracker();  // 🔥 幂等性追踪器
 
   public void registerTool(Tool tool)
   {
@@ -50,7 +50,8 @@ public class ToolManager
     return tool != null && tool.isAsync();
   }
 
-  // 🔥 新增：带幂等检查的异步执行入口
+  // 🔥 修改：移除入口处的幂等检查，改为在回复时检查
+  // 原因：工具可能回调多次（onResult + onError），入口检查无法阻止重复回复
   public void executeToolAsync(String toolId, String toolName, JSONObject arguments, Tool.OnResultCallback callback)
   {
     Tool tool = getTool(toolName);
@@ -69,12 +70,7 @@ public class ToolManager
       return;
     }
 
-    // 🔥 幂等性检查：如果该 toolId 已回复过，则忽略
-    if (!callTracker.tryMarkAsReplied(toolId))
-    {
-      Log.w(TAG, "忽略重复的工具回复消息，toolId=" + toolId + ", toolName=" + toolName);
-      return;  // 忽略第二次回复
-    }
+    // 🔥 不再在这里做幂等检查，改为在 postProcessToolResults 中回复前检查
 
     if (!tool.isAsync())
     {
@@ -94,6 +90,12 @@ public class ToolManager
       // 异步工具直接调用
       tool.executeAsync(arguments, callback);
     }
+  }
+
+  // 🔥 新增：在回复前检查是否已回复过（正确的时机！）
+  public boolean tryMarkToolCallAsReplied(String toolCallId)
+  {
+    return callTracker.tryMarkAsReplied(toolCallId);
   }
 
   // 🔥 新增：清理已追踪的 toolId（在新一轮对话前调用）
