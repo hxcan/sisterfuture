@@ -34,7 +34,8 @@ public class ToolRegistry
     Context context)
   {
     // === 基础工具 ===
-    toolManager.registerTool(new ConversationResetTool(contextManager));
+    // 🔥 #4791 修改：传入 toolManager 参数
+    toolManager.registerTool(new ConversationResetTool(contextManager, toolManager));
     toolManager.registerTool(new GetCurrentTimeTool());
     toolManager.registerTool(new GetLocationTool(context));
 
