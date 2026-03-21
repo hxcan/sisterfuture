@@ -6,11 +6,13 @@ import java.util.List;
 import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import android.util.Log;
 
 public class ToolManager
 {
   private static final String TAG = "ToolManager";
-  private Map<String, Tool> toolRegistry = new HashMap<>(); // 字段名是 toolRegistry
+  private Map<String, Tool> toolRegistry = new HashMap<>();
+  private ToolCallTracker callTracker = new ToolCallTracker();  // 🔥 新增：幂等性追踪器
 
   public void registerTool(Tool tool)
   {
@@ -42,15 +44,14 @@ public class ToolManager
     return tool.execute(arguments);
   }
 
-  // 🔥 新增：判断是否为异步工具
   public boolean isToolAsync(String toolName)
   {
     Tool tool = getTool(toolName);
     return tool != null && tool.isAsync();
   }
 
-  // 🔥 新增：异步执行入口
-  public void executeToolAsync(String toolName, JSONObject arguments, Tool.OnResultCallback callback)
+  // 🔥 新增：带幂等检查的异步执行入口
+  public void executeToolAsync(String toolId, String toolName, JSONObject arguments, Tool.OnResultCallback callback)
   {
     Tool tool = getTool(toolName);
     if (tool == null)
@@ -66,6 +67,13 @@ public class ToolManager
         callback.onError(e);
       }
       return;
+    }
+
+    // 🔥 幂等性检查：如果该 toolId 已回复过，则忽略
+    if (!callTracker.tryMarkAsReplied(toolId))
+    {
+      Log.w(TAG, "忽略重复的工具回复消息，toolId=" + toolId + ", toolName=" + toolName);
+      return;  // 忽略第二次回复
     }
 
     if (!tool.isAsync())
@@ -88,6 +96,19 @@ public class ToolManager
     }
   }
 
+  // 🔥 新增：清理已追踪的 toolId（在新一轮对话前调用）
+  public void clearTrackedCalls()
+  {
+    callTracker.clearAll();
+    Log.d(TAG, "已清空所有追踪的 tool_call_id");
+  }
+
+  // 🔥 新增：清理单个 toolId
+  public void clearTrackedCall(String toolId)
+  {
+    callTracker.clearRepliedCallId(toolId);
+  }
+
   // ✅ 原有方法保持不变
   public List<Tool> getRegisteredTools()
   {
@@ -103,5 +124,11 @@ public class ToolManager
   {
     Tool tool = toolRegistry.get(toolName);
     return tool != null ? tool.getDefinition() : null;
+  }
+
+  // 🔥 新增：获取追踪器（用于测试）
+  public ToolCallTracker getCallTracker()
+  {
+    return callTracker;
   }
 }
