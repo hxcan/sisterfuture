@@ -17,13 +17,14 @@ public class ConversationResetTool implements Tool
 {
   private static final String TAG = "ConversationResetTool";
   private ContextManager contextManager;
+  private ToolManager toolManager;  // 🔥 #4791 新增：用于清空 ToolCallTracker
 
   // 🔒 防连续重置标记（防止模型在无历史时反复调用）
   private static volatile boolean JUST_RESET = false;
 
-  // 🔥 单行、无换行、无英文双引号，JSON安全
+  // 🔥 单行、无换行、无英文双引号，JSON 安全
   public static final String RESET_TOOL_DESCRIPTION =
-    "仅当满足以下条件之一时调用：(1)用户明确表示“开始新话题”、“清空上下文”或“忘记之前内容”等类似语义；(2)当前消息与所有历史对话在语义上完全无关且无任何上下文依赖。禁止在首次对话（无历史）时调用；话题自然转换（如从天气聊到穿衣）不得视为新话题；正在聊软件开发相关的事情，接着贴代码，也不得视为新话题；存在模糊时请保留上下文。";
+    "仅当满足以下条件之一时调用：(1) 用户明确表示"开始新话题”、"清空上下文”或"忘记之前内容”等类似语义；(2) 当前消息与所有历史对话在语义上完全无关且无任何上下文依赖。禁止在首次对话（无历史）时调用；话题自然转换（如从天气聊到穿衣）不得视为新话题；正在聊软件开发相关的事情，接着贴代码，也不得视为新话题；存在模糊时请保留上下文。";
 
   public static String getFewShotExamples()
   {
@@ -65,9 +66,11 @@ public class ConversationResetTool implements Tool
     return userMessageCount > 1;
   }
 
-  public ConversationResetTool(ContextManager contextManager)
+  // 🔥 #4791 修改：构造函数传入 ToolManager
+  public ConversationResetTool(ContextManager contextManager, ToolManager toolManager)
   {
     this.contextManager = contextManager;
+    this.toolManager = toolManager;
   }
 
   @Override
@@ -152,6 +155,14 @@ public class ConversationResetTool implements Tool
         // if (latestAssistant != null) newHistory.add(latestAssistant);
 
         contextManager.replaceHistory(newHistory);
+        
+        // 🔥 #4791 新增：清空 ToolCallTracker，防止内存泄漏
+        if (toolManager != null)
+        {
+          toolManager.clearTrackedCalls();
+          Log.d(TAG, "🧹 已清空 ToolCallTracker 追踪的 tool_call_id");
+        }
+        
         JUST_RESET = true; // 🔒 标记已重置
 
         // 🕒 500ms 后自动解除保护
