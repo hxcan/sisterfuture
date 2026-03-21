@@ -867,7 +867,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 // #4895 更新通知状态：正在执行工具
                 SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在执行：" + toolName);
                 
-                toolManager.executeToolAsync(toolName, args, new Tool.OnResultCallback()
+                // 🔥 #4790 修改：传入 toolCallId 参数实现幂等性检查
+                toolManager.executeToolAsync(toolCallId, toolName, args, new Tool.OnResultCallback()
                 {
                   @Override
                   public void onResult(JSONObject result)
@@ -897,7 +898,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   @Override
                   public void onError(Exception e)
                   {
-                    Log.e(TAG, "异步工具失败：" + toolName, e);
+                    Log.e(TAG, "异步工具失败：" + toolName + ", toolCallId=" + toolCallId, e);
                     postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
                   }
                 });
@@ -1033,6 +1034,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             String name = wrapper.getString("name");
             JSONObject result = wrapper.getJSONObject("result");
+
+            // 🔥 #4790 在回复前检查：这个 toolCallId 是否已回复过
+            if (!toolManager.tryMarkToolCallAsReplied(id))
+            {
+              Log.w(TAG, "⚠️ 忽略重复的工具回复消息，toolCallId=" + id + ", toolName=" + name);
+              continue;  // 跳过重复回复
+            }
 
             contextManager.addToolMessage(id, name, result.toString());
             Log.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
