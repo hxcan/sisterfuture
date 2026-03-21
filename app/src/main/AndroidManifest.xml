@@ -25,6 +25,12 @@
     <!-- Android 11+ 文件访问权限 -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage"/>
+    
+    <!-- 前台服务权限（Android 9+） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    
+    <!-- 通知权限（Android 13+） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
       android:allowBackup="true"
@@ -79,11 +85,12 @@
                 android:value="false" />
         </receiver>
 
-        <!-- 后台服务 -->
+        <!-- 前台服务 - 显示持久化通知，防止应用被杀死 -->
         <service
             android:name="com.stupidbeauty.sisterfuture.SisterFutureService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
     </application>
 </manifest>
