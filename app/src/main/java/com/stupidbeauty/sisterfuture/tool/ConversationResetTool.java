@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import org.json.JSONArray;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 public class ConversationResetTool implements Tool
 {
@@ -126,13 +127,24 @@ public class ConversationResetTool implements Tool
 
     try
     {
+      // 🔍 #4935 新增：记录工具执行前的历史消息
       List<JSONObject> history = contextManager.getHistory();
+      FileLogger.i(TAG, "🔍 #4935 [重置前] 历史消息数：" + history.size());
+      for (int i = 0; i < history.size(); i++)
+      {
+        JSONObject msg = history.get(i);
+        String role = msg.optString("role", "unknown");
+        String content = msg.optString("content", "").substring(0, Math.min(50, msg.optString("content").length()));
+        String toolCalls = msg.has("tool_calls") ? "有 tool_calls" : "无";
+        FileLogger.i(TAG, "  消息[" + i + "] role=" + role + ", content=" + content + "..., tool_calls=" + toolCalls);
+      }
 
       // 仅当有足够历史时才执行重置（至少有一轮完整对话）
       if (history.size() >= 2)
       {
         JSONObject latestUser = null;
         JSONObject latestAssistant = null;
+        int latestUserIndex = -1;
 
         // 从后往前找最近一轮 user
         for (int i = history.size() - 1; i >= 0; i--)
@@ -142,8 +154,10 @@ public class ConversationResetTool implements Tool
           if ("user".equals(role) && latestUser == null)
           {
             latestUser = msg;
+            latestUserIndex = i;
+            FileLogger.i(TAG, "🔍 [找到 latestUser] 索引：" + i + ", 内容：" + msg.optString("content", "").substring(0, Math.min(50, msg.optString("content").length())) + "...");
           }
-          if (latestUser != null )
+          if (latestUser != null)
           {
             break;
           }
@@ -154,7 +168,19 @@ public class ConversationResetTool implements Tool
         if (latestUser != null) newHistory.add(latestUser);
         // if (latestAssistant != null) newHistory.add(latestAssistant);
 
+        FileLogger.i(TAG, "🔍 [replaceHistory 前] newHistory 消息数：" + newHistory.size());
+        
         contextManager.replaceHistory(newHistory);
+        
+        // 🔍 #4935 新增：记录 replaceHistory 后的历史消息
+        FileLogger.i(TAG, "🔍 [replaceHistory 后] 新历史消息数：" + newHistory.size());
+        for (int i = 0; i < newHistory.size(); i++)
+        {
+          JSONObject msg = newHistory.get(i);
+          String role = msg.optString("role", "unknown");
+          String content = msg.optString("content", "").substring(0, Math.min(50, msg.optString("content").length()));
+          FileLogger.i(TAG, "  新消息[" + i + "] role=" + role + ", content=" + content + "...");
+        }
         
         // 🔥 #4791 新增：清空 ToolCallTracker，防止内存泄漏
         if (toolManager != null)
@@ -180,10 +206,16 @@ public class ConversationResetTool implements Tool
 
         Log.d(TAG, "🧹 对话上下文已由工具自身重置。");
       }
+      else
+      {
+        FileLogger.w(TAG, "⚠️ #4935 历史消息数不足 2 条，跳过重置：" + history.size());
+      }
 
       // 🔥 关键：返回对模型有指导意义的 tool response
       JSONObject successResponse = new JSONObject();
       successResponse.put("message", "上下文已成功重置。接下来的回复将仅基于用户最新消息生成，请勿再次调用 reset_conversation_context。");
+      
+      FileLogger.i(TAG, "🔍 [工具返回] 成功响应");
       return successResponse;
     }
     catch (Exception e)
@@ -191,6 +223,7 @@ public class ConversationResetTool implements Tool
       // 出错时务必清除标记，避免永久锁死
       JUST_RESET = false;
       Log.e(TAG, "Error in tool execution", e);
+      FileLogger.e(TAG, "❌ #4935 重置工具执行失败：" + e.getMessage());
 
       JSONObject errorResponse = new JSONObject();
       try
