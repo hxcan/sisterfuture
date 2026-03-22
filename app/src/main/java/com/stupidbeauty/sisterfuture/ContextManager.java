@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.List;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import com.stupidbeauty.sisterfuture.manager.SessionManager;
+import com.stupidbeauty.sisterfuture.manager.Session;
 
 public class ContextManager
 {
@@ -28,15 +30,23 @@ public class ContextManager
   private static final int INITIAL_MAX_ROUNDS = 5;
   private SharedPreferences sharedPreferences;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
+  
+  // ✅ #4932 新增：SessionManager 引用
+  private SessionManager sessionManager;
+  private Context context;
 
   public ContextManager(Context context)
   {
+    this.context = context.getApplicationContext();
     sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     currentMaxRounds = sharedPreferences.getInt("current_max_rounds", INITIAL_MAX_ROUNDS);
     
+    // ✅ #4932 初始化 SessionManager
+    this.sessionManager = SessionManager.getInstance(context);
+    
     // ✅ #4844 修复：在构造函数中执行一次初始清理（仅在启动时）
     cleanupInvalidToolCallsOnStartup();
-    FileLogger.d(TAG, "ContextManager 初始化完成，currentMaxRounds=" + currentMaxRounds);
+    FileLogger.d(TAG, "ContextManager 初始化完成，currentMaxRounds=" + currentMaxRounds + ", SessionManager 已集成");
   }
 
   // ✅ #4844 新增：只在启动时调用一次的清理方法
@@ -266,9 +276,29 @@ public class ContextManager
     return new JSONArray(history);
   }
 
-  // ✅ #4844 修复：getHistory 只做加载，不做任何清理
+  // ✅ #4932 重构：getHistory 优先从 SessionManager 读取，兜底从 SharedPreferences 读取
   public List<JSONObject> getHistory()
   {
+    // 1. 优先：从 SessionManager 读取
+    if (sessionManager != null)
+    {
+      try
+      {
+        Session session = sessionManager.getCurrentSession();
+        if (session != null && session.getHistory() != null)
+        {
+          List<JSONObject> history = session.getHistory();
+          FileLogger.d(TAG, "📋 [getHistory] 从 SessionManager 读取，消息数：" + history.size());
+          return new ArrayList<>(history); // 返回副本，避免外部修改
+        }
+      }
+      catch (Exception e)
+      {
+        FileLogger.w(TAG, "⚠️ [getHistory] 从 SessionManager 读取失败，降级到 SharedPreferences: " + e.getMessage());
+      }
+    }
+    
+    // 2. 兜底：从原有 SharedPreferences 读取（迁移前/回滚场景）
     String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
 
     if (historyStr.isEmpty())
@@ -285,7 +315,7 @@ public class ContextManager
       JSONArray array = new JSONArray(historyStr);
 
       // 🔍 #4846 新增：入口日志
-      FileLogger.d(TAG, "📋 [getHistory] 加载历史记录，消息数：" + array.length());
+      FileLogger.d(TAG, "📋 [getHistory] 从 SharedPreferences 兜底读取，消息数：" + array.length());
 
       // ✅ #4844 修复：直接加载，不做任何清理或修改
       for (int i = 0; i < array.length(); i++)
@@ -467,14 +497,37 @@ public class ContextManager
     return list;
   }
 
+  // ✅ #4932 重构：saveHistory 同步写入 SessionManager
   private void saveHistory(List<JSONObject> history)
   {
+    // 1. 原有逻辑：保存到 SharedPreferences（保持兜底能力）
     JSONArray historyArray = new JSONArray(history);
     sharedPreferences.edit()
         .putString(KEY_HISTORY, historyArray.toString())
         .putInt("current_max_rounds", currentMaxRounds)
         .apply();
-    FileLogger.d(TAG, "💾 [saveHistory] 已保存历史，消息数：" + history.size());
+    
+    // 2. 新增逻辑：同步写入 SessionManager（优先数据源）
+    if (sessionManager != null)
+    {
+      try
+      {
+        Session session = sessionManager.getCurrentSession();
+        if (session != null)
+        {
+          session.setHistory(history);
+          sessionManager.saveSession(session);
+          FileLogger.d(TAG, "💾 [saveHistory] 已同步到 SessionManager，消息数：" + history.size());
+        }
+      }
+      catch (Exception e)
+      {
+        FileLogger.w(TAG, "⚠️ [saveHistory] 同步到 SessionManager 失败：" + e.getMessage());
+        // 不影响 SharedPreferences 保存
+      }
+    }
+    
+    FileLogger.d(TAG, "💾 [saveHistory] 已保存历史到 SharedPreferences，消息数：" + history.size());
   }
 
   private JSONObject createMessage(String role, String content)
@@ -529,5 +582,26 @@ public class ContextManager
       newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
     }
     saveHistory(newHistory);
+  }
+  
+  // ✅ #4932 新增：清空历史（用于 reset_conversation_context 工具）
+  public void clearHistory()
+  {
+    List<JSONObject> emptyHistory = new ArrayList<>();
+    saveHistory(emptyHistory);
+    
+    // 同步清空 SessionManager 的 ToolCallTracker
+    if (sessionManager != null)
+    {
+      sessionManager.clearCurrentSession();
+    }
+    
+    FileLogger.i(TAG, "🧹 [clearHistory] 已清空历史");
+  }
+  
+  // ✅ #4932 新增：获取 SessionManager（用于外部访问）
+  public SessionManager getSessionManager()
+  {
+    return sessionManager;
   }
 }
