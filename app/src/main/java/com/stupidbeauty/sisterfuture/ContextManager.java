@@ -19,8 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
-import com.stupidbeauty.sisterfuture.manager.SessionManager;
-import com.stupidbeauty.sisterfuture.manager.Session;
 
 public class ContextManager
 {
@@ -30,23 +28,15 @@ public class ContextManager
   private static final int INITIAL_MAX_ROUNDS = 5;
   private SharedPreferences sharedPreferences;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
-  
-  // ✅ #4932 新增：SessionManager 引用
-  private SessionManager sessionManager;
-  private Context context;
 
   public ContextManager(Context context)
   {
-    this.context = context.getApplicationContext();
     sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     currentMaxRounds = sharedPreferences.getInt("current_max_rounds", INITIAL_MAX_ROUNDS);
     
-    // ✅ #4932 初始化 SessionManager
-    this.sessionManager = SessionManager.getInstance(context);
-    
     // ✅ #4844 修复：在构造函数中执行一次初始清理（仅在启动时）
     cleanupInvalidToolCallsOnStartup();
-    FileLogger.d(TAG, "ContextManager 初始化完成，currentMaxRounds=" + currentMaxRounds + ", SessionManager 已集成");
+    FileLogger.d(TAG, "ContextManager 初始化完成，currentMaxRounds=" + currentMaxRounds);
   }
 
   // ✅ #4844 新增：只在启动时调用一次的清理方法
@@ -133,19 +123,20 @@ public class ContextManager
   // ContextManager.java —— 新增方法
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
-    FileLogger.i(TAG, "🔧 [addToolMessage] 开始添加工具回复 - toolCallId=" + toolCallId + ", toolName=" + toolName);
+    FileLogger.i(TAG, "🔧 #4935 [addToolMessage 开始] toolCallId=" + toolCallId + ", toolName=" + toolName);
     
     List<JSONObject> history = getHistory();
     FileLogger.i(TAG, "🔧 [addToolMessage] 当前历史消息数：" + history.size());
     
-    // 🔍 #4855 调试：输出当前历史中的所有消息
+    // 🔍 #4935 新增：输出当前历史中的所有消息
     for (int i = 0; i < history.size(); i++)
     {
       JSONObject msg = history.get(i);
       String role = msg.optString("role", "unknown");
       String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " 个" : "无";
       String toolId = msg.optString("tool_call_id", "无");
-      FileLogger.d(TAG, "📋 [addToolMessage] 历史[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
+      String contentPreview = msg.optString("content", "").substring(0, Math.min(30, msg.optString("content").length()));
+      FileLogger.i(TAG, "  消息[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId + ", content=" + contentPreview + "...");
     }
 
     JSONObject toolMessage = new JSONObject();
@@ -172,18 +163,18 @@ public class ContextManager
     history = normalizeToolCallMessages(history); // NOrmalize tool calls messages
     FileLogger.i(TAG, "🔧 [addToolMessage] normalize 后消息数：" + history.size());
     
-    // 🔍 #4855 调试：输出 normalize 后的历史
+    // 🔍 #4935 新增：输出 normalize 后的历史
     for (int i = 0; i < history.size(); i++)
     {
       JSONObject msg = history.get(i);
       String role = msg.optString("role", "unknown");
       String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " 个" : "无";
       String toolId = msg.optString("tool_call_id", "无");
-      FileLogger.d(TAG, "📋 [addToolMessage] normalize 后历史[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
+      FileLogger.i(TAG, "  normalize 后消息[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
     }
 
     saveHistory(history);
-    FileLogger.i(TAG, "🔧 [addToolMessage] 已保存历史");
+    FileLogger.i(TAG, "🔧 [addToolMessage 完成] 已保存历史");
   }
 
   public void addUserMessage(String message)
@@ -276,29 +267,9 @@ public class ContextManager
     return new JSONArray(history);
   }
 
-  // ✅ #4932 重构：getHistory 优先从 SessionManager 读取，兜底从 SharedPreferences 读取
+  // ✅ #4844 修复：getHistory 只做加载，不做任何清理
   public List<JSONObject> getHistory()
   {
-    // 1. 优先：从 SessionManager 读取
-    if (sessionManager != null)
-    {
-      try
-      {
-        Session session = sessionManager.getCurrentSession();
-        if (session != null && session.getHistory() != null)
-        {
-          List<JSONObject> history = session.getHistory();
-          FileLogger.d(TAG, "📋 [getHistory] 从 SessionManager 读取，消息数：" + history.size());
-          return new ArrayList<>(history); // 返回副本，避免外部修改
-        }
-      }
-      catch (Exception e)
-      {
-        FileLogger.w(TAG, "⚠️ [getHistory] 从 SessionManager 读取失败，降级到 SharedPreferences: " + e.getMessage());
-      }
-    }
-    
-    // 2. 兜底：从原有 SharedPreferences 读取（迁移前/回滚场景）
     String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
 
     if (historyStr.isEmpty())
@@ -315,7 +286,7 @@ public class ContextManager
       JSONArray array = new JSONArray(historyStr);
 
       // 🔍 #4846 新增：入口日志
-      FileLogger.d(TAG, "📋 [getHistory] 从 SharedPreferences 兜底读取，消息数：" + array.length());
+      FileLogger.d(TAG, "📋 [getHistory] 加载历史记录，消息数：" + array.length());
 
       // ✅ #4844 修复：直接加载，不做任何清理或修改
       for (int i = 0; i < array.length(); i++)
@@ -394,7 +365,7 @@ public class ContextManager
   private List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory)
   // private void normalizeToolCallMessages()
   {
-    FileLogger.i(TAG, "🔧 [normalizeToolCallMessages] 开始规范化，输入消息数：" + oldHistory.size());
+    FileLogger.i(TAG, "🔧 [normalizeToolCallMessages 开始] 输入消息数：" + oldHistory.size());
     
     List<JSONObject> history = oldHistory;
     // history.add(message);
@@ -493,41 +464,42 @@ public class ContextManager
       e.printStackTrace();
     }
     
-    FileLogger.i(TAG, "🔧 [normalizeToolCallMessages] 规范化完成，输出消息数：" + list.size());
+    FileLogger.i(TAG, "🔧 [normalizeToolCallMessages 完成] 输出消息数：" + list.size());
     return list;
   }
 
-  // ✅ #4932 重构：saveHistory 同步写入 SessionManager
+  // ✅ #4935 新增：replaceHistory 添加详细日志
+  public void replaceHistory(List<JSONObject> newHistory)
+  {
+    FileLogger.i(TAG, "🔄 #4935 [replaceHistory 开始] 新历史消息数：" + newHistory.size());
+    
+    // 🔍 #4935 记录替换前的消息详情
+    for (int i = 0; i < newHistory.size(); i++)
+    {
+      JSONObject msg = newHistory.get(i);
+      String role = msg.optString("role", "unknown");
+      String content = msg.optString("content", "").substring(0, Math.min(50, msg.optString("content").length()));
+      FileLogger.i(TAG, "  新消息[" + i + "] role=" + role + ", content=" + content + "...");
+    }
+    
+    if (newHistory.size() > currentMaxRounds * 2)
+    {
+      newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
+      FileLogger.w(TAG, "⚠️ [replaceHistory] 新历史超出限制，已截断到：" + newHistory.size());
+    }
+    
+    saveHistory(newHistory);
+    FileLogger.i(TAG, "🔄 [replaceHistory 完成] 已保存新历史");
+  }
+
   private void saveHistory(List<JSONObject> history)
   {
-    // 1. 原有逻辑：保存到 SharedPreferences（保持兜底能力）
     JSONArray historyArray = new JSONArray(history);
     sharedPreferences.edit()
         .putString(KEY_HISTORY, historyArray.toString())
         .putInt("current_max_rounds", currentMaxRounds)
         .apply();
-    
-    // 2. 新增逻辑：同步写入 SessionManager（优先数据源）
-    if (sessionManager != null)
-    {
-      try
-      {
-        Session session = sessionManager.getCurrentSession();
-        if (session != null)
-        {
-          session.setHistory(history);
-          sessionManager.saveSession(session);
-          FileLogger.d(TAG, "💾 [saveHistory] 已同步到 SessionManager，消息数：" + history.size());
-        }
-      }
-      catch (Exception e)
-      {
-        FileLogger.w(TAG, "⚠️ [saveHistory] 同步到 SessionManager 失败：" + e.getMessage());
-        // 不影响 SharedPreferences 保存
-      }
-    }
-    
-    FileLogger.d(TAG, "💾 [saveHistory] 已保存历史到 SharedPreferences，消息数：" + history.size());
+    FileLogger.d(TAG, "💾 #4935 [saveHistory] 已保存历史，消息数：" + history.size());
   }
 
   private JSONObject createMessage(String role, String content)
@@ -575,33 +547,12 @@ public class ContextManager
   }
 
   // ✅ 新增：直接替换整个历史（用于重置上下文）
-  public void replaceHistory(List<JSONObject> newHistory)
+  public void replaceHistoryOld(List<JSONObject> newHistory)
   {
     if (newHistory.size() > currentMaxRounds * 2)
     {
       newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
     }
     saveHistory(newHistory);
-  }
-  
-  // ✅ #4932 新增：清空历史（用于 reset_conversation_context 工具）
-  public void clearHistory()
-  {
-    List<JSONObject> emptyHistory = new ArrayList<>();
-    saveHistory(emptyHistory);
-    
-    // 同步清空 SessionManager 的 ToolCallTracker
-    if (sessionManager != null)
-    {
-      sessionManager.clearCurrentSession();
-    }
-    
-    FileLogger.i(TAG, "🧹 [clearHistory] 已清空历史");
-  }
-  
-  // ✅ #4932 新增：获取 SessionManager（用于外部访问）
-  public SessionManager getSessionManager()
-  {
-    return sessionManager;
   }
 }
