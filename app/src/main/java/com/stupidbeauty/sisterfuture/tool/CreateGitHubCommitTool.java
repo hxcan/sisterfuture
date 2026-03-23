@@ -328,7 +328,7 @@ public class CreateGitHubCommitTool implements Tool {
     }
 
     /**
-     * 递归创建嵌套目录树
+     * 递归创建嵌套目录树（修复版：检查并复用已存在的目录）
      * @param client OkHttpClient 实例
      * @param token GitHub Token
      * @param owner 仓库所有者
@@ -382,55 +382,78 @@ public class CreateGitHubCommitTool implements Tool {
         String currentTreeSha = leafTreeInfo.getString("sha");
         Log.d(TAG, "Created leaf tree SHA: " + currentTreeSha);
         
-        // 2. 从内向外逐级创建目录 tree
-        // 将目录路径分割成数组，从最深层开始向外处理
+        // 2. 从内向外逐级创建目录 tree（修复：检查并复用已存在的目录）
         String[] dirParts = dirPath.split("/");
         
-        // 从倒数第二个目录开始（因为最后一个已经是文件名了）
         for (int i = dirParts.length - 1; i >= 0; i--) {
             String dirName = dirParts[i];
-            Log.d(TAG, "Creating directory tree for: " + dirName + " (level " + i + ")");
+            Log.d(TAG, "Processing directory: " + dirName + " (level " + i + ")");
             
-            JSONArray dirTreeArray = new JSONArray();
-            JSONObject dirEntry = new JSONObject();
-            dirEntry.put("path", dirName);
-            dirEntry.put("mode", "040000"); // 目录模式
-            dirEntry.put("type", "tree");
-            dirEntry.put("sha", currentTreeSha); // 引用下一级 tree
-            dirTreeArray.put(dirEntry);
+            // 【关键修复】检查基础 tree 中是否已存在该目录
+            String existingDirSha = findExistingDirectory(client, token, owner, repo, baseTreeSha, dirName);
             
-            JSONObject dirTreeBody = new JSONObject();
-            dirTreeBody.put("tree", dirTreeArray);
-            
-            Request createDirTreeRequest = new Request.Builder()
-                .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
-                .post(RequestBody.create(dirTreeBody.toString(), MediaType.get("application/json; charset=utf-8")))
-                .header("Authorization", "Bearer " + token)
-                .header("Accept", "application/vnd.github.v3+json")
-                .build();
-            
-            Response createDirTreeResponse = client.newCall(createDirTreeRequest).execute();
-            if (!createDirTreeResponse.isSuccessful()) {
-                throw new IOException("创建目录 Tree 失败 (" + dirName + ")：" + createDirTreeResponse.code() + " " + createDirTreeResponse.message());
+            if (existingDirSha != null) {
+                // 目录已存在，获取其完整内容并合并新条目
+                Log.d(TAG, "Directory '" + dirName + "' already exists (SHA: " + existingDirSha + "), merging content...");
+                currentTreeSha = mergeWithExistingTree(client, token, owner, repo, existingDirSha, currentTreeSha, dirName);
+            } else {
+                // 目录不存在，创建新目录
+                JSONArray dirTreeArray = new JSONArray();
+                JSONObject dirEntry = new JSONObject();
+                dirEntry.put("path", dirName);
+                dirEntry.put("mode", "040000"); // 目录模式
+                dirEntry.put("type", "tree");
+                dirEntry.put("sha", currentTreeSha); // 引用下一级 tree
+                dirTreeArray.put(dirEntry);
+                
+                JSONObject dirTreeBody = new JSONObject();
+                dirTreeBody.put("tree", dirTreeArray);
+                
+                Request createDirTreeRequest = new Request.Builder()
+                    .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
+                    .post(RequestBody.create(dirTreeBody.toString(), MediaType.get("application/json; charset=utf-8")))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
+                
+                Response createDirTreeResponse = client.newCall(createDirTreeRequest).execute();
+                if (!createDirTreeResponse.isSuccessful()) {
+                    throw new IOException("创建目录 Tree 失败 (" + dirName + ")：" + createDirTreeResponse.code() + " " + createDirTreeResponse.message());
+                }
+                
+                JSONObject dirTreeInfo = new JSONObject(createDirTreeResponse.body().string());
+                currentTreeSha = dirTreeInfo.getString("sha");
+                Log.d(TAG, "Created new directory tree SHA: " + currentTreeSha);
             }
-            
-            JSONObject dirTreeInfo = new JSONObject(createDirTreeResponse.body().string());
-            currentTreeSha = dirTreeInfo.getString("sha");
-            Log.d(TAG, "Created directory tree SHA: " + currentTreeSha);
         }
         
         // 3. 最后，将最外层目录 tree 合并到基础 tree 中
         String outermostDirName = dirParts[0];
-        JSONArray finalTreeArray = new JSONArray();
-        JSONObject outermostEntry = new JSONObject();
-        outermostEntry.put("path", outermostDirName);
-        outermostEntry.put("mode", "040000");
-        outermostEntry.put("type", "tree");
-        outermostEntry.put("sha", currentTreeSha);
-        finalTreeArray.put(outermostEntry);
+        JSONArray finalTreeArray = getTreeEntries(client, token, owner, repo, baseTreeSha);
+        
+        // 更新或添加最外层目录条目
+        boolean found = false;
+        for (int i = 0; i < finalTreeArray.length(); i++) {
+            JSONObject entry = finalTreeArray.getJSONObject(i);
+            if (entry.getString("path").equals(outermostDirName)) {
+                entry.put("sha", currentTreeSha); // 更新为新 SHA
+                found = true;
+                break;
+            }
+        }
+        
+        if (!found) {
+            // 添加新条目
+            JSONObject outermostEntry = new JSONObject();
+            outermostEntry.put("path", outermostDirName);
+            outermostEntry.put("mode", "040000");
+            outermostEntry.put("type", "tree");
+            outermostEntry.put("sha", currentTreeSha);
+            finalTreeArray.put(outermostEntry);
+        }
         
         JSONObject finalTreeBody = new JSONObject();
-        finalTreeBody.put("base_tree", baseTreeSha); // 基于原始基础 tree
+        finalTreeBody.put("base_tree", baseTreeSha);
         finalTreeBody.put("tree", finalTreeArray);
         
         Request createFinalTreeRequest = new Request.Builder()
@@ -450,5 +473,93 @@ public class CreateGitHubCommitTool implements Tool {
         Log.d(TAG, "Created final tree SHA: " + finalTreeSha);
         
         return finalTreeSha;
+    }
+
+    /**
+     * 在基础 tree 中查找指定名称的目录
+     * @return 目录的 SHA，如果不存在则返回 null
+     */
+    private String findExistingDirectory(OkHttpClient client, String token, String owner, String repo, String treeSha, String dirName) throws IOException, org.json.JSONException {
+        JSONArray entries = getTreeEntries(client, token, owner, repo, treeSha);
+        for (int i = 0; i < entries.length(); i++) {
+            JSONObject entry = entries.getJSONObject(i);
+            if (entry.getString("path").equals(dirName) && "tree".equals(entry.getString("type"))) {
+                return entry.getString("sha");
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取 tree 的所有条目
+     */
+    private JSONArray getTreeEntries(OkHttpClient client, String token, String owner, String repo, String treeSha) throws IOException, org.json.JSONException {
+        HttpUrl url = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees/" + treeSha);
+        Request request = new Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer " + token)
+            .header("Accept", "application/vnd.github.v3+json")
+            .build();
+        
+        Response response = client.newCall(request).execute();
+        if (!response.isSuccessful()) {
+            throw new IOException("获取 Tree 条目失败：" + response.code() + " " + response.message());
+        }
+        
+        JSONObject treeInfo = new JSONObject(response.body().string());
+        return treeInfo.getJSONArray("tree");
+    }
+
+    /**
+     * 合并已存在的 tree 与新创建的子 tree
+     * @param existingTreeSha 已存在的目录 tree SHA
+     * @param newChildTreeSha 新创建的子 tree SHA（包含下级目录或文件）
+     * @param childName 子条目的名称（目录名或文件名）
+     * @return 合并后的 tree SHA
+     */
+    private String mergeWithExistingTree(OkHttpClient client, String token, String owner, String repo, String existingTreeSha, String newChildTreeSha, String childName) throws IOException, org.json.JSONException {
+        // 获取已存在 tree 的所有条目
+        JSONArray entries = getTreeEntries(client, token, owner, repo, existingTreeSha);
+        
+        // 查找是否已存在同名的子条目
+        boolean found = false;
+        for (int i = 0; i < entries.length(); i++) {
+            JSONObject entry = entries.getJSONObject(i);
+            if (entry.getString("path").equals(childName)) {
+                // 更新现有条目的 SHA
+                entry.put("sha", newChildTreeSha);
+                found = true;
+                break;
+            }
+        }
+        
+        if (!found) {
+            // 添加新条目
+            JSONObject newEntry = new JSONObject();
+            newEntry.put("path", childName);
+            newEntry.put("mode", "040000"); // 目录模式
+            newEntry.put("type", "tree");
+            newEntry.put("sha", newChildTreeSha);
+            entries.put(newEntry);
+        }
+        
+        // 创建合并后的 tree
+        JSONObject treeBody = new JSONObject();
+        treeBody.put("tree", entries);
+        
+        Request request = new Request.Builder()
+            .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
+            .post(RequestBody.create(treeBody.toString(), MediaType.get("application/json; charset=utf-8")))
+            .header("Authorization", "Bearer " + token)
+            .header("Accept", "application/vnd.github.v3+json")
+            .build();
+        
+        Response response = client.newCall(request).execute();
+        if (!response.isSuccessful()) {
+            throw new IOException("创建合并 Tree 失败：" + response.code() + " " + response.message());
+        }
+        
+        JSONObject result = new JSONObject(response.body().string());
+        return result.getString("sha");
     }
 }
