@@ -1,0 +1,13 @@
+name: Nested Directory Test
+
+on:
+  push:
+    branches:
+      - 'test/nested-dir-verify'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test nested directory fix
+        run: echo "This file tests the nested directory fix for create_github_commit tool"
