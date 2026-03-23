@@ -385,16 +385,13 @@ public class CreateGitHubCommitTool implements Tool {
         // 2. 从内向外逐级创建目录 tree（修复：检查并复用已存在的目录）
         String[] dirParts = dirPath.split("/");
         
-        // 【关键修复】引入 currentTreeShaForLoop 变量，用于在循环中跟踪上一级合并后的 tree
-        String currentTreeShaForLoop = currentTreeSha;
-        
+        // 【关键修复】始终检查 baseTreeSha，因为所有已存在的目录都在基础 tree 中
         for (int i = dirParts.length - 1; i >= 0; i--) {
             String dirName = dirParts[i];
             Log.d(TAG, "Processing directory: " + dirName + " (level " + i + ")");
             
-            // 【关键修复】第一次检查 baseTreeSha，后续检查上一级合并后的 tree
-            String checkTreeSha = (i == dirParts.length - 1) ? baseTreeSha : currentTreeShaForLoop;
-            String existingDirSha = findExistingDirectory(client, token, owner, repo, checkTreeSha, dirName);
+            // 【关键修复】始终使用 baseTreeSha 检查目录是否存在
+            String existingDirSha = findExistingDirectory(client, token, owner, repo, baseTreeSha, dirName);
             
             if (existingDirSha != null) {
                 // 目录已存在，获取其完整内容并合并新条目
@@ -429,9 +426,6 @@ public class CreateGitHubCommitTool implements Tool {
                 currentTreeSha = dirTreeInfo.getString("sha");
                 Log.d(TAG, "Created new directory tree SHA: " + currentTreeSha);
             }
-            
-            // 【关键修复】更新 currentTreeShaForLoop，供下一级迭代使用
-            currentTreeShaForLoop = currentTreeSha;
         }
         
         // 3. 最后，将最外层目录 tree 合并到基础 tree 中
