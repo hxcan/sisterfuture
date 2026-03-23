@@ -94,8 +94,8 @@ android
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
     targetSdkVersion 28
-    versionCode 934
-    versionName "2026.3.18"
+    versionCode 935
+    versionName "2026.3.23"
     multiDexEnabled true
     
     // 配置支持的 SO 库架构
