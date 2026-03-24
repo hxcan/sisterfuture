@@ -1,0 +1,9 @@
+name: Verify Nested Dir Fix v12
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify fix
+        run: echo "Testing nested directory creation fix v12"
