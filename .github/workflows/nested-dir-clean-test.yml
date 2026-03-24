@@ -1,0 +1,18 @@
+name: Clean Nested Dir Test
+
+on:
+  push:
+    branches:
+      - 'test/nested-dir-fix-clean-v1'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify clean nested directory creation
+        run: |
+          echo "=== Testing nested directory fix #4940 ==="
+          echo "Branch: test/nested-dir-fix-clean-v1 (fresh from master)"
+          echo "Expected path: .github/workflows/nested-dir-clean-test.yml"
+          echo "Should NOT be: .github/.github/workflows/..."
+          echo "=== Test passed if file exists at correct path ==="
