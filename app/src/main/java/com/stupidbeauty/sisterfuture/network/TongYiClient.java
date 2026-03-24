@@ -103,6 +103,14 @@ public class TongYiClient
         requestBody.put("messages", messages);
         requestBody.put("stream", true);
 
+        // #4775 禁用思考功能，避免空回复问题
+        // 基于阿里云百炼官方文档：enable_thinking 参数
+        // https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions
+        JSONObject extraBody = new JSONObject();
+        extraBody.put("enable_thinking", false);
+        requestBody.put("extra_body", extraBody);
+        FileLogger.d(NETWORK_TAG, "[Thinking] 思考功能已禁用 (enable_thinking=false)");
+
         if (includeTools)
         {
             JSONArray toolsArray = new JSONArray();
