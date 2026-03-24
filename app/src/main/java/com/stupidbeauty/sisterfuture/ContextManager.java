@@ -50,6 +50,7 @@ public class ContextManager
     
     List<JSONObject> history = new ArrayList<>();
     int invalidCount = 0;
+    int blankAssistantCount = 0;
     
     try
     {
@@ -59,6 +60,20 @@ public class ContextManager
       for (int i = 0; i < array.length(); i++)
       {
         JSONObject currentObject = array.getJSONObject(i);
+        
+        // #4962 新增：过滤空白 assistant 消息
+        String role = currentObject.optString("role", "");
+        String content = currentObject.optString("content", "");
+        boolean hasToolCalls = currentObject.has("tool_calls");
+        
+        if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
+        {
+          blankAssistantCount++;
+          FileLogger.w(TAG, "[Startup cleanup] Skip blank assistant message at index: " + i);
+          continue;
+        }
+        
+        // 原有逻辑：验证 tool_call 的 JSON 有效性
         if (isValidToolCallMessage(currentObject))
         {
           history.add(currentObject);
@@ -72,9 +87,9 @@ public class ContextManager
       
       history = normalizeToolCallMessages(history);
       
-      if (invalidCount > 0 || history.size() < array.length())
+      if (invalidCount > 0 || blankAssistantCount > 0 || history.size() < array.length())
       {
-        FileLogger.w(TAG, "[Startup cleanup] Removed " + invalidCount + " invalid messages");
+        FileLogger.w(TAG, "[Startup cleanup] Removed " + invalidCount + " invalid messages, " + blankAssistantCount + " blank assistant messages");
         saveHistory(history);
       }
       else
