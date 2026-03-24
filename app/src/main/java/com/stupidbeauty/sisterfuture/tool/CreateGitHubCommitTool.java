@@ -417,7 +417,7 @@ public class CreateGitHubCommitTool implements Tool {
                 Log.d(TAG, "[NestedTree] → 新目录包含子条目 '" + childName + "'");
                 JSONArray dirTreeArray = new JSONArray();
                 JSONObject dirEntry = new JSONObject();
-                dirEntry.put("path", currentDirName);
+                dirEntry.put("path", childName); // 【v10 修复】使用 childName 而非 currentDirName
                 dirEntry.put("mode", "040000"); // 目录模式
                 dirEntry.put("type", "tree");
                 dirEntry.put("sha", currentTreeSha); // 引用下一级 tree
