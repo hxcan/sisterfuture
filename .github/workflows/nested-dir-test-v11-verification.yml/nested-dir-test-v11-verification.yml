@@ -1,0 +1,16 @@
+name: Nested Dir Fix Verification v11
+
+on:
+  push:
+    branches: [test/nested-dir-fix-verification]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify nested directory fix
+        run: |
+          echo "Testing nested directory creation..."
+          echo "If this file exists at .github/workflows/, the fix works!"
+          echo "File created by create_github_commit tool v11"
