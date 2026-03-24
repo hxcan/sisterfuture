@@ -296,58 +296,100 @@ public class CreateGitHubCommitTool implements Tool {
         });
     }
 
+    /**
+     * v18 修复：从内向外创建嵌套目录树，正确保留每一级的现有内容
+     * 
+     * 关键修复点：
+     * 1. 从外向内遍历目录，在上一级目录的 tree 中查找当前目录（而不是始终在 baseTree 中查找）
+     * 2. 收集每一级的现有条目
+     * 3. 从内向外创建 tree 时，正确合并每一级的现有内容
+     */
     private String createNestedTree(OkHttpClient client, String token, String owner, String repo, 
                                     String baseTreeSha, String fullPath, String blobSha) 
             throws IOException, org.json.JSONException {
         
-        FileLogger.d(TAG, "[NestedTree v17] ========== 开始创建嵌套目录树 ==========");
-        FileLogger.d(TAG, "[NestedTree v17] 完整路径：" + fullPath);
-        FileLogger.d(TAG, "[NestedTree v17] 基础 Tree SHA: " + baseTreeSha.substring(0, 10) + "...");
+        FileLogger.d(TAG, "[NestedTree v18] ========== 开始创建嵌套目录树 (v18 修复版) ==========");
+        FileLogger.d(TAG, "[NestedTree v18] 完整路径：" + fullPath);
+        FileLogger.d(TAG, "[NestedTree v18] 基础 Tree SHA: " + baseTreeSha.substring(0, 10) + "...");
         
         int lastSlashIndex = fullPath.lastIndexOf('/');
         String fileName = fullPath.substring(lastSlashIndex + 1);
         String dirPath = fullPath.substring(0, lastSlashIndex);
         
-        FileLogger.d(TAG, "[NestedTree v17] 目录路径：" + dirPath);
-        FileLogger.d(TAG, "[NestedTree v17] 文件名：" + fileName);
+        FileLogger.d(TAG, "[NestedTree v18] 目录路径：" + dirPath);
+        FileLogger.d(TAG, "[NestedTree v18] 文件名：" + fileName);
         
         String[] dirParts = dirPath.split("/");
+        
+        FileLogger.d(TAG, "[NestedTree v18] 目录层级数：" + dirParts.length);
+        
+        // ========== 第一步：从外向内遍历，收集每一级的现有 tree SHA ==========
+        String[] parentTreeShas = new String[dirParts.length];
+        String currentCheckTreeSha = baseTreeSha;
+        
+        for (int i = 0; i < dirParts.length; i++) {
+            String currentDirName = dirParts[i];
+            FileLogger.d(TAG, "[NestedTree v18] 第 " + i + " 层：在 Tree (" + currentCheckTreeSha.substring(0, 10) + "...) 中查找 '" + currentDirName + "'");
+            
+            String existingDirSha = findExistingDirectory(client, token, owner, repo, currentCheckTreeSha, currentDirName);
+            
+            if (existingDirSha != null) {
+                FileLogger.d(TAG, "[NestedTree v18]   ✓ 找到目录 '" + currentDirName + "' (SHA: " + existingDirSha.substring(0, 10) + "...)");
+                parentTreeShas[i] = existingDirSha;
+                
+                // 下一级要在当前目录的 tree 中查找
+                currentCheckTreeSha = existingDirSha;
+            } else {
+                FileLogger.d(TAG, "[NestedTree v18]   ✗ 未找到目录 '" + currentDirName + "'，后续层级都不存在");
+                // 当前目录不存在，后续层级也都不存在
+                for (int j = i; j < dirParts.length; j++) {
+                    parentTreeShas[j] = null;
+                }
+                break;
+            }
+        }
+        
+        // ========== 第二步：从内向外创建 tree，合并现有内容 ==========
         String currentTreeSha = blobSha;
         String currentType = "blob";
         
-        FileLogger.d(TAG, "[NestedTree v17] 目录层级数：" + dirParts.length);
-        
         for (int i = dirParts.length - 1; i >= 0; i--) {
             String currentDirName = dirParts[i];
+            String childName = (i == dirParts.length - 1) ? fileName : dirParts[i + 1];
             
-            FileLogger.d(TAG, "[NestedTree v17] ========== 处理第 " + i + " 层目录：" + currentDirName + " ==========");
+            FileLogger.d(TAG, "[NestedTree v18] ========== 处理第 " + i + " 层目录：" + currentDirName + " (子条目：" + childName + ") ==========");
             
-            String existingDirSha = findExistingDirectory(client, token, owner, repo, baseTreeSha, currentDirName);
+            String existingDirSha = parentTreeShas[i];
             
             if (existingDirSha != null) {
-                FileLogger.d(TAG, "[NestedTree v17] ✓ 目录 '" + currentDirName + "' 已存在 (SHA: " + existingDirSha.substring(0, 10) + "...)");
-                FileLogger.d(TAG, "[NestedTree v17] → 获取现有目录内容并合并新子条目");
+                // 目录已存在：获取现有内容并合并
+                FileLogger.d(TAG, "[NestedTree v18] ✓ 目录 '" + currentDirName + "' 已存在，获取现有内容并合并");
                 
                 JSONArray existingEntries = getTreeEntries(client, token, owner, repo, existingDirSha);
-                FileLogger.d(TAG, "[NestedTree v17] 现有目录包含 " + existingEntries.length() + " 个条目");
+                FileLogger.d(TAG, "[NestedTree v18]   现有目录包含 " + existingEntries.length() + " 个条目");
                 
-                String childName = (i == dirParts.length - 1) ? fileName : dirParts[i + 1];
-                FileLogger.d(TAG, "[NestedTree v17] 子条目名称：" + childName);
+                // 打印现有条目列表
+                for (int j = 0; j < existingEntries.length(); j++) {
+                    JSONObject entry = existingEntries.getJSONObject(j);
+                    FileLogger.d(TAG, "[NestedTree v18]   现有条目 [" + j + "]: " + entry.getString("path") + " (" + entry.getString("type") + ")");
+                }
                 
+                // 更新或添加子条目
                 boolean found = false;
                 for (int j = 0; j < existingEntries.length(); j++) {
                     JSONObject entry = existingEntries.getJSONObject(j);
                     if (entry.getString("path").equals(childName)) {
                         entry.put("sha", currentTreeSha);
                         entry.put("type", currentType);
+                        entry.put("mode", currentType.equals("blob") ? "100644" : "040000");
                         found = true;
-                        FileLogger.d(TAG, "[NestedTree v17] ✓ 更新现有子条目 '" + childName + "'");
+                        FileLogger.d(TAG, "[NestedTree v18]   ✓ 更新现有子条目 '" + childName + "'");
                         break;
                     }
                 }
                 
                 if (!found) {
-                    FileLogger.d(TAG, "[NestedTree v17] ✗ 添加新子条目 '" + childName + "'");
+                    FileLogger.d(TAG, "[NestedTree v18]   ✗ 添加新子条目 '" + childName + "'");
                     JSONObject newEntry = new JSONObject();
                     newEntry.put("path", childName);
                     newEntry.put("mode", currentType.equals("blob") ? "100644" : "040000");
@@ -356,6 +398,7 @@ public class CreateGitHubCommitTool implements Tool {
                     existingEntries.put(newEntry);
                 }
                 
+                // 创建合并后的 tree
                 JSONObject treeBody = new JSONObject();
                 treeBody.put("tree", existingEntries);
                 
@@ -375,21 +418,20 @@ public class CreateGitHubCommitTool implements Tool {
                 currentTreeSha = treeInfo.getString("sha");
                 currentType = "tree";
                 
-                FileLogger.d(TAG, "[NestedTree v17] ✓ 合并后 Tree SHA: " + currentTreeSha.substring(0, 10) + "...");
+                FileLogger.d(TAG, "[NestedTree v18]   ✓ 合并后 Tree SHA: " + currentTreeSha.substring(0, 10) + "...");
             } else {
-                FileLogger.d(TAG, "[NestedTree v17] ✗ 目录 '" + currentDirName + "' 不存在，创建新目录");
+                // 目录不存在：创建新 tree
+                FileLogger.d(TAG, "[NestedTree v18] ✗ 目录 '" + currentDirName + "' 不存在，创建新目录");
                 
                 JSONArray treeArray = new JSONArray();
                 JSONObject dirEntry = new JSONObject();
-                
-                String childName = (i == dirParts.length - 1) ? fileName : dirParts[i + 1];
                 dirEntry.put("path", childName);
                 dirEntry.put("mode", currentType.equals("blob") ? "100644" : "040000");
                 dirEntry.put("type", currentType);
                 dirEntry.put("sha", currentTreeSha);
                 treeArray.put(dirEntry);
                 
-                FileLogger.d(TAG, "[NestedTree v17] → 新目录包含子条目 '" + childName + "'");
+                FileLogger.d(TAG, "[NestedTree v18]   → 新目录包含子条目 '" + childName + "'");
                 
                 JSONObject treeBody = new JSONObject();
                 treeBody.put("tree", treeArray);
@@ -410,14 +452,15 @@ public class CreateGitHubCommitTool implements Tool {
                 currentTreeSha = treeInfo.getString("sha");
                 currentType = "tree";
                 
-                FileLogger.d(TAG, "[NestedTree v17] ✓ 创建新目录 Tree SHA: " + currentTreeSha.substring(0, 10) + "...");
+                FileLogger.d(TAG, "[NestedTree v18]   ✓ 创建新目录 Tree SHA: " + currentTreeSha.substring(0, 10) + "...");
             }
         }
         
-        FileLogger.d(TAG, "[NestedTree v17] 所有目录层级处理完成，最终 currentTreeSha: " + currentTreeSha.substring(0, 10) + "...");
+        FileLogger.d(TAG, "[NestedTree v18] 所有目录层级处理完成，最终 currentTreeSha: " + currentTreeSha.substring(0, 10) + "...");
         
+        // ========== 第三步：合并最外层目录到基础 Tree ==========
         String outermostDirName = dirParts[0];
-        FileLogger.d(TAG, "[NestedTree v17] ========== 合并最外层目录到基础 Tree ==========");
+        FileLogger.d(TAG, "[NestedTree v18] ========== 合并最外层目录到基础 Tree ==========");
         
         JSONArray finalTreeArray = getTreeEntries(client, token, owner, repo, baseTreeSha);
         
@@ -427,13 +470,13 @@ public class CreateGitHubCommitTool implements Tool {
             if (entry.getString("path").equals(outermostDirName)) {
                 entry.put("sha", currentTreeSha);
                 found = true;
-                FileLogger.d(TAG, "[NestedTree v17] ✓ 基础 Tree 中已存在最外层目录，更新 SHA");
+                FileLogger.d(TAG, "[NestedTree v18] ✓ 基础 Tree 中已存在最外层目录，更新 SHA");
                 break;
             }
         }
         
         if (!found) {
-            FileLogger.d(TAG, "[NestedTree v17] ✗ 基础 Tree 中不存在最外层目录，添加新条目");
+            FileLogger.d(TAG, "[NestedTree v18] ✗ 基础 Tree 中不存在最外层目录，添加新条目");
             JSONObject outermostEntry = new JSONObject();
             outermostEntry.put("path", outermostDirName);
             outermostEntry.put("mode", "040000");
@@ -460,8 +503,8 @@ public class CreateGitHubCommitTool implements Tool {
         
         JSONObject finalTreeInfo = new JSONObject(createFinalTreeResponse.body().string());
         String finalTreeSha = finalTreeInfo.getString("sha");
-        FileLogger.d(TAG, "[NestedTree v17] ✓ 创建最终 Tree SHA: " + finalTreeSha.substring(0, 10) + "...");
-        FileLogger.d(TAG, "[NestedTree v17] ========== 嵌套目录树创建成功！==========");
+        FileLogger.d(TAG, "[NestedTree v18] ✓ 创建最终 Tree SHA: " + finalTreeSha.substring(0, 10) + "...");
+        FileLogger.d(TAG, "[NestedTree v18] ========== 嵌套目录树创建成功！==========");
         
         return finalTreeSha;
     }
