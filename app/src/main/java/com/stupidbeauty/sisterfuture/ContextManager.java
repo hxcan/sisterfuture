@@ -284,6 +284,32 @@ public class ContextManager
     return new JSONArray(history);
   }
 
+  // #4962 新增：输出全部上下文消息到日志，一条消息一行，用于调查上下文混乱问题
+  public void logFullHistory(String prefix)
+  {
+    List<JSONObject> history = getHistory();
+    FileLogger.i(TAG, "#4962 [Full History Dump] " + prefix + ", Total messages: " + history.size());
+    FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
+    
+    for (int i = 0; i < history.size(); i++)
+    {
+      JSONObject msg = history.get(i);
+      String role = msg.optString("role", "unknown");
+      String content = msg.optString("content", "").replaceAll("\\n", "\\\\n").replaceAll("\\r", "\\\\r");
+      String toolCalls = msg.has("tool_calls") ? " | tool_calls=" + msg.optJSONArray("tool_calls").length() : "";
+      String toolId = msg.optString("tool_call_id", "");
+      String toolIdLog = !toolId.isEmpty() ? " | tool_call_id=" + toolId : "";
+      
+      // 限制 content 长度，避免日志过长
+      String contentPreview = content.length() > 500 ? content.substring(0, 500) + "...[truncated]" : content;
+      
+      FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | content=\"" + contentPreview + "\"");
+    }
+    
+    FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
+    FileLogger.i(TAG, "#4962 [Full History Dump] End, Total: " + history.size() + " messages");
+  }
+
   public List<JSONObject> getHistory()
   {
     String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
