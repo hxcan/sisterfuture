@@ -329,7 +329,7 @@ public class CreateGitHubCommitTool implements Tool {
     }
 
     /**
-     * 递归创建嵌套目录树（修复版 v8：修正 mergeWithExistingTree 调用参数）
+     * 递归创建嵌套目录树（修复版 v16：修正目录不存在时的创建逻辑）
      * @param client OkHttpClient 实例
      * @param token GitHub Token
      * @param owner 仓库所有者
@@ -392,7 +392,7 @@ public class CreateGitHubCommitTool implements Tool {
         FileLogger.d(TAG, "[NestedTree] 目录层级数：" + dirParts.length);
         FileLogger.d(TAG, "[NestedTree] 目录列表：" + String.join(" → ", dirParts));
         
-        // 【关键修复 v8】始终检查 baseTreeSha，并正确传递子目录名称
+        // 【关键修复 v16】正确处理目录不存在的情况
         for (int i = dirParts.length - 1; i >= 0; i--) {
             String currentDirName = dirParts[i];
             String childName = (i == dirParts.length - 1) ? fileName : dirParts[i + 1];
@@ -413,35 +413,43 @@ public class CreateGitHubCommitTool implements Tool {
                 currentTreeSha = mergeWithExistingTree(client, token, owner, repo, existingDirSha, currentTreeSha, childName);
                 FileLogger.d(TAG, "[NestedTree] ✓ 合并后 Tree SHA: " + currentTreeSha.substring(0, 10) + "...");
             } else {
-                // 目录不存在，创建新目录
+                // 【v16 关键修复】目录不存在时的正确逻辑
                 FileLogger.d(TAG, "[NestedTree] ✗ 目录 '" + currentDirName + "' 不存在，创建新目录");
                 FileLogger.d(TAG, "[NestedTree] → 新目录包含子条目 '" + childName + "'");
-                JSONArray dirTreeArray = new JSONArray();
-                JSONObject dirEntry = new JSONObject();
-                dirEntry.put("path", childName); // 【v10 修复】使用 childName 而非 currentDirName
-                dirEntry.put("mode", "040000"); // 目录模式
-                dirEntry.put("type", "tree");
-                dirEntry.put("sha", currentTreeSha); // 引用下一级 tree
-                dirTreeArray.put(dirEntry);
                 
-                JSONObject dirTreeBody = new JSONObject();
-                dirTreeBody.put("tree", dirTreeArray);
-                
-                Request createDirTreeRequest = new Request.Builder()
-                    .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
-                    .post(RequestBody.create(dirTreeBody.toString(), MediaType.get("application/json; charset=utf-8")))
-                    .header("Authorization", "Bearer " + token)
-                    .header("Accept", "application/vnd.github.v3+json")
-                    .build();
-                
-                Response createDirTreeResponse = client.newCall(createDirTreeRequest).execute();
-                if (!createDirTreeResponse.isSuccessful()) {
-                    throw new IOException("创建目录 Tree 失败 (" + currentDirName + ")：" + createDirTreeResponse.code() + " " + createDirTreeResponse.message());
+                // 最内层目录（直接包含文件）：直接使用 currentTreeSha，不创建新 tree
+                if (i == dirParts.length - 1) {
+                    // currentTreeSha 已经包含文件，直接使用
+                    FileLogger.d(TAG, "[NestedTree] ✓ 最内层目录，直接使用已有的 tree SHA");
+                } else {
+                    // 中间目录：创建 tree 包含 {path: childName, ...} 条目
+                    JSONArray dirTreeArray = new JSONArray();
+                    JSONObject dirEntry = new JSONObject();
+                    dirEntry.put("path", childName); // 【v16 修复】使用 childName 而非 currentDirName
+                    dirEntry.put("mode", "040000"); // 目录模式
+                    dirEntry.put("type", "tree");
+                    dirEntry.put("sha", currentTreeSha); // 引用下一级 tree
+                    dirTreeArray.put(dirEntry);
+                    
+                    JSONObject dirTreeBody = new JSONObject();
+                    dirTreeBody.put("tree", dirTreeArray);
+                    
+                    Request createDirTreeRequest = new Request.Builder()
+                        .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
+                        .post(RequestBody.create(dirTreeBody.toString(), MediaType.get("application/json; charset=utf-8")))
+                        .header("Authorization", "Bearer " + token)
+                        .header("Accept", "application/vnd.github.v3+json")
+                        .build();
+                    
+                    Response createDirTreeResponse = client.newCall(createDirTreeRequest).execute();
+                    if (!createDirTreeResponse.isSuccessful()) {
+                        throw new IOException("创建目录 Tree 失败 (" + currentDirName + ")：" + createDirTreeResponse.code() + " " + createDirTreeResponse.message());
+                    }
+                    
+                    JSONObject dirTreeInfo = new JSONObject(createDirTreeResponse.body().string());
+                    currentTreeSha = dirTreeInfo.getString("sha");
+                    FileLogger.d(TAG, "[NestedTree] ✓ 创建新目录 Tree SHA: " + currentTreeSha.substring(0, 10) + "...");
                 }
-                
-                JSONObject dirTreeInfo = new JSONObject(createDirTreeResponse.body().string());
-                currentTreeSha = dirTreeInfo.getString("sha");
-                FileLogger.d(TAG, "[NestedTree] ✓ 创建新目录 Tree SHA: " + currentTreeSha.substring(0, 10) + "...");
             }
             FileLogger.d(TAG, "[NestedTree] ========== 第 " + i + " 层处理完成 ==========\n");
         }
