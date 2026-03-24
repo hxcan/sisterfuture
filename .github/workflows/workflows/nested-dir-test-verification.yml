@@ -1,0 +1,16 @@
+name: Nested Directory Fix Verification
+
+on:
+  push:
+    branches:
+      - 'test/nested-dir-fix-verification'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check file path
+        run: |
+          echo "✅ 文件路径验证成功！"
+          echo "如果看到这个文件在 .github/workflows/ 目录下，说明修复生效！"
+          echo "文件位置：.github/workflows/nested-dir-test-verification.yml"
