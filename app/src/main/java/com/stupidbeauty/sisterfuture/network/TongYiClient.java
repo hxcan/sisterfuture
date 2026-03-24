@@ -87,6 +87,9 @@ public class TongYiClient
       
       if (currentAccessPoint != null) {
           apiKey = currentAccessPoint.getApiKey();
+          FileLogger.d(NETWORK_TAG, "[AP Info] 当前接入点名称：" + currentAccessPoint.getName());
+          FileLogger.d(NETWORK_TAG, "[AP Info] 当前模型名称：" + currentAccessPoint.getModelName());
+          FileLogger.d(NETWORK_TAG, "[AP Info] Base URL: " + currentAccessPoint.getBaseUrl());
       }
       
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
@@ -134,6 +137,12 @@ public class TongYiClient
         
         FileLogger.d(NETWORK_TAG, "URL: " + fullUrl);
         FileLogger.d(NETWORK_TAG, "Body length: " + requestBody.toString().length());
+        
+        // #4833 新增：记录请求体前 1000 字符用于调试
+        String bodyPreview = requestBody.toString().length() > 1000 
+            ? requestBody.toString().substring(0, 1000) + "..." 
+            : requestBody.toString();
+        FileLogger.d(NETWORK_TAG, "Body preview: " + bodyPreview);
 
         if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
             FileLogger.w(NETWORK_TAG, "⚠️ Double slash in URL!");
@@ -159,17 +168,26 @@ public class TongYiClient
           @Override
           public void onResponse(Call call, Response response) throws IOException
           {
+            int statusCode = response.code();
+            FileLogger.d(NETWORK_TAG, "HTTP Response Status: " + statusCode);
+            
             if (!response.isSuccessful())
             {
               String errorBody = "";
               try {
                 errorBody = response.body().string();
-                int statusCode = response.code();
-                FileLogger.e(NETWORK_TAG, "HTTP " + statusCode + ": " + errorBody);
+                FileLogger.e(NETWORK_TAG, "HTTP " + statusCode + " Error Body: " + errorBody);
+                
+                // #4833 新增：记录错误体前 2000 字符
+                String errorPreview = errorBody.length() > 2000 
+                    ? errorBody.substring(0, 2000) + "..." 
+                    : errorBody;
+                FileLogger.e(NETWORK_TAG, "Error Body Preview: " + errorPreview);
                 
                 // ✅ #4823 新增：HTTP 400 且是上下文超长 → 不标记为接入点不可用
                 if (statusCode == 400 && ContextLengthUtils.isContextLengthError(errorBody)) {
                   FileLogger.w(NETWORK_TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点");
+                  FileLogger.d(NETWORK_TAG, "[ContextLength] 错误消息：" + errorBody);
                   listener.onError(new ResponseException(response, errorBody));
                   return; // 直接返回，不标记为不可用
                 }
@@ -233,9 +251,20 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
     boolean isDone = false;
     boolean htmlChecked = false;
     StringBuilder firstLineBuffer = new StringBuilder();
+    
+    // #4833 新增：记录接收到的总行数和 content 内容
+    int lineCount = 0;
+    int contentLineCount = 0;
+    StringBuilder allContentBuilder = new StringBuilder();
 
     while ((line = bufferedReader.readLine()) != null)
     {
+      lineCount++;
+      
+      // #4833 记录每一行 SSE 数据（前 500 字符）
+      String linePreview = line.length() > 500 ? line.substring(0, 500) + "..." : line;
+      FileLogger.d(TAG, "[SSE Line " + lineCount + "] " + linePreview);
+      
       if (!htmlChecked)
       {
         htmlChecked = true;
@@ -254,17 +283,60 @@ private static void processSSEStream(java.io.Reader reader, OnResponseListener l
       if (line.startsWith("data:"))
       {
         String dataPart = line.substring(5).trim();
+        
+        // #4833 记录 data 行内容
+        FileLogger.d(TAG, "[SSE Data] " + (dataPart.length() > 500 ? dataPart.substring(0, 500) + "..." : dataPart));
 
         if (!dataPart.isEmpty())
         {
           if (!dataPart.equals("[DONE]"))
           {
+            try {
+              // #4833 解析 JSON 并记录 delta 内容
+              JSONObject json = new JSONObject(dataPart);
+              if (json.has("choices") && json.getJSONArray("choices").length() > 0) {
+                JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
+                if (choice.has("delta")) {
+                  JSONObject delta = choice.getJSONObject("delta");
+                  String content = delta.optString("content", "");
+                  
+                  if (!content.isEmpty()) {
+                    contentLineCount++;
+                    allContentBuilder.append(content);
+                    FileLogger.d(TAG, "[SSE Content #" + contentLineCount + "] " + (content.length() > 200 ? content.substring(0, 200) + "..." : content));
+                  } else {
+                    FileLogger.d(TAG, "[SSE Content] delta.content is empty");
+                  }
+                  
+                  // 记录 tool_calls 信息
+                  if (delta.has("tool_calls")) {
+                    FileLogger.d(TAG, "[SSE Tool Calls] delta contains tool_calls");
+                  }
+                }
+              }
+            } catch (Exception e) {
+              FileLogger.e(TAG, "[SSE Parse Error] Failed to parse JSON: " + e.getMessage());
+            }
+            
             listener.onResponse(dataPart);
           }
           else
           {
             isDone = true;
             FileLogger.d(TAG, "SSE 流处理完成 [DONE]");
+            
+            // #4833 新增：记录最终统计信息
+            FileLogger.d(TAG, "[SSE Summary] 总行数：" + lineCount);
+            FileLogger.d(TAG, "[SSE Summary] content 行数：" + contentLineCount);
+            FileLogger.d(TAG, "[SSE Summary] 总 content 长度：" + allContentBuilder.length());
+            
+            String finalContent = allContentBuilder.toString();
+            if (finalContent.isEmpty()) {
+              FileLogger.w(TAG, "[SSE Summary] ⚠️ 警告：模型返回空响应！");
+              FileLogger.w(TAG, "[SSE Summary] 可能原因：1.上下文超长 2.模型错误 3.其他 API 错误");
+            } else {
+              FileLogger.d(TAG, "[SSE Summary] ✓ 模型响应正常，长度：" + finalContent.length());
+            }
           }
         }
       }
