@@ -115,20 +115,10 @@ public class ContextManager
   
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
-    FileLogger.i(TAG, "#4935 [addToolMessage start] toolCallId=" + toolCallId + ", toolName=" + toolName);
+    FileLogger.i(TAG, "#4935 [addToolMessage] toolCallId=" + toolCallId + ", toolName=" + toolName);
     
     List<JSONObject> history = getHistory();
     FileLogger.i(TAG, "[addToolMessage] Current history count: " + history.size());
-    
-    for (int i = 0; i < history.size(); i++)
-    {
-      JSONObject msg = history.get(i);
-      String role = msg.optString("role", "unknown");
-      String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " items" : "none";
-      String toolId = msg.optString("tool_call_id", "none");
-      String contentPreview = msg.optString("content", "").substring(0, Math.min(30, msg.optString("content").length()));
-      FileLogger.i(TAG, "  Msg[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId + ", content=" + contentPreview + "...");
-    }
 
     JSONObject toolMessage = new JSONObject();
     try
@@ -152,15 +142,6 @@ public class ContextManager
     FileLogger.i(TAG, "[addToolMessage] Before normalize: " + history.size());
     history = normalizeToolCallMessages(history);
     FileLogger.i(TAG, "[addToolMessage] After normalize: " + history.size());
-    
-    for (int i = 0; i < history.size(); i++)
-    {
-      JSONObject msg = history.get(i);
-      String role = msg.optString("role", "unknown");
-      String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " items" : "none";
-      String toolId = msg.optString("tool_call_id", "none");
-      FileLogger.i(TAG, "  Normalized[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
-    }
 
     saveHistory(history);
     FileLogger.i(TAG, "[addToolMessage done] History saved");
@@ -180,7 +161,6 @@ public class ContextManager
     addMessage("assistant", message);
   }
 
-  // #4935 Enhanced: Add detailed logs to track message addition timing
   public void addRawMessage(JSONObject message)
   {
     if (message == null)
@@ -189,28 +169,16 @@ public class ContextManager
       return;
     }
 
-    // #4935 Key: Log addRawMessage call details
     String role = message.optString("role", "unknown");
     boolean hasToolCalls = message.has("tool_calls");
     int toolCallsCount = hasToolCalls ? message.optJSONArray("tool_calls").length() : 0;
-    String contentPreview = message.optString("content", "").substring(0, Math.min(50, message.optString("content").length()));
     
     FileLogger.i(TAG, "#4935 [addRawMessage CALL] role=" + role + 
                   ", has_tool_calls=" + hasToolCalls + 
-                  ", tool_calls_count=" + toolCallsCount +
-                  ", content_preview=\"" + contentPreview + "...\"");
+                  ", tool_calls_count=" + toolCallsCount);
     
-    // #4935 Log history state before add
     List<JSONObject> historyBefore = getHistory();
     FileLogger.i(TAG, "#4935 [addRawMessage BEFORE] History count: " + historyBefore.size());
-    for (int i = 0; i < historyBefore.size(); i++)
-    {
-      JSONObject msg = historyBefore.get(i);
-      String msgRole = msg.optString("role", "unknown");
-      String msgToolCalls = msg.has("tool_calls") ? "has_tool_calls(" + msg.optJSONArray("tool_calls").length() + ")" : "none";
-      String msgToolId = msg.optString("tool_call_id", "none");
-      FileLogger.i(TAG, "  Msg[" + i + "] role=" + msgRole + ", tool_calls=" + msgToolCalls + ", tool_call_id=" + msgToolId);
-    }
 
     try
     {
@@ -282,6 +250,30 @@ public class ContextManager
   {
     List<JSONObject> history = getHistory();
     return new JSONArray(history);
+  }
+
+  public void logFullHistory(String prefix)
+  {
+    List<JSONObject> history = getHistory();
+    FileLogger.i(TAG, "#4962 [Full History Dump] " + prefix + ", Total messages: " + history.size());
+    FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
+    
+    for (int i = 0; i < history.size(); i++)
+    {
+      JSONObject msg = history.get(i);
+      String role = msg.optString("role", "unknown");
+      String content = msg.optString("content", "").replaceAll("\\n", "\\\\n").replaceAll("\\r", "\\\\r");
+      String toolCalls = msg.has("tool_calls") ? " | tool_calls=" + msg.optJSONArray("tool_calls").length() : "";
+      String toolId = msg.optString("tool_call_id", "");
+      String toolIdLog = !toolId.isEmpty() ? " | tool_call_id=" + toolId : "";
+      
+      String contentPreview = content.length() > 500 ? content.substring(0, 500) + "...[truncated]" : content;
+      
+      FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | content=\"" + contentPreview + "\"");
+    }
+    
+    FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
+    FileLogger.i(TAG, "#4962 [Full History Dump] End, Total: " + history.size() + " messages");
   }
 
   public List<JSONObject> getHistory()
@@ -454,18 +446,9 @@ public class ContextManager
     return list;
   }
 
-  // #4935 Added: Detailed logs for replaceHistory
   public void replaceHistory(List<JSONObject> newHistory)
   {
     FileLogger.i(TAG, "#4935 [replaceHistory start] New history count: " + newHistory.size());
-    
-    for (int i = 0; i < newHistory.size(); i++)
-    {
-      JSONObject msg = newHistory.get(i);
-      String role = msg.optString("role", "unknown");
-      String content = msg.optString("content", "").substring(0, Math.min(50, msg.optString("content").length()));
-      FileLogger.i(TAG, "  NewMsg[" + i + "] role=" + role + ", content=" + content + "...");
-    }
     
     if (newHistory.size() > currentMaxRounds * 2)
     {
