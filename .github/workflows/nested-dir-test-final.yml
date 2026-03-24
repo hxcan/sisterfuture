@@ -1,0 +1,16 @@
+name: Nested Dir Fix Verification
+
+on:
+  push:
+    branches:
+      - 'test/nested-dir-fix-verification'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify nested directory fix
+        run: |
+          echo "Testing nested directory creation fix for #4940"
+          echo "If this file exists at .github/workflows/nested-dir-test-final.yml, the fix works!"
+          echo "Path should NOT be .github/.github/workflows/..."
