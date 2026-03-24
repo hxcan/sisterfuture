@@ -533,6 +533,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     Log.w(TAG, "🔍 检测到上下文超长错误，自动缩短上下文");
     
+    // #4962 输出错误时的上下文状态
+    contextManager.logFullHistory("ContextLengthError");
+    
     // 1. 在界面显示错误消息（包含实际错误内容和处置提示）
     runOnUiThread(() ->
     {
@@ -629,6 +632,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // 🔍 #4839 调试：输出请求内容，检查 tool_calls 参数格式
       logRequestMessages(messagesArray);
+      
+      // #4962 发送请求前输出完整上下文历史
+      contextManager.logFullHistory("BeforeSendRequest");
 
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
