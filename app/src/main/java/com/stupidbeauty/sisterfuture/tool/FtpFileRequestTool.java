@@ -16,13 +16,26 @@ import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Environment;
+import android.provider.Settings;
+
 
 /**
- * FTP文件请求工具
- * 用于读取电脑上的文件内容
+ * FTP 文件请求工具增强版
+ * 用于读取电脑上的文件内容，并支持直接保存到手机存储
+ * 
+ * 增强功能 (#4976):
+ * - 支持 save_to_phone 参数，将文件保存到手机
+ * - 支持 phone_path 参数，自定义保存路径
+ * - 自动处理外置存储权限申请
+ * - 优先写入外置存储，失败则回退到私有目录
  */
 public class FtpFileRequestTool implements Tool {
     private static final String TAG = "FtpFileRequestTool";
@@ -44,14 +57,20 @@ public class FtpFileRequestTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "ftp_file_request");
-            functionDef.put("description", "从FTP服务器读取文件内容。支持文本文件读取。");
+            functionDef.put("description", "从 FTP 服务器读取文件内容。支持文本文件读取。增强版支持直接保存到手机存储。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()
                 .put("url", new JSONObject()
                     .put("type", "string")
-                    .put("description", "FTP文件URL，格式：ftp://username:password@host:port/path"))
+                    .put("description", "FTP 文件 URL，格式：ftp://username:password@host:port/path"))
+                .put("save_to_phone", new JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否将文件保存到手机存储（默认 false）"))
+                .put("phone_path", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "手机保存路径（可选，默认 /sdcard/Download/文件名）"))
             );
             parameters.put("required", new JSONArray(new String[]{"url"}));
 
@@ -80,8 +99,12 @@ public class FtpFileRequestTool implements Tool {
             try {
                 String url = arguments.getString("url").trim();
                 if (url.isEmpty()) {
-                    throw new IllegalArgumentException("URL不能为空");
+                    throw new IllegalArgumentException("URL 不能为空");
                 }
+
+                // 新增参数：是否保存到手机
+                boolean saveToPhone = arguments.optBoolean("save_to_phone", false);
+                String phonePath = arguments.optString("phone_path", "");
 
                 String username = "ftpuser";
                 String password = "yourpassword";
@@ -119,11 +142,11 @@ public class FtpFileRequestTool implements Tool {
 
                 ftpClient.connect(host, port);
                 if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
-                    throw new IOException("连接失败: " + ftpClient.getReplyString());
+                    throw new IOException("连接失败：" + ftpClient.getReplyString());
                 }
 
                 if (!ftpClient.login(username, password)) {
-                    throw new IOException("登录失败: " + ftpClient.getReplyString());
+                    throw new IOException("登录失败：" + ftpClient.getReplyString());
                 }
 
                 ftpClient.enterLocalPassiveMode();
@@ -133,25 +156,46 @@ public class FtpFileRequestTool implements Tool {
                 boolean success = ftpClient.retrieveFile(path, outputStream);
                 
                 if (!success) {
-                    throw new IOException("文件读取失败: " + ftpClient.getReplyString());
+                    throw new IOException("文件读取失败：" + ftpClient.getReplyString());
                 }
 
                 byte[] fileBytes = outputStream.toByteArray();
                 if (fileBytes.length > MAX_FILE_SIZE) {
-                    throw new IOException("文件太大，超过1MB限制");
+                    throw new IOException("文件太大，超过 1MB 限制");
                 }
 
                 String content = new String(fileBytes, StandardCharsets.UTF_8);
 
-                JSONObject result = new JSONObject();
-                result.put("status", "success");
-                result.put("content", content);
-                result.put("url", url);
-                result.put("size", fileBytes.length);
-                result.put("processed_at", System.currentTimeMillis());
-                // ✅ 已移除敏感字段: sister_future_note
-
-                callback.onResult(result);
+                // 🔥 新增：保存到手机存储逻辑
+                if (saveToPhone) {
+                    String fileName = getFileNameFromUrl(url);
+                    String targetPath = phonePath.isEmpty() 
+                        ? "/sdcard/Download/" + fileName 
+                        : phonePath;
+                    
+                    WriteResult writeResult = writeToPhoneStorage(targetPath, fileBytes);
+                    
+                    JSONObject result = new JSONObject();
+                    result.put("status", "success");
+                    result.put("ftp_url", url);
+                    result.put("file_saved", true);
+                    result.put("phone_path", writeResult.path);
+                    result.put("size", fileBytes.length);
+                    result.put("permission_note", writeResult.permissionNote);
+                    result.put("processed_at", System.currentTimeMillis());
+                    
+                    callback.onResult(result);
+                } else {
+                    // 原有逻辑：只返回内容
+                    JSONObject result = new JSONObject();
+                    result.put("status", "success");
+                    result.put("content", content);
+                    result.put("url", url);
+                    result.put("size", fileBytes.length);
+                    result.put("processed_at", System.currentTimeMillis());
+                    
+                    callback.onResult(result);
+                }
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
                 try {
@@ -172,8 +216,133 @@ public class FtpFileRequestTool implements Tool {
         });
     }
 
+    /**
+     * 从 FTP URL 中提取文件名
+     */
+    private String getFileNameFromUrl(String url) {
+        try {
+            int lastSlash = url.lastIndexOf('/');
+            if (lastSlash != -1 && lastSlash < url.length() - 1) {
+                return url.substring(lastSlash + 1);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "提取文件名失败", e);
+        }
+        return "ftp_downloaded_file_" + System.currentTimeMillis();
+    }
+
+    /**
+     * 写入手机存储
+     * 优先尝试外置存储，失败则回退到私有目录
+     */
+    private WriteResult writeToPhoneStorage(String path, byte[] content) {
+        File file = new File(path);
+        
+        // 确保父目录存在
+        if (file.getParentFile() != null) {
+            file.getParentFile().mkdirs();
+        }
+        
+        // 尝试写入外置存储
+        try {
+            FileOutputStream fos = new FileOutputStream(file);
+            fos.write(content);
+            fos.close();
+            
+            Log.d(TAG, "✅ 成功写入外置存储：" + path);
+            return new WriteResult(
+                path,
+                true,
+                "已写入外置存储（公共目录）"
+            );
+        } catch (SecurityException e) {
+            // 外置存储权限不足，回退到私有目录
+            Log.w(TAG, "⚠️ 外置存储权限不足，回退到私有目录", e);
+            return fallbackToPrivateStorage(file.getName(), content);
+        } catch (IOException e) {
+            Log.e(TAG, "写入外置存储失败", e);
+            return fallbackToPrivateStorage(file.getName(), content);
+        }
+    }
+
+    /**
+     * 回退到私有目录存储
+     */
+    private WriteResult fallbackToPrivateStorage(String fileName, byte[] content) {
+        try {
+            // 获取应用私有目录
+            File privateDir = context.getExternalFilesDir(null);
+            if (privateDir == null) {
+                privateDir = context.getFilesDir();
+            }
+            
+            File privateFile = new File(privateDir, fileName);
+            FileOutputStream fos = new FileOutputStream(privateFile);
+            fos.write(content);
+            fos.close();
+            
+            String privatePath = privateFile.getAbsolutePath();
+            Log.d(TAG, "✅ 成功写入私有目录：" + privatePath);
+            
+            // 触发权限申请
+            requestExternalStoragePermission();
+            
+            return new WriteResult(
+                privatePath,
+                true,
+                "已写入私有目录，正在申请外置存储权限，授权后可访问公共目录"
+            );
+        } catch (IOException e) {
+            Log.e(TAG, "写入私有目录失败", e);
+            return new WriteResult(
+                "",
+                false,
+                "写入失败：" + e.getMessage()
+            );
+        }
+    }
+
+    /**
+     * 请求外置存储权限（Android 11+ 需要 MANAGE_EXTERNAL_STORAGE）
+     */
+    private void requestExternalStoragePermission() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+            intent.setData(Uri.parse("package:" + context.getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+            
+            Log.d(TAG, "📱 已打开权限申请页面");
+        } catch (Exception e) {
+            Log.e(TAG, "打开权限申请页面失败", e);
+            
+            // 降级方案：尝试打开应用设置页面
+            try {
+                Intent fallbackIntent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                fallbackIntent.setData(Uri.parse("package:" + context.getPackageName()));
+                fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(fallbackIntent);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    /**
+     * 写入结果封装类
+     */
+    private static class WriteResult {
+        String path;
+        boolean success;
+        String permissionNote;
+        
+        WriteResult(String path, boolean success, String permissionNote) {
+            this.path = path;
+            this.success = success;
+            this.permissionNote = permissionNote;
+        }
+    }
+
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求获取FTP文件内容时才调用此工具。只支持读取文本文件，最大支持1MB。需要完整的FTP URL包含用户名密码。";
+        return "必须在用户明确要求获取 FTP 文件内容时才调用此工具。支持可选的 save_to_phone 参数将文件保存到手机。只支持读取文本文件，最大支持 1MB。需要完整的 FTP URL 包含用户名密码。";
     }
 }
