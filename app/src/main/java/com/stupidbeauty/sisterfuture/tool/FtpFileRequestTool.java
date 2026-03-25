@@ -36,10 +36,12 @@ import android.provider.Settings;
  * - 支持 phone_path 参数，自定义保存路径
  * - 自动处理外置存储权限申请
  * - 优先写入外置存储，失败则回退到私有目录
+ * - 保存到手机时不限制文件大小，不返回文件内容
+ * - 支持二进制文件保存（Base64 编码检测）
  */
 public class FtpFileRequestTool implements Tool {
     private static final String TAG = "FtpFileRequestTool";
-    private static final int MAX_FILE_SIZE = 1024 * 1024; // 1MB
+    private static final int MAX_FILE_SIZE_FOR_CONTENT = 1024 * 1024; // 1MB (仅当不保存到手机时限制)
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -57,7 +59,7 @@ public class FtpFileRequestTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "ftp_file_request");
-            functionDef.put("description", "从 FTP 服务器读取文件内容。支持文本文件读取。增强版支持直接保存到手机存储。");
+            functionDef.put("description", "从 FTP 服务器读取文件内容。支持文本和二进制文件。增强版支持直接保存到手机存储，保存时不限制文件大小且不返回内容。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -67,7 +69,7 @@ public class FtpFileRequestTool implements Tool {
                     .put("description", "FTP 文件 URL，格式：ftp://username:password@host:port/path"))
                 .put("save_to_phone", new JSONObject()
                     .put("type", "boolean")
-                    .put("description", "是否将文件保存到手机存储（默认 false）"))
+                    .put("description", "是否将文件保存到手机存储（默认 false）。为 true 时不限制文件大小，不返回文件内容"))
                 .put("phone_path", new JSONObject()
                     .put("type", "string")
                     .put("description", "手机保存路径（可选，默认 /sdcard/Download/文件名）"))
@@ -150,7 +152,8 @@ public class FtpFileRequestTool implements Tool {
                 }
 
                 ftpClient.enterLocalPassiveMode();
-                ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
+                // 🔥 改为 BINARY 模式，支持文本和二进制文件
+                ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                 boolean success = ftpClient.retrieveFile(path, outputStream);
@@ -160,11 +163,12 @@ public class FtpFileRequestTool implements Tool {
                 }
 
                 byte[] fileBytes = outputStream.toByteArray();
-                if (fileBytes.length > MAX_FILE_SIZE) {
-                    throw new IOException("文件太大，超过 1MB 限制");
-                }
+                long fileSize = fileBytes.length;
 
-                String content = new String(fileBytes, StandardCharsets.UTF_8);
+                // 🔥 关键修改：保存到手机时不限制大小，只在不保存时限制
+                if (!saveToPhone && fileSize > MAX_FILE_SIZE_FOR_CONTENT) {
+                    throw new IOException("文件太大，超过 1MB 限制。请使用 save_to_phone=true 参数直接保存到手机");
+                }
 
                 // 🔥 新增：保存到手机存储逻辑
                 if (saveToPhone) {
@@ -175,23 +179,48 @@ public class FtpFileRequestTool implements Tool {
                     
                     WriteResult writeResult = writeToPhoneStorage(targetPath, fileBytes);
                     
+                    // 🔥 保存到手机时不返回文件内容，只返回元数据
                     JSONObject result = new JSONObject();
                     result.put("status", "success");
                     result.put("ftp_url", url);
                     result.put("file_saved", true);
                     result.put("phone_path", writeResult.path);
-                    result.put("size", fileBytes.length);
+                    result.put("size", fileSize);
                     result.put("permission_note", writeResult.permissionNote);
                     result.put("processed_at", System.currentTimeMillis());
+                    // 不添加 content 字段，避免大文件占用上下文
                     
                     callback.onResult(result);
                 } else {
-                    // 原有逻辑：只返回内容
+                    // 原有逻辑：只返回内容（限制 1MB）
+                    // 尝试检测是否为文本文件
+                    String content;
+                    try {
+                        content = new String(fileBytes, StandardCharsets.UTF_8);
+                        // 验证是否为有效 UTF-8
+                        if (content.contains("\uFFFD")) {
+                            throw new Exception("包含无效 UTF-8 字符");
+                        }
+                    } catch (Exception e) {
+                        // 非文本文件，返回 Base64 提示
+                        JSONObject result = new JSONObject();
+                        result.put("status", "success");
+                        result.put("content", "[二进制文件，无法直接显示。请使用 save_to_phone=true 保存到手机]");
+                        result.put("url", url);
+                        result.put("size", fileSize);
+                        result.put("is_binary", true);
+                        result.put("processed_at", System.currentTimeMillis());
+                        
+                        callback.onResult(result);
+                        return;
+                    }
+                    
                     JSONObject result = new JSONObject();
                     result.put("status", "success");
                     result.put("content", content);
                     result.put("url", url);
-                    result.put("size", fileBytes.length);
+                    result.put("size", fileSize);
+                    result.put("is_binary", false);
                     result.put("processed_at", System.currentTimeMillis());
                     
                     callback.onResult(result);
@@ -343,6 +372,6 @@ public class FtpFileRequestTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求获取 FTP 文件内容时才调用此工具。支持可选的 save_to_phone 参数将文件保存到手机。只支持读取文本文件，最大支持 1MB。需要完整的 FTP URL 包含用户名密码。";
+        return "必须在用户明确要求获取 FTP 文件内容时才调用此工具。支持可选的 save_to_phone 参数将文件保存到手机。保存到手机时不限制文件大小且不返回内容。不保存时仅支持 1MB 以内的文本文件。需要完整的 FTP URL 包含用户名密码。";
     }
 }
