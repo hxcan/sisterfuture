@@ -84,7 +84,8 @@ android
       minifyEnabled false
       proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
     }
-    debug {
+    debug
+    {
       signingConfig signingConfigs.debug
     }
   }
@@ -94,12 +95,13 @@ android
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
     targetSdkVersion 28
-    versionCode 935
-    versionName "2026.3.23"
+    versionCode 1091
+    versionName "2026.3.26"
     multiDexEnabled true
     
     // 配置支持的 SO 库架构
-    ndk {
+    ndk
+    {
       abiFilters "armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
     }
   }
