@@ -79,7 +79,8 @@ public class ContextManager
         if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
         {
           blankAssistantCount++;
-          FileLogger.w(TAG, "[Startup cleanup] Skip blank assistant message at index: " + i);
+          // 🔍 #4997 移除冗余日志：跳过空白 assistant 消息的详细日志
+          // FileLogger.w(TAG, "[Startup cleanup] Skip blank assistant message at index: " + i);
           continue;
         }
 
