@@ -79,7 +79,8 @@ public class ContextManager
         if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
         {
           blankAssistantCount++;
-          FileLogger.w(TAG, "[Startup cleanup] Skip blank assistant message at index: " + i);
+          // 🔍 #4997 移除冗余日志：跳过空白 assistant 消息的详细日志
+          // FileLogger.w(TAG, "[Startup cleanup] Skip blank assistant message at index: " + i);
           continue;
         }
 
@@ -439,7 +440,8 @@ public class ContextManager
 
         String toolCallIds = currentObject.has("tool_calls") ? String.valueOf(currentObject.optJSONArray("tool_calls").length()) + " items" : "none";
         String toolId = currentObject.optString("tool_call_id", "none");
-        FileLogger.d(TAG, "[normalize] Process[" + i + "] role=" + roleString + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
+        // 🔍 #4997 移除冗余日志：删除 [normalize] Process 日志行
+        // FileLogger.d(TAG, "[normalize] Process[" + i + "] role=" + roleString + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
 
         if (roleString.equals("assistant"))
         {

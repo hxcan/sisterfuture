@@ -171,6 +171,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private int rateLimitRetryCount = 0;
   private static final int MAX_RATE_LIMIT_RETRIES = 3;
 
+  // 🔍 #4997 并发请求锁 - 防止并发请求风暴
+  private volatile boolean isRequestInProgress = false;
+  private volatile int activeRequestCount = 0;
+
 	@Override
   public void onInit(int arg0)
   {
@@ -381,6 +385,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
     contextManager.addUserMessage(message);
     
+    // 🔍 #4997 并发调试：记录调用栈
+    FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] sendMessageToSister 被调用，当前活跃请求数：" + activeRequestCount);
+    FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 调用栈:\n" + android.util.Log.getStackTraceString(new Throwable()));
+    
     // 🔥 #4657 检查是否处于死循环救援模式
     if (isDeadlockRescueMode) {
       FileLogger.d(TAG, "🔥 [RESCUE_MODE] 处于死循环救援模式，处理 API Key 输入");
@@ -457,6 +465,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void sendChatRequest() 
   {
     recognizeResulttextView.setText("");
+    
+    // 🔍 #4997 并发调试：记录调用来源
+    FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] sendChatRequest 被调用，当前活跃请求数：" + activeRequestCount);
+    FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 调用栈:\n" + android.util.Log.getStackTraceString(new Throwable()));
     
     if (guideManager != null && guideManager.isEmptyAccessPointList())
     {
@@ -562,6 +574,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void sendChatRequestTongYi()
   {
+    // 🔍 #4997 并发调试：检查是否有并发请求
+    FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] sendChatRequestTongYi 被调用");
+    FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] isRequestInProgress=" + isRequestInProgress + ", activeRequestCount=" + activeRequestCount);
+    FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 调用栈:\n" + android.util.Log.getStackTraceString(new Throwable()));
+    
     // 🔍 #4997 救援调试：请求发起前记录状态
     FileLogger.d(TAG, "🔍 [RESCUE_DEBUG] 开始发送请求，当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex());
     FileLogger.d(TAG, "📊 [FAILURE_COUNT] 当前连续失败次数：" + modelAccessPointManager.getConsecutiveFailures());
@@ -643,6 +660,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       // #4962 发送请求前输出完整上下文历史
       contextManager.logFullHistory("BeforeSendRequest");
 
+      // 🔍 #4997 并发调试：增加活跃请求计数
+      activeRequestCount++;
+      FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 请求开始前，activeRequestCount++ => " + activeRequestCount);
+
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
         @Override
@@ -651,7 +672,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         hideThinkingOverlay();
           // #4895 更新通知状态：收到响应，正在解析
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
+          
+          // 🔍 #4997 并发调试：记录成功响应
+          FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 收到成功响应，activeRequestCount=" + activeRequestCount);
+          
           parseTongYiResponse(response);
+          
+          // 🔍 #4997 并发调试：响应处理后减少计数
+          activeRequestCount--;
+          FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 响应处理完成，activeRequestCount-- => " + activeRequestCount);
         }
 
         @Override
@@ -662,6 +691,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           // #4895 更新通知状态：请求出错
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "请求出错，请重试");
+          
+          // 🔍 #4997 并发调试：记录错误
+          FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 收到错误响应，activeRequestCount=" + activeRequestCount);
 
           boolean isAccessPointUnavailable = false;
 
@@ -694,6 +726,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 if (ContextLengthUtils.isContextLengthError(errorBody)) {
                   // ✅ #4829 使用统一处理方法（缩短后重试）
                   handleContextLengthError(errorBody, true);
+                  
+                  // 🔍 #4997 并发调试：错误处理后减少计数
+                  activeRequestCount--;
+                  FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 上下文错误处理完成，activeRequestCount-- => " + activeRequestCount);
                   return; // 直接返回，不继续处理
                 }
               }
@@ -711,6 +747,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 messageAdapter.addMessage(new MessageItem("API 返回 HTML 页面", MessageType.AI));
                 scrollToBottom();
               });
+              
+              // 🔍 #4997 并发调试：错误处理后减少计数
+              activeRequestCount--;
+              FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] HTML 错误处理完成，activeRequestCount-- => " + activeRequestCount);
               return;
             }
           }
@@ -725,6 +765,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 接入点不可用，计数器递增：" + failures);
             FileLogger.d(TAG, "🔥 [FAILURE_COUNT] 当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex() + 
                           " / 阈值：" + (modelAccessPointManager.getAccessPointCount() * 2));
+            
+            // 🔍 #4997 并发调试：重试前记录
+            FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 准备重试，重试前 activeRequestCount=" + activeRequestCount);
+            
             sendChatRequestTongYi(); // 继续重试
           }
           else
@@ -732,6 +776,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             // ✅ [FAILURE_RESET] 非接入点错误，重置失败计数器
             FileLogger.d(TAG, "✅ [FAILURE_RESET] 非接入点错误，重置失败计数器");
             modelAccessPointManager.resetFailureCount();
+            
+            // 🔍 #4997 并发调试：错误处理后减少计数
+            activeRequestCount--;
+            FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 非接入点错误处理完成，activeRequestCount-- => " + activeRequestCount);
           }
         }
       },
@@ -1076,6 +1124,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
 
         clearAccumulatedToolCalls();
+
+        // 🔍 #4997 并发调试：记录工具处理完成后发起新请求
+        FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] postProcessToolResults 完成，准备发起新请求，当前 activeRequestCount=" + activeRequestCount);
+        FileLogger.d(TAG, "🔍 [CONCURRENT_DEBUG] 调用栈:\n" + android.util.Log.getStackTraceString(new Throwable()));
 
         sendChatRequestTongYi();
       }
