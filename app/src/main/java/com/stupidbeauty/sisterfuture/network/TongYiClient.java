@@ -108,10 +108,8 @@ public class TongYiClient
         requestBody.put("stream", true);
 
         // #4775 禁用思考功能，避免空回复问题
-        // 修正参数格式：直接放到请求体顶层，不是 extra_body
-        // 文档说 extra_body 是 Python SDK 的用法，我们直接发 HTTP 不需要
         requestBody.put("enable_thinking", false);
-        FileLogger.d(NETWORK_TAG, "[Thinking] 思考功能已禁用 (enable_thinking=false)");
+        // FileLogger.d(NETWORK_TAG, "[Thinking] 思考功能已禁用 (enable_thinking=false)"); // 删除调试日志
 
         if (includeTools)
         {
