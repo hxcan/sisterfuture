@@ -277,14 +277,19 @@ public class ContextManager
     {
       JSONObject msg = history.get(i);
       String role = msg.optString("role", "unknown");
-      String content = msg.optString("content", "").replaceAll("\\n", "\\\\n").replaceAll("\\r", "\\\\r");
       String toolCalls = msg.has("tool_calls") ? " | tool_calls=" + msg.optJSONArray("tool_calls").length() : "";
       String toolId = msg.optString("tool_call_id", "");
       String toolIdLog = !toolId.isEmpty() ? " | tool_call_id=" + toolId : "";
       
-      String contentPreview = content.length() > 500 ? content.substring(0, 500) + "...[truncated]" : content;
-      
-      FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | content=\"" + contentPreview + "\"");
+      // ✅ #4997 修改：简化 tool 消息日志，不输出详细 content
+      if ("tool".equals(role)) {
+        String toolName = msg.optString("name", "unknown");
+        FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | name=" + toolName + " | tool_call=true");
+      } else {
+        String content = msg.optString("content", "").replaceAll("\\n", "\\n").replaceAll("\\r", "\\r");
+        String contentPreview = content.length() > 500 ? content.substring(0, 500) + "...[truncated]" : content;
+        FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | content=\"" + contentPreview + "\"");
+      }
     }
     
     FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
