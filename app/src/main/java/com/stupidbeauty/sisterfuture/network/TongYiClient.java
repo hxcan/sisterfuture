@@ -41,7 +41,7 @@ public class TongYiClient
     this.accessPointManager = accessPointManager;
     this.toolManager = toolManager;
     this.networkRequester = new OkHttpNetworkRequester(this.accessPointManager, this.toolManager);
-    FileLogger.d(TAG, "TongYiClient 初始化完成");
+    // FileLogger.d(TAG, "TongYiClient 初始化完成"); // 删除冗余日志
   }
 
   public void sendChatRequest(JSONArray messages, boolean includeTools , OnResponseListener listener, Runnable onStreamComplete)
@@ -76,7 +76,7 @@ public class TongYiClient
         .build();
       this.accessPointManager = accessPointManager;
       this.toolManager = toolManager;
-      FileLogger.d(NETWORK_TAG, "OkHttpNetworkRequester 初始化完成");
+      // FileLogger.d(NETWORK_TAG, "OkHttpNetworkRequester 初始化完成"); // 删除冗余日志
     }
 
     @Override
@@ -94,7 +94,11 @@ public class TongYiClient
       
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
           
-      FileLogger.d(NETWORK_TAG, "Using API Key: " + (apiKey != null && !apiKey.isEmpty() ? "Access Point" : "No auth"));
+      // 🔍 [调试] 添加 API Key 脱敏输出（前 8 位 + ... + 后 4 位）
+      String apiKeyMasked = (apiKey != null && apiKey.length() > 12) 
+          ? apiKey.substring(0, 8) + "..." + apiKey.substring(apiKey.length() - 4)
+          : (apiKey != null ? "***" : "null");
+      FileLogger.d(NETWORK_TAG, "[API Key] 接入点=\"" + (currentAccessPoint != null ? currentAccessPoint.getName() : "null") + "\", Key=\"" + apiKeyMasked + "\" (长度：" + (apiKey != null ? apiKey.length() : 0) + ")");
 
       try
       {
@@ -144,9 +148,9 @@ public class TongYiClient
         FileLogger.d(NETWORK_TAG, "URL: " + fullUrl);
         FileLogger.d(NETWORK_TAG, "Body length: " + requestBody.toString().length());
         
-        // #4833 新增：记录请求体前 1000 字符用于调试
-        String bodyPreview = requestBody.toString().length() > 1000 
-            ? requestBody.toString().substring(0, 1000) + "..." 
+        // #4833 优化：截断 Body preview 至 200 字符
+        String bodyPreview = requestBody.toString().length() > 200 
+            ? requestBody.toString().substring(0, 200) + "..." 
             : requestBody.toString();
         FileLogger.d(NETWORK_TAG, "Body preview: " + bodyPreview);
 
@@ -184,7 +188,7 @@ public class TongYiClient
                 errorBody = response.body().string();
                 FileLogger.e(NETWORK_TAG, "HTTP " + statusCode + " Error Body: " + errorBody);
                 
-                // #4833 新增：记录错误体前 2000 字符
+                // #4833 优化：截断错误体预览
                 String errorPreview = errorBody.length() > 2000 
                     ? errorBody.substring(0, 2000) + "..." 
                     : errorBody;
