@@ -28,6 +28,7 @@ public class ContextManager
   private static final int INITIAL_MAX_ROUNDS = 5;
   private SharedPreferences sharedPreferences;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
+  private int MAX_ARGUMENTS_STR_LENGTH = 226810;
 
   public ContextManager(Context context)
   {
@@ -37,6 +38,15 @@ public class ContextManager
     cleanupInvalidToolCallsOnStartup();
     FileLogger.d(TAG, "ContextManager init, currentMaxRounds=" + currentMaxRounds);
   }
+
+  private boolean inDebugMessageIndexRange(int i)
+  {
+    int rangeMaximal = 1890;
+    int rangeMinimal= 0;
+
+    // return ((i>= rangeMinimal) && (i<=rangeMaximal)    );
+    return true;
+  } // private boolean inDebugMessageIndexRange(index i)
 
   private void cleanupInvalidToolCallsOnStartup()
   {
@@ -72,6 +82,13 @@ public class ContextManager
           FileLogger.w(TAG, "[Startup cleanup] Skip blank assistant message at index: " + i);
           continue;
         }
+
+        if ((!(inDebugMessageIndexRange(i))) && (hasToolCalls)) // binary search to find the message that caused the problem. Only keep the messages with index in debug range
+        {
+          FileLogger.w(TAG, "Skipping message with index not in binary search range: " + i);
+
+          continue;
+        } // if !(inDebugMessageIndexRange(i)) // binary search to find the message that caused the problem. Only keep the messages with index in debug range
         
         // 原有逻辑：验证 tool_call 的 JSON 有效性
         if (isValidToolCallMessage(currentObject))
@@ -358,12 +375,17 @@ public class ContextManager
           if (function.has("arguments"))
           {
             String argumentsStr = function.getString("arguments");
+            Log.i(TAG, "argumentsString length: " + argumentsStr.length() + ", content : " + argumentsStr );
+
+
             
             try
             {
               JSONTokener tokener = new JSONTokener(argumentsStr);
               Object parsed = tokener.nextValue();
-              
+
+              Log.i(TAG, "parsed length: " +  parsed.toString().length()   + ", content: " + parsed );
+
               if (tokener.more())
               {
                 FileLogger.w(TAG, "Invalid JSON: extra data - \"" + argumentsStr + "\"");
@@ -373,6 +395,12 @@ public class ContextManager
               if (!(parsed instanceof JSONObject))
               {
                 FileLogger.w(TAG, "Invalid JSON: not JSONObject, type=" + parsed.getClass().getName());
+                return false;
+              }
+
+              if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
+              {
+                FileLogger.w(TAG, "arguments string too long: " + argumentsStr.length());
                 return false;
               }
             }
