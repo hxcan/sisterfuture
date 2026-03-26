@@ -189,7 +189,7 @@ public class FileLogger {
                 currentLogFile.createNewFile();
             }
             
-            Log.i(TAG, "📄 切换到新日志文件：" + currentLogFile.getAbsolutePath());
+            // Log.i(TAG, "📄 切换到新日志文件：" + currentLogFile.getAbsolutePath());
         } catch (IOException e) {
             Log.e(TAG, "创建日志文件失败", e);
             currentLogFile = null;

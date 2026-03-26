@@ -290,6 +290,20 @@ public class ContextManager
         String contentPreview = content.length() > 500 ? content.substring(0, 500) + "...[truncated]" : content;
         FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | content=\"" + contentPreview + "\"");
       }
+
+      if (msg.has("tool_calls"))
+      {
+        // 陈欣，输出工具调用消息内容：
+        // 待续。
+
+        // toString
+
+        // String bodyPreview = requestBody.toString().length() > 1000
+//
+
+        FileLogger.i(TAG, "#4997 tool call:" + msg.optJSONArray("tool_calls").toString());
+
+      } // if (msg.has("tool_calls"))
     }
     
     FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
