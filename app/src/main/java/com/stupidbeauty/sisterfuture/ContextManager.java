@@ -79,8 +79,6 @@ public class ContextManager
         if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
         {
           blankAssistantCount++;
-          // 🔍 #4997 移除冗余日志：跳过空白 assistant 消息的详细日志
-          // FileLogger.w(TAG, "[Startup cleanup] Skip blank assistant message at index: " + i);
           continue;
         }
 
@@ -308,20 +306,6 @@ public class ContextManager
         String contentPreview = content.length() > 500 ? content.substring(0, 500) + "...[truncated]" : content;
         FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | content=\"" + contentPreview + "\"");
       }
-
-      if (msg.has("tool_calls"))
-      {
-        // 陈欣，输出工具调用消息内容：
-        // 待续。
-
-        // toString
-
-        // String bodyPreview = requestBody.toString().length() > 1000
-//
-
-        FileLogger.i(TAG, "#4997 tool call:" + msg.optJSONArray("tool_calls").toString());
-
-      } // if (msg.has("tool_calls"))
     }
     
     FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
@@ -440,8 +424,6 @@ public class ContextManager
 
         String toolCallIds = currentObject.has("tool_calls") ? String.valueOf(currentObject.optJSONArray("tool_calls").length()) + " items" : "none";
         String toolId = currentObject.optString("tool_call_id", "none");
-        // 🔍 #4997 移除冗余日志：删除 [normalize] Process 日志行
-        // FileLogger.d(TAG, "[normalize] Process[" + i + "] role=" + roleString + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
 
         if (roleString.equals("assistant"))
         {
