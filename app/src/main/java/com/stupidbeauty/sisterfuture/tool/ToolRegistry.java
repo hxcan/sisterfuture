@@ -94,8 +94,8 @@ public class ToolRegistry
     toolManager.registerTool(new GetGitHubFileTool(context));
     toolManager.registerTool(new CreateGitHubCommitTool(context));
     
-    // 🔥 新增：GitHub Actions 日志获取工具（不需要 context）
-    toolManager.registerTool(new GetGitHubActionsLogsTool());
+    // 🔥 新增：GitHub Actions 日志获取工具（异步版本，需要 context）
+    toolManager.registerTool(new GetGitHubActionsLogsTool(context));
 
     // === 系统提示词管理工具 ===
     toolManager.registerTool(new FuseSystemPromptTool(context));
