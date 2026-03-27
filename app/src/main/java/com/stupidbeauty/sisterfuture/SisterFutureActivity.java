@@ -565,9 +565,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void sendChatRequestTongYi()
   {
-    // 🔒 #4997 并发请求锁：检查是否有请求正在进行（最小化修改：仅添加此 3 行）
+    // 🔍 #4997 【关键调试】记录调用来源堆栈
+    FileLogger.d(TAG, "🔍 [CALL_STACK] sendChatRequestTongYi() 被调用，当前线程：" + Thread.currentThread().getName());
+    FileLogger.d(TAG, "📋 [CALL_STACK] 调用堆栈:\n" + Log.getStackTraceString(new Exception()));
+    
+    // 🔒 #4997 并发请求锁：检查是否有请求正在进行
     if (isRequestInProgress) {
-      FileLogger.w(TAG, "🔒 [REQUEST_LOCK] 请求锁已占用，跳过本次请求（防止并发风暴）");
+      FileLogger.w(TAG, "🔒 [REQUEST_LOCK] 请求锁已占用，跳过本次请求（防止并发风暴），thread=" + Thread.currentThread().getName());
       return;
     }
     
@@ -610,7 +614,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
-      // 🔒 #4997 设置请求锁（最小化修改：仅添加此 2 行）
+      // 🔒 #4997 设置请求锁
       isRequestInProgress = true;
       FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已设置：true");
       
@@ -667,7 +671,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           parseTongYiResponse(response);
           
-          // 🔒 #4997 释放请求锁（最小化修改：仅添加此 1 行）
+          // 🔒 #4997 释放请求锁
           isRequestInProgress = false;
           FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (成功响应)");
         }
@@ -693,7 +697,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.w(TAG, "⚠️ [RATE_LIMIT] 限流错误，等待后重试 #" + rateLimitRetryCount);
             handleRateLimitError();
             
-            // 🔒 #4997 释放请求锁（最小化修改：仅添加此 1 行）
+            // 🔒 #4997 释放请求锁
             isRequestInProgress = false;
             FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (限流重试)");
             return;
@@ -717,7 +721,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   // ✅ #4829 使用统一处理方法（缩短后重试）
                   handleContextLengthError(errorBody, true);
                   
-                  // 🔒 #4997 释放请求锁（最小化修改：仅添加此 1 行）
+                  // 🔒 #4997 释放请求锁
                   isRequestInProgress = false;
                   FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (上下文错误)");
                   return; // 直接返回，不继续处理
@@ -738,7 +742,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 scrollToBottom();
               });
               
-              // 🔒 #4997 释放请求锁（最小化修改：仅添加此 1 行）
+              // 🔒 #4997 释放请求锁
               isRequestInProgress = false;
               FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (HTML 错误)");
               return;
@@ -756,7 +760,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.d(TAG, "🔥 [FAILURE_COUNT] 当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex() + 
                           " / 阈值：" + (modelAccessPointManager.getAccessPointCount() * 2));
             
-            // 🔒 #4997 释放请求锁后重试（最小化修改：仅添加此 1 行）
+            // 🔍 #4997 【关键调试】记录重试来源
+            FileLogger.d(TAG, "🔄 [RETRY_FROM_ONERROR] 准备从 onError() 重试，thread=" + Thread.currentThread().getName());
+            FileLogger.d(TAG, "📋 [RETRY_STACK] 重试调用堆栈:\n" + Log.getStackTraceString(new Exception()));
+            
+            // 🔒 #4997 释放请求锁后重试
             isRequestInProgress = false;
             FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (接入点不可用，准备重试)");
             
@@ -766,7 +774,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             // ✅ [FAILURE_RESET] 非接入点错误，重置失败计数器
             
-            // 🔒 #4997 释放请求锁（最小化修改：仅添加此 1 行）
+            // 🔒 #4997 释放请求锁
             isRequestInProgress = false;
             FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (非接入点错误)");
             
@@ -1085,6 +1093,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       try
       {
+        // 🔍 #4997 【关键调试】标记来自工具处理的重试
+        FileLogger.d(TAG, "🔄 [RETRY_FROM_TOOL] 准备从 postProcessToolResults() 重试，thread=" + Thread.currentThread().getName());
+        FileLogger.d(TAG, "📋 [TOOL_RETRY_STACK] 工具重试调用堆栈:\n" + Log.getStackTraceString(new Exception()));
+        
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
