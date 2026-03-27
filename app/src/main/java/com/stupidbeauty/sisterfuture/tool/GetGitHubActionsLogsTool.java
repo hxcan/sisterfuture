@@ -179,7 +179,8 @@ public class GetGitHubActionsLogsTool implements Tool {
     /**
      * 从工具备注读取默认 token
      */
-    private String getNote(Context context) {
+    @Override
+    public String getNote(Context context) {
         // TODO: 实现从 ToolManager 读取备注的逻辑
         // 这里暂时返回空字符串
         return "";
