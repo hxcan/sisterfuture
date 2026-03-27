@@ -538,7 +538,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     FileLogger.w(TAG, "🔍 [CONTEXT_LENGTH] 检测到上下文超长错误，自动缩短上下文");
     
-    // #4962 输出错误时的上下文状态
+    // #4962 输出错误时的上下文状态（仅统计行数）
     contextManager.logFullHistory("ContextLengthError");
     
     // 1. 在界面显示错误消息（包含实际错误内容和处置提示）
@@ -650,10 +650,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
-      // 🔍 #4839 调试：输出请求内容，检查 tool_calls 参数格式
+      // 🔍 #4839 调试：输出请求内容（已完全移除日志输出）
       logRequestMessages(messagesArray);
       
-      // #4962 发送请求前输出完整上下文历史
+      // #4962 发送请求前输出完整上下文历史（仅统计行数）
       contextManager.logFullHistory("BeforeSendRequest");
 
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
@@ -1541,23 +1541,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     mIat= SpeechRecognizer.createRecognizer(this, null);
   }
 
-  // 🔍 #4839 调试：输出请求内容，检查 tool_calls 参数格式
+  // 🔍 #4839 调试：输出请求内容（已完全移除日志输出）
   private void logRequestMessages(JSONArray messagesArray)
   {
-    FileLogger.d(TAG, "📋 [REQUEST_DEBUG] 请求消息总数：" + messagesArray.length());
-    for (int i = 0; i < messagesArray.length(); i++) {
-      try {
-        JSONObject msg = messagesArray.getJSONObject(i);
-        String role = msg.optString("role", "unknown");
-        
-        // 检查 assistant 消息中的 tool_calls
-        if ("assistant".equals(role) && msg.has("tool_calls")) {
-          JSONArray toolCalls = msg.getJSONArray("tool_calls");
-          FileLogger.d(TAG, "    🔧 tool_calls 数量：" + toolCalls.length());
-        }
-      } catch (Exception e) {
-        FileLogger.e(TAG, "  解析消息[" + i + "] 失败", e);
-      }
-    }
+    // ✅ #4997 已完全移除所有日志输出，该方法现为空操作
+    // 如需调试，可在调用处临时添加日志
   }
 }
