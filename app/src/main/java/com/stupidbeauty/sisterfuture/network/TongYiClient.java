@@ -72,7 +72,7 @@ public class TongYiClient
       
       while (!Thread.currentThread().isInterrupted()) {
         try {
-          Runnable request = requestQueue.take();
+          Runnable request = requestQueue.take(); // 阻塞等待下一个请求
           request.run();
         } catch (InterruptedException e) {
           FileLogger.w(TAG, "🔒 [QUEUE_WORKER] 队列工作线程被中断，退出循环");
@@ -80,6 +80,7 @@ public class TongYiClient
           break;
         } catch (Exception e) {
           FileLogger.e(TAG, "🔒 [QUEUE_ERROR] 队列执行异常", e);
+          // 继续处理下一个请求，不退出循环
         }
       }
       
@@ -95,6 +96,7 @@ public class TongYiClient
     
     FileLogger.d(TAG, "🔒 [QUEUE_SUBMIT] 请求 #" + totalRequests + " 提交到队列 | 当前队列长度：" + queueSizeBefore + " | 线程：" + Thread.currentThread().getName());
     
+    // === 🔒 #5028 将请求提交到队列 ===
     boolean queued = requestQueue.offer(() -> {
       final long startTime = System.currentTimeMillis();
       final long waitTime = startTime - submitTime;
@@ -102,6 +104,7 @@ public class TongYiClient
       
       totalWaitTimeMs.addAndGet(waitTime);
       
+      // 更新高水位标记
       int currentQueueSize = queueSizeBefore;
       int oldHighWaterMark = queueSizeHighWaterMark.get();
       while (currentQueueSize > oldHighWaterMark) {
@@ -115,6 +118,7 @@ public class TongYiClient
       FileLogger.d(TAG, "🔒 [QUEUE_EXEC] 请求 #" + totalRequests + " 开始执行 | 等待时间：" + waitTime + "ms | 当前队列长度：" + queueSizeNow + " | 线程：" + Thread.currentThread().getName());
       
       try {
+        // 执行实际的网络请求
         networkRequester.sendRequest(messages, includeTools, listener, onStreamComplete);
         
         final long endTime = System.currentTimeMillis();
@@ -122,6 +126,7 @@ public class TongYiClient
         
         FileLogger.d(TAG, "🔒 [QUEUE_DONE] 请求 #" + totalRequests + " 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
         
+        // 每 10 个请求输出一次统计
         if (totalRequests % 10 == 0) {
           long avgWaitTime = totalWaitTimeMs.get() / totalRequests;
           int highWaterMark = queueSizeHighWaterMark.get();
@@ -280,23 +285,29 @@ public class TongYiClient
                     : errorBody;
                 FileLogger.e(NETWORK_TAG, "Error Body Preview: " + errorPreview);
                 
+                // ✅ #4823 HTTP 400 → 上下文超长
                 if (statusCode == 400 && ContextLengthUtils.isContextLengthError(errorBody)) {
                   FileLogger.w(NETWORK_TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点");
                   listener.onError(new ResponseException(response, errorBody));
-                  return;
+                  return; // 只调用一次 onError()
                 }
                 
+                // ✅ #4824 HTTP 429 → 限流错误
                 if (statusCode == 429) {
                   FileLogger.w(NETWORK_TAG, "⚠️ 检测到 HTTP 429 限流错误，不切换接入点");
                   listener.onError(new RateLimitException(response, errorBody));
-                  return;
+                  return; // 只调用一次 onError()
                 }
+                
+                // ✅ 其他错误 (401/403/500/503) → 接入点不可用
+                FileLogger.d(NETWORK_TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换");
+                listener.onError(new AccessPointUnavailableException("Error: " + errorBody));
+                return; // 只调用一次 onError()
               } catch (Exception e) {
                 FileLogger.e(NETWORK_TAG, "Failed to read error body: " + e.getMessage());
+                listener.onError(new AccessPointUnavailableException("Failed to read error body: " + e.getMessage()));
+                return; // 只调用一次 onError()
               }
-              
-              listener.onError(new AccessPointUnavailableException("Error: " + errorBody));
-              listener.onError(new ResponseException(response, errorBody));
             }
             else
             {
