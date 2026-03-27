@@ -1,171 +1,212 @@
+// com.stupidbeauty.sisterfuture.tool.GetGitHubActionsLogsTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
+import android.content.Context;
 import android.util.Log;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import androidx.annotation.NonNull;
+import okhttp3.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
+import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
- * @version 1.0.0
+ * @version 2.0.0 (异步版本)
  */
 public class GetGitHubActionsLogsTool implements Tool {
     
     private static final String TAG = "GetGHActionsLogs";
     private static final String API_BASE = "https://api.github.com/repos";
     
+    private final Context context;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    public GetGitHubActionsLogsTool(Context context) {
+        this.context = context;
+    }
+
     @Override
     public String getName() {
         return "get_github_actions_logs";
     }
-    
+
     @Override
     public JSONObject getDefinition() {
         try {
-            JSONObject def = new JSONObject();
-            def.put("name", getName());
-            def.put("description", "获取 GitHub Actions 运行记录的详细日志。支持智能摘要、错误过滤和根因分析。");
-            
-            JSONArray params = new JSONArray();
-            params.put(createParam("owner", "string", "仓库所有者（必需）"));
-            params.put(createParam("repo", "string", "仓库名称（必需）"));
-            params.put(createParam("runId", "integer", "Workflow Run ID（必需）"));
-            params.put(createParam("jobId", "integer", "Job ID（可选，不填则自动选择第一个失败的 job）"));
-            params.put(createParam("mode", "string", "返回模式 summary|errors_only|full（可选，默认 summary）"));
-            params.put(createParam("token", "string", "GitHub Token（可选，从工具备注读取）"));
-            
-            def.put("parameters", params);
-            return def;
+            JSONObject functionDef = new JSONObject();
+            functionDef.put("name", "get_github_actions_logs");
+            functionDef.put("description", "获取 GitHub Actions 运行记录的详细日志。支持智能摘要、错误过滤和根因分析。");
+
+            JSONObject parameters = new JSONObject();
+            parameters.put("type", "object");
+            parameters.put("properties", new JSONObject()
+                .put("owner", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "仓库所有者（必需）"))
+                .put("repo", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "仓库名称（必需）"))
+                .put("runId", new JSONObject()
+                    .put("type", "integer")
+                    .put("description", "Workflow Run ID（必需）"))
+                .put("jobId", new JSONObject()
+                    .put("type", "integer")
+                    .put("description", "Job ID（可选，不填则自动选择第一个失败的 job）"))
+                .put("mode", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "返回模式 summary|errors_only|full（可选，默认 summary）"))
+                .put("token", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "GitHub Token（可选，从工具备注读取）"))
+            );
+            parameters.put("required", new JSONArray(new String[]{"owner", "repo", "runId"}));
+
+            functionDef.put("parameters", parameters);
+            return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
-            Log.e(TAG, "创建定义失败", e);
-            return null;
+            FileLogger.e(TAG, "Failed to build definition", e);
+            return new JSONObject();
         }
     }
-    
-    private JSONObject createParam(String name, String type, String desc) throws Exception {
-        JSONObject param = new JSONObject();
-        param.put("name", name);
-        param.put("type", type);
-        param.put("description", desc);
-        return param;
-    }
-    
+
     @Override
     public boolean shouldInclude() {
         return true;
     }
-    
-    /**
-     * 获取参数名称列表（用于大模型调用）
-     */
-    public List<String> getParameterNames() {
-        List<String> params = new ArrayList<>();
-        params.add("owner");
-        params.add("repo");
-        params.add("runId");
-        params.add("jobId");
-        params.add("mode");
-        params.add("token");
-        return params;
+
+    @Override
+    public boolean isAsync() {
+        return true;
     }
-    
-    /**
-     * 工具调用入口（由大模型调用）
-     */
-    public String callTool(List<String> args) throws Exception {
-        if (args.size() < 3) {
-            throw new IllegalArgumentException("需要至少 3 个参数：owner, repo, runId");
-        }
-        
-        String owner = args.get(0);
-        String repo = args.get(1);
-        long runId = Long.parseLong(args.get(2));
-        Long jobId = args.size() > 3 && !args.get(3).isEmpty() ? Long.parseLong(args.get(3)) : null;
-        String mode = args.size() > 4 && !args.get(4).isEmpty() ? args.get(4) : "summary";
-        String token = args.size() > 5 && !args.get(5).isEmpty() ? args.get(5) : null;
-        
-        // 如果未提供 token，尝试从工具备注读取
-        if (token == null || token.isEmpty()) {
-            token = getToolRemarkToken();
-        }
-        
-        if (token == null || token.isEmpty()) {
-            throw new IllegalArgumentException("需要提供 GitHub Token 参数或在工具备注中配置");
-        }
-        
-        Log.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId);
-        
-        // 如果未指定 jobId，先获取 Job 列表并自动选择
-        if (jobId == null) {
-            JSONObject jobsResponse = getJobsList(owner, repo, runId, token);
-            jobId = findFirstFailedJob(jobsResponse);
-            
-            if (jobId == null) {
-                // 如果没有失败的 job，使用最后一个 job
-                jobId = getLastJobId(jobsResponse);
+
+    @Override
+    public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
+        executor.execute(() -> {
+            try {
+                String owner = arguments.getString("owner");
+                String repo = arguments.getString("repo");
+                long runId = arguments.getLong("runId");
+                Long jobId = arguments.has("jobId") && !arguments.isNull("jobId") ? arguments.getLong("jobId") : null;
+                String mode = arguments.optString("mode", "summary");
+                String token = arguments.optString("token", "").trim();
+
+                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode);
+
+                // 如果未提供 token，尝试从工具备注读取
+                if (token.isEmpty()) {
+                    String noteJson = getNote(context);
+                    if (!noteJson.isEmpty()) {
+                        JSONObject saved = new JSONObject(noteJson);
+                        if (saved.has("github_token")) {
+                            token = saved.getString("github_token");
+                            FileLogger.d(TAG, "从备注中读取到 github_token");
+                        }
+                    }
+                }
+
+                if (token.isEmpty()) {
+                    throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
+                }
+
+                OkHttpClient client = new OkHttpClient();
+
+                // 如果未指定 jobId，先获取 Job 列表并自动选择
+                if (jobId == null) {
+                    JSONObject jobsResponse = getJobsList(client, token, owner, repo, runId);
+                    jobId = findFirstFailedJob(jobsResponse);
+
+                    if (jobId == null) {
+                        // 如果没有失败的 job，使用最后一个 job
+                        jobId = getLastJobId(jobsResponse);
+                    }
+
+                    if (jobId == null) {
+                        JSONObject error = new JSONObject();
+                        error.put("status", "error");
+                        error.put("message", "未找到任何 Job");
+                        callback.onResult(error);
+                        return;
+                    }
+
+                    FileLogger.d(TAG, "自动选择 jobId: " + jobId);
+                }
+
+                // 获取详细日志（纯文本）
+                String logs = getJobLogs(client, token, owner, repo, jobId);
+
+                // 根据 mode 处理日志
+                String result;
+                if ("summary".equals(mode)) {
+                    result = generateSmartSummary(client, token, owner, repo, runId, jobId, logs);
+                } else if ("errors_only".equals(mode)) {
+                    result = filterErrorLines(logs);
+                } else {
+                    // full mode
+                    result = logs;
+                }
+
+                JSONObject response = new JSONObject();
+                response.put("status", "success");
+                response.put("message", "日志获取成功！");
+                response.put("content", result);
+                response.put("run_id", runId);
+                response.put("job_id", jobId);
+                response.put("mode", mode);
+                response.put("fetched_at", System.currentTimeMillis());
+
+                callback.onResult(response);
+
+            } catch (Exception e) {
+                FileLogger.e(TAG, "执行出错", e);
+                try {
+                    JSONObject error = new JSONObject();
+                    error.put("status", "error");
+                    error.put("message", e.getMessage());
+                    error.put("type", e.getClass().getSimpleName());
+                    callback.onResult(error);
+                } catch (Exception ignored) {}
             }
-            
-            if (jobId == null) {
-                return "❌ 错误：未找到任何 Job";
-            }
-            
-            Log.d(TAG, "自动选择 jobId: " + jobId);
-        }
-        
-        // 获取详细日志（纯文本）
-        String logs = getJobLogs(owner, repo, jobId, token);
-        
-        // 根据 mode 处理日志
-        if ("summary".equals(mode)) {
-            return generateSmartSummary(owner, repo, runId, jobId, logs, token);
-        } else if ("errors_only".equals(mode)) {
-            return filterErrorLines(logs);
-        } else {
-            // full mode
-            return logs;
-        }
+        });
     }
-    
+
     /**
-     * 从工具备注读取默认 token（模拟实现）
+     * 从工具备注读取默认 token
      */
-    private String getToolRemarkToken() {
+    private String getNote(Context context) {
         // TODO: 实现从 ToolManager 读取备注的逻辑
-        return null;
+        // 这里暂时返回空字符串
+        return "";
     }
-    
-    private JSONObject getJobsList(String owner, String repo, long runId, String token) throws Exception {
+
+    private JSONObject getJobsList(OkHttpClient client, String token, String owner, String repo, long runId) throws Exception {
         String url = API_BASE + "/" + owner + "/" + repo + "/actions/runs/" + runId + "/jobs";
-        return httpGetJson(url, token);
+        return httpGetJson(client, token, url);
     }
-    
-    private String getJobLogs(String owner, String repo, long jobId, String token) throws Exception {
+
+    private String getJobLogs(OkHttpClient client, String token, String owner, String repo, long jobId) throws Exception {
         String url = API_BASE + "/" + owner + "/" + repo + "/actions/jobs/" + jobId + "/logs";
-        URL obj = new URL(url);
-        HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-        con.setRequestMethod("GET");
-        con.setRequestProperty("Authorization", "token " + token);
-        con.setRequestProperty("User-Agent", "SisterFuture-GetGitHubActionsLogsTool");
         
-        BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-        StringBuilder logs = new StringBuilder();
-        String inputLine;
-        while ((inputLine = in.readLine()) != null) {
-            logs.append(inputLine).append("\n");
+        Request request = new Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer " + token)
+            .header("User-Agent", "SisterFuture-GetGitHubActionsLogsTool")
+            .build();
+
+        Response response = client.newCall(request).execute();
+        if (!response.isSuccessful()) {
+            throw new IOException("获取日志失败：" + response.code() + " " + response.message());
         }
-        in.close();
-        con.disconnect();
-        
-        return logs.toString();
+
+        return response.body().string();
     }
-    
+
     private Long findFirstFailedJob(JSONObject jobsResponse) throws Exception {
         JSONArray jobs = jobsResponse.getJSONArray("jobs");
         for (int i = 0; i < jobs.length(); i++) {
@@ -176,7 +217,7 @@ public class GetGitHubActionsLogsTool implements Tool {
         }
         return null;
     }
-    
+
     private Long getLastJobId(JSONObject jobsResponse) throws Exception {
         JSONArray jobs = jobsResponse.getJSONArray("jobs");
         if (jobs.length() > 0) {
@@ -184,18 +225,18 @@ public class GetGitHubActionsLogsTool implements Tool {
         }
         return null;
     }
-    
-    private String generateSmartSummary(String owner, String repo, long runId, long jobId, 
-                                        String logs, String token) {
+
+    private String generateSmartSummary(OkHttpClient client, String token, String owner, String repo, 
+                                        long runId, long jobId, String logs) {
         StringBuilder summary = new StringBuilder();
-        
+
         // 获取 Job 元数据
         String jobName = "unknown";
         String jobConclusion = "unknown";
         JSONArray steps = null;
-        
+
         try {
-            JSONObject jobsResponse = getJobsList(owner, repo, runId, token);
+            JSONObject jobsResponse = getJobsList(client, token, owner, repo, runId);
             JSONArray jobs = jobsResponse.getJSONArray("jobs");
             for (int i = 0; i < jobs.length(); i++) {
                 JSONObject job = jobs.getJSONObject(i);
@@ -207,16 +248,16 @@ public class GetGitHubActionsLogsTool implements Tool {
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "获取 Job 元数据失败", e);
+            FileLogger.e(TAG, "获取 Job 元数据失败", e);
         }
-        
+
         // 构建摘要头部
         summary.append("=== GitHub Actions 运行记录摘要 ===\n\n");
         summary.append("📦 仓库：").append(owner).append("/").append(repo).append("\n");
         summary.append("🔢 Run ID: ").append(runId).append("\n");
         summary.append("🏗️  Job: ").append(jobName).append("\n");
         summary.append("📊 状态：");
-        
+
         if ("failure".equals(jobConclusion)) {
             summary.append("❌ 失败\n\n");
         } else if ("success".equals(jobConclusion)) {
@@ -224,64 +265,66 @@ public class GetGitHubActionsLogsTool implements Tool {
         } else {
             summary.append("⚠️ ").append(jobConclusion).append("\n\n");
         }
-        
+
         // 分析错误步骤
-        List<JSONObject> errorSteps = new ArrayList<>();
-        List<JSONObject> skippedSteps = new ArrayList<>();
-        
+        JSONArray errorSteps = new JSONArray();
+        JSONArray skippedSteps = new JSONArray();
+
         if (steps != null) {
             try {
                 for (int i = 0; i < steps.length(); i++) {
                     JSONObject step = steps.getJSONObject(i);
                     String conclusion = step.optString("conclusion", "");
-                    
+
                     if ("failure".equals(conclusion)) {
-                        errorSteps.add(step);
+                        errorSteps.put(step);
                     } else if ("skipped".equals(conclusion)) {
-                        skippedSteps.add(step);
+                        skippedSteps.put(step);
                     }
                 }
             } catch (Exception e) {
-                Log.e(TAG, "解析步骤失败", e);
+                FileLogger.e(TAG, "解析步骤失败", e);
             }
         }
-        
+
         // 输出错误步骤详情
-        if (!errorSteps.isEmpty()) {
+        if (errorSteps.length() > 0) {
             summary.append("--- ❌ 错误步骤 ---\n\n");
-            
-            for (JSONObject step : errorSteps) {
+
+            for (int i = 0; i < errorSteps.length(); i++) {
+                JSONObject step = errorSteps.getJSONObject(i);
                 String stepName = step.optString("name", "Unknown");
                 int stepNumber = step.optInt("number", -1);
-                
+
                 summary.append("❌ [Step ").append(stepNumber).append("] ").append(stepName).append("\n");
-                
+
                 // 从日志中提取该步骤的错误信息
                 String errorMessage = extractErrorMessageForStep(logs, stepName);
                 if (errorMessage != null && !errorMessage.isEmpty()) {
                     summary.append("   错误信息：").append(errorMessage).append("\n");
                 }
-                
+
                 // 根因分析
                 String rootCause = analyzeRootCause(stepName, errorMessage);
                 summary.append("\n💡 根因分析：").append(rootCause).append("\n");
-                
+
                 // 解决方案建议
                 String solution = suggestFix(stepName, errorMessage);
                 summary.append("🔧 解决方案：").append(solution).append("\n\n");
             }
         }
-        
+
         // 输出跳过的步骤
-        if (!skippedSteps.isEmpty()) {
+        if (skippedSteps.length() > 0) {
             summary.append("--- ⏭️ 跳过的步骤（由于上述错误）---\n");
-            for (JSONObject step : skippedSteps) {
+            for (int i = 0; i < skippedSteps.length(); i++) {
+                JSONObject step = skippedSteps.getJSONObject(i);
                 summary.append("   - ").append(step.optString("name", "Unknown"))
                        .append(" (Step ").append(step.optInt("number", -1)).append(")\n");
             }
             summary.append("\n");
         }
-        
+
         // 统计信息
         summary.append("📊 统计：");
         if (steps != null) {
@@ -295,32 +338,32 @@ public class GetGitHubActionsLogsTool implements Tool {
                     else if ("skipped".equals(conclusion)) skippedCount++;
                 }
             } catch (Exception e) {
-                Log.e(TAG, "统计失败", e);
+                FileLogger.e(TAG, "统计失败", e);
             }
             summary.append("成功 ").append(successCount).append(" 步，失败 ")
                    .append(failureCount).append(" 步，跳过 ").append(skippedCount).append(" 步\n");
         }
-        
+
         return summary.toString();
     }
-    
+
     private String extractErrorMessageForStep(String logs, String stepName) {
         String[] lines = logs.split("\n");
         StringBuilder errors = new StringBuilder();
-        
+
         for (String line : lines) {
             if (line.contains("##[error]") || line.contains("cannot access") || 
                 line.contains("No such file") || line.contains("failed")) {
                 errors.append(line.trim()).append("\n");
             }
         }
-        
+
         return errors.length() > 0 ? errors.toString().trim() : null;
     }
-    
+
     private String analyzeRootCause(String stepName, String errorMessage) {
         if (errorMessage == null) errorMessage = "";
-        
+
         if (stepName.contains("gradlew") && errorMessage.contains("No such file")) {
             return "gradlew 脚本文件不存在于仓库根目录";
         } else if (errorMessage.contains("permission denied")) {
@@ -335,10 +378,10 @@ public class GetGitHubActionsLogsTool implements Tool {
             return "未知错误，需要查看详细日志";
         }
     }
-    
+
     private String suggestFix(String stepName, String errorMessage) {
         if (errorMessage == null) errorMessage = "";
-        
+
         if (stepName.contains("gradlew") && errorMessage.contains("No such file")) {
             return "1. 从其他项目复制 gradlew 文件到仓库根目录\n" +
                    "   2. 同时复制 gradle/wrapper/gradle-wrapper.jar\n" +
@@ -359,46 +402,35 @@ public class GetGitHubActionsLogsTool implements Tool {
             return "请查看详细日志以定位具体问题";
         }
     }
-    
+
     private String filterErrorLines(String logs) {
         StringBuilder filtered = new StringBuilder();
         String[] lines = logs.split("\n");
-        
+
         for (String line : lines) {
             if (line.contains("##[error]") || line.contains("ERROR") || 
                 line.contains("failed") || line.contains("exception")) {
                 filtered.append(line).append("\n");
             }
         }
-        
+
         return filtered.length() > 0 ? filtered.toString() : "✅ 未发现明显错误";
     }
-    
-    private JSONObject httpGetJson(String urlString, String token) throws Exception {
-        URL obj = new URL(urlString);
-        HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-        con.setRequestMethod("GET");
-        con.setRequestProperty("Authorization", "token " + token);
-        con.setRequestProperty("Accept", "application/vnd.github.v3+json");
-        con.setRequestProperty("User-Agent", "SisterFuture-GetGitHubActionsLogsTool");
-        
-        int responseCode = con.getResponseCode();
-        Log.d(TAG, "HTTP 响应码：" + responseCode);
-        
-        if (responseCode != 200) {
-            throw new Exception("HTTP 请求失败：" + responseCode);
+
+    private JSONObject httpGetJson(OkHttpClient client, String token, String urlString) throws Exception {
+        Request request = new Request.Builder()
+            .url(urlString)
+            .header("Authorization", "Bearer " + token)
+            .header("Accept", "application/vnd.github.v3+json")
+            .header("User-Agent", "SisterFuture-GetGitHubActionsLogsTool")
+            .build();
+
+        Response response = client.newCall(request).execute();
+        if (!response.isSuccessful()) {
+            throw new Exception("HTTP 请求失败：" + response.code() + " " + response.message());
         }
-        
-        BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-        StringBuilder response = new StringBuilder();
-        String inputLine;
-        
-        while ((inputLine = in.readLine()) != null) {
-            response.append(inputLine);
-        }
-        in.close();
-        con.disconnect();
-        
-        return new JSONObject(response.toString());
+
+        String responseBody = response.body().string();
+        return new JSONObject(responseBody);
     }
 }
