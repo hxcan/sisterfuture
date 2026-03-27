@@ -286,8 +286,7 @@ public class ContextManager
   public void logFullHistory(String prefix)
   {
     List<JSONObject> history = getHistory();
-    FileLogger.i(TAG, "#4962 [Full History Dump] " + prefix + ", Total messages: " + history.size());
-    FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
+    FileLogger.i(TAG, "[Full History] " + prefix + ", Total: " + history.size());
     
     for (int i = 0; i < history.size(); i++)
     {
@@ -297,19 +296,23 @@ public class ContextManager
       String toolId = msg.optString("tool_call_id", "");
       String toolIdLog = !toolId.isEmpty() ? " | tool_call_id=" + toolId : "";
       
-      // ✅ #4997 修改：简化 tool 消息日志，不输出详细 content
+      // ✅ #4997 简化所有消息日志，只输出关键信息
       if ("tool".equals(role)) {
         String toolName = msg.optString("name", "unknown");
-        FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | name=" + toolName + " | tool_call=true");
+        FileLogger.i(TAG, "  [" + i + "] role=" + role + toolCalls + toolIdLog + " | name=" + toolName);
+      } else if ("user".equals(role)) {
+        // user 消息只输出 role，不输出 content
+        FileLogger.i(TAG, "  [" + i + "] role=" + role);
+      } else if ("assistant".equals(role)) {
+        // assistant 消息只输出 role 和 tool_calls 统计
+        FileLogger.i(TAG, "  [" + i + "] role=" + role + toolCalls);
       } else {
-        String content = msg.optString("content", "").replaceAll("\\n", "\\n").replaceAll("\\r", "\\r");
-        String contentPreview = content.length() > 500 ? content.substring(0, 500) + "...[truncated]" : content;
-        FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | content=\"" + contentPreview + "\"");
+        // 其他角色（如 system）只输出 role
+        FileLogger.i(TAG, "  [" + i + "] role=" + role);
       }
     }
     
-    FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
-    FileLogger.i(TAG, "#4962 [Full History Dump] End, Total: " + history.size() + " messages");
+    FileLogger.i(TAG, "[Full History] End");
   }
 
   public List<JSONObject> getHistory()
@@ -408,7 +411,7 @@ public class ContextManager
 
   private List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory)
   {
-    FileLogger.i(TAG, "[normalizeToolCallMessages start] Input count: " + oldHistory.size());
+    FileLogger.i(TAG, "[normalize] Input: " + oldHistory.size());
     
     List<JSONObject> history = oldHistory;
     List<JSONObject> list = new ArrayList<>();
@@ -478,22 +481,22 @@ public class ContextManager
       e.printStackTrace();
     }
     
-    FileLogger.i(TAG, "[normalizeToolCallMessages done] Output count: " + list.size());
+    FileLogger.i(TAG, "[normalize] Output: " + list.size());
     return list;
   }
 
   public void replaceHistory(List<JSONObject> newHistory)
   {
-    FileLogger.i(TAG, "#4935 [replaceHistory start] New history count: " + newHistory.size());
+    FileLogger.i(TAG, "[replaceHistory] New count: " + newHistory.size());
     
     if (newHistory.size() > currentMaxRounds * 2)
     {
       newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
-      FileLogger.w(TAG, "[replaceHistory] Exceeded limit, truncated to: " + newHistory.size());
+      FileLogger.w(TAG, "[replaceHistory] Truncated to: " + newHistory.size());
     }
     
     saveHistory(newHistory);
-    FileLogger.i(TAG, "[replaceHistory done] History saved");
+    FileLogger.i(TAG, "[replaceHistory] Done");
   }
 
   private void saveHistory(List<JSONObject> history)
@@ -503,7 +506,7 @@ public class ContextManager
         .putString(KEY_HISTORY, historyArray.toString())
         .putInt("current_max_rounds", currentMaxRounds)
         .apply();
-    FileLogger.d(TAG, "#4935 [saveHistory] Saved, count: " + history.size());
+    FileLogger.d(TAG, "[saveHistory] Saved: " + history.size());
   }
 
   private JSONObject createMessage(String role, String content)
@@ -528,12 +531,12 @@ public class ContextManager
       currentMaxRounds++;
       saveHistory(getHistory());
     }
-    FileLogger.i(TAG, "Increase max rounds to: " + currentMaxRounds);
+    FileLogger.i(TAG, "Max rounds: " + currentMaxRounds);
   }
 
   public void decreaseMaxRounds()
   {
-    FileLogger.i(TAG, "Max rounds before decrease: " + currentMaxRounds);
+    FileLogger.i(TAG, "Max rounds before: " + currentMaxRounds);
 
     List<JSONObject> history = getHistory();
     int idealMaxRounds = history.size() /2 -1 ;
@@ -544,6 +547,6 @@ public class ContextManager
       history = removeOldHistoryEntries(history);
       saveHistory(history);
     }
-    FileLogger.i(TAG, "Decrease max rounds to: " + currentMaxRounds);
+    FileLogger.i(TAG, "Max rounds after: " + currentMaxRounds);
   }
 }
