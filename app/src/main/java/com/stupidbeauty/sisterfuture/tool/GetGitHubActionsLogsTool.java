@@ -18,7 +18,7 @@ import java.util.concurrent.Executors;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
- * @version 2.0.0 (异步版本)
+ * @version 3.0.0 (通用版本 - 移除特定平台分析)
  */
 public class GetGitHubActionsLogsTool implements Tool {
     
@@ -42,7 +42,7 @@ public class GetGitHubActionsLogsTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "get_github_actions_logs");
-            functionDef.put("description", "获取 GitHub Actions 运行记录的详细日志。支持智能摘要、错误过滤和根因分析。");
+            functionDef.put("description", "获取 GitHub Actions 运行记录的详细日志。支持智能摘要和错误过滤，适用于任何类型的 GitHub 仓库。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -144,7 +144,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                 // 根据 mode 处理日志
                 String result;
                 if ("summary".equals(mode)) {
-                    result = generateSmartSummary(client, token, owner, repo, runId, jobId, logs);
+                    result = generateSummary(client, token, owner, repo, runId, jobId, logs);
                 } else if ("errors_only".equals(mode)) {
                     result = filterErrorLines(logs);
                 } else {
@@ -226,8 +226,11 @@ public class GetGitHubActionsLogsTool implements Tool {
         return null;
     }
 
-    private String generateSmartSummary(OkHttpClient client, String token, String owner, String repo, 
-                                        long runId, long jobId, String logs) {
+    /**
+     * 生成摘要 - 只展示事实信息，不做根因分析
+     */
+    private String generateSummary(OkHttpClient client, String token, String owner, String repo, 
+                                    long runId, long jobId, String logs) {
         StringBuilder summary = new StringBuilder();
 
         // 获取 Job 元数据
@@ -266,7 +269,7 @@ public class GetGitHubActionsLogsTool implements Tool {
             summary.append("⚠️ ").append(jobConclusion).append("\n\n");
         }
 
-        // 分析错误步骤
+        // 收集错误和跳过的步骤
         JSONArray errorSteps = new JSONArray();
         JSONArray skippedSteps = new JSONArray();
 
@@ -287,9 +290,9 @@ public class GetGitHubActionsLogsTool implements Tool {
             }
         }
 
-        // 输出错误步骤详情
+        // 输出错误步骤详情（只展示原始错误信息）
         if (errorSteps.length() > 0) {
-            summary.append("--- ❌ 错误步骤 ---\n\n");
+            summary.append("--- ❌ 失败的步骤 ---\n\n");
 
             for (int i = 0; i < errorSteps.length(); i++) {
                 JSONObject step = errorSteps.getJSONObject(i);
@@ -298,19 +301,17 @@ public class GetGitHubActionsLogsTool implements Tool {
 
                 summary.append("❌ [Step ").append(stepNumber).append("] ").append(stepName).append("\n");
 
-                // 从日志中提取该步骤的错误信息
+                // 从日志中提取该步骤的错误信息（只展示原始日志）
                 String errorMessage = extractErrorMessageForStep(logs, stepName);
                 if (errorMessage != null && !errorMessage.isEmpty()) {
-                    summary.append("   错误信息：").append(errorMessage).append("\n");
+                    summary.append("   错误日志：\n");
+                    // 格式化错误日志，每行前加缩进
+                    String[] errorLines = errorMessage.split("\n");
+                    for (String line : errorLines) {
+                        summary.append("   ").append(line).append("\n");
+                    }
                 }
-
-                // 根因分析
-                String rootCause = analyzeRootCause(stepName, errorMessage);
-                summary.append("\n💡 根因分析：").append(rootCause).append("\n");
-
-                // 解决方案建议
-                String solution = suggestFix(stepName, errorMessage);
-                summary.append("🔧 解决方案：").append(solution).append("\n\n");
+                summary.append("\n");
             }
         }
 
@@ -347,62 +348,34 @@ public class GetGitHubActionsLogsTool implements Tool {
         return summary.toString();
     }
 
+    /**
+     * 从日志中提取错误信息
+     */
     private String extractErrorMessageForStep(String logs, String stepName) {
         String[] lines = logs.split("\n");
         StringBuilder errors = new StringBuilder();
+        boolean inErrorSection = false;
 
         for (String line : lines) {
-            if (line.contains("##[error]") || line.contains("cannot access") || 
-                line.contains("No such file") || line.contains("failed")) {
-                errors.append(line.trim()).append("\n");
+            if (line.contains("##[error]")) {
+                inErrorSection = true;
+                errors.append(line.substring(line.indexOf("##[error]"))).append("\n");
+            } else if (inErrorSection) {
+                // 继续收集错误相关的行，直到遇到新的 section
+                if (line.startsWith("20") && line.contains("Z ")) {
+                    // 可能是新的时间戳行，停止收集
+                    break;
+                }
+                errors.append(line).append("\n");
             }
         }
 
         return errors.length() > 0 ? errors.toString().trim() : null;
     }
 
-    private String analyzeRootCause(String stepName, String errorMessage) {
-        if (errorMessage == null) errorMessage = "";
-
-        if (stepName.contains("gradlew") && errorMessage.contains("No such file")) {
-            return "gradlew 脚本文件不存在于仓库根目录";
-        } else if (errorMessage.contains("permission denied")) {
-            return "文件权限不足，需要执行 chmod +x";
-        } else if (errorMessage.contains("OutOfMemoryError")) {
-            return "内存不足，Gradle 构建需要更多内存";
-        } else if (errorMessage.contains("connection timed out")) {
-            return "网络连接超时，无法下载依赖";
-        } else if (errorMessage.contains("compilation failed")) {
-            return "代码编译失败，存在语法错误或类型不匹配";
-        } else {
-            return "未知错误，需要查看详细日志";
-        }
-    }
-
-    private String suggestFix(String stepName, String errorMessage) {
-        if (errorMessage == null) errorMessage = "";
-
-        if (stepName.contains("gradlew") && errorMessage.contains("No such file")) {
-            return "1. 从其他项目复制 gradlew 文件到仓库根目录\n" +
-                   "   2. 同时复制 gradle/wrapper/gradle-wrapper.jar\n" +
-                   "   3. 提交并推送代码";
-        } else if (errorMessage.contains("permission denied")) {
-            return "在 CI 配置中添加步骤：chmod +x gradlew";
-        } else if (errorMessage.contains("OutOfMemoryError")) {
-            return "在 gradle.properties 中增加：org.gradle.jvmargs=-Xmx4096m";
-        } else if (errorMessage.contains("connection timed out")) {
-            return "1. 检查网络连接\n" +
-                   "   2. 配置国内镜像源（如阿里云 Maven 镜像）\n" +
-                   "   3. 重试构建";
-        } else if (errorMessage.contains("compilation failed")) {
-            return "1. 查看完整编译错误信息\n" +
-                   "   2. 修复代码语法错误\n" +
-                   "   3. 重新提交代码";
-        } else {
-            return "请查看详细日志以定位具体问题";
-        }
-    }
-
+    /**
+     * 过滤只返回错误行
+     */
     private String filterErrorLines(String logs) {
         StringBuilder filtered = new StringBuilder();
         String[] lines = logs.split("\n");
