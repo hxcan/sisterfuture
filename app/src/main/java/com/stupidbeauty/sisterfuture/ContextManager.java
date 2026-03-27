@@ -287,31 +287,7 @@ public class ContextManager
   {
     List<JSONObject> history = getHistory();
     FileLogger.i(TAG, "[Full History] " + prefix + ", Total: " + history.size());
-    
-    for (int i = 0; i < history.size(); i++)
-    {
-      JSONObject msg = history.get(i);
-      String role = msg.optString("role", "unknown");
-      String toolCalls = msg.has("tool_calls") ? " | tool_calls=" + msg.optJSONArray("tool_calls").length() : "";
-      String toolId = msg.optString("tool_call_id", "");
-      String toolIdLog = !toolId.isEmpty() ? " | tool_call_id=" + toolId : "";
-      
-      // ✅ #4997 简化所有消息日志，只输出关键信息
-      if ("tool".equals(role)) {
-        String toolName = msg.optString("name", "unknown");
-        FileLogger.i(TAG, "  [" + i + "] role=" + role + toolCalls + toolIdLog + " | name=" + toolName);
-      } else if ("user".equals(role)) {
-        // user 消息只输出 role，不输出 content
-        FileLogger.i(TAG, "  [" + i + "] role=" + role);
-      } else if ("assistant".equals(role)) {
-        // assistant 消息只输出 role 和 tool_calls 统计
-        FileLogger.i(TAG, "  [" + i + "] role=" + role + toolCalls);
-      } else {
-        // 其他角色（如 system）只输出 role
-        FileLogger.i(TAG, "  [" + i + "] role=" + role);
-      }
-    }
-    
+    // ✅ #4997 完全移除逐行日志输出，只保留统计信息
     FileLogger.i(TAG, "[Full History] End");
   }
 
