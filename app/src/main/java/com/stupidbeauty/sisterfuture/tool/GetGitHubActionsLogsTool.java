@@ -62,7 +62,9 @@ public class GetGitHubActionsLogsTool implements Tool {
         return true;
     }
     
-    @Override
+    /**
+     * 获取参数名称列表（用于大模型调用）
+     */
     public List<String> getParameterNames() {
         List<String> params = new ArrayList<>();
         params.add("owner");
@@ -74,7 +76,9 @@ public class GetGitHubActionsLogsTool implements Tool {
         return params;
     }
     
-    @Override
+    /**
+     * 工具调用入口（由大模型调用）
+     */
     public String callTool(List<String> args) throws Exception {
         if (args.size() < 3) {
             throw new IllegalArgumentException("需要至少 3 个参数：owner, repo, runId");
@@ -131,11 +135,9 @@ public class GetGitHubActionsLogsTool implements Tool {
     
     /**
      * 从工具备注读取默认 token（模拟实现）
-     * 实际使用时需要从 ToolManager 获取备注
      */
     private String getToolRemarkToken() {
         // TODO: 实现从 ToolManager 读取备注的逻辑
-        // 这里返回 null，强制用户传入 token 参数
         return null;
     }
     
@@ -302,11 +304,7 @@ public class GetGitHubActionsLogsTool implements Tool {
         return summary.toString();
     }
     
-    /**
-     * 从日志中提取指定步骤的错误信息
-     */
     private String extractErrorMessageForStep(String logs, String stepName) {
-        // 简单实现：查找包含 ##[error] 的行
         String[] lines = logs.split("\n");
         StringBuilder errors = new StringBuilder();
         
@@ -320,9 +318,6 @@ public class GetGitHubActionsLogsTool implements Tool {
         return errors.length() > 0 ? errors.toString().trim() : null;
     }
     
-    /**
-     * 根因分析
-     */
     private String analyzeRootCause(String stepName, String errorMessage) {
         if (errorMessage == null) errorMessage = "";
         
@@ -341,9 +336,6 @@ public class GetGitHubActionsLogsTool implements Tool {
         }
     }
     
-    /**
-     * 提供解决方案建议
-     */
     private String suggestFix(String stepName, String errorMessage) {
         if (errorMessage == null) errorMessage = "";
         
@@ -368,9 +360,6 @@ public class GetGitHubActionsLogsTool implements Tool {
         }
     }
     
-    /**
-     * 过滤只返回错误行
-     */
     private String filterErrorLines(String logs) {
         StringBuilder filtered = new StringBuilder();
         String[] lines = logs.split("\n");
@@ -385,9 +374,6 @@ public class GetGitHubActionsLogsTool implements Tool {
         return filtered.length() > 0 ? filtered.toString() : "✅ 未发现明显错误";
     }
     
-    /**
-     * HTTP GET 请求，返回 JSON
-     */
     private JSONObject httpGetJson(String urlString, String token) throws Exception {
         URL obj = new URL(urlString);
         HttpURLConnection con = (HttpURLConnection) obj.openConnection();
