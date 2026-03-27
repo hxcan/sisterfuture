@@ -171,8 +171,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private int rateLimitRetryCount = 0;
   private static final int MAX_RATE_LIMIT_RETRIES = 3;
 
-  // 🔍 #4997 并发请求锁 - 防止并发请求风暴
-  private volatile boolean isRequestInProgress = false;
+  // 🔍 #4997 请求 ID 追踪 - 过滤旧请求的错误回调
+  private volatile long currentRequestId = 0;
+  private volatile long lastSuccessRequestId = 0;
 
 	@Override
   public void onInit(int arg0)
@@ -565,20 +566,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void sendChatRequestTongYi()
   {
-    // 🔍 #4997 【关键调试】记录调用来源堆栈
-    FileLogger.d(TAG, "🔍 [CALL_STACK] sendChatRequestTongYi() 被调用，当前线程：" + Thread.currentThread().getName());
-    FileLogger.d(TAG, "📋 [CALL_STACK] 调用堆栈:\n" + Log.getStackTraceString(new Exception()));
-    
-    // 🔒 #4997 并发请求锁：检查是否有请求正在进行
-    if (isRequestInProgress) {
-      FileLogger.w(TAG, "🔒 [REQUEST_LOCK] 请求锁已占用，跳过本次请求（防止并发风暴），thread=" + Thread.currentThread().getName());
-      return;
-    }
+    // 🔍 #4997【阶段 3】生成请求 ID 用于追踪
+    final long requestId = System.currentTimeMillis();
+    currentRequestId = requestId;
+    FileLogger.d(TAG, "🆔 [REQUEST_ID] 开始发送请求 #" + requestId + " | 当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex());
     
     // 🔍 #4997 救援调试：请求发起前记录状态
-    FileLogger.d(TAG, "🔍 [RESCUE_DEBUG] 开始发送请求，当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex());
     FileLogger.d(TAG, "📊 [FAILURE_COUNT] 当前连续失败次数：" + modelAccessPointManager.getConsecutiveFailures());
-    
     FileLogger.d(TAG, "开始发送请求，当前接入点：" + modelAccessPointManager.getCurrentAccessPoint().getName());
     
     // #4895 更新通知状态：正在发送请求
@@ -600,6 +594,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
             scrollToBottom();
             ttsSayReply(message);
+            // 如果响应包含成功标记，退出救援模式并重置计数器
+            if (message.contains("✅")) {
+              FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
+              isDeadlockRescueMode = false;
+              FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
+              // ✅ #4657 救援成功后重置计数器，防止立即再次触发
+              modelAccessPointManager.resetFailureCount();
+              FileLogger.i(TAG, "✅ [FAILURE_RESET] 救援成功，计数器已重置：" + modelAccessPointManager.getConsecutiveFailures());
+            }
           }
 
           @Override
@@ -614,10 +617,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
-      // 🔒 #4997 设置请求锁
-      isRequestInProgress = true;
-      FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已设置：true");
-      
       accumulatedAnswer.setLength(0);
       showThinkingOverlay();
 
@@ -654,9 +653,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
-      // 🔍 #4839 调试：输出请求内容（已完全移除日志输出）
-      logRequestMessages(messagesArray);
-      
       // #4962 发送请求前输出完整上下文历史（仅统计行数）
       contextManager.logFullHistory("BeforeSendRequest");
 
@@ -669,16 +665,24 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           // #4895 更新通知状态：收到响应，正在解析
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
           
-          parseTongYiResponse(response);
+          // ✅ #4997【阶段 3】记录成功响应并更新 lastSuccessRequestId
+          FileLogger.d(TAG, "✅ [SUCCESS] 请求 #" + requestId + " 成功响应 | 更新 lastSuccessRequestId=" + requestId);
+          lastSuccessRequestId = requestId;
           
-          // 🔒 #4997 释放请求锁
-          isRequestInProgress = false;
-          FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (成功响应)");
+          parseTongYiResponse(response);
         }
 
         @Override
         public void onError(Exception error)
         {
+          // 🔍 #4997【阶段 3】检查是否为旧请求的错误回调
+          FileLogger.d(TAG, "❌ [ERROR_CHECK] 请求 #" + requestId + " 错误 | lastSuccessRequestId=" + lastSuccessRequestId + " | 忽略=" + (requestId < lastSuccessRequestId));
+          
+          if (requestId < lastSuccessRequestId) {
+            FileLogger.w(TAG, "⚠️ [IGNORED] 忽略旧请求 #" + requestId + " 的错误回调（lastSuccessRequestId=" + lastSuccessRequestId + "）");
+            return; // 忽略旧请求的错误
+          }
+          
           FileLogger.e(TAG, "请求出错：" + error.getClass().getSimpleName() + " - " + error.getMessage());
           hideThinkingOverlay();
           
@@ -696,10 +700,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           else if (error instanceof TongYiClient.RateLimitException) {
             FileLogger.w(TAG, "⚠️ [RATE_LIMIT] 限流错误，等待后重试 #" + rateLimitRetryCount);
             handleRateLimitError();
-            
-            // 🔒 #4997 释放请求锁
-            isRequestInProgress = false;
-            FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (限流重试)");
             return;
           }
           else if (error instanceof TongYiClient.ResponseException)
@@ -720,10 +720,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 if (ContextLengthUtils.isContextLengthError(errorBody)) {
                   // ✅ #4829 使用统一处理方法（缩短后重试）
                   handleContextLengthError(errorBody, true);
-                  
-                  // 🔒 #4997 释放请求锁
-                  isRequestInProgress = false;
-                  FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (上下文错误)");
                   return; // 直接返回，不继续处理
                 }
               }
@@ -741,10 +737,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 messageAdapter.addMessage(new MessageItem("API 返回 HTML 页面", MessageType.AI));
                 scrollToBottom();
               });
-              
-              // 🔒 #4997 释放请求锁
-              isRequestInProgress = false;
-              FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (HTML 错误)");
               return;
             }
           }
@@ -760,24 +752,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.d(TAG, "🔥 [FAILURE_COUNT] 当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex() + 
                           " / 阈值：" + (modelAccessPointManager.getAccessPointCount() * 2));
             
-            // 🔍 #4997 【关键调试】记录重试来源
-            FileLogger.d(TAG, "🔄 [RETRY_FROM_ONERROR] 准备从 onError() 重试，thread=" + Thread.currentThread().getName());
-            FileLogger.d(TAG, "📋 [RETRY_STACK] 重试调用堆栈:\n" + Log.getStackTraceString(new Exception()));
-            
-            // 🔒 #4997 释放请求锁后重试
-            isRequestInProgress = false;
-            FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (接入点不可用，准备重试)");
+            // 🔍 #4997【阶段 3】记录重试
+            FileLogger.d(TAG, "🔄 [RETRY] 准备重试，thread=" + Thread.currentThread().getName());
             
             sendChatRequestTongYi(); // 继续重试
           }
           else
           {
             // ✅ [FAILURE_RESET] 非接入点错误，重置失败计数器
-            
-            // 🔒 #4997 释放请求锁
-            isRequestInProgress = false;
-            FileLogger.d(TAG, "🔒 [REQUEST_LOCK] 请求锁已释放：false (非接入点错误)");
-            
             modelAccessPointManager.resetFailureCount();
           }
         }
@@ -1093,10 +1075,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       try
       {
-        // 🔍 #4997 【关键调试】标记来自工具处理的重试
-        FileLogger.d(TAG, "🔄 [RETRY_FROM_TOOL] 准备从 postProcessToolResults() 重试，thread=" + Thread.currentThread().getName());
-        FileLogger.d(TAG, "📋 [TOOL_RETRY_STACK] 工具重试调用堆栈:\n" + Log.getStackTraceString(new Exception()));
-        
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
