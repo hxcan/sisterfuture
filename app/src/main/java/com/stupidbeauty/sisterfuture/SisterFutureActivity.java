@@ -1549,7 +1549,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       try {
         JSONObject msg = messagesArray.getJSONObject(i);
         String role = msg.optString("role", "unknown");
-        FileLogger.d(TAG, "  消息[" + i + "] role=" + role);
         
         // 检查 assistant 消息中的 tool_calls
         if ("assistant".equals(role) && msg.has("tool_calls")) {
