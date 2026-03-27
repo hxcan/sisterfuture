@@ -36,17 +36,14 @@ public class ContextManager
     currentMaxRounds = sharedPreferences.getInt("current_max_rounds", INITIAL_MAX_ROUNDS);
     
     cleanupInvalidToolCallsOnStartup();
-    FileLogger.d(TAG, "ContextManager init, currentMaxRounds=" + currentMaxRounds);
   }
 
   private boolean inDebugMessageIndexRange(int i)
   {
     int rangeMaximal = 1890;
     int rangeMinimal= 0;
-
-    // return ((i>= rangeMinimal) && (i<=rangeMaximal)    );
     return true;
-  } // private boolean inDebugMessageIndexRange(index i)
+  }
 
   private void cleanupInvalidToolCallsOnStartup()
   {
@@ -54,7 +51,6 @@ public class ContextManager
     
     if (historyStr.isEmpty())
     {
-      FileLogger.d(TAG, "[Startup cleanup] History empty, skip");
       return;
     }
     
@@ -65,13 +61,11 @@ public class ContextManager
     try
     {
       JSONArray array = new JSONArray(historyStr);
-      FileLogger.i(TAG, "[Startup cleanup] Start, original count: " + array.length());
       
       for (int i = 0; i < array.length(); i++)
       {
         JSONObject currentObject = array.getJSONObject(i);
         
-        // #4962 新增：过滤空白 assistant 消息
         String role = currentObject.optString("role", "");
         String content = currentObject.optString("content", "");
         boolean hasToolCalls = currentObject.has("tool_calls");
@@ -82,14 +76,11 @@ public class ContextManager
           continue;
         }
 
-        if ((!(inDebugMessageIndexRange(i))) && (hasToolCalls)) // binary search to find the message that caused the problem. Only keep the messages with index in debug range
+        if ((!(inDebugMessageIndexRange(i))) && (hasToolCalls))
         {
-          FileLogger.w(TAG, "Skipping message with index not in binary search range: " + i);
-
           continue;
-        } // if !(inDebugMessageIndexRange(i)) // binary search to find the message that caused the problem. Only keep the messages with index in debug range
+        }
         
-        // 原有逻辑：验证 tool_call 的 JSON 有效性
         if (isValidToolCallMessage(currentObject))
         {
           history.add(currentObject);
@@ -97,7 +88,6 @@ public class ContextManager
         else
         {
           invalidCount++;
-          FileLogger.w(TAG, "[Startup cleanup] Skip invalid JSON at index: " + i);
         }
       }
       
@@ -105,12 +95,7 @@ public class ContextManager
       
       if (invalidCount > 0 || blankAssistantCount > 0 || history.size() < array.length())
       {
-        FileLogger.w(TAG, "[Startup cleanup] Removed " + invalidCount + " invalid messages, " + blankAssistantCount + " blank assistant messages");
         saveHistory(history);
-      }
-      else
-      {
-        FileLogger.d(TAG, "[Startup cleanup] History clean, no changes");
       }
     }
     catch (Exception e)
@@ -146,10 +131,7 @@ public class ContextManager
   
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
-    FileLogger.i(TAG, "#4935 [addToolMessage] toolCallId=" + toolCallId + ", toolName=" + toolName);
-    
     List<JSONObject> history = getHistory();
-    FileLogger.i(TAG, "[addToolMessage] Current history count: " + history.size());
 
     JSONObject toolMessage = new JSONObject();
     try
@@ -166,16 +148,9 @@ public class ContextManager
     }
 
     history.add(toolMessage);
-    FileLogger.i(TAG, "[addToolMessage] Added tool message, count: " + history.size());
-
     history = removeOldHistoryEntries(history);
-    
-    FileLogger.i(TAG, "[addToolMessage] Before normalize: " + history.size());
     history = normalizeToolCallMessages(history);
-    FileLogger.i(TAG, "[addToolMessage] After normalize: " + history.size());
-
     saveHistory(history);
-    FileLogger.i(TAG, "[addToolMessage done] History saved");
   }
 
   public void addUserMessage(String message)
@@ -196,20 +171,10 @@ public class ContextManager
   {
     if (message == null)
     {
-      FileLogger.w(TAG, "#4935 [addRawMessage] Input is null, skip");
       return;
     }
 
-    String role = message.optString("role", "unknown");
-    boolean hasToolCalls = message.has("tool_calls");
-    int toolCallsCount = hasToolCalls ? message.optJSONArray("tool_calls").length() : 0;
-    
-    FileLogger.i(TAG, "#4935 [addRawMessage CALL] role=" + role + 
-                  ", has_tool_calls=" + hasToolCalls + 
-                  ", tool_calls_count=" + toolCallsCount);
-    
     List<JSONObject> historyBefore = getHistory();
-    FileLogger.i(TAG, "#4935 [addRawMessage BEFORE] History count: " + historyBefore.size());
 
     try
     {
@@ -218,7 +183,6 @@ public class ContextManager
         JSONArray toolCalls = message.getJSONArray("tool_calls");
         if (toolCalls.length() == 0)
         {
-          FileLogger.w(TAG, "#4935 [addRawMessage] Empty tool_calls detected, filtered");
           return;
         }
 
@@ -237,9 +201,6 @@ public class ContextManager
               }
               catch (JSONException e)
               {
-                FileLogger.w(TAG, "Skip invalid JSON tool_call arguments: " + argumentsStr);
-                FileLogger.w(TAG, "   tool_call name: " + function.optString("name", "unknown"));
-                FileLogger.w(TAG, "#4935 [addRawMessage] Skipped due to invalid JSON, count remains: " + historyBefore.size());
                 return;
               }
             }
@@ -254,21 +215,8 @@ public class ContextManager
 
     List<JSONObject> history = getHistory();
     history.add(message);
-    
-    FileLogger.i(TAG, "#4935 [addRawMessage] Message added, before: " + historyBefore.size() + " -> after: " + history.size());
-    
-    JSONObject lastMsg = history.get(history.size() - 1);
-    String lastRole = lastMsg.optString("role", "unknown");
-    boolean lastHasToolCalls = lastMsg.has("tool_calls");
-    FileLogger.i(TAG, "#4935 [addRawMessage] Last msg verify: role=" + lastRole + ", has_tool_calls=" + lastHasToolCalls);
-
     history = removeOldHistoryEntries(history);
-    
-    FileLogger.i(TAG, "#4935 [removeOldHistoryEntries] After: " + history.size());
-    
     saveHistory(history);
-    
-    FileLogger.i(TAG, "#4935 [addRawMessage DONE] Final count: " + history.size());
   }
 
   private void addMessage(String role, String content)
@@ -287,7 +235,6 @@ public class ContextManager
   {
     List<JSONObject> history = getHistory();
     FileLogger.i(TAG, "[Full History] " + prefix + ", Total: " + history.size());
-    // ✅ #4997 完全移除逐行日志输出，只保留统计信息
     FileLogger.i(TAG, "[Full History] End");
   }
 
@@ -305,7 +252,6 @@ public class ContextManager
     try
     {
       JSONArray array = new JSONArray(historyStr);
-      FileLogger.d(TAG, "[getHistory] Load history, count: " + array.length());
 
       for (int i = 0; i < array.length(); i++)
       {
@@ -339,38 +285,29 @@ public class ContextManager
           if (function.has("arguments"))
           {
             String argumentsStr = function.getString("arguments");
-            Log.i(TAG, "argumentsString length: " + argumentsStr.length() + ", content : " + argumentsStr );
-
-
             
             try
             {
               JSONTokener tokener = new JSONTokener(argumentsStr);
               Object parsed = tokener.nextValue();
 
-              Log.i(TAG, "parsed length: " +  parsed.toString().length()   + ", content: " + parsed );
-
               if (tokener.more())
               {
-                FileLogger.w(TAG, "Invalid JSON: extra data - \"" + argumentsStr + "\"");
                 return false;
               }
               
               if (!(parsed instanceof JSONObject))
               {
-                FileLogger.w(TAG, "Invalid JSON: not JSONObject, type=" + parsed.getClass().getName());
                 return false;
               }
 
               if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
               {
-                FileLogger.w(TAG, "arguments string too long: " + argumentsStr.length());
                 return false;
               }
             }
             catch (JSONException e)
             {
-              FileLogger.w(TAG, "Invalid JSON: " + e.getMessage());
               return false;
             }
           }
@@ -380,15 +317,12 @@ public class ContextManager
     }
     catch (JSONException e)
     {
-      FileLogger.w(TAG, "Error during validation: " + e.getMessage());
       return false;
     }
   }
 
   private List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory)
   {
-    FileLogger.i(TAG, "[normalize] Input: " + oldHistory.size());
-    
     List<JSONObject> history = oldHistory;
     List<JSONObject> list = new ArrayList<>();
 
@@ -405,18 +339,6 @@ public class ContextManager
         {
           if (currentObject.has("tool_calls"))
           {
-            String toolCallId = "unknown";
-            try
-            {
-              JSONArray toolCalls = currentObject.getJSONArray("tool_calls");
-              if (toolCalls.length() > 0)
-              {
-                JSONObject firstToolCall = toolCalls.getJSONObject(0);
-                toolCallId = firstToolCall.optString("id", "unknown");
-              }
-            }
-            catch (Exception e) {}
-            
             pendingToolCallsObject = currentObject;
             continue;
           }
@@ -457,22 +379,17 @@ public class ContextManager
       e.printStackTrace();
     }
     
-    FileLogger.i(TAG, "[normalize] Output: " + list.size());
     return list;
   }
 
   public void replaceHistory(List<JSONObject> newHistory)
   {
-    FileLogger.i(TAG, "[replaceHistory] New count: " + newHistory.size());
-    
     if (newHistory.size() > currentMaxRounds * 2)
     {
       newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
-      FileLogger.w(TAG, "[replaceHistory] Truncated to: " + newHistory.size());
     }
     
     saveHistory(newHistory);
-    FileLogger.i(TAG, "[replaceHistory] Done");
   }
 
   private void saveHistory(List<JSONObject> history)
@@ -482,7 +399,6 @@ public class ContextManager
         .putString(KEY_HISTORY, historyArray.toString())
         .putInt("current_max_rounds", currentMaxRounds)
         .apply();
-    FileLogger.d(TAG, "[saveHistory] Saved: " + history.size());
   }
 
   private JSONObject createMessage(String role, String content)
@@ -507,13 +423,10 @@ public class ContextManager
       currentMaxRounds++;
       saveHistory(getHistory());
     }
-    FileLogger.i(TAG, "Max rounds: " + currentMaxRounds);
   }
 
   public void decreaseMaxRounds()
   {
-    FileLogger.i(TAG, "Max rounds before: " + currentMaxRounds);
-
     List<JSONObject> history = getHistory();
     int idealMaxRounds = history.size() /2 -1 ;
 
@@ -523,6 +436,5 @@ public class ContextManager
       history = removeOldHistoryEntries(history);
       saveHistory(history);
     }
-    FileLogger.i(TAG, "Max rounds after: " + currentMaxRounds);
   }
 }
