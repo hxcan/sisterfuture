@@ -565,9 +565,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void sendChatRequestTongYi()
   {
+    // 🔍 #4997 【关键调试】记录调用来源堆栈
+    FileLogger.d(TAG, "🔍 [CALL_STACK] sendChatRequestTongYi() 被调用，当前线程：" + Thread.currentThread().getName());
+    FileLogger.d(TAG, "📋 [CALL_STACK] 调用堆栈:\n" + Log.getStackTraceString(new Exception()));
+    
     // 🔒 #4997 并发请求锁：检查是否有请求正在进行
     if (isRequestInProgress) {
-      FileLogger.w(TAG, "🔒 [REQUEST_LOCK] 请求锁已占用，跳过本次请求（防止并发风暴）");
+      FileLogger.w(TAG, "🔒 [REQUEST_LOCK] 请求锁已占用，跳过本次请求（防止并发风暴），thread=" + Thread.currentThread().getName());
       return;
     }
     
@@ -755,6 +759,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 接入点不可用，计数器递增：" + failures);
             FileLogger.d(TAG, "🔥 [FAILURE_COUNT] 当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex() + 
                           " / 阈值：" + (modelAccessPointManager.getAccessPointCount() * 2));
+            
+            // 🔍 #4997 【关键调试】记录重试来源
+            FileLogger.d(TAG, "🔄 [RETRY_FROM_ONERROR] 准备从 onError() 重试，thread=" + Thread.currentThread().getName());
+            FileLogger.d(TAG, "📋 [RETRY_STACK] 重试调用堆栈:\n" + Log.getStackTraceString(new Exception()));
             
             // 🔒 #4997 释放请求锁后重试
             isRequestInProgress = false;
@@ -1085,6 +1093,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       try
       {
+        // 🔍 #4997 【关键调试】标记来自工具处理的重试
+        FileLogger.d(TAG, "🔄 [RETRY_FROM_TOOL] 准备从 postProcessToolResults() 重试，thread=" + Thread.currentThread().getName());
+        FileLogger.d(TAG, "📋 [TOOL_RETRY_STACK] 工具重试调用堆栈:\n" + Log.getStackTraceString(new Exception()));
+        
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
