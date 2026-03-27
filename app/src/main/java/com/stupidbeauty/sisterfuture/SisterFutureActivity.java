@@ -1554,25 +1554,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         if ("assistant".equals(role) && msg.has("tool_calls")) {
           JSONArray toolCalls = msg.getJSONArray("tool_calls");
           FileLogger.d(TAG, "    🔧 tool_calls 数量：" + toolCalls.length());
-          for (int j = 0; j < toolCalls.length(); j++) {
-            JSONObject toolCall = toolCalls.getJSONObject(j);
-            JSONObject func = toolCall.optJSONObject("function");
-            if (func != null) {
-              String funcName = func.optString("name", "unknown");
-              Object args = func.opt("arguments");
-              String argsType = (args == null) ? "null" : args.getClass().getSimpleName();
-              String argsValue = (args == null) ? "null" : args.toString();
-              FileLogger.d(TAG, "      tool_call[" + j + "] name=" + funcName + ", arguments 类型=" + argsType);
-              FileLogger.d(TAG, "      arguments 值：" + argsValue);
-              
-              // ⚠️ 检测类型
-              if (args instanceof String) {
-                FileLogger.w(TAG, "      ⚠️ 警告：arguments 是 String 类型，Code 模型可能拒绝！");
-              } else if (args instanceof JSONObject) {
-                FileLogger.d(TAG, "      ✅ arguments 是 JSONObject 类型，格式正确");
-              }
-            }
-          }
         }
       } catch (Exception e) {
         FileLogger.e(TAG, "  解析消息[" + i + "] 失败", e);
