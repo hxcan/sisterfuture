@@ -7,41 +7,12 @@ import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import android.util.Log;
-import android.content.Context;
 
 public class ToolManager
 {
   private static final String TAG = "ToolManager";
   private Map<String, Tool> toolRegistry = new HashMap<>();
   private ToolCallTracker callTracker = new ToolCallTracker();  // 🔥 幂等性追踪器
-  private Context context;  // 保存 Context 引用
-
-  // 🔥 添加构造函数，接收 Context 参数
-  public ToolManager(Context context)
-  {
-    this.context = context;
-    // 🔥 初始化时注册所有工具
-    registerDefaultTools();
-  }
-
-  private void registerDefaultTools()
-  {
-    if (context == null)
-    {
-      Log.e(TAG, "Context is null, cannot register tools");
-      return;
-    }
-
-    // 注册现有工具（都需要传入 context）
-    registerTool(new AddNoteTool(context));
-    registerTool(new ListNotesTool(context));
-    registerTool(new RemoveNoteTool(context));
-    
-    // 🔥 新增：注册 GitHub Actions 日志获取工具（不需要 context）
-    registerTool(new GetGitHubActionsLogsTool());
-    
-    Log.d(TAG, "已注册 " + toolRegistry.size() + " 个工具：" + toolRegistry.keySet());
-  }
 
   public void registerTool(Tool tool)
   {
