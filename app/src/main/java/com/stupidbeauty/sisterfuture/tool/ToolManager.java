@@ -14,6 +14,25 @@ public class ToolManager
   private Map<String, Tool> toolRegistry = new HashMap<>();
   private ToolCallTracker callTracker = new ToolCallTracker();  // 🔥 幂等性追踪器
 
+  public ToolManager()
+  {
+    // 🔥 初始化时注册所有工具
+    registerDefaultTools();
+  }
+
+  private void registerDefaultTools()
+  {
+    // 注册现有工具
+    registerTool(new AddNoteTool());
+    registerTool(new ListNotesTool());
+    registerTool(new RemoveNoteTool());
+    
+    // 🔥 新增：注册 GitHub Actions 日志获取工具
+    registerTool(new GetGitHubActionsLogsTool());
+    
+    Log.d(TAG, "已注册 " + toolRegistry.size() + " 个工具: " + toolRegistry.keySet());
+  }
+
   public void registerTool(Tool tool)
   {
     toolRegistry.put(tool.getName(), tool);
