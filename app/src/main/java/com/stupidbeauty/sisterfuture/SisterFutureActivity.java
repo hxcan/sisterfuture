@@ -1,6 +1,117 @@
 package com.stupidbeauty.sisterfuture;
 
-// ... 省略所有 import 语句（保持原有 70+ 行 import 不变）...
+import com.stupidbeauty.sisterfuture.tool.ToolRegistry;
+import com.stupidbeauty.sisterfuture.tool.ToolManager;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.MemoryManager;
+import com.stupidbeauty.sisterfuture.ContextManager;
+import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
+import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
+import android.os.Handler;
+import android.os.Looper;
+import com.stupidbeauty.codeposition.CodePosition;
+import java.io.FileDescriptor;
+import android.os.Build;
+import com.stupidbeauty.sisterfuture.bean.MemoryEntity;
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import java.io.IOException;
+import butterknife.OnClick;
+import com.iflytek.cloud.SpeechRecognizer;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import android.util.Log;
+import com.stupidbeauty.sisterfuture.bean.MessageItem;
+import com.stupidbeauty.sisterfuture.bean.MessageType;
+import com.stupidbeauty.sisterfuture.bean.Delta;
+import com.stupidbeauty.sisterfuture.bean.Choice;
+import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
+import com.stupidbeauty.sisterfuture.tool.Tool;
+import com.stupidbeauty.sisterfuture.bean.ToolCall;
+import com.stupidbeauty.sisterfuture.bean.Function;
+import butterknife.ButterKnife;
+import com.stupidbeauty.sisterfuture.R;
+import android.view.KeyEvent;
+import android.view.inputmethod.EditorInfo;
+import java.util.List;
+import android.text.TextUtils;
+import android.widget.EditText;
+import android.widget.RadioGroup;
+import net.tatans.coeus.TensorFlowTTS.utils.ThreadPoolManager;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import net.tatans.coeus.TensorFlowTTS.tts.TtsManager;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.io.FileInputStream;
+import android.Manifest;
+import android.app.Activity;
+import android.app.ActivityOptions;
+import android.app.WallpaperManager;
+import android.media.MediaScannerConnection;
+import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.LocaleList;
+import android.os.PowerManager;
+import android.os.Vibrator;
+import android.speech.tts.TextToSpeech;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.Window;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.widget.Toast;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.VolleyError;
+import com.stupidbeauty.msclearnfootball.VoiceRecognizeResult;
+import com.iflytek.cloud.ErrorCode;
+import com.iflytek.cloud.RecognizerListener;
+import com.iflytek.cloud.RecognizerResult;
+import com.iflytek.cloud.SpeechConstant;
+import com.iflytek.cloud.SpeechError;
+import com.iflytek.cloud.SpeechUtility;
+import com.stupidbeauty.sisterfuture.network.TongYiClient;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import butterknife.BindView;
+import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
+import com.koushikdutta.async.http.server.AsyncHttpServer;
+import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
+import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
+import com.koushikdutta.async.http.server.HttpServerRequestCallback;
+import com.stupidbeauty.lanime.network.volley.MapUtils;
+import com.stupidbeauty.sisterfuture.SisterFutureApplication;
+import com.stupidbeauty.lanime.Constants;
+import com.stupidbeauty.lanime.callback.CommitTextCallback;
+import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
+import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
+import com.stupidbeauty.sisterfuture.manager.GuideManager;
+import android.content.pm.PackageManager;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
@@ -455,9 +566,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void sendChatRequestTongYi()
   {
-    // 🔍 #4997 请求锁检查 - 防止并发
+    // 🔍 #4997 请求锁检查 - 防止并发（最小化修改：仅添加此块）
     if (isRequestInProgress) {
-      FileLogger.w(TAG, "🔍 [REQUEST_LOCK] 请求锁已占用，拒绝并发请求");
+      FileLogger.w(TAG, "🔍 [REQUEST_LOCK] 请求锁已占用，拒绝并发请求，thread=" + Thread.currentThread().getName());
       return;
     }
     
@@ -500,9 +611,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
-      // 🔍 #4997 设置请求锁
+      // 🔍 #4997 设置请求锁（最小化修改：仅添加此 2 行）
       isRequestInProgress = true;
-      FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已设置：true");
+      FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已设置：true, thread=" + Thread.currentThread().getName());
       
       accumulatedAnswer.setLength(0);
       showThinkingOverlay();
@@ -557,9 +668,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           parseTongYiResponse(response);
           
-          // 🔍 #4997 释放请求锁
+          // 🔍 #4997 释放请求锁（最小化修改：仅添加此 2 行）
           isRequestInProgress = false;
-          FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (成功响应)");
+          FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (成功响应), thread=" + Thread.currentThread().getName());
         }
 
         @Override
@@ -583,9 +694,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.w(TAG, "⚠️ [RATE_LIMIT] 限流错误，等待后重试 #" + rateLimitRetryCount);
             handleRateLimitError();
             
-            // 🔍 #4997 释放请求锁
+            // 🔍 #4997 释放请求锁（最小化修改：仅添加此 2 行）
             isRequestInProgress = false;
-            FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (限流错误)");
+            FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (限流错误), thread=" + Thread.currentThread().getName());
             return;
           }
           else if (error instanceof TongYiClient.ResponseException)
@@ -607,9 +718,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   // 🎉 #4829 上下文超长处理
                   handleContextLengthError(errorBody, true);
                   
-                  // 🔍 #4997 释放请求锁
+                  // 🔍 #4997 释放请求锁（最小化修改：仅添加此 2 行）
                   isRequestInProgress = false;
-                  FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (上下文超长)");
+                  FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (上下文超长), thread=" + Thread.currentThread().getName());
                   return; // ✅ 已处理，不再继续
                 }
               }
@@ -628,9 +739,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 scrollToBottom();
               });
               
-              // 🔍 #4997 释放请求锁
+              // 🔍 #4997 释放请求锁（最小化修改：仅添加此 2 行）
               isRequestInProgress = false;
-              FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (HTML 响应)");
+              FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (HTML 响应), thread=" + Thread.currentThread().getName());
               return;
             }
           }
@@ -646,9 +757,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.d(TAG, "📊 [FAILURE_COUNT] 当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex() + 
                           " / 总接入点数：" + (modelAccessPointManager.getAccessPointCount() * 2));
             
-            // 🔍 #4997 释放请求锁
+            // 🔍 #4997 释放请求锁（最小化修改：仅添加此 2 行）
             isRequestInProgress = false;
-            FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (接入点不可用)");
+            FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (接入点不可用), thread=" + Thread.currentThread().getName());
             
             sendChatRequestTongYi(); // 🔄 重试
           }
@@ -656,9 +767,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             // 🎉 [FAILURE_RESET] 非致命错误，重置计数器
             
-            // 🔍 #4997 释放请求锁
+            // 🔍 #4997 释放请求锁（最小化修改：仅添加此 2 行）
             isRequestInProgress = false;
-            FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (非致命错误)");
+            FileLogger.d(TAG, "🔍 [REQUEST_LOCK] 请求锁已释放：false (非致命错误), thread=" + Thread.currentThread().getName());
             
             modelAccessPointManager.resetFailureCount();
           }
@@ -1082,7 +1193,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       Gson gson=new Gson();
       VoiceRecognizeResult voiceRecognizeResult=gson.fromJson(text, VoiceRecognizeResult.class);
-      String saidText=voiceRecognizeResult.get SaidText();
+      String saidText=voiceRecognizeResult.getSaidText();
 
       recognizerResulttextView.append(saidText);
       voiceRecognizeResultString=voiceRecognizeResultString+saidText;
