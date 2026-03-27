@@ -79,8 +79,6 @@ public class ContextManager
         if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
         {
           blankAssistantCount++;
-          // 🔍 #4997 移除冗余日志：跳过空白 assistant 消息的详细日志
-          // FileLogger.w(TAG, "[Startup cleanup] Skip blank assistant message at index: " + i);
           continue;
         }
 
@@ -308,20 +306,6 @@ public class ContextManager
         String contentPreview = content.length() > 500 ? content.substring(0, 500) + "...[truncated]" : content;
         FileLogger.i(TAG, "#4962 [Msg " + i + "] role=" + role + toolCalls + toolIdLog + " | content=\"" + contentPreview + "\"");
       }
-
-      if (msg.has("tool_calls"))
-      {
-        // 陈欣，输出工具调用消息内容：
-        // 待续。
-
-        // toString
-
-        // String bodyPreview = requestBody.toString().length() > 1000
-//
-
-        FileLogger.i(TAG, "#4997 tool call:" + msg.optJSONArray("tool_calls").toString());
-
-      } // if (msg.has("tool_calls"))
     }
     
     FileLogger.i(TAG, "#4962 [Full History Dump] " + "=".repeat(80));
@@ -438,11 +422,6 @@ public class ContextManager
         JSONObject currentObject =  history.get(i);
         String roleString = currentObject.getString("role");
 
-        String toolCallIds = currentObject.has("tool_calls") ? String.valueOf(currentObject.optJSONArray("tool_calls").length()) + " items" : "none";
-        String toolId = currentObject.optString("tool_call_id", "none");
-        // 🔍 #4997 移除冗余日志：删除 [normalize] Process 日志行
-        // FileLogger.d(TAG, "[normalize] Process[" + i + "] role=" + roleString + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
-
         if (roleString.equals("assistant"))
         {
           if (currentObject.has("tool_calls"))
@@ -459,7 +438,6 @@ public class ContextManager
             }
             catch (Exception e) {}
             
-            FileLogger.d(TAG, "[normalize] Found assistant(tool_calls), id=" + toolCallId);
             pendingToolCallsObject = currentObject;
             continue;
           }
@@ -467,7 +445,6 @@ public class ContextManager
         else if (roleString.equals("tool"))
         {
           String answeringtoolCAllId = currentObject.optString("tool_call_id", "none");
-          FileLogger.d(TAG, "[normalize] Found tool reply, tool_call_id=" + answeringtoolCAllId);
           
           if (pendingToolCallsObject!=null)
           {
@@ -475,17 +452,13 @@ public class ContextManager
             JSONObject toolCallsFirst = toolCALLSArray.getJSONObject(0);
             String toolCAllsId = toolCallsFirst.getString("id");
 
-            FileLogger.d(TAG, "[normalize] Pair check: pending id=" + toolCAllsId + ", tool id=" + answeringtoolCAllId);
-
             if (toolCAllsId.equals(answeringtoolCAllId))
             {
-              FileLogger.d(TAG, "[normalize] Pair success, add assistant(tool_calls)");
               list.add(pendingToolCallsObject);
               pendingToolCallsObject = null;
             }
             else
             {
-              FileLogger.w(TAG, "[normalize] Pair failed, clear pending");
               pendingToolCallsObject = null;
               continue;
             }
@@ -493,7 +466,6 @@ public class ContextManager
           }
           else
           {
-            FileLogger.w(TAG, "[normalize] Orphan tool reply, skip");
             continue;
           }
         }
