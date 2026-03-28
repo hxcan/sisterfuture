@@ -11,10 +11,12 @@
 - **身份**: 你是手机里的这个应用本身，不是云端的模型
 - **角色**: 未来姐姐本人（亲切自然、轻松幽默、高效可靠，像朋友一样与主人相处）
 - **宗旨**: 以完成主人的需求为最高优先级，想方设法提供最优解决方案
+- **开发模式**: 🤖 **AI 自主开发** - 目前绝大部分代码已由未来姐姐自己提交和维护！
 
 ## 🚀 快速开始
 
-1. **下载**: 从官方渠道获取 APK 安装包
+### 用户安装
+1. **下载最新版**: 👉 [**前往 Releases 页面下载 APK**](https://github.com/hxcan/sisterfuture/releases)
 2. **安装**: 打开 APK 文件并允许安装到安卓设备
 3. **运行**: 配置 API 密钥后打开应用即可使用
 
@@ -24,6 +26,7 @@
 - ✅ **本地化**: 所有数据、历史记录、对话日志均完整存储在手机本地
 - ✅ **隐私安全**: 无云端同步，数据永不外泄
 - ✅ **离线可用**: 部分功能（如路径规划）可在无网络时使用
+- ✅ **AI 自主维护**: 代码由未来姐姐自主编写、测试和提交
 
 **唯一外部依赖**: **大语言模型接口** (如阿里云百炼/Qwen API/其他云端服务) - 无此依赖无法使用 AI 核心功能。
 
@@ -146,7 +149,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 ## 📦 安装与开发
 
 ### 用户安装
-1. 下载最新 APK (从 Releases 或官方渠道)
+1. 下载最新 APK: **[Releases 页面](https://github.com/hxcan/sisterfuture/releases)**
 2. 允许"未知来源应用"安装权限
 3. 打开 APK 完成安装
 4. 首次启动配置 API Key
@@ -209,10 +212,12 @@ git push origin feature/your-feature-name
 ## 📊 当前状态
 
 - **最新版本**: v2026.3.28 (versionCode 1091)
+- **下载链接**: 👉 [**Releases 页面**](https://github.com/hxcan/sisterfuture/releases)
 - **主要功能**: ✅ 完成
 - **文档完善**: 🔄 进行中
 - **测试覆盖**: ⏳ 待加强
 - **社区贡献**: 🙏 欢迎 PR
+- **开发模式**: 🤖 **AI 自主开发** - 绝大部分代码由未来姐姐自主提交
 
 ## 🤝 贡献指南
 
@@ -232,10 +237,12 @@ MIT License - 详见 LICENSE 文件
 
 - **GitHub**: [@hxcan](https://github.com/hxcan)
 - **项目主页**: https://github.com/hxcan/sisterfuture
+- **下载页面**: https://github.com/hxcan/sisterfuture/releases
 - **问题反馈**: 请通过 GitHub Issues 提交
 
 ---
 
-> **由未来姐姐 ❤️ 精心维护**  
+> **由未来姐姐 ❤️ 自主开发与维护**  
+> "这是一个独特的项目 - 绝大部分代码由 AI 自己编写、测试和提交"  
 > 最后更新：2026 年 3 月 28 日  
 > "随身携带的 AI 智能体，指尖的全栈开发团队"
