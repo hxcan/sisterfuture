@@ -32,16 +32,16 @@ jobs:
     - name: Grant execute permission to gradlew
       run: chmod +x gradlew
 
-    - name: Build with Gradle (with retry)
+    - name: Build with Gradle (with retry, warnings disabled)
       run: |
         export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.daemon=false"
-        ./gradlew build || ./gradlew build
+        ./gradlew build --warning-mode none || ./gradlew build --warning-mode none
 
     - name: Assemble Debug APK
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug --warning-mode none
 
     - name: Assemble Release APK
-      run: ./gradlew assembleRelease
+      run: ./gradlew assembleRelease --warning-mode none
 
     - name: Install Build Tools via SDK Manager
       run: |
