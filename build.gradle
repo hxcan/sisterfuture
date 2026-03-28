@@ -13,13 +13,5 @@ buildscript
   }
 }
 
-allprojects 
-{
-  repositories 
-  {
-    mavenCentral()
-    maven { url "https://jitpack.io" }
-    jcenter()
-    google()
-  }
-}
+// allprojects 块已移除，仓库配置统一在 settings.gradle 中管理
+// 避免与 settings.gradle 中的 repositoriesMode 冲突
