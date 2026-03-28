@@ -1,99 +1,99 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.util.Log;
+import com.baidu.mapapi.search.route.*;
+import com.baidu.mapapi.model.LatLng;
+import com.baidu.mapapi.search.core.SearchResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.io.IOException;
-import java.net.URLEncoder;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
 
-/**
- * 百度地图路径规划工具
- * 支持步行、骑行、驾车、公交四种交通方式
- * 
- * 关联任务：#4779
- */
 public class PlanRouteTool implements Tool {
     private static final String TAG = "PlanRouteTool";
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final OkHttpClient httpClient = new OkHttpClient();
-
-    // 百度地图路径规划 API 端点
-    private static final String BASE_URL = "https://api.map.baidu.com/directionlite/v1";
-    private static final String DRIVING_PATH = "/driving";
-    private static final String WALKING_PATH = "/walking";
-    private static final String RIDING_PATH = "/riding";
-    private static final String TRANSIT_PATH = "/transit";
+    private final RoutePlanSearch mRouteSearch = RoutePlanSearch.newInstance();
+    
+    private OnResultCallback currentCallback;
+    private String currentMode;
 
     public PlanRouteTool(Context context) {
         this.context = context;
+        
+        mRouteSearch.setOnGetRoutePlanResultListener(new OnGetRoutePlanResultListener() {
+            @Override
+            public void onGetDrivingRouteResult(DrivingRouteResult result) {
+                handleRouteResult(result, "driving");
+            }
+            
+            @Override
+            public void onGetWalkingRouteResult(WalkingRouteResult result) {
+                handleRouteResult(result, "walking");
+            }
+            
+            @Override
+            public void onGetBikingRouteResult(BikingRouteResult result) {
+                handleRouteResult(result, "riding");
+            }
+            
+            @Override
+            public void onGetTransitRouteResult(TransitRouteResult result) {
+                handleRouteResult(result, "transit");
+            }
+            
+            @Override
+            public void onGetIndoorRouteResult(IndoorRouteResult result) {
+                sendError(currentCallback, "不支持室内路线规划");
+            }
+            
+            @Override
+            public void onGetMassTransitRouteResult(MassTransitRouteResult result) {
+                sendError(currentCallback, "不支持大交通路线规划");
+            }
+        });
     }
 
     @Override
-    public String getName() {
-        return "plan_route";
-    }
+    public String getName() { return "plan_route"; }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "plan_route");
-            functionDef.put("description", "使用百度地图 API 进行路径规划，支持步行、骑行、驾车、公交四种交通方式。返回距离、时间、详细路线步骤。");
-
+            functionDef.put("description", "使用百度地图 SDK 进行路径规划");
+            
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("required", new JSONArray().put("origin").put("destination").put("mode"));
-
-            JSONObject properties = new JSONObject();
             
-            // origin 参数
-            JSONObject originProp = new JSONObject();
-            originProp.put("type", "string");
-            originProp.put("description", "起点经纬度，格式：'纬度,经度'（如：'39.908823,116.397470'），或使用 'location' 表示当前位置");
-            properties.put("origin", originProp);
-
-            // destination 参数
-            JSONObject destProp = new JSONObject();
-            destProp.put("type", "string");
-            destProp.put("description", "终点经纬度，格式：'纬度,经度'（如：'39.908823,116.397470'）");
-            properties.put("destination", destProp);
-
-            // mode 参数
-            JSONObject modeProp = new JSONObject();
-            modeProp.put("type", "string");
-            modeProp.put("description", "交通方式：'driving'（驾车）、'walking'（步行）、'riding'（骑行）、'transit'（公交）");
-            modeProp.put("enum", new JSONArray().put("driving").put("walking").put("riding").put("transit"));
-            properties.put("mode", modeProp);
-
+            JSONObject properties = new JSONObject();
+            properties.put("origin", new JSONObject()
+                .put("type", "string")
+                .put("description", "起点经纬度"));
+            properties.put("destination", new JSONObject()
+                .put("type", "string")
+                .put("description", "终点经纬度"));
+            properties.put("mode", new JSONObject()
+                .put("type", "string")
+                .put("enum", new JSONArray().put("driving").put("walking").put("riding").put("transit")));
+            
             parameters.put("properties", properties);
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to build definition", e);
+            Log.e(TAG, "getDefinition failed", e);
             return new JSONObject();
         }
     }
 
     @Override
-    public boolean shouldInclude() {
-        return true;
-    }
-
+    public boolean shouldInclude() { return true; }
     @Override
-    public boolean isAsync() {
-        return true;
-    }
+    public boolean isAsync() { return true; }
 
     @Override
     public void executeAsync(JSONObject arguments, OnResultCallback callback) {
@@ -103,240 +103,182 @@ public class PlanRouteTool implements Tool {
                 String destination = arguments.getString("destination");
                 String mode = arguments.getString("mode");
 
-                // 如果起点是 "location"，获取当前位置
-                if ("location".equals(origin)) {
-                    GetLocationTool locationTool = new GetLocationTool(context);
-                    final JSONObject[] locationResult = {null};
-                    final Object lock = new Object();
+                LatLng originLatLng = parseLocation(origin, callback);
+                if (originLatLng == null) return;
+                
+                LatLng destLatLng = parseLocation(destination, callback);
+                if (destLatLng == null) return;
 
-                    locationTool.executeAsync(new JSONObject(), new OnResultCallback() {
-                        @Override
-                        public void onResult(JSONObject result) {
-                            try {
-                                if ("success".equals(result.getString("status"))) {
-                                    JSONObject loc = result.getJSONObject("location");
-                                    double lat = loc.getDouble("latitude");
-                                    double lng = loc.getDouble("longitude");
-                                    locationResult[0] = new JSONObject()
-                                        .put("lat", lat)
-                                        .put("lng", lng);
-                                }
-                            } catch (Exception e) {
-                                Log.e(TAG, "解析位置失败", e);
-                            }
-                            synchronized (lock) {
-                                lock.notify();
-                            }
-                        }
+                currentCallback = callback;
+                currentMode = mode;
 
-                        @Override
-                        public void onError(Exception e) {
-                            Log.e(TAG, "获取位置失败", e);
-                            synchronized (lock) {
-                                lock.notify();
-                            }
-                        }
-                    });
-
-                    synchronized (lock) {
-                        lock.wait(10000); // 等待 10 秒
-                    }
-
-                    if (locationResult[0] != null) {
-                        origin = locationResult[0].getDouble("lat") + "," + locationResult[0].getDouble("lng");
-                    } else {
-                        JSONObject error = new JSONObject();
-                        error.put("status", "error");
-                        error.put("message", "无法获取当前位置，请指定起点经纬度");
-                        callback.onResult(error);
-                        return;
-                    }
+                PlanNode from = PlanNode.withLocation(originLatLng);
+                PlanNode to = PlanNode.withLocation(destLatLng);
+                
+                switch (mode) {
+                    case "driving":
+                        mRouteSearch.drivingSearch(new DrivingRoutePlanOption().from(from).to(to));
+                        break;
+                    case "walking":
+                        mRouteSearch.walkingSearch(new WalkingRoutePlanOption().from(from).to(to));
+                        break;
+                    case "riding":
+                        mRouteSearch.bikingSearch(new BikingRoutePlanOption().from(from).to(to));
+                        break;
+                    case "transit":
+                        mRouteSearch.transitSearch(new TransitRoutePlanOption().from(from).to(to).city("深圳市"));
+                        break;
+                    default:
+                        sendError(callback, "不支持的交通方式：" + mode);
+                        currentCallback = null;
+                        currentMode = null;
                 }
-
-                // 获取 API Key
-                String apiKey = getApiKey();
-                if (apiKey == null || apiKey.isEmpty()) {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", "百度地图 API Key 未配置，请先在长期记忆中设置 baidu_map_api_key");
-                    callback.onResult(error);
-                    return;
-                }
-
-                // 构建 API URL
-                String path = getApiPath(mode);
-                String url = BASE_URL + path + "?origin=" + URLEncoder.encode(origin, "UTF-8")
-                    + "&destination=" + URLEncoder.encode(destination, "UTF-8")
-                    + "&ak=" + apiKey;
-
-                // 驾车模式额外参数
-                if ("driving".equals(mode)) {
-                    url += "&coord_type=bd09ll&steps=1";
-                } else {
-                    url += "&coord_type=bd09ll";
-                }
-
-                Log.d(TAG, "请求 URL: " + url);
-
-                // 发起 HTTP 请求
-                Request request = new Request.Builder().url(url).build();
-                httpClient.newCall(request).enqueue(new Callback() {
-                    @Override
-                    public void onFailure(Call call, IOException e) {
-                        Log.e(TAG, "请求失败", e);
-                        try {
-                            JSONObject error = new JSONObject();
-                            error.put("status", "error");
-                            error.put("message", "网络请求失败：" + e.getMessage());
-                            callback.onResult(error);
-                        } catch (Exception ignored) {}
-                    }
-
-                    @Override
-                    public void onResponse(Call call, Response response) throws IOException {
-                        try (ResponseBody body = response.body()) {
-                            String responseJson = body.string();
-                            Log.d(TAG, "API 响应：" + responseJson);
-
-                            JSONObject result = parseResponse(responseJson, mode);
-                            callback.onResult(result);
-                        } catch (Exception e) {
-                            Log.e(TAG, "解析响应失败", e);
-                            try {
-                                JSONObject error = new JSONObject();
-                                error.put("status", "error");
-                                error.put("message", "解析响应失败：" + e.getMessage());
-                                callback.onResult(error);
-                            } catch (Exception ignored) {}
-                        }
-                    }
-                });
-
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    callback.onResult(error);
-                } catch (Exception ignored) {}
+                sendError(callback, e.getMessage());
             }
         });
     }
 
-    private String getApiPath(String mode) {
-        switch (mode) {
-            case "driving": return DRIVING_PATH;
-            case "walking": return WALKING_PATH;
-            case "riding": return RIDING_PATH;
-            case "transit": return TRANSIT_PATH;
-            default: return DRIVING_PATH;
-        }
-    }
-
-    private JSONObject parseResponse(String responseJson, String mode) {
+    private LatLng parseLocation(String location, OnResultCallback callback) {
         try {
-            JSONObject json = new JSONObject(responseJson);
+            if ("location".equals(location)) {
+                GetLocationTool locationTool = new GetLocationTool(context);
+                final LatLng[] result = {null};
+                final Object lock = new Object();
 
-            if (json.has("error") && json.getInt("error") != 0) {
-                JSONObject error = new JSONObject();
-                error.put("status", "error");
-                error.put("message", "百度地图 API 错误：" + json.getInt("error") + " - " + json.optString("message"));
-                return error;
-            }
+                locationTool.executeAsync(new JSONObject(), new OnResultCallback() {
+                    public void onResult(JSONObject r) {
+                        try {
+                            if ("success".equals(r.getString("status"))) {
+                                JSONObject loc = r.getJSONObject("location");
+                                result[0] = new LatLng(loc.getDouble("latitude"), loc.getDouble("longitude"));
+                            }
+                        } catch (Exception e) {}
+                        synchronized (lock) { lock.notify(); }
+                    }
+                    public void onError(Exception e) {
+                        synchronized (lock) { lock.notify(); }
+                    }
+                });
 
-            JSONObject result = new JSONObject();
-            result.put("status", "success");
-
-            JSONArray routes = json.optJSONArray("routes");
-            if (routes == null || routes.length() == 0) {
-                result.put("message", "未找到可用路线");
-                return result;
-            }
-
-            JSONObject bestRoute = routes.getJSONObject(0);
-
-            // 基本信息
-            result.put("distance", bestRoute.optString("distance", "0"));
-            result.put("duration", bestRoute.optString("duration", "0"));
-
-            // 格式化距离和时间
-            int distanceMeters = bestRoute.optInt("distance", 0);
-            int durationSeconds = bestRoute.optInt("duration", 0);
-
-            String distanceText = distanceMeters >= 1000
-                ? String.format("%.2fkm", distanceMeters / 1000.0)
-                : distanceMeters + "m";
-
-            String durationText;
-            if (durationSeconds >= 3600) {
-                durationText = String.format("%d小时%d分钟", durationSeconds / 3600, (durationSeconds % 3600) / 60);
-            } else {
-                durationText = String.format("%d分钟", (durationSeconds + 30) / 60);
-            }
-
-            result.put("formatted_distance", distanceText);
-            result.put("formatted_duration", durationText);
-            result.put("transport_mode", mode);
-
-            // 路线步骤
-            JSONArray steps = bestRoute.optJSONArray("steps");
-            JSONArray stepsArray = new JSONArray();
-            if (steps != null) {
-                for (int i = 0; i < steps.length(); i++) {
-                    JSONObject step = steps.getJSONObject(i);
-                    JSONObject stepInfo = new JSONObject();
-                    stepInfo.put("instruction", step.optString("instructions", ""));
-                    stepInfo.put("distance", step.optString("distance", "0"));
-                    stepInfo.put("duration", step.optString("duration", "0"));
-                    stepsArray.put(stepInfo);
+                synchronized (lock) { lock.wait(10000); }
+                
+                if (result[0] == null) {
+                    sendError(callback, "无法获取当前位置");
+                    return null;
                 }
+                return result[0];
+            } else {
+                String[] parts = location.split(",");
+                return new LatLng(Double.parseDouble(parts[0].trim()), Double.parseDouble(parts[1].trim()));
             }
-            result.put("steps", stepsArray);
-
-            // 起点和终点
-            JSONObject origin = bestRoute.optJSONObject("origin");
-            JSONObject destination = bestRoute.optJSONObject("destination");
-            if (origin != null) {
-                result.put("origin_location", origin.optString("location", ""));
-            }
-            if (destination != null) {
-                result.put("destination_location", destination.optString("location", ""));
-            }
-
-            result.put("message", "路线规划成功");
-            return result;
-
         } catch (Exception e) {
-            Log.e(TAG, "解析响应失败", e);
-            try {
-                JSONObject error = new JSONObject();
-                error.put("status", "error");
-                error.put("message", "解析失败：" + e.getMessage());
-                return error;
-            } catch (Exception ignored) {
-                return new JSONObject();
-            }
+            sendError(callback, "解析位置失败：" + e.getMessage());
+            return null;
         }
     }
 
-    private String getApiKey() {
+    private void handleRouteResult(Object result, String mode) {
         try {
-            // 从长期记忆读取
-            SharedPreferences prefs = context.getSharedPreferences("memory", Context.MODE_PRIVATE);
-            String memoryJson = prefs.getString("baidu_map_api_key", null);
-            if (memoryJson != null) {
-                JSONObject memory = new JSONObject(memoryJson);
-                return memory.optString("content", "");
-            }
+            JSONObject response = parseSDKResult(result, mode);
+            if (currentCallback != null) currentCallback.onResult(response);
         } catch (Exception e) {
-            Log.e(TAG, "读取 API Key 失败", e);
+            Log.e(TAG, "处理结果失败", e);
+        } finally {
+            currentCallback = null;
+            currentMode = null;
         }
-        return null;
+    }
+
+    private JSONObject parseSDKResult(Object result, String mode) {
+        JSONObject response = new JSONObject();
+        try {
+            SearchResult.ERRORNO errorCode = null;
+            if (result instanceof DrivingRouteResult) {
+                errorCode = ((DrivingRouteResult) result).error;
+            } else if (result instanceof WalkingRouteResult) {
+                errorCode = ((WalkingRouteResult) result).error;
+            } else if (result instanceof BikingRouteResult) {
+                errorCode = ((BikingRouteResult) result).error;
+            } else if (result instanceof TransitRouteResult) {
+                errorCode = ((TransitRouteResult) result).error;
+            }
+            
+            if (errorCode != null && errorCode != SearchResult.ERRORNO.NO_ERROR) {
+                response.put("status", "error");
+                response.put("message", "路线规划失败：" + errorCode);
+                return response;
+            }
+            
+            List<?> routes = null;
+            if (result instanceof DrivingRouteResult) {
+                routes = ((DrivingRouteResult) result).getRouteLines();
+            } else if (result instanceof WalkingRouteResult) {
+                routes = ((WalkingRouteResult) result).getRouteLines();
+            } else if (result instanceof BikingRouteResult) {
+                routes = ((BikingRouteResult) result).getRouteLines();
+            } else if (result instanceof TransitRouteResult) {
+                routes = ((TransitRouteResult) result).getRouteLines();
+            }
+            
+            if (routes == null || routes.isEmpty()) {
+                response.put("status", "success");
+                response.put("message", "未找到可用路线");
+                return response;
+            }
+            
+            Object bestRoute = routes.get(0);
+            int distance = 0, duration = 0;
+            
+            if (bestRoute instanceof DrivingRouteLine) {
+                distance = ((DrivingRouteLine) bestRoute).getDistance();
+                duration = ((DrivingRouteLine) bestRoute).getDuration();
+            } else if (bestRoute instanceof WalkingRouteLine) {
+                distance = ((WalkingRouteLine) bestRoute).getDistance();
+                duration = ((WalkingRouteLine) bestRoute).getDuration();
+            } else if (bestRoute instanceof BikingRouteLine) {
+                distance = ((BikingRouteLine) bestRoute).getDistance();
+                duration = ((BikingRouteLine) bestRoute).getDuration();
+            } else if (bestRoute instanceof TransitRouteLine) {
+                distance = ((TransitRouteLine) bestRoute).getDistance();
+                duration = ((TransitRouteLine) bestRoute).getDuration();
+            }
+            
+            response.put("status", "success");
+            response.put("distance", String.valueOf(distance));
+            response.put("duration", String.valueOf(duration));
+            response.put("formatted_distance", distance >= 1000 ? 
+                String.format("%.2fkm", distance/1000.0) : distance + "m");
+            response.put("formatted_duration", duration >= 3600 ?
+                String.format("%d小时%d分钟", duration/3600, (duration%3600)/60) :
+                String.format("%d分钟", (duration+30)/60));
+            response.put("transport_mode", mode);
+            response.put("message", "路线规划成功");
+            response.put("steps", new JSONArray());
+            
+        } catch (Exception e) {
+            Log.e(TAG, "parseSDKResult failed", e);
+            try {
+                response.put("status", "error");
+                response.put("message", "解析失败：" + e.getMessage());
+            } catch (Exception ignored) {}
+        }
+        return response;
+    }
+
+    private void sendError(OnResultCallback callback, String message) {
+        if (callback == null) return;
+        try {
+            JSONObject error = new JSONObject();
+            error.put("status", "error");
+            error.put("message", message);
+            callback.onResult(error);
+        } catch (Exception ignored) {}
     }
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "使用百度地图 API 进行路径规划。参数：origin（起点，可用'location'表示当前位置）、destination（终点）、mode（交通方式：driving/walking/riding/transit）。返回距离、时间、详细步骤。API Key 从长期记忆自动读取。";
+        return "使用百度地图 SDK 进行路径规划。参数：origin, destination, mode(driving/walking/riding/transit)。API Key 从清单文件自动读取。";
     }
 }
