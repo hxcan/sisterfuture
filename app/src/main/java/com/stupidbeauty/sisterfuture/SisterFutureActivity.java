@@ -178,7 +178,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   // 🔍 #4997 请求 ID 追踪 - 过滤旧请求的错误回调
   private volatile long currentRequestId = 0;
   private volatile long lastSuccessRequestId = 0;
-n  // === 内置 FTP 服务器相关成员变量 ===
+  // === 内置 FTP 服务器相关成员变量 ===
   private static final int FTP_SERVER_PORT = 2123;  // 端口规划：BlindBox.her=2121, JoyMan=2122, SisterFuture=2123
   private BuiltinFtpServer builtinFtpServer = null;
   private BuiltinFtpServerErrorListener builtinFtpServerErrorListener = null;
@@ -1548,7 +1548,6 @@ n  // === 内置 FTP 服务器相关成员变量 ===
     // ✅ #4997 已完全移除所有日志输出，该方法现为空操作
     // 如需调试，可在调用处临时添加日志
   }
-}
   // === 内置 FTP 服务器方法实现 ===
   
   /**
@@ -1578,3 +1577,5 @@ n  // === 内置 FTP 服务器相关成员变量 ===
     };
     timerObj.schedule(timerTaskObj, 2000); // 延时 2 秒启动
   }
+
+}
