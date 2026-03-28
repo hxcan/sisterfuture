@@ -2,7 +2,6 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
-import android.os.Build;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import androidx.annotation.NonNull;
@@ -11,10 +10,10 @@ import okhttp3.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -94,6 +93,34 @@ public class CreateGitHubCommitTool implements Tool {
         return true;
     }
 
+    /**
+     * 兼容 API 24+ 的文件读取方法
+     */
+    private byte[] readAllBytesCompat(String filePath) throws IOException {
+        File file = new File(filePath);
+        long fileSize = file.length();
+        
+        if (fileSize > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("File too large: " + fileSize + " bytes");
+        }
+        
+        byte[] buffer = new byte[(int) fileSize];
+        int offset = 0;
+        int bytesRead;
+        
+        try (FileInputStream fis = new FileInputStream(file)) {
+            while (offset < fileSize && (bytesRead = fis.read(buffer, offset, (int) fileSize - offset)) != -1) {
+                offset += bytesRead;
+            }
+        }
+        
+        if (offset < fileSize) {
+            throw new IOException("Could not completely read file " + filePath);
+        }
+        
+        return buffer;
+    }
+
     @Override
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
@@ -123,7 +150,8 @@ public class CreateGitHubCommitTool implements Tool {
                         throw new IOException("手机文件不存在：" + phonePath);
                     }
                     
-                    byte[] fileBytes = Files.readAllBytes(Paths.get(phonePath));
+                    // 使用兼容方法读取文件
+                    byte[] fileBytes = readAllBytesCompat(phonePath);
                     
                     // 自动判断文件类型
                     String lowerPath = phonePath.toLowerCase();
@@ -135,7 +163,7 @@ public class CreateGitHubCommitTool implements Tool {
                     
                     if (isBinary) {
                         // 二进制文件：使用 Base64 编码
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                             content = Base64.getEncoder().encodeToString(fileBytes);
                         } else {
                             content = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP);
