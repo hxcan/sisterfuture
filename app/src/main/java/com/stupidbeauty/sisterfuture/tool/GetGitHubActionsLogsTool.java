@@ -14,11 +14,12 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
 /**
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
- * @version 3.0.0 (通用版本 - 移除特定平台分析)
+ * @version 3.0.1 (修复 JSONException 未处理问题)
  */
 public class GetGitHubActionsLogsTool implements Tool {
     
@@ -296,7 +297,13 @@ public class GetGitHubActionsLogsTool implements Tool {
             summary.append("--- ❌ 失败的步骤 ---\n\n");
 
             for (int i = 0; i < errorSteps.length(); i++) {
-                JSONObject step = errorSteps.getJSONObject(i);
+                JSONObject step;
+                try {
+                    step = errorSteps.getJSONObject(i);
+                } catch (Exception e) {
+                    FileLogger.e(TAG, "读取错误步骤失败", e);
+                    continue;
+                }
                 String stepName = step.optString("name", "Unknown");
                 int stepNumber = step.optInt("number", -1);
 
@@ -320,7 +327,13 @@ public class GetGitHubActionsLogsTool implements Tool {
         if (skippedSteps.length() > 0) {
             summary.append("--- ⏭️ 跳过的步骤（由于上述错误）---\n");
             for (int i = 0; i < skippedSteps.length(); i++) {
-                JSONObject step = skippedSteps.getJSONObject(i);
+                JSONObject step;
+                try {
+                    step = skippedSteps.getJSONObject(i);
+                } catch (Exception e) {
+                    FileLogger.e(TAG, "读取跳过步骤失败", e);
+                    continue;
+                }
                 summary.append("   - ").append(step.optString("name", "Unknown"))
                        .append(" (Step ").append(step.optInt("number", -1)).append(")\n");
             }
