@@ -9,6 +9,7 @@ import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
 import android.content.Context;
 
 
+
 /**
  * 工具注册中心 - 集中管理所有工具的注册逻辑
  * 
@@ -38,6 +39,7 @@ public class ToolRegistry
     toolManager.registerTool(new ConversationResetTool(contextManager, toolManager));
     toolManager.registerTool(new GetCurrentTimeTool());
     toolManager.registerTool(new GetLocationTool(context));
+    toolManager.registerTool(new PlanRouteTool(context));
 
     // === 接入点管理工具 ===
     toolManager.registerTool(new SwitchAccessPointTool(modelAccessPointManager));
