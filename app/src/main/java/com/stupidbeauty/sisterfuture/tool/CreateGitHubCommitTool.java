@@ -9,7 +9,10 @@ import com.google.gson.Gson;
 import okhttp3.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.concurrent.ExecutorService;
@@ -63,8 +66,14 @@ public class CreateGitHubCommitTool implements Tool {
                 .put("token", new JSONObject()
                     .put("type", "string")
                     .put("description", "GitHub 个人访问令牌 (PAT)，用于认证"))
+                .put("read_from_phone", new JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否从手机读取文件内容（true 时忽略 content 参数，使用 phone_path）"))
+                .put("phone_path", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "当 read_from_phone=true 时，指定要读取的手机文件路径"))
             );
-            parameters.put("required", new JSONArray(new String[]{"owner", "repo", "branch", "path", "content", "commit_message"}));
+            parameters.put("required", new JSONArray(new String[]{"owner", "repo", "branch", "path", "commit_message"}));
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
@@ -84,6 +93,34 @@ public class CreateGitHubCommitTool implements Tool {
         return true;
     }
 
+    /**
+     * 兼容 API 24+ 的文件读取方法
+     */
+    private byte[] readAllBytesCompat(String filePath) throws IOException {
+        File file = new File(filePath);
+        long fileSize = file.length();
+        
+        if (fileSize > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("File too large: " + fileSize + " bytes");
+        }
+        
+        byte[] buffer = new byte[(int) fileSize];
+        int offset = 0;
+        int bytesRead;
+        
+        try (FileInputStream fis = new FileInputStream(file)) {
+            while (offset < fileSize && (bytesRead = fis.read(buffer, offset, (int) fileSize - offset)) != -1) {
+                offset += bytesRead;
+            }
+        }
+        
+        if (offset < fileSize) {
+            throw new IOException("Could not completely read file " + filePath);
+        }
+        
+        return buffer;
+    }
+
     @Override
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
@@ -92,10 +129,57 @@ public class CreateGitHubCommitTool implements Tool {
                 String repo = arguments.getString("repo");
                 String branch = arguments.getString("branch");
                 String path = arguments.getString("path");
-                String content = arguments.getString("content");
                 String commitMessage = arguments.getString("commit_message");
                 String token = arguments.optString("token", "").trim();
                 String encoding = arguments.optString("encoding", "text");
+                
+                // 新增参数
+                boolean readFromPhone = arguments.optBoolean("read_from_phone", false);
+                String phonePath = arguments.optString("phone_path", "");
+                
+                String content = "";
+                
+                // 处理从手机读取文件的逻辑
+                if (readFromPhone) {
+                    if (phonePath.isEmpty()) {
+                        throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path 参数");
+                    }
+                    
+                    File phoneFile = new File(phonePath);
+                    if (!phoneFile.exists()) {
+                        throw new IOException("手机文件不存在：" + phonePath);
+                    }
+                    
+                    // 使用兼容方法读取文件
+                    byte[] fileBytes = readAllBytesCompat(phonePath);
+                    
+                    // 自动判断文件类型
+                    String lowerPath = phonePath.toLowerCase();
+                    boolean isBinary = lowerPath.endsWith(".jar") || lowerPath.endsWith(".apk") || 
+                                       lowerPath.endsWith(".png") || lowerPath.endsWith(".jpg") || 
+                                       lowerPath.endsWith(".gif") || lowerPath.endsWith(".pdf") || 
+                                       lowerPath.endsWith(".zip") || lowerPath.endsWith(".keystore") || 
+                                       lowerPath.endsWith(".jks");
+                    
+                    if (isBinary) {
+                        // 二进制文件：使用 Base64 编码
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            content = Base64.getEncoder().encodeToString(fileBytes);
+                        } else {
+                            content = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP);
+                        }
+                        encoding = "base64";
+                        FileLogger.d(TAG, "CreateGitHubCommit: Read binary file from phone, size=" + fileBytes.length + ", encoded length=" + content.length());
+                    } else {
+                        // 文本文件：直接使用 UTF-8 字符串
+                        content = new String(fileBytes, StandardCharsets.UTF_8);
+                        encoding = "text";
+                        FileLogger.d(TAG, "CreateGitHubCommit: Read text file from phone, size=" + fileBytes.length);
+                    }
+                } else {
+                    // 原有逻辑：使用传入的 content 参数
+                    content = arguments.getString("content");
+                }
 
                 int contentLength = content.length();
                 FileLogger.d(TAG, "CreateGitHubCommit DEBUG: Received content length: " + contentLength + " chars");
@@ -273,10 +357,9 @@ public class CreateGitHubCommitTool implements Tool {
                     .put("repo", repo)
                     .put("path", path)
                     .put("branch", branch)
-                    .put("encoding", encoding));
+                    .put("encoding", encoding)
+                    .put("read_from_phone", readFromPhone));
                 debugInfo.put("content_received_length", contentLength);
-                debugInfo.put("expected_binary_size", 0);
-                debugInfo.put("warning_if_large", contentLength > 5000);
                 debugInfo.put("verification_status", "OK");
                 
                 result.put("debug_info", debugInfo);
@@ -284,7 +367,7 @@ public class CreateGitHubCommitTool implements Tool {
                 callback.onResult(result);
 
             } catch (Exception e) {
-                FileLogger.e(TAG, "執行出錯", e);
+                FileLogger.e(TAG, "执行出错", e);
                 try {
                     JSONObject error = new JSONObject();
                     error.put("status", "error");
@@ -298,11 +381,6 @@ public class CreateGitHubCommitTool implements Tool {
 
     /**
      * v18 修复：从内向外创建嵌套目录树，正确保留每一级的现有内容
-     * 
-     * 关键修复点：
-     * 1. 从外向内遍历目录，在上一级目录的 tree 中查找当前目录（而不是始终在 baseTree 中查找）
-     * 2. 收集每一级的现有条目
-     * 3. 从内向外创建 tree 时，正确合并每一级的现有内容
      */
     private String createNestedTree(OkHttpClient client, String token, String owner, String repo, 
                                     String baseTreeSha, String fullPath, String blobSha) 
@@ -336,12 +414,9 @@ public class CreateGitHubCommitTool implements Tool {
             if (existingDirSha != null) {
                 FileLogger.d(TAG, "[NestedTree v18]   ✓ 找到目录 '" + currentDirName + "' (SHA: " + existingDirSha.substring(0, 10) + "...)");
                 parentTreeShas[i] = existingDirSha;
-                
-                // 下一级要在当前目录的 tree 中查找
                 currentCheckTreeSha = existingDirSha;
             } else {
                 FileLogger.d(TAG, "[NestedTree v18]   ✗ 未找到目录 '" + currentDirName + "'，后续层级都不存在");
-                // 当前目录不存在，后续层级也都不存在
                 for (int j = i; j < dirParts.length; j++) {
                     parentTreeShas[j] = null;
                 }
@@ -362,19 +437,16 @@ public class CreateGitHubCommitTool implements Tool {
             String existingDirSha = parentTreeShas[i];
             
             if (existingDirSha != null) {
-                // 目录已存在：获取现有内容并合并
                 FileLogger.d(TAG, "[NestedTree v18] ✓ 目录 '" + currentDirName + "' 已存在，获取现有内容并合并");
                 
                 JSONArray existingEntries = getTreeEntries(client, token, owner, repo, existingDirSha);
                 FileLogger.d(TAG, "[NestedTree v18]   现有目录包含 " + existingEntries.length() + " 个条目");
                 
-                // 打印现有条目列表
                 for (int j = 0; j < existingEntries.length(); j++) {
                     JSONObject entry = existingEntries.getJSONObject(j);
                     FileLogger.d(TAG, "[NestedTree v18]   现有条目 [" + j + "]: " + entry.getString("path") + " (" + entry.getString("type") + ")");
                 }
                 
-                // 更新或添加子条目
                 boolean found = false;
                 for (int j = 0; j < existingEntries.length(); j++) {
                     JSONObject entry = existingEntries.getJSONObject(j);
@@ -398,7 +470,6 @@ public class CreateGitHubCommitTool implements Tool {
                     existingEntries.put(newEntry);
                 }
                 
-                // 创建合并后的 tree
                 JSONObject treeBody = new JSONObject();
                 treeBody.put("tree", existingEntries);
                 
@@ -420,7 +491,6 @@ public class CreateGitHubCommitTool implements Tool {
                 
                 FileLogger.d(TAG, "[NestedTree v18]   ✓ 合并后 Tree SHA: " + currentTreeSha.substring(0, 10) + "...");
             } else {
-                // 目录不存在：创建新 tree
                 FileLogger.d(TAG, "[NestedTree v18] ✗ 目录 '" + currentDirName + "' 不存在，创建新目录");
                 
                 JSONArray treeArray = new JSONArray();

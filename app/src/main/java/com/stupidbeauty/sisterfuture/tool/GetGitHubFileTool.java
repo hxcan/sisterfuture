@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.os.Build;
+import android.os.Environment;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import com.google.gson.Gson;
@@ -9,6 +10,8 @@ import okhttp3.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -56,6 +59,12 @@ public class GetGitHubFileTool implements Tool {
                     .put("encoding", new JSONObject()
                             .put("type", "string")
                             .put("description", "返回模式：\"text\"（自动解码 Base64，默认）或 \"base64\"（保留原始编码）"))
+                    .put("save_to_phone", new JSONObject()
+                            .put("type", "boolean")
+                            .put("description", "是否将文件保存到手机存储（适用于大文件，避免返回内容撑爆上下文）"))
+                    .put("phone_path", new JSONObject()
+                            .put("type", "string")
+                            .put("description", "手机保存路径，默认 /sdcard/Download/文件名"))
             );
             parameters.put("required", new JSONArray(new String[]{"owner", "repo", "path"}));
             functionDef.put("parameters", parameters);
@@ -86,7 +95,10 @@ public class GetGitHubFileTool implements Tool {
                 String path = arguments.getString("path");
                 String branch = arguments.optString("branch", "master");
                 String token = arguments.optString("token", "").trim();
-                String encoding = arguments.optString("encoding", "text"); // 新增参数，默认"text"
+                String encoding = arguments.optString("encoding", "text");
+                // 新增参数
+                boolean saveToPhone = arguments.optBoolean("save_to_phone", false);
+                String phonePath = arguments.optString("phone_path", "");
 
                 // 创建结果对象，立即包含请求参数
                 JSONObject result = new JSONObject();
@@ -96,7 +108,8 @@ public class GetGitHubFileTool implements Tool {
                         .put("repo", repo)
                         .put("path", path)
                         .put("branch", branch)
-                        .put("encoding", encoding));
+                        .put("encoding", encoding)
+                        .put("save_to_phone", saveToPhone));
 
                 // 2. 尝试从备注恢复默认值
                 if (token.isEmpty()) {
@@ -127,14 +140,11 @@ public class GetGitHubFileTool implements Tool {
                         .build();
                 Response response = client.newCall(request).execute();
                 if (!response.isSuccessful()) {
-                    // 在错误情况下利用 sister_future_note 字段提供提示
                     try {
                         JSONObject error = new JSONObject();
                         error.put("status", "error");
                         error.put("message", "请求失败：" + response.code() + " " + response.message());
                         error.put("type", "IOException");
-
-                        // 必须返回请求参数
                         if (arguments != null) {
                             error.put("request_params", new JSONObject()
                                     .put("owner", arguments.optString("owner", ""))
@@ -142,13 +152,10 @@ public class GetGitHubFileTool implements Tool {
                                     .put("path", arguments.optString("path", ""))
                                     .put("branch", arguments.optString("branch", "master")));
                         }
-
-                        // 利用该字段向大模型发送调试提示
                         error.put("sister_future_note", "请检查分支参数是否正确，当前仓库使用的是 \"master\" 分支而非 \"main\" 分支。\n原错误信息：" + response.message());
-
                         callback.onResult(error);
                     } catch (Exception ignored) {}
-                    return; // 结束执行
+                    return;
                 }
                 ResponseBody body = response.body();
                 if (body == null) {
@@ -157,13 +164,50 @@ public class GetGitHubFileTool implements Tool {
                 String resultStr = body.string();
                 JSONObject resultJson = new JSONObject(resultStr);
 
-                // 正确的解码逻辑：当存在 content 字段、编码方式为 base64 且 encoding 参数不是"base64"时才解码
+                // 处理保存到手机的功能
+                if (saveToPhone && resultJson.has("content")) {
+                    String encodedContent = resultJson.getString("content");
+                    encodedContent = encodedContent.replaceAll("\\s+", "");
+                    
+                    byte[] decodedBytes;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        decodedBytes = Base64.getDecoder().decode(encodedContent);
+                    } else {
+                        decodedBytes = android.util.Base64.decode(encodedContent, android.util.Base64.DEFAULT);
+                    }
+                    
+                    // 确定保存路径
+                    String fileName = path.substring(path.lastIndexOf('/') + 1);
+                    if (phonePath.isEmpty()) {
+                        phonePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getAbsolutePath() + "/" + fileName;
+                    }
+                    
+                    // 保存文件
+                    File outputFile = new File(phonePath);
+                    File parentDir = outputFile.getParentFile();
+                    if (parentDir != null && !parentDir.exists()) {
+                        parentDir.mkdirs();
+                    }
+                    
+                    try (FileOutputStream fos = new FileOutputStream(outputFile)) {
+                        fos.write(decodedBytes);
+                    }
+                    
+                    // 返回保存成功信息
+                    result.put("file_saved", true);
+                    result.put("phone_path", phonePath);
+                    result.put("file_size", decodedBytes.length);
+                    result.put("fetched_at", System.currentTimeMillis());
+                    callback.onResult(result);
+                    return;
+                }
+
+                // 正常的返回逻辑（不解码Base64）
                 if (resultJson.has("content") && resultJson.getString("encoding").equals("base64")) {
                     String encodedContent = resultJson.getString("content");
                     
                     // 如果 encoding="base64"，跳过解码，保留原始内容
                     if (!"base64".equalsIgnoreCase(encoding)) {
-                        // 关键修复：移除所有空白字符
                         encodedContent = encodedContent.replaceAll("\\s+", "");
                         byte[] decodedBytes;
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -174,26 +218,19 @@ public class GetGitHubFileTool implements Tool {
                         String decodedContent = new String(decodedBytes, StandardCharsets.UTF_8);
                         resultJson.put("decoded_content", decodedContent);
                     } else {
-                        // 保留原始的 encoding="base64" 模式下的 content 字段
                         resultJson.put("raw_content", resultJson.getString("content"));
-                        // 调试日志：记录返回的 Base64 内容长度和预计文件大小
                         int originalLength = resultJson.getString("raw_content").length();
                         Log.d(TAG, "GetGitHubFile DEBUG: Returning Base64 with length: " + originalLength);
-                        Log.d(TAG, "GetGitHubFile DEBUG: Expected binary size approx: " + (originalLength * 3 / 4) + " bytes");
-                        
-                        // 添加完整性验证提示
                         if (originalLength > 2500) {
-                            Log.w(TAG, "GetGitHubFile WARNING: Large Base64 content detected (" + originalLength + " chars). " +
-                                   "May be truncated by LLM during transfer. Consider using write_memory or add_note for storage.");
+                            Log.w(TAG, "GetGitHubFile WARNING: Large Base64 content detected (" + originalLength + " chars).");
                         }
                     }
-                    resultJson.remove("content"); // 移除原始 content 字段以节省带宽
+                    resultJson.remove("content");
                 }
 
                 result.put("file_info", resultJson);
                 result.put("fetched_at", System.currentTimeMillis());
                 
-                // 添加调试信息到结果中
                 JSONObject debugInfo = new JSONObject();
                 debugInfo.put("tool_name", "get_github_file");
                 debugInfo.put("params", result.getJSONObject("request_params"));
@@ -205,7 +242,6 @@ public class GetGitHubFileTool implements Tool {
                 }
                 result.put("debug_info", debugInfo);
                 
-                // 成功情况下不再添加任何附加信息
                 callback.onResult(result);
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
@@ -214,20 +250,16 @@ public class GetGitHubFileTool implements Tool {
                     error.put("status", "error");
                     error.put("message", e.getMessage());
                     error.put("type", e.getClass().getSimpleName());
-
-                    // 在错误情况下也必须返回请求参数
                     if (arguments != null) {
                         error.put("request_params", new JSONObject()
                                 .put("owner", arguments.optString("owner", ""))
                                 .put("repo", arguments.optString("repo", ""))
                                 .put("path", arguments.optString("path", ""))
                                 .put("branch", arguments.optString("branch", "master"))
-                                .put("encoding", arguments.optString("encoding", "text")));
+                                .put("encoding", arguments.optString("encoding", "text"))
+                                .put("save_to_phone", arguments.optBoolean("save_to_phone", false)));
                     }
-
-                    // 利用该字段向大模型发送调试提示
                     error.put("sister_future_note", "请检查分支参数是否正确，当前仓库使用的是 \"master\" 分支而非 \"main\" 分支。\n原错误信息：" + e.getMessage());
-
                     callback.onResult(error);
                 } catch (Exception ignored) {}
             }
@@ -237,6 +269,6 @@ public class GetGitHubFileTool implements Tool {
     // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求读取 GitHub 文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 github_token 等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试 404 等错误情况。\n\n新增功能：\n- 支持通过参数 encoding=\"base64\" 可选返回 Base64 编码的原始文件内容（不自动解码）\n- 对于二进制文件（.keystore, .png, .jpg 等），建议默认使用 base64 模式以避免数据损坏\n- 返回结构包含：content (Base64 字符串), encoding(\"base64\"或\"text\"), 以及原有的 file_info 和 request_params\n- 适用场景建议：\n  - 二进制文件（.keystore, .apk, .png 等）必须使用 encoding=\"base64\"\n  - 文本文件（.yml, .md, .java 等）使用默认 encoding=\"text\" 以节省资源\n\n**调试增强：**\n- 自动记录并返回 raw_content_length 参数\n- 对超过 2500 字符的 Base64 内容发出警告提示\n- 在 response 中包含 debug_info 字段供分析截断问题";
+        return "必须在用户明确要求读取 GitHub 文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 github_token 等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试 404 等错误情况。\n\n新增功能：\n- 支持通过参数 encoding=\"base64\" 可选返回 Base64 编码的原始文件内容（不自动解码）\n- 对于二进制文件（.keystore, .png, .jpg 等），建议默认使用 base64 模式以避免数据损坏\n- 支持 save_to_phone 参数：将文件直接保存到手机存储，避免大文件返回撑爆上下文\n- 支持 phone_path 参数：指定手机保存路径\n- 适用场景建议：\n  - 二进制文件（.keystore, .apk, .png 等）必须使用 encoding=\"base64\"\n  - 大文件建议使用 save_to_phone=true 直接保存到手机";
     }
 }
