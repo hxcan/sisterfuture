@@ -79,6 +79,10 @@ import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import com.stupidbeauty.builtinftp.BuiltinFtpServer;
+import com.stupidbeauty.sisterfuture.listener.BuiltinFtpServerErrorListener;
+import java.util.Timer;
+import java.util.TimerTask;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.VolleyError;
@@ -174,6 +178,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   // 🔍 #4997 请求 ID 追踪 - 过滤旧请求的错误回调
   private volatile long currentRequestId = 0;
   private volatile long lastSuccessRequestId = 0;
+  // === 内置 FTP 服务器相关成员变量 ===
+  private static final int FTP_SERVER_PORT = 2123;  // 端口规划：BlindBox.her=2121, JoyMan=2122, SisterFuture=2123
+  private BuiltinFtpServer builtinFtpServer = null;
+  private BuiltinFtpServerErrorListener builtinFtpServerErrorListener = null;
 
 	@Override
   public void onInit(int arg0)
@@ -1321,6 +1329,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     connectSignals();
     displayExistingContext();
     
+    // 启动内置 FTP 服务器（用于数据备份）
+    scheduleStartBuiltinFtpServer();
+
     // #4895 启动前台服务
     SisterFutureService.startForegroundService(this);
     requestNotificationPermission();
@@ -1537,4 +1548,34 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // ✅ #4997 已完全移除所有日志输出，该方法现为空操作
     // 如需调试，可在调用处临时添加日志
   }
+  // === 内置 FTP 服务器方法实现 ===
+  
+  /**
+   * 启动内置 FTP 服务器（用于数据备份）
+   */
+  private void startBuiltinFtpServer() {
+    builtinFtpServer = new BuiltinFtpServer(this);
+    builtinFtpServerErrorListener = new BuiltinFtpServerErrorListener();
+    
+    builtinFtpServer.setPort(FTP_SERVER_PORT);
+    builtinFtpServer.setAllowActiveMode(false);
+    builtinFtpServer.setErrorListener(builtinFtpServerErrorListener);
+    builtinFtpServer.start();
+    
+    Log.d(TAG, "内置 FTP 服务器已启动，端口：" + FTP_SERVER_PORT);
+  }
+
+  /**
+   * 计划启动内置 FTP 服务器（延时 2 秒）
+   */
+  private void scheduleStartBuiltinFtpServer() {
+    Timer timerObj = new Timer();
+    TimerTask timerTaskObj = new TimerTask() {
+      public void run() {
+        startBuiltinFtpServer();
+      }
+    };
+    timerObj.schedule(timerTaskObj, 2000); // 延时 2 秒启动
+  }
+
 }

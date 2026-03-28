@@ -50,6 +50,10 @@ dependencies
   
   // #4834 添加 Timber 日志库（用于日志输出到外置存储）
   implementation 'com.jakewharton.timber:timber:5.0.1'
+  
+  // Builtin FTP Server - 最新版（用于数据备份）
+  implementation 'com.github.hxcan:builtinftp:2025.12.15'
+  implementation 'com.github.hxcan:ftpserver:2023.9.8'
 }
 
 android 
