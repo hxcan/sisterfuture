@@ -18,12 +18,13 @@ import android.util.Log;
 import org.apache.commons.net.ftp.FTPFile;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
+
 /**
  * 列出 FTP 目录内容工具
  * 用于浏览服务器上的文件系统结构
  * 
  * @author 未来姐姐
- * @version 1.2
+ * @version 1.3
  * @since 2026-03-16
  */
 public class ListFtpDirectoryTool implements Tool {
@@ -129,7 +130,7 @@ public class ListFtpDirectoryTool implements Tool {
                 
                 FileLogger.d(TAG, "🔑 [FTP] 解析结果 - Host: " + host + ", Port: " + port + ", Path: " + path + ", Username: " + username + ", Password: " + (password.isEmpty() ? "(empty)" : "***"));
 
-                // 🔍 连接服务器
+                // 🔌 连接服务器
                 FileLogger.d(TAG, "🔌 [FTP] 正在连接到 " + host + ":" + port);
                 ftpClient.connect(host, port);
                 FileLogger.d(TAG, "📶 [FTP] 连接成功，响应码：" + ftpClient.getReplyCode());
@@ -139,7 +140,7 @@ public class ListFtpDirectoryTool implements Tool {
                     throw new IOException("连接失败：" + ftpClient.getReplyString());
                 }
 
-                // 🔍 登录
+                // 🔐 登录
                 FileLogger.d(TAG, "🔐 [FTP] 正在登录，用户名：" + username);
                 boolean loginResult = ftpClient.login(username, password);
                 FileLogger.d(TAG, "📝 [FTP] 登录结果：" + loginResult + ", 响应码：" + ftpClient.getReplyCode());
@@ -149,15 +150,32 @@ public class ListFtpDirectoryTool implements Tool {
                     throw new IOException("登录失败：" + ftpClient.getReplyString());
                 }
 
-                // 🔍 进入被动模式
+                // 🔄 进入被动模式
                 FileLogger.d(TAG, "🔄 [FTP] 进入被动模式");
                 ftpClient.enterLocalPassiveMode();
                 
-                // 🔍 设置文件类型
+                // 📄 设置文件类型
                 FileLogger.d(TAG, "📄 [FTP] 设置文件类型为 ASCII");
                 ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
 
-                // 🔍 列出文件
+                // 🔍 【新增调试】先发送原始 LIST 命令，捕获服务器响应
+                FileLogger.d(TAG, "🔍 [FTP] === 开始调试：发送原始 LIST 命令 ===");
+                ftpClient.sendCommand("LIST", path);
+                int replyCode = ftpClient.getReplyCode();
+                FileLogger.d(TAG, "📊 [FTP] LIST 命令响应码：" + replyCode);
+                
+                if (FTPReply.isPositiveCompletion(replyCode) || FTPReply.isPositiveIntermediate(replyCode)) {
+                    String[] rawLines = ftpClient.getReplyStrings();
+                    FileLogger.d(TAG, "📝 [FTP] 原始 LIST 响应共 " + rawLines.length + " 行:");
+                    for (int i = 0; i < rawLines.length; i++) {
+                        FileLogger.d(TAG, "  [" + i + "] " + rawLines[i]);
+                    }
+                } else {
+                    FileLogger.w(TAG, "⚠️ [FTP] LIST 命令返回非完成状态码：" + replyCode);
+                }
+                FileLogger.d(TAG, "🔍 [FTP] === 原始 LIST 调试结束 ===");
+
+                // 📋 列出文件（使用 listFiles）
                 FileLogger.d(TAG, "📋 [FTP] 正在列出目录：" + path);
                 long listStartTime = System.currentTimeMillis();
                 FTPFile[] files = ftpClient.listFiles(path);
