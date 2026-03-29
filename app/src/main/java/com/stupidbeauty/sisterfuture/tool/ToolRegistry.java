@@ -6,6 +6,7 @@ import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
 import com.stupidbeauty.sisterfuture.tools.ListPhoneDirectoryTool;
 import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
+import com.stupidbeauty.sisterfuture.tools.EditFileByLineTool;
 import android.content.Context;
 
 
@@ -132,5 +133,8 @@ public class ToolRegistry
     // === 手机文件访问工具（新增） ===
     toolManager.registerTool(new ListPhoneDirectoryTool(context));
     toolManager.registerTool(new ReadPhoneFileTool(context));
+
+    // 🔥 新增：按行文件编辑工具
+    toolManager.registerTool(new EditFileByLineTool(context));
   }
 }
