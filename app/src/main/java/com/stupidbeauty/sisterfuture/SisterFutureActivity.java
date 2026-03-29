@@ -1567,9 +1567,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       if (files != null) {
         for (File file : files) {
-          FileLogger.d(TAG, "  - 📄 [FTP_DEBUG] " + (file.isDirectory() ? "DIR" : "FILE") + ": " + file.getName());
-        }
-      }
       
       // 检查关键子目录
       FileLogger.d(TAG, "📂 [FTP_DEBUG] databases/ 存在：" + new File(parentDir, "databases").exists());
