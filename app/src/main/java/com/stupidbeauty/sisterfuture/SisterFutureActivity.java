@@ -381,7 +381,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
     }
-    Log.d(TAG, "历史消息加载完成，总数=" + history.size());
   }
 
   public void sendMessageToSister(String message)
@@ -1088,7 +1087,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           JSONObject call = toolCallsArray.getJSONObject(i);
           String id = call.getString("id");
           JSONObject wrapper = pendingResults.get(id);
-
           if (wrapper != null)
           {
             String name = wrapper.getString("name");
@@ -1542,12 +1540,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     mIat= SpeechRecognizer.createRecognizer(this, null);
   }
 
-  // 🔍 #4839 调试：输出请求内容（已完全移除日志输出）
-  private void logRequestMessages(JSONArray messagesArray)
-  {
-    // ✅ #4997 已完全移除所有日志输出，该方法现为空操作
-    // 如需调试，可在调用处临时添加日志
-  }
   // === 内置 FTP 服务器方法实现 ===
   
   /**
