@@ -1541,12 +1541,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     mIat= SpeechRecognizer.createRecognizer(this, null);
   }
 
-  // 🔍 #4839 调试：输出请求内容（已完全移除日志输出）
-  private void logRequestMessages(JSONArray messagesArray)
-  {
-    // ✅ #4997 已完全移除所有日志输出，该方法现为空操作
-    // 如需调试，可在调用处临时添加日志
-  }
   // === 内置 FTP 服务器方法实现 ===
   
   /**
@@ -1567,6 +1561,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       if (files != null) {
         for (File file : files) {
+          FileLogger.d(TAG, "  - 📄 [FTP_DEBUG] " + (file.isDirectory() ? "DIR" : "FILE") + ": " + file.getName());
+        }
+      }
       
       // 检查关键子目录
       FileLogger.d(TAG, "📂 [FTP_DEBUG] databases/ 存在：" + new File(parentDir, "databases").exists());
