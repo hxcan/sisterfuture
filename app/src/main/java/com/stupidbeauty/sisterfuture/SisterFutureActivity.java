@@ -381,7 +381,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
     }
-    Log.d(TAG, "历史消息加载完成，总数=" + history.size());
   }
 
   public void sendMessageToSister(String message)
