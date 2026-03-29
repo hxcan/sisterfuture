@@ -21,6 +21,7 @@ import com.stupidbeauty.sisterfuture.tool.Tool;
  * - 支持传入文件路径读取后编辑
  * - 支持输出为文件内容或写入到文件路径
  * - 支持多种行编辑操作：插入、删除、修改、替换
+ * - 支持创建新文件（当不提供输入内容但提供输出路径时）
  */
 public class EditFileByLineTool implements Tool
 {
@@ -44,23 +45,23 @@ public class EditFileByLineTool implements Tool
         {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "edit_file_by_line");
-            functionDef.put("description", "按行编辑文件内容。支持插入、删除、修改、替换行操作。");
+            functionDef.put("description", "按行编辑文件内容或创建新文件。支持插入、删除、修改、替换行操作。当不提供输入内容但提供输出路径时，将创建新文件。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             
             JSONObject properties = new JSONObject();
             
-            // source 参数（必填）
+            // source 参数（可选）
             properties.put("source", new JSONObject()
                 .put("type", "string")
-                .put("description", "文件内容（直接传入文本）或文件路径（以 / 或字母盘符开头）"));
+                .put("description", "文件内容（直接传入文本）或文件路径。留空且提供 outputPath 时将创建新文件"));
             
-            // inputType 参数（必填）
+            // inputType 参数（可选）
             properties.put("inputType", new JSONObject()
                 .put("type", "string")
-                .put("enum", new JSONArray(new String[]{"content", "filepath"}))
-                .put("description", "输入类型：'content' (直接内容) | 'filepath' (文件路径)"));
+                .put("enum", new JSONArray(new String[]{"content", "filepath", "none"}))
+                .put("description", "输入类型：'content' (直接内容) | 'filepath' (文件路径) | 'none' (创建新文件，默认)"));
             
             // outputType 参数（必填）
             properties.put("outputType", new JSONObject()
@@ -68,10 +69,10 @@ public class EditFileByLineTool implements Tool
                 .put("enum", new JSONArray(new String[]{"content", "filepath"}))
                 .put("description", "输出类型：'content' (返回内容) | 'filepath' (写入文件)"));
             
-            // outputPath 参数（可选）
+            // outputPath 参数（当 outputType='filepath' 时必填）
             properties.put("outputPath", new JSONObject()
                 .put("type", "string")
-                .put("description", "输出文件路径（当 outputType='filepath' 时必需）"));
+                .put("description", "输出文件路径（当 outputType='filepath' 时必需）。若 inputType='none' 则创建新文件"));
             
             // encoding 参数（可选）
             properties.put("encoding", new JSONObject()
@@ -79,10 +80,10 @@ public class EditFileByLineTool implements Tool
                 .put("enum", new JSONArray(new String[]{"utf-8", "base64"}))
                 .put("description", "编码方式，默认 utf-8"));
             
-            // operations 参数（必填）
+            // operations 参数（可选）
             properties.put("operations", new JSONObject()
                 .put("type", "array")
-                .put("description", "要执行的编辑操作列表")
+                .put("description", "要执行的编辑操作列表。创建新文件时可提供初始内容")
                 .put("items", new JSONObject()
                     .put("type", "object")
                     .put("properties", new JSONObject()
@@ -112,7 +113,7 @@ public class EditFileByLineTool implements Tool
                     )));
             
             parameters.put("properties", properties);
-            parameters.put("required", new JSONArray(new String[]{"source", "inputType", "outputType", "operations"}));
+            parameters.put("required", new JSONArray(new String[]{"outputType"}));
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
@@ -132,59 +133,75 @@ public class EditFileByLineTool implements Tool
     @Override
     public JSONObject execute(JSONObject arguments) throws Exception
     {
-        String source = arguments.getString("source");
-        String inputType = arguments.getString("inputType");
+        String source = arguments.optString("source", null);
+        String inputType = arguments.optString("inputType", "none");
         String outputType = arguments.getString("outputType");
         String outputPath = arguments.optString("outputPath", null);
         String encoding = arguments.optString("encoding", "utf-8");
-        JSONArray operations = arguments.getJSONArray("operations");
+        JSONArray operations = arguments.optJSONArray("operations");
 
         List<String> operationLog = new ArrayList<>();
 
         try
         {
             // 1. 获取原始内容
-            List<String> lines;
-            if ("filepath".equals(inputType))
+            List<String> lines = new ArrayList<>();
+            
+            if ("filepath".equals(inputType) && source != null && !source.isEmpty())
             {
+                // 从文件读取
                 lines = readFileLines(source, encoding);
                 operationLog.add("✓ 读取文件：" + source);
             }
-            else
+            else if ("content".equals(inputType) && source != null)
             {
+                // 使用传入的内容
                 lines = splitIntoLines(source);
                 operationLog.add("✓ 使用传入的内容");
+            }
+            else
+            {
+                // 创建新文件模式
+                if ("filepath".equals(outputType) && (outputPath == null || outputPath.isEmpty()))
+                {
+                    throw new IllegalArgumentException("创建新文件时必须提供 outputPath 参数");
+                }
+                lines = new ArrayList<>();
+                operationLog.add("✓ 创建新文件模式");
             }
 
             int originalLineCount = lines.size();
             operationLog.add("✓ 原始行数：" + originalLineCount);
 
-            // 2. 执行编辑操作
-            for (int i = 0; i < operations.length(); i++)
+            // 2. 执行编辑操作（如果有）
+            if (operations != null && operations.length() > 0)
             {
-                JSONObject op = operations.getJSONObject(i);
-                String opType = op.getString("type");
-
-                switch (opType)
+                for (int i = 0; i < operations.length(); i++)
                 {
-                    case "insert":
-                        lines = applyInsert(lines, op);
-                        operationLog.add("✓ 插入 " + op.optJSONArray("lines").length() + " 行到位置 " + op.getInt("lineNumber"));
-                        break;
-                    case "delete":
-                        lines = applyDelete(lines, op);
-                        operationLog.add("✓ 删除行 " + op.getInt("startLine") + "-" + (op.has("endLine") ? op.getInt("endLine") : "EOF"));
-                        break;
-                    case "update":
-                        lines = applyUpdate(lines, op);
-                        operationLog.add("✓ 更新行 " + op.getInt("lineNumber"));
-                        break;
-                    case "replace":
-                        lines = applyReplace(lines, op);
-                        operationLog.add("✓ 替换行 " + op.getInt("startLine") + "-" + op.getInt("endLine") + " 为 " + op.optJSONArray("newLines").length() + " 行");
-                        break;
-                    default:
-                        throw new IllegalArgumentException("未知操作类型：" + opType);
+                    JSONObject op = operations.getJSONObject(i);
+                    String opType = op.getString("type");
+
+                    switch (opType)
+                    {
+                        case "insert":
+                            lines = applyInsert(lines, op);
+                            operationLog.add("✓ 插入 " + op.optJSONArray("lines").length() + " 行到位置 " + op.getInt("lineNumber"));
+                            break;
+                        case "delete":
+                            lines = applyDelete(lines, op);
+                            operationLog.add("✓ 删除行 " + op.getInt("startLine") + "-" + (op.has("endLine") ? op.getInt("endLine") : "EOF"));
+                            break;
+                        case "update":
+                            lines = applyUpdate(lines, op);
+                            operationLog.add("✓ 更新行 " + op.getInt("lineNumber"));
+                            break;
+                        case "replace":
+                            lines = applyReplace(lines, op);
+                            operationLog.add("✓ 替换行 " + op.getInt("startLine") + "-" + op.getInt("endLine") + " 为 " + op.optJSONArray("newLines").length() + " 行");
+                            break;
+                        default:
+                            throw new IllegalArgumentException("未知操作类型：" + opType);
+                    }
                 }
             }
 
@@ -204,9 +221,23 @@ public class EditFileByLineTool implements Tool
                 {
                     throw new IllegalArgumentException("outputPath is required when outputType is 'filepath'");
                 }
+                
+                // 创建父目录（如果不存在）
+                File outputFile = new File(outputPath);
+                File parentDir = outputFile.getParentFile();
+                if (parentDir != null && !parentDir.exists())
+                {
+                    boolean mkdirsResult = parentDir.mkdirs();
+                    if (!mkdirsResult)
+                    {
+                        throw new IOException("无法创建父目录：" + parentDir.getAbsolutePath());
+                    }
+                    operationLog.add("✓ 创建父目录：" + parentDir.getAbsolutePath());
+                }
+                
                 writeFileContent(outputPath, finalContent, encoding);
                 result.put("outputPath", outputPath);
-                operationLog.add("✓ 写入文件：" + outputPath);
+                operationLog.add("✓ " + (originalLineCount == 0 ? "创建" : "写入") + " 文件：" + outputPath);
             }
             else
             {
@@ -230,7 +261,7 @@ public class EditFileByLineTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求编辑文件时才调用此工具。支持两种输入模式（直接内容/文件路径）和两种输出模式（返回内容/写入文件）。操作类型包括：insert（插入行）、delete（删除行）、update（修改单行）、replace（批量替换行）。行号从 0 开始计数。";
+        return "必须在用户明确要求编辑文件或创建新文件时才调用此工具。支持三种输入模式：'content'（直接内容）、'filepath'（文件路径）、'none'（创建新文件，默认）。支持两种输出模式：'content'（返回内容）、'filepath'（写入文件）。操作类型包括：insert（插入行）、delete（删除行）、update（修改单行）、replace（批量替换行）。行号从 0 开始计数。创建新文件时只需提供 outputPath 和 operations（可选），不提供 source 和 inputType。";
     }
 
     /**
