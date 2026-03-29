@@ -1088,7 +1088,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           JSONObject call = toolCallsArray.getJSONObject(i);
           String id = call.getString("id");
           JSONObject wrapper = pendingResults.get(id);
-
           if (wrapper != null)
           {
             String name = wrapper.getString("name");
