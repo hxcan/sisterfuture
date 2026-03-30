@@ -405,6 +405,7 @@ public class TongYiClient
                       FileLogger.d(TAG, "[SSE Content] delta.content is empty");
                     }
                     
+                    if (delta.has("tool_calls")) {
                       FileLogger.d(TAG, "[SSE Tool Calls] delta contains tool_calls");
                     }
                   }
