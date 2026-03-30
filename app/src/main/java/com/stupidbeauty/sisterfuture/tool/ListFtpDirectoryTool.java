@@ -2,8 +2,8 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import org.apache.commons.net.ftp.FTPReply;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.content.Context;
@@ -15,8 +15,6 @@ import androidx.annotation.NonNull;
 import android.util.Log;
 import org.apache.commons.net.ftp.FTPFile;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
-import org.apache.commons.net.io.CopyStreamAdapter;
-import org.apache.commons.net.io.CopyStreamListener;
 
 
 /**
@@ -81,33 +79,6 @@ public class ListFtpDirectoryTool implements Tool {
             FTPClient ftpClient = new FTPClient();
             long startTime = System.currentTimeMillis();
             
-            // 🔧【新增】创建数据流监听器，捕获所有传输的数据
-            CopyStreamAdapter streamListener = new CopyStreamAdapter() {
-                @Override
-                public void bytesTransferred(long totalBytesTransferred, int bytesTransferred, long streamSize) {
-                    FileLogger.d(TAG, "📦 [STREAM] 单次传输：" + bytesTransferred + " 字节，累计：" + totalBytesTransferred + " 字节");
-                }
-            };
-            
-            // 🔧【新增】创建自定义监听器，记录原始数据内容
-            CopyStreamListener rawDataListener = new CopyStreamListener() {
-                @Override
-                public void bytesTransferred(long totalBytesTransferred, int bytesTransferred, long streamSize) {
-                    // 已在 streamListener 中处理
-                }
-                
-                @Override
-                public void bytesTransferred(CopyStreamEvent event) {
-                    long totalBytes = event.getTotalBytesTransferred();
-                    int currentBytes = event.getBytesTransferred();
-                    FileLogger.d(TAG, "🔍 [RAW-DATA] 当前传输：" + currentBytes + " 字节，已累计：" + totalBytes + " 字节");
-                    
-                    // 记录数据源信息
-                    Object source = event.getSource();
-                    FileLogger.d(TAG, "🔍 [RAW-DATA] 数据源类型：" + (source != null ? source.getClass().getSimpleName() : "null"));
-                }
-            };
-            
             try {
                 String url = arguments.getString("url").trim();
                 FileLogger.d(TAG, "📡 [FTP] 开始执行，URL: " + url);
@@ -133,7 +104,6 @@ public class ListFtpDirectoryTool implements Tool {
                             username = auth.substring(0, colonIdx);
                             password = auth.substring(colonIdx + 1);
                         } else {
-                            // 🔍 修复：处理 anonymous@host 格式（没有冒号）
                             username = auth;
                             password = "";
                         }
@@ -185,12 +155,56 @@ public class ListFtpDirectoryTool implements Tool {
                 FileLogger.d(TAG, "📄 [FTP] 设置文件类型为 ASCII");
                 ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
 
-                // 🔧【新增】附加数据流监听器
-                FileLogger.d(TAG, "🔧 [DEBUG] 附加数据流监听器到 FTP 客户端");
-                ftpClient.setCopyStreamListener(streamListener);
-
-                // 📋 列出文件（使用 listFiles）
-                FileLogger.d(TAG, "📋 [FTP] 正在列出目录：" + path);
+                // 🔧【DEBUG】手动发送 LIST 命令并捕获原始响应数据
+                FileLogger.d(TAG, "🔧 [DEBUG] 手动发送 LIST 命令来捕获原始数据...");
+                
+                // 发送 NLST 命令获取原始列表数据
+                FileLogger.d(TAG, "🔧 [DEBUG] 发送 NLST " + path + " 命令");
+                boolean listCommandSuccess = ftpClient.sendCommand("NLST", path);
+                FileLogger.d(TAG, "🔧 [DEBUG] NLST 命令响应码: " + listCommandSuccess);
+                
+                // 读取响应数据行
+                FileLogger.d(TAG, "🔧 [DEBUG] 开始读取 NLST 数据流...");
+                StringBuilder rawData = new StringBuilder();
+                rawData.append("=== NLST 原始数据开始 ===\n");
+                
+                BufferedReader reader = new BufferedReader(new InputStreamReader(ftpClient.getReplyStrings() != null ? 
+                    new java.io.ByteArrayInputStream(String.join("\n", ftpClient.getReplyStrings()).getBytes()) :
+                    new java.io.ByteArrayInputStream(new byte[0])));
+                
+                // 使用 FTPClient 的数据流读取方式
+                try {
+                    java.io.InputStream inputStream = ftpClient.openDataConnection("NLST", path);
+                    if (inputStream != null) {
+                        BufferedReader dataReader = new BufferedReader(new InputStreamReader(inputStream));
+                        String line;
+                        int lineCount = 0;
+                        while ((line = dataReader.readLine()) != null) {
+                            lineCount++;
+                            rawData.append("行[").append(lineCount).append("]: ").append(line).append("\n");
+                            FileLogger.d(TAG, "📄 [DATA] " + line);
+                        }
+                        dataReader.close();
+                        rawData.append("=== NLST 原始数据结束，共 ").append(lineCount).append(" 行 ===\n");
+                        FileLogger.d(TAG, "🔧 [DEBUG] NLST 数据读取完成，共 " + lineCount + " 行");
+                    } else {
+                        FileLogger.d(TAG, "⚠️ [DEBUG] 无法打开数据连接");
+                        rawData.append("无法打开数据连接\n");
+                    }
+                } catch (Exception e) {
+                    FileLogger.e(TAG, "❌ [DEBUG] 读取 NLST 数据时出错：" + e.getMessage(), e);
+                    rawData.append("读取出错：").append(e.getMessage()).append("\n");
+                }
+                
+                // 记录完整原始数据到日志
+                FileLogger.d(TAG, "📋 [DEBUG] NLST 原始数据完整记录:\n" + rawData.toString());
+                
+                // 消费掉命令响应码
+                int replyCode = ftpClient.getReplyCode();
+                FileLogger.d(TAG, "🔧 [DEBUG] NLST 最终响应码: " + replyCode);
+                
+                // 尝试用标准 listFiles 方法
+                FileLogger.d(TAG, "📋 [FTP] 正在列出目录（使用标准方法）：" + path);
                 long listStartTime = System.currentTimeMillis();
                 FTPFile[] files = ftpClient.listFiles(path);
                 long listEndTime = System.currentTimeMillis();
@@ -222,6 +236,7 @@ public class ListFtpDirectoryTool implements Tool {
                 result.put("path", path);
                 result.put("host", host);
                 result.put("processed_at", System.currentTimeMillis());
+                result.put("debug_raw_data", rawData.toString());
                 
                 FileLogger.d(TAG, "✅ [FTP] 执行完成，总耗时：" + (System.currentTimeMillis() - startTime) + "ms, 返回文件数：" + fileList.length());
 
