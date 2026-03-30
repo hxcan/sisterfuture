@@ -9,10 +9,6 @@ import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.json.JSONObject;
 import org.json.JSONArray;
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import androidx.annotation.NonNull;
 import android.util.Log;
 import org.apache.commons.net.ftp.FTPFile;
@@ -26,7 +22,7 @@ import org.apache.commons.net.io.CopyStreamEvent;
  * 用于浏览服务器上的文件系统结构
  * 
  * @author 未来姐姐
- * @version 1.4 (DEBUG)
+ * @version 1.5 (DEBUG)
  * @since 2026-03-16
  */
 public class ListFtpDirectoryTool implements Tool {
@@ -178,23 +174,6 @@ public class ListFtpDirectoryTool implements Tool {
                 // 🔧【新增】附加数据流监听器
                 FileLogger.d(TAG, "🔧 [DEBUG] 附加数据流监听器到 FTP 客户端");
                 ftpClient.setCopyStreamListener(streamListener);
-
-                // 🔍 【调试】先发送原始 LIST 命令，捕获服务器响应
-                FileLogger.d(TAG, "🔍 [FTP] === 开始调试：发送原始 LIST 命令 ===");
-                ftpClient.sendCommand("LIST", path);
-                int replyCode = ftpClient.getReplyCode();
-                FileLogger.d(TAG, "📊 [FTP] LIST 命令响应码：" + replyCode);
-                
-                if (FTPReply.isPositiveCompletion(replyCode) || FTPReply.isPositiveIntermediate(replyCode)) {
-                    String[] rawLines = ftpClient.getReplyStrings();
-                    FileLogger.d(TAG, "📝 [FTP] 原始 LIST 响应共 " + rawLines.length + " 行:");
-                    for (int i = 0; i < rawLines.length; i++) {
-                        FileLogger.d(TAG, "  [" + i + "] " + rawLines[i]);
-                    }
-                } else {
-                    FileLogger.w(TAG, "⚠️ [FTP] LIST 命令返回非完成状态码：" + replyCode);
-                }
-                FileLogger.d(TAG, "🔍 [FTP] === 原始 LIST 调试结束 ===");
 
                 // 📋 列出文件（使用 listFiles）
                 FileLogger.d(TAG, "📋 [FTP] 正在列出目录：" + path);
