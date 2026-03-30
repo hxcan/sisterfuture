@@ -4,6 +4,7 @@ import org.apache.commons.net.ftp.FTPReply;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import android.content.Context;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
@@ -77,14 +78,14 @@ public class ListFtpDirectoryTool implements Tool {
         executor.execute(() -> {
             FTPClient ftpClient = new FTPClient();
             long startTime = System.currentTimeMillis();
-            long totalBytesTransferred = 0;
-            int transferCount = 0;
+            // 使用 AtomicInteger 以便在匿名内部类中修改变量值
+            final AtomicInteger transferCount = new AtomicInteger(0);
             
             // 🔧【DEBUG】创建数据流监听器，记录传输字节数
             CopyStreamAdapter streamListener = new CopyStreamAdapter() {
                 @Override
                 public void bytesTransferred(long totalBytesTransferred, int bytesTransferred, long streamSize) {
-                    FileLogger.d(TAG, "📊 [STREAM] 传输事件 #" + (++transferCount) + 
+                    FileLogger.d(TAG, "📊 [STREAM] 传输事件 #" + transferCount.incrementAndGet() + 
                         " | 本次: " + bytesTransferred + " 字节" +
                         " | 累计: " + totalBytesTransferred + " 字节" +
                         " | 流大小: " + streamSize);
@@ -168,10 +169,10 @@ public class ListFtpDirectoryTool implements Tool {
 
                 // 📋 列出文件
                 FileLogger.d(TAG, "📋 [FTP] 列出目录：" + path);
-                int filesBefore = transferCount;
+                int countBefore = transferCount.get();
                 FTPFile[] files = ftpClient.listFiles(path);
-                int filesAfter = transferCount;
-                FileLogger.d(TAG, "✅ [FTP] listFiles() 完成，传输事件数：" + (filesAfter - filesBefore) + ", 文件数：" + (files != null ? files.length : 0));
+                int countAfter = transferCount.get();
+                FileLogger.d(TAG, "✅ [FTP] listFiles() 完成，传输事件数：" + (countAfter - countBefore) + ", 文件数：" + (files != null ? files.length : 0));
                 
                 JSONArray fileList = new JSONArray();
 
@@ -195,7 +196,7 @@ public class ListFtpDirectoryTool implements Tool {
                 result.put("path", path);
                 result.put("host", host);
                 result.put("processed_at", System.currentTimeMillis());
-                result.put("transfer_events_count", filesAfter - filesBefore);
+                result.put("transfer_events_count", countAfter - countBefore);
                 
                 FileLogger.d(TAG, "✅ [FTP] 完成，总耗时：" + (System.currentTimeMillis() - startTime) + "ms");
 
