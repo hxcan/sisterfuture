@@ -362,9 +362,6 @@ public class TongYiClient
       {
         lineCount++;
         
-        String linePreview = line.length() > 500 ? line.substring(0, 500) + "..." : line;
-        FileLogger.d(TAG, "[SSE Line " + lineCount + "] " + linePreview);
-        
         if (!htmlChecked)
         {
           htmlChecked = true;
@@ -401,13 +398,8 @@ public class TongYiClient
                     if (!content.isEmpty()) {
                       contentLineCount++;
                       allContentBuilder.append(content);
-                      FileLogger.d(TAG, "[SSE Content #" + contentLineCount + "] " + (content.length() > 200 ? content.substring(0, 200) + "..." : content));
                     } else {
                       FileLogger.d(TAG, "[SSE Content] delta.content is empty");
-                    }
-                    
-                    if (delta.has("tool_calls")) {
-                      FileLogger.d(TAG, "[SSE Tool Calls] delta contains tool_calls");
                     }
                   }
                 }

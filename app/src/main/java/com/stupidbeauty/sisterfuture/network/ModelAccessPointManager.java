@@ -145,9 +145,7 @@ public class ModelAccessPointManager
         String apiKey = null;
         try {
           apiKey = obj.getString("apiKey");
-          FileLogger.d(TAG, "Loaded apiKey for access point " + obj.getString("name"));
         } catch (JSONException e) {
-          FileLogger.d(TAG, "No apiKey found for access point, setting to null");
         }
         
         accessPoints.add(new ModelAccessPoint(
