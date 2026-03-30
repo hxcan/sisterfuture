@@ -381,6 +381,58 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
     }
+    
+    // ✅ #5029 新增：检查最后一条消息，自动恢复请求
+    checkAndResumeLastMessage();
+  }
+  
+  // ✅ #5029 新增：检查并恢复最后一条消息的请求
+  private void checkAndResumeLastMessage()
+  {
+    List<JSONObject> history = contextManager.getHistory();
+    if (history == null || history.isEmpty())
+    {
+      FileLogger.d(TAG, "🔄 [AUTO_RESUME] 历史记录为空，跳过自动恢复");
+      return;
+    }
+    
+    // 获取最后一条消息
+    JSONObject lastMsg = history.get(history.size() - 1);
+    String role = lastMsg.optString("role", "");
+    String toolCallId = lastMsg.optString("tool_call_id", "");
+    
+    FileLogger.d(TAG, "🔄 [AUTO_RESUME] 检查最后一条消息：role=" + role + ", toolCallId=" + toolCallId);
+    
+    boolean shouldResume = false;
+    String resumeReason = "";
+    
+    // 情况 1：最后一条是用户消息 → 需要继续回复
+    if ("user".equals(role))
+    {
+      shouldResume = true;
+      resumeReason = "最后一条是用户消息";
+    }
+    // 情况 2：最后一条是工具调用结果 → 需要继续处理
+    else if ("tool".equals(role) && !toolCallId.isEmpty())
+    {
+      shouldResume = true;
+      resumeReason = "最后一条是工具调用结果";
+    }
+    
+    if (shouldResume)
+    {
+      FileLogger.i(TAG, "🔄 [AUTO_RESUME] 触发自动恢复：" + resumeReason);
+      
+      // 延迟 500ms 后发送请求，避免 UI 还未完全加载
+      new Handler(Looper.getMainLooper()).postDelayed(() -> {
+        FileLogger.d(TAG, "🔄 [AUTO_RESUME] 开始发送自动恢复请求");
+        sendChatRequestTongYi();
+      }, 500);
+    }
+    else
+    {
+      FileLogger.d(TAG, "🔄 [AUTO_RESUME] 不需要自动恢复（最后一条是 AI 回复或无 tool_call_id 的工具消息）");
+    }
   }
 
   public void sendMessageToSister(String message)
