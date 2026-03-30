@@ -17,6 +17,8 @@ import androidx.annotation.NonNull;
 import android.util.Log;
 import org.apache.commons.net.ftp.FTPFile;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import org.apache.commons.net.io.CopyStreamAdapter;
+import org.apache.commons.net.io.CopyStreamEvent;
 
 
 /**
@@ -24,7 +26,7 @@ import com.stupidbeauty.sisterfuture.utils.FileLogger;
  * 用于浏览服务器上的文件系统结构
  * 
  * @author 未来姐姐
- * @version 1.3
+ * @version 1.4 (DEBUG)
  * @since 2026-03-16
  */
 public class ListFtpDirectoryTool implements Tool {
@@ -80,6 +82,21 @@ public class ListFtpDirectoryTool implements Tool {
         executor.execute(() -> {
             FTPClient ftpClient = new FTPClient();
             long startTime = System.currentTimeMillis();
+            
+            // 🔧【新增】创建数据流监听器，捕获所有传输的数据
+            CopyStreamAdapter streamListener = new CopyStreamAdapter() {
+                @Override
+                public void bytesTransferred(CopyStreamEvent event) {
+                    long totalBytes = event.getBytesTransferred();
+                    long currentBytes = event.getCurrentBytesTransferred();
+                    FileLogger.d(TAG, "📊 [STREAM] 数据传输进度：" + currentBytes + " / " + totalBytes + " 字节");
+                }
+
+                @Override
+                public void bytesTransferred(long totalBytesTransferred, int bytesTransferred, long streamSize) {
+                    FileLogger.d(TAG, "📦 [STREAM] 单次传输：" + bytesTransferred + " 字节，累计：" + totalBytesTransferred + " 字节");
+                }
+            };
             
             try {
                 String url = arguments.getString("url").trim();
@@ -158,7 +175,11 @@ public class ListFtpDirectoryTool implements Tool {
                 FileLogger.d(TAG, "📄 [FTP] 设置文件类型为 ASCII");
                 ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
 
-                // 🔍 【新增调试】先发送原始 LIST 命令，捕获服务器响应
+                // 🔧【新增】附加数据流监听器
+                FileLogger.d(TAG, "🔧 [DEBUG] 附加数据流监听器到 FTP 客户端");
+                ftpClient.setCopyStreamListener(streamListener);
+
+                // 🔍 【调试】先发送原始 LIST 命令，捕获服务器响应
                 FileLogger.d(TAG, "🔍 [FTP] === 开始调试：发送原始 LIST 命令 ===");
                 ftpClient.sendCommand("LIST", path);
                 int replyCode = ftpClient.getReplyCode();
