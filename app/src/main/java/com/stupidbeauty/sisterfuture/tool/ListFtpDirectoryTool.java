@@ -4,6 +4,7 @@ import org.apache.commons.net.ftp.FTPReply;
 import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -75,82 +76,113 @@ public class ListFtpDirectoryTool implements Tool {
     }
 
     /**
-     * 读取数据连接socket的原始内容
+     * 使用主动模式捕获 FTP 服务器发送的原始数据流
      */
-    private String readDataFromSocket(Socket socket) throws IOException {
-        StringBuilder data = new StringBuilder();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        String line;
-        int lineCount = 0;
-        while ((line = reader.readLine()) != null) {
-            lineCount++;
-            data.append("行[").append(lineCount).append("]: ").append(line).append("\n");
-            FileLogger.d(TAG, "📄 [RAW-DATA] " + line);
-        }
-        reader.close();
-        return data.toString();
-    }
-    
-    /**
-     * 手动发送 LIST 命令并捕获完整原始响应数据
-     */
-    private String manualListCommand(FTPClient ftpClient, String path) {
+    private String captureFtpDataWithActiveMode(FTPClient ftpClient, String path) {
         StringBuilder result = new StringBuilder();
-        result.append("=== 手动 LIST 命令调试开始 ===\n");
+        result.append("=== 主动模式数据流捕获开始 ===\n");
+        
+        ServerSocket serverSocket = null;
+        Socket dataSocket = null;
         
         try {
-            // 先发送 NLST 命令
-            FileLogger.d(TAG, "🔧 [DEBUG] 发送 NLST " + path);
-            int[] replyCodes = ftpClient.sendCommandWithReply("NLST", path);
-            result.append("NLST 响应码: ").append(replyCodes != null && replyCodes.length > 0 ? replyCodes[0] : "null").append("\n");
-            FileLogger.d(TAG, "🔧 [DEBUG] NLST 响应码: " + (replyCodes != null && replyCodes.length > 0 ? replyCodes[0] : "null"));
+            // 创建 ServerSocket 用于接收数据连接
+            serverSocket = new ServerSocket(0); // 自动分配端口
+            int port = serverSocket.getLocalPort();
+            FileLogger.d(TAG, "🔧 [DEBUG] 创建 ServerSocket 监听端口: " + port);
             
-            // 打印所有响应行
-            String[] replies = ftpClient.getReplyStrings();
-            if (replies != null) {
-                result.append("NLST 服务器响应行数: ").append(replies.length).append("\n");
-                for (int i = 0; i < replies.length; i++) {
-                    result.append("响应[").append(i).append("]: ").append(replies[i]).append("\n");
-                    FileLogger.d(TAG, "📝 [DEBUG] 响应[" + i + "]: " + replies[i]);
-                }
+            // 将端口转换为 FTP 需要的格式 (高位字节 + 低位字节)
+            String ip = "127.0.0.1"; // 本地回环地址
+            String[] ipParts = ip.split("\\.");
+            int portHigh = port / 256;
+            int portLow = port % 256;
+            String portCommand = ipParts[0] + "," + ipParts[1] + "," + ipParts[2] + "," + ipParts[3] + "," + portHigh + "," + portLow;
+            
+            // 发送 PORT 命令
+            FileLogger.d(TAG, "🔧 [DEBUG] 发送 PORT 命令: " + portCommand);
+            boolean portSuccess = ftpClient.sendCommand("PORT", portCommand);
+            result.append("PORT 命令响应: ").append(ftpClient.getReplyString()).append("\n");
+            FileLogger.d(TAG, "📝 [DEBUG] PORT 响应: " + ftpClient.getReplyString());
+            
+            if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
+                result.append("PORT 命令失败!\n");
+                FileLogger.e(TAG, "❌ [DEBUG] PORT 命令失败");
+                return result.toString();
             }
             
-            // 使用 listNames 获取原始数据
-            FileLogger.d(TAG, "🔧 [DEBUG] 调用 listNames() 获取原始文件名列表");
-            String[] names = ftpClient.listNames(path);
-            if (names != null) {
-                result.append("\nlistNames() 返回 " + names.length + " 个名称:\n");
-                FileLogger.d(TAG, "🔧 [DEBUG] listNames() 返回 " + names.length + " 个名称");
-                for (int i = 0; i < names.length; i++) {
-                    result.append("  名称[").append(i).append("]: ").append(names[i]).append("\n");
-                    FileLogger.d(TAG, "  📁 [" + i + "]: " + names[i]);
+            // 发送 NLST 命令
+            FileLogger.d(TAG, "🔧 [DEBUG] 发送 NLST 命令: " + path);
+            boolean listSuccess = ftpClient.sendCommand("NLST", path);
+            result.append("NLST 命令响应码: ").append(listSuccess).append("\n");
+            FileLogger.d(TAG, "📝 [DEBUG] NLST 响应码: " + listSuccess);
+            
+            // 立即接受数据连接（设置超时）
+            serverSocket.setSoTimeout(10000); // 10秒超时
+            FileLogger.d(TAG, "🔧 [DEBUG] 等待数据连接...");
+            
+            try {
+                dataSocket = serverSocket.accept();
+                FileLogger.d(TAG, "✅ [DEBUG] 数据连接已建立: " + dataSocket.getInetAddress());
+                result.append("数据连接已建立 from: ").append(dataSocket.getInetAddress()).append("\n");
+                
+                // 读取原始数据流
+                FileLogger.d(TAG, "🔧 [DEBUG] 开始读取数据流...");
+                result.append("\n--- 原始数据内容 ---\n");
+                
+                BufferedReader reader = new BufferedReader(new InputStreamReader(dataSocket.getInputStream()));
+                String line;
+                int lineCount = 0;
+                int totalBytes = 0;
+                
+                while ((line = reader.readLine()) != null) {
+                    lineCount++;
+                    totalBytes += line.getBytes().length + 1; // +1 for newline
+                    
+                    // 记录原始行
+                    result.append("行[").append(lineCount).append("](长度=").append(line.length()).append("): ").append(line).append("\n");
+                    
+                    // 同时记录到日志
+                    FileLogger.d(TAG, "📄 [RAW] 行[" + lineCount + "]: " + line);
                 }
-            } else {
-                result.append("\nlistNames() 返回 null\n");
-                FileLogger.d(TAG, "⚠️ [DEBUG] listNames() 返回 null");
+                
+                result.append("--- 原始数据结束 ---\n");
+                result.append("共 ").append(lineCount).append(" 行，总计约 ").append(totalBytes).append(" 字节\n");
+                
+                FileLogger.d(TAG, "🔧 [DEBUG] 数据读取完成: " + lineCount + " 行，约 " + totalBytes + " 字节");
+                
+                reader.close();
+                
+            } catch (Exception e) {
+                result.append("读取数据时出错: ").append(e.getMessage()).append("\n");
+                FileLogger.e(TAG, "❌ [DEBUG] 读取数据出错: " + e.getMessage(), e);
             }
             
-            // 尝试使用 LIST 命令（非 NLST）
-            FileLogger.d(TAG, "🔧 [DEBUG] 发送 LIST " + path);
-            replyCodes = ftpClient.sendCommandWithReply("LIST", path);
-            result.append("\nLIST 响应码: ").append(replyCodes != null && replyCodes.length > 0 ? replyCodes[0] : "null").append("\n");
-            FileLogger.d(TAG, "🔧 [DEBUG] LIST 响应码: " + (replyCodes != null && replyCodes.length > 0 ? replyCodes[0] : "null"));
-            
-            replies = ftpClient.getReplyStrings();
-            if (replies != null) {
-                result.append("LIST 服务器响应行数: ").append(replies.length).append("\n");
-                for (int i = 0; i < replies.length; i++) {
-                    result.append("响应[").append(i).append("]: ").append(replies[i]).append("\n");
-                    FileLogger.d(TAG, "📝 [DEBUG] LIST 响应[" + i + "]: " + replies[i]);
-                }
-            }
+            // 获取最终响应
+            int replyCode = ftpClient.getReplyCode();
+            result.append("\n最终响应码: ").append(replyCode).append("\n");
+            result.append("最终响应: ").append(ftpClient.getReplyString()).append("\n");
+            FileLogger.d(TAG, "📝 [DEBUG] 最终响应: " + replyCode + " - " + ftpClient.getReplyString());
             
         } catch (Exception e) {
             result.append("\n发生错误: ").append(e.getClass().getSimpleName()).append(" - ").append(e.getMessage()).append("\n");
-            FileLogger.e(TAG, "❌ [DEBUG] 手动 LIST 命令出错：" + e.getMessage(), e);
+            FileLogger.e(TAG, "❌ [DEBUG] 主动模式数据捕获出错: " + e.getMessage(), e);
+        } finally {
+            // 清理资源
+            try {
+                if (dataSocket != null && !dataSocket.isClosed()) {
+                    dataSocket.close();
+                    FileLogger.d(TAG, "🔧 [DEBUG] 关闭数据 socket");
+                }
+                if (serverSocket != null && !serverSocket.isClosed()) {
+                    serverSocket.close();
+                    FileLogger.d(TAG, "🔧 [DEBUG] 关闭 server socket");
+                }
+            } catch (Exception e) {
+                FileLogger.e(TAG, "❌ [DEBUG] 清理资源出错: " + e.getMessage());
+            }
         }
         
-        result.append("=== 手动 LIST 命令调试结束 ===\n");
+        result.append("=== 主动模式数据流捕获结束 ===\n");
         return result.toString();
     }
 
@@ -159,6 +191,7 @@ public class ListFtpDirectoryTool implements Tool {
         executor.execute(() -> {
             FTPClient ftpClient = new FTPClient();
             long startTime = System.currentTimeMillis();
+            StringBuilder allDebugInfo = new StringBuilder();
             
             try {
                 String url = arguments.getString("url").trim();
@@ -206,7 +239,7 @@ public class ListFtpDirectoryTool implements Tool {
                     }
                 }
                 
-                FileLogger.d(TAG, "🔑 [FTP] 解析结果 - Host: " + host + ", Port: " + port + ", Path: " + path + ", Username: " + username);
+                FileLogger.d(TAG, "🔑 [FTP] 解析结果 - Host: " + host + ", Port: " + port + ", Path: " + path);
 
                 // 🔌 连接服务器
                 FileLogger.d(TAG, "🔌 [FTP] 正在连接到 " + host + ":" + port);
@@ -228,32 +261,34 @@ public class ListFtpDirectoryTool implements Tool {
                     throw new IOException("登录失败：" + ftpClient.getReplyString());
                 }
 
-                // 🔄 进入被动模式
-                FileLogger.d(TAG, "🔄 [FTP] 进入被动模式");
-                ftpClient.enterLocalPassiveMode();
-                
-                // 📄 设置文件类型
+                // 设置文件类型
                 FileLogger.d(TAG, "📄 [FTP] 设置文件类型为 ASCII");
                 ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
 
-                // 🔧【DEBUG】手动发送 LIST 命令并捕获原始响应数据
-                FileLogger.d(TAG, "🔧 [DEBUG] 开始手动 LIST 命令调试...");
-                String debugInfo = manualListCommand(ftpClient, path);
-                FileLogger.d(TAG, "📋 [DEBUG] 调试信息:\n" + debugInfo);
+                // 🔧【DEBUG】使用主动模式捕获原始数据流
+                FileLogger.d(TAG, "🔧 [DEBUG] 使用主动模式捕获 FTP 数据流...");
+                String activeModeData = captureFtpDataWithActiveMode(ftpClient, path);
+                allDebugInfo.append(activeModeData);
+                FileLogger.d(TAG, "📋 [DEBUG] 主动模式捕获结果:\n" + activeModeData);
                 
-                // 使用标准方法获取文件列表
-                FileLogger.d(TAG, "📋 [FTP] 正在列出目录（使用标准方法）：" + path);
+                // 🔧【DEBUG】同时也用被动模式对比
+                FileLogger.d(TAG, "🔧 [DEBUG] 切换到被动模式测试 listFiles()...");
+                ftpClient.enterLocalPassiveMode();
+                
+                FileLogger.d(TAG, "📋 [FTP] 正在列出目录（被动模式）：" + path);
                 long listStartTime = System.currentTimeMillis();
                 FTPFile[] files = ftpClient.listFiles(path);
                 long listEndTime = System.currentTimeMillis();
                 FileLogger.d(TAG, "✅ [FTP] 目录列表完成，耗时：" + (listEndTime - listStartTime) + "ms, 文件数：" + (files != null ? files.length : 0));
                 
-                // 🔍 输出原始文件列表
+                // 输出文件列表
                 if (files != null) {
                     for (int i = 0; i < files.length; i++) {
                         FTPFile file = files[i];
-                        FileLogger.d(TAG, "  📁 [" + i + "] 名称：" + file.getName() + ", 类型：" + (file.isDirectory() ? "目录" : "文件") + ", 大小：" + file.getSize() + " 字节");
+                        FileLogger.d(TAG, "  📁 [" + i + "] 名称：" + file.getName());
                     }
+                } else {
+                    FileLogger.d(TAG, "⚠️ [FTP] listFiles() 返回 null");
                 }
                 
                 JSONArray fileList = new JSONArray();
@@ -278,9 +313,9 @@ public class ListFtpDirectoryTool implements Tool {
                 result.put("path", path);
                 result.put("host", host);
                 result.put("processed_at", System.currentTimeMillis());
-                result.put("debug_raw_data", debugInfo);
+                result.put("debug_active_mode_raw_data", activeModeData);
                 
-                FileLogger.d(TAG, "✅ [FTP] 执行完成，总耗时：" + (System.currentTimeMillis() - startTime) + "ms, 返回文件数：" + fileList.length());
+                FileLogger.d(TAG, "✅ [FTP] 执行完成，总耗时：" + (System.currentTimeMillis() - startTime) + "ms");
 
                 callback.onResult(result);
             } catch (Exception e) {
@@ -295,7 +330,6 @@ public class ListFtpDirectoryTool implements Tool {
             } finally {
                 try {
                     if (ftpClient.isConnected()) {
-                        FileLogger.d(TAG, "👋 [FTP] 断开连接");
                         ftpClient.logout();
                         ftpClient.disconnect();
                     }
