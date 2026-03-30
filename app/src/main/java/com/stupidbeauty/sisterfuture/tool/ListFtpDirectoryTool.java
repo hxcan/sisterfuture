@@ -2,6 +2,8 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import org.apache.commons.net.ftp.FTPReply;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.content.Context;
@@ -14,6 +16,7 @@ import android.util.Log;
 import org.apache.commons.net.ftp.FTPFile;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import org.apache.commons.net.io.CopyStreamAdapter;
+import org.apache.commons.net.io.CopyStreamListener;
 
 
 /**
@@ -83,6 +86,25 @@ public class ListFtpDirectoryTool implements Tool {
                 @Override
                 public void bytesTransferred(long totalBytesTransferred, int bytesTransferred, long streamSize) {
                     FileLogger.d(TAG, "📦 [STREAM] 单次传输：" + bytesTransferred + " 字节，累计：" + totalBytesTransferred + " 字节");
+                }
+            };
+            
+            // 🔧【新增】创建自定义监听器，记录原始数据内容
+            CopyStreamListener rawDataListener = new CopyStreamListener() {
+                @Override
+                public void bytesTransferred(long totalBytesTransferred, int bytesTransferred, long streamSize) {
+                    // 已在 streamListener 中处理
+                }
+                
+                @Override
+                public void bytesTransferred(CopyStreamEvent event) {
+                    long totalBytes = event.getTotalBytesTransferred();
+                    int currentBytes = event.getBytesTransferred();
+                    FileLogger.d(TAG, "🔍 [RAW-DATA] 当前传输：" + currentBytes + " 字节，已累计：" + totalBytes + " 字节");
+                    
+                    // 记录数据源信息
+                    Object source = event.getSource();
+                    FileLogger.d(TAG, "🔍 [RAW-DATA] 数据源类型：" + (source != null ? source.getClass().getSimpleName() : "null"));
                 }
             };
             
