@@ -14,7 +14,6 @@ import android.util.Log;
 import org.apache.commons.net.ftp.FTPFile;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import org.apache.commons.net.io.CopyStreamAdapter;
-import org.apache.commons.net.io.CopyStreamEvent;
 
 
 /**
@@ -81,13 +80,6 @@ public class ListFtpDirectoryTool implements Tool {
             
             // 🔧【新增】创建数据流监听器，捕获所有传输的数据
             CopyStreamAdapter streamListener = new CopyStreamAdapter() {
-                @Override
-                public void bytesTransferred(CopyStreamEvent event) {
-                    long totalBytes = event.getBytesTransferred();
-                    long currentBytes = event.getCurrentBytesTransferred();
-                    FileLogger.d(TAG, "📊 [STREAM] 数据传输进度：" + currentBytes + " / " + totalBytes + " 字节");
-                }
-
                 @Override
                 public void bytesTransferred(long totalBytesTransferred, int bytesTransferred, long streamSize) {
                     FileLogger.d(TAG, "📦 [STREAM] 单次传输：" + bytesTransferred + " 字节，累计：" + totalBytesTransferred + " 字节");
