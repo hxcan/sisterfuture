@@ -631,10 +631,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     currentRequestId = requestId;
     FileLogger.d(TAG, "🆔 [REQUEST_ID] 开始发送请求 #" + requestId + " | 当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex());
     
-    // 🔍 #4997 救援调试：请求发起前记录状态
-    FileLogger.d(TAG, "📊 [FAILURE_COUNT] 当前连续失败次数：" + modelAccessPointManager.getConsecutiveFailures());
-    FileLogger.d(TAG, "开始发送请求，当前接入点：" + modelAccessPointManager.getCurrentAccessPoint().getName());
-    
     // #4895 更新通知状态：正在发送请求
     SisterFutureService.updateNotificationStatus(this, "正在发送请求...");
 
@@ -809,8 +805,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
             FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 接入点不可用，计数器递增：" + failures);
-            FileLogger.d(TAG, "🔥 [FAILURE_COUNT] 当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex() + 
-                          " / 阈值：" + (modelAccessPointManager.getAccessPointCount() * 2));
             
             // 🔍 #4997【阶段 3】记录重试
             FileLogger.d(TAG, "🔄 [RETRY] 准备重试，thread=" + Thread.currentThread().getName());
