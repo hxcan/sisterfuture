@@ -826,7 +826,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   protected void parseTongYiResponse(String jsonString)
   {
-    FileLogger.d(TAG, "收到响应");
     try
     {
       TongYiResponse response = new Gson().fromJson(jsonString, TongYiResponse.class);
