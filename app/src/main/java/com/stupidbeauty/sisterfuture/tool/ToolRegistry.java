@@ -6,7 +6,6 @@ import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
 import com.stupidbeauty.sisterfuture.tools.ListPhoneDirectoryTool;
 import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
-import com.stupidbeauty.sisterfuture.tools.EditFileByLineTool;
 import android.content.Context;
 
 
@@ -99,6 +98,9 @@ public class ToolRegistry
     
     // 🔥 新增：GitHub Actions 日志获取工具（异步版本，需要 context）
     toolManager.registerTool(new GetGitHubActionsLogsTool(context));
+    
+    // 🔥 新增：GitHub Pull Request 创建工具
+    toolManager.registerTool(new CreatePullRequestTool(context));
 
     // === 系统提示词管理工具 ===
     toolManager.registerTool(new FuseSystemPromptTool(context));
