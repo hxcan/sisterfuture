@@ -45,7 +45,7 @@ dependencies
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Search:7.5.4'
   // 定位工具组件
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Util:7.5.4'
-  // 全量定位组件
+  implementation 'com.github.hxcan:builtinftp:2026.3.31'
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Location_All:9.3.7'
   
   // #4834 添加 Timber 日志库（用于日志输出到外置存储）
