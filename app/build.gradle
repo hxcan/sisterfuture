@@ -108,10 +108,10 @@ android
     versionName "2026.3.26"
     multiDexEnabled true
     
-    // 配置支持的 SO 库架构
+    // 配置支持的 SO 库架构 - 仅保留手机端需要的架构
     ndk
     {
-      abiFilters "armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+      abiFilters "armeabi", "armeabi-v7a", "arm64-v8a"
     }
   }
 
