@@ -185,9 +185,6 @@ public class TongYiClient
       
       if (currentAccessPoint != null) {
           apiKey = currentAccessPoint.getApiKey();
-          FileLogger.d(NETWORK_TAG, "[AP Info] 当前接入点名称：" + currentAccessPoint.getName());
-          FileLogger.d(NETWORK_TAG, "[AP Info] 当前模型名称：" + currentAccessPoint.getModelName());
-          FileLogger.d(NETWORK_TAG, "[AP Info] Base URL: " + currentAccessPoint.getBaseUrl());
       }
       
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
