@@ -174,15 +174,15 @@ public class ContextManager
       return;
     }
 
-    List<JSONObject> historyBefore = getHistory();
-
-    try
+    // Validate tool_calls arguments before adding to history
+    if (message.has("tool_calls"))
     {
-      if (message.has("tool_calls"))
+      try
       {
         JSONArray toolCalls = message.getJSONArray("tool_calls");
         if (toolCalls.length() == 0)
         {
+          FileLogger.w(TAG, "[addRawMessage] Skip: empty tool_calls array");
           return;
         }
 
@@ -195,28 +195,68 @@ public class ContextManager
             if (function.has("arguments"))
             {
               String argumentsStr = function.getString("arguments");
+              
+              // Check length first
+              if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments too long (" + argumentsStr.length() + " > " + MAX_ARGUMENTS_STR_LENGTH + ")");
+                return;
+              }
+              
+              // Strict JSON validation
               try
               {
-                new JSONObject(argumentsStr);
+                JSONTokener tokener = new JSONTokener(argumentsStr);
+                Object parsed = tokener.nextValue();
+                
+                // Check if there's trailing content
+                if (tokener.more())
+                {
+                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments has trailing content after JSON");
+                  return;
+                }
+                
+                // Must be a JSONObject
+                if (!(parsed instanceof JSONObject))
+                {
+                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments is not a JSONObject (type: " + (parsed != null ? parsed.getClass().getSimpleName() : "null") + ")");
+                  return;
+                }
               }
               catch (JSONException e)
               {
+                FileLogger.w(TAG, "[addRawMessage] Skip: invalid JSON in arguments - " + e.getMessage());
                 return;
               }
             }
           }
         }
       }
-    }
-    catch (JSONException e)
-    {
-      FileLogger.e(TAG, "Error checking tool_calls", e);
+      catch (JSONException e)
+      {
+        FileLogger.e(TAG, "[addRawMessage] Error checking tool_calls: " + e.getMessage(), e);
+        return;
+      }
     }
 
+    List<JSONObject> historyBefore = getHistory();
+    FileLogger.i(TAG, "[addRawMessage CALL] role=" + message.optString("role", "unknown") + 
+      ", has_tool_calls=" + message.has("tool_calls") + 
+      ", tool_calls_count=" + (message.has("tool_calls") ? message.optJSONArray("tool_calls").length() : 0));
+
     List<JSONObject> history = getHistory();
+    FileLogger.i(TAG, "[addRawMessage BEFORE] History count: " + history.size());
+    
     history.add(message);
+    FileLogger.i(TAG, "[addRawMessage] Message added, before: " + historyBefore.size() + " -> after: " + history.size());
+    FileLogger.i(TAG, "[addRawMessage] Last msg verify: role=" + message.optString("role", "unknown") + 
+      ", has_tool_calls=" + message.has("tool_calls"));
+    
     history = removeOldHistoryEntries(history);
+    FileLogger.i(TAG, "[removeOldHistoryEntries] After: " + history.size());
+    
     saveHistory(history);
+    FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
   }
 
   private void addMessage(String role, String content)
