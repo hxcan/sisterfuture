@@ -102,11 +102,16 @@ android
     versionCode 1091
     versionName "2026.3.26"
     multiDexEnabled true
+<<<<<<< HEAD
     
     // 配置支持的 SO 库架构
     ndk
     {
       abiFilters "armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+=======
+    ndk {
+      abiFilters 'arm64-v8a', 'armeabi-v7a'
+>>>>>>> de9f8f8 (fix: 移除 x86_64 和 x86 ABI 以减小 APK 体积)
     }
   }
 
