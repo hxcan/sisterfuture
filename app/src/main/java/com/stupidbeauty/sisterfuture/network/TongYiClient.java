@@ -68,7 +68,6 @@ public class TongYiClient
   // === 🔒 #5028 队列处理器 ===
   private void startQueueProcessor() {
     executor.submit(() -> {
-      FileLogger.i(TAG, "🔒 [QUEUE_WORKER] 队列工作线程启动：" + Thread.currentThread().getName());
       
       while (!Thread.currentThread().isInterrupted()) {
         try {
