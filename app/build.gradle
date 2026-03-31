@@ -52,8 +52,8 @@ dependencies
   implementation 'com.jakewharton.timber:timber:5.0.1'
   
   // Builtin FTP Server - 最新版（用于数据备份）
-  // 注意：不需要显式添加 ftpserver 依赖，builtinftp 会通过传递依赖自动引入正确版本
-  implementation 'com.github.hxcan:builtinftp:2026.3.29'
+  // builtinftp 2026.3.31+ includes ftpserver 2026.3.39 with LIST command fix
+  implementation 'com.github.hxcan:builtinftp:2026.3.31'
 }
 
 android 
