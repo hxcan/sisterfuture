@@ -47,8 +47,8 @@
 ### 🗺️ 路径规划（百度地图 SDK）
 - **实时路线规划**: 支持驾车、步行、骑行、公交四种交通方式
 - **快速估算**: 一键比较不同交通方式的距离和时间
-- **离线可用**: 基于百度地图 SDK，无需额外配置 API Key
-- **精准定位**: 集成百度地图高精度定位服务
+- **离线可用**: 集成百度地图高精度定位服务
+- **精准定位**: 支持多种定位模式
 
 **示例用法**:
 ```
@@ -59,70 +59,89 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 ### 🔧 开发工具集
 
 #### GitHub 集成
-- **代码提交**: 直接通过 API 提交代码更改
-- **分支管理**: 自动创建功能分支，推送至远程仓库
-- **PR 创建**: 自动生成 Pull Request，支持详细变更说明
-- **Actions 监控**: 查看 CI/CD 运行状态和日志
-- **文件搜索**: 智能搜索仓库文件，支持通配符匹配
+- **代码提交**: 直接通过 API 提交代码更改 (`create_github_commit`)
+- **分支管理**: 自动创建功能分支，推送至远程仓库 (`create_git_branch`)
+- **PR 创建**: 自动生成 Pull Request，支持详细变更说明 (`create_pull_request`)
+- **Actions 监控**: 查看 CI/CD 运行状态和日志 (`get_github_actions_logs`)
+- **文件搜索**: 智能搜索仓库文件，支持通配符匹配 (`search_file_in_repo`)
+- **文件读取**: 读取仓库文件内容，支持大文件保存到手机 (`get_github_file`)
 
 #### Redmine 项目管理
-- **任务查询**: 获取任务详情、搜索任务列表
-- **任务创建**: 创建新任务、子任务，设置优先级/状态
-- **任务更新**: 修改任务属性、添加评论、建立阻塞关系
-- **项目浏览**: 列出所有可用项目，支持分页查询
+- **任务查询**: 获取任务详情、搜索任务列表 (`get_redmine_task_info`, `search_redmine_tasks`)
+- **任务创建**: 创建新任务、子任务，设置优先级/状态 (`create_redmine_task`)
+- **任务更新**: 修改任务属性、添加评论、建立阻塞关系 (`update_redmine_issue`)
+- **任务关系**: 建立/删除任务间的阻塞关系 (`establish_task_relationship`, `remove_task_relationship`)
+- **项目浏览**: 列出所有可用项目，支持分页查询 (`list_redmine_projects`)
 
 #### 远程服务器管理
-- **SSH 执行**: 连接远程 Linux 服务器执行命令
-- **文件传输**: 通过 FTP 上传/下载文件
+- **SSH 执行**: 连接远程服务器执行命令，支持 GNU Linux、macOS、BSD 等 UNIX 系统 (`execute_remote_command`)
+  - 示例系统：Fedora、Red Hat Enterprise Linux (RHEL)、Ubuntu、Debian、CentOS、macOS、FreeBSD、NetBSD、OpenBSD
+- **文件传输**: 通过 FTP/SFTP 上传/下载文件 (`ftp_file_request`, `ftp_file_write`)
+- **目录浏览**: 列出远程目录内容 (`list_ftp_directory`)
 - **多账户支持**: 配置多个服务器凭证，快速切换
 
 ### 📝 个人助理功能
 
 #### 记事本
-- 快速记录待办事项、灵感想法
-- 自动分配 ID，支持按 ID 删除
-- 时间戳记录，方便追溯
+- 快速记录待办事项、灵感想法 (`add_note`)
+- 自动分配 ID，支持按 ID 删除 (`remove_note`)
+- 时间戳记录，方便追溯 (`list_notes`)
 
 #### 购物清单
-- 分类管理（食品/药品/日用品）
-- 数量统计，标记购买状态
-- 支持多人共享清单
+- 分类管理（食品/药品/日用品）(`add_shopping_item`)
+- 数量统计，标记购买状态 (`list_shopping_items`)
+- 支持多人共享清单 (`remove_shopping_item`)
 
 #### 长期记忆
-- 智能存储重要信息（喜好、系统参数、人际关系）
-- 语义化搜索，快速检索相关内容
-- 自动标签分类，便于管理
+- 智能存储重要信息（喜好、系统参数、人际关系）(`write_memory`)
+- 语义化搜索，快速检索相关内容 (`search_memory`)
+- 自动标签分类，便于管理 (`list_all_memories`, `remove_memory`)
 
 ### 🌐 网络工具
 
 #### 网页访问
-- **基础请求**: 获取网页 HTML/纯文本/摘要
-- **通用 HTTP**: 支持 GET/POST/PUT/DELETE/PATCH
-- **安全搜索**: 集成 Brave Search API，保护隐私
+- **基础请求**: 获取网页 HTML/纯文本/摘要 (`basic_web_request`)
+- **通用 HTTP**: 支持 GET/POST/PUT/DELETE/PATCH，自定义 Headers/Auth/Body (`generic_web_request`)
+- **安全搜索**: 集成 Brave Search API，保护隐私 (`search_with_brave`)
 - **API 调试**: 临时验证第三方 API，不持久化敏感凭证
 
 #### 模型接入点管理
-- **多模型支持**: 配置多个 AI 模型接入点（Qwen/MiniMax/GLM 等）
-- **动态切换**: 运行时切换不同模型，适应不同场景
+- **多模型支持**: 配置多个 AI 模型接入点（Qwen/MiniMax/GLM 等）(`add_model_access_point`)
+- **动态切换**: 运行时切换不同模型，适应不同场景 (`switch_access_point`)
 - **独立认证**: 每个接入点独立的 API Key 管理
 - **智能降级**: 主模型失败时自动切换到备用模型
+- **接入点查询**: 列出/获取当前接入点信息 (`list_access_points`, `get_current_access_point_info`)
 
 ### 🛠️ 系统工具
 
 #### 代码编译与构建
 - **Gradle 集成**: 自动编译 Android 项目
 - **错误诊断**: 详细报告编译错误和警告
-- **APK 生成**: 输出调试/发布版本安装包
+- **APK 生成**: 输出调试/发布版本安装包（带版本信息命名）
 
 #### 上下文管理
-- **智能重置**: 根据语义判断是否需要清空上下文
+- **智能重置**: 根据语义判断是否需要清空上下文 (`reset_conversation_context`)
 - **历史优化**: 自动清理空白消息，节省 token
 - **会话恢复**: 保存对话历史，支持断点续聊
 
 #### 工具增强系统
-- **动态备注**: 为工具添加自定义说明和配置
-- **提示词融合**: 智能调整工具行为，适应用户需求
-- **版本控制**: 追踪工具配置变更历史
+- **动态备注**: 为工具添加自定义说明和配置 (`set_tool_remark`, `get_tool_remark`)
+- **提示词融合**: 智能调整工具行为，适应用户需求 (`set_tool_enhancement`, `query_tool_enhancement`)
+- **系统提示词**: 获取/更新系统提示词 (`get_current_system_prompt`, `fuse_system_prompt`)
+
+#### 文件操作
+- **手机文件读取**: 读取手机外置存储文件，支持文本/二进制 (`read_phone_file`)
+- **目录扫描**: 递归扫描目录，支持过滤 (`list_phone_directory`)
+- **行编辑**: 按行编辑文件内容，支持插入/删除/修改/替换 (`edit_file_by_line`)
+
+#### 其他实用工具
+- **地理位置**: 查询当前位置，支持百度地图反向地理编码 (`get_location`)
+- **网络信息**: 获取 WiFi 详情（SSID、IP、信号强度等）(`get_network_info`)
+- **时间查询**: 获取当前北京时间 (`get_current_time`)
+- **联系人访问**: 获取手机通讯录列表 (`get_contact_list`)
+- **开发者信息**: 获取开发者联系方式和下载地址 (`get_developer_info`)
+- **异步测试**: 延迟返回测试工具 (`delayed_reply`)
+- **总结分享**: 生成对话总结并分享 (`summarize_and_share`)
 
 ## 🏗️ 技术架构
 
@@ -175,7 +194,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
    - `settings.gradle`: 项目模块结构
    - `app/build.gradle`: 依赖配置
    - `SisterFutureActivity.java`: 主界面入口
-   - `tool/` 目录: 所有工具实现
+   - `app/src/main/java/com/stupidbeauty/sisterfuture/tool/` 目录：所有工具实现类
 
 5. **运行调试**:
    - 连接设备或启动模拟器
@@ -244,5 +263,5 @@ MIT License - 详见 LICENSE 文件
 
 > **由未来姐姐 ❤️ 自主开发与维护**  
 > "这是一个独特的项目 - 绝大部分代码由 AI 自己编写、测试和提交"  
-> 最后更新：2026 年 3 月 28 日  
+> 最后更新：2026 年 3 月 31 日  
 > "随身携带的 AI 智能体，指尖的全栈开发团队"
