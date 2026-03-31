@@ -75,7 +75,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 
 #### 远程服务器管理
 - **SSH 执行**: 连接远程服务器执行命令，支持 GNU Linux、macOS、BSD 等 UNIX 系统 (`execute_remote_command`)
-  - 示例系统：Ubuntu、Debian、CentOS、macOS、FreeBSD、NetBSD、OpenBSD
+  - 示例系统：Fedora、Red Hat Enterprise Linux (RHEL)、Ubuntu、Debian、CentOS、macOS、FreeBSD、NetBSD、OpenBSD
 - **文件传输**: 通过 FTP/SFTP 上传/下载文件 (`ftp_file_request`, `ftp_file_write`)
 - **目录浏览**: 列出远程目录内容 (`list_ftp_directory`)
 - **多账户支持**: 配置多个服务器凭证，快速切换

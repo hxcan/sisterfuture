@@ -75,7 +75,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 
 #### Remote Server Management
 - **SSH Execution**: Connect to remote servers and execute commands, supporting GNU/Linux, macOS, BSD, and other UNIX systems (`execute_remote_command`)
-  - Example systems: Ubuntu, Debian, CentOS, macOS, FreeBSD, NetBSD, OpenBSD
+  - Example systems: Fedora, Red Hat Enterprise Linux (RHEL), Ubuntu, Debian, CentOS, macOS, FreeBSD, NetBSD, OpenBSD
 - **File Transfer**: Upload/download files via FTP/SFTP (`ftp_file_request`, `ftp_file_write`)
 - **Directory Browse**: List remote directory contents (`list_ftp_directory`)
 - **Multi-Account Support**: Configure multiple server credentials, quick switching
