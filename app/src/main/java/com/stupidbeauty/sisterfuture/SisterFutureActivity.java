@@ -722,7 +722,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
           
           // ✅ #4997【阶段 3】记录成功响应并更新 lastSuccessRequestId
-          FileLogger.d(TAG, "✅ [SUCCESS] 请求 #" + requestId + " 成功响应 | 更新 lastSuccessRequestId=" + requestId);
           lastSuccessRequestId = requestId;
           
           parseTongYiResponse(response);

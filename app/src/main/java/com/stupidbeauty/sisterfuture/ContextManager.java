@@ -234,8 +234,6 @@ public class ContextManager
   public void logFullHistory(String prefix)
   {
     List<JSONObject> history = getHistory();
-    FileLogger.i(TAG, "[Full History] " + prefix + ", Total: " + history.size());
-    FileLogger.i(TAG, "[Full History] End");
   }
 
   public List<JSONObject> getHistory()

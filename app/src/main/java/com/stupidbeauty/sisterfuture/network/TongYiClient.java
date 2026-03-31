@@ -68,7 +68,6 @@ public class TongYiClient
   // === 🔒 #5028 队列处理器 ===
   private void startQueueProcessor() {
     executor.submit(() -> {
-      FileLogger.i(TAG, "🔒 [QUEUE_WORKER] 队列工作线程启动：" + Thread.currentThread().getName());
       
       while (!Thread.currentThread().isInterrupted()) {
         try {
@@ -185,9 +184,6 @@ public class TongYiClient
       
       if (currentAccessPoint != null) {
           apiKey = currentAccessPoint.getApiKey();
-          FileLogger.d(NETWORK_TAG, "[AP Info] 当前接入点名称：" + currentAccessPoint.getName());
-          FileLogger.d(NETWORK_TAG, "[AP Info] 当前模型名称：" + currentAccessPoint.getModelName());
-          FileLogger.d(NETWORK_TAG, "[AP Info] Base URL: " + currentAccessPoint.getBaseUrl());
       }
       
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
@@ -381,7 +377,6 @@ public class TongYiClient
         {
           String dataPart = line.substring(5).trim();
           
-          FileLogger.d(TAG, "[SSE Data] " + (dataPart.length() > 500 ? dataPart.substring(0, 500) + "..." : dataPart));
 
           if (!dataPart.isEmpty())
           {
