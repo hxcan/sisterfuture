@@ -158,7 +158,6 @@ public class ModelAccessPointManager
           apiKey // 传入 apiKey 参数
         ));
       }
-      FileLogger.i(TAG, "Loaded " + accessPoints.size() + " access points from persistent storage");
     } catch (Exception e) {
       FileLogger.e(TAG, "Failed to load from persistent storage", e);
     }
