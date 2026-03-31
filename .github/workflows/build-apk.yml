@@ -49,10 +49,10 @@ jobs:
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin
         yes | sdkmanager "build-tools;29.0.3"
 
-    - name: List Release APK Files (Debug)
+    - name: List Debug APK Files
       run: |
-        echo "=== Release APK Directory ==="
-        ls -la app/build/outputs/apk/release/ || echo "Directory not found"
+        echo "=== Debug APK Directory ==="
+        ls -la app/build/outputs/apk/debug/ || echo "Directory not found"
         find app/build/outputs -name "*.apk" || echo "No APK files found"
 
     - name: Sign Release APK
@@ -65,18 +65,25 @@ jobs:
         keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
         keyPassword: ${{ secrets.KEY_STORE_PASSWORD }}
 
-    - name: List Signed APK Files (Debug)
+    - name: List Signed APK Files
       run: |
         echo "=== After Signing ==="
         ls -la app/build/outputs/apk/release/ || echo "Directory not found"
         find app/build/outputs -name "*-signed.apk" || echo "No signed APK files found"
 
-    - name: Upload APK artifact (PR)
+    - name: Upload Debug APK artifact (PR)
       if: github.event_name == 'pull_request'
       uses: actions/upload-artifact@v4
       with:
-        name: sisterfuture-pr-${{ github.run_number }}
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: sisterfuture-debug
+        path: app/build/outputs/apk/debug/*.apk
+
+    - name: Upload Signed Release APK artifact (PR)
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v4
+      with:
+        name: sisterfuture-release-signed
+        path: ${{ steps.sign_release.outputs.signedReleaseFile }}
 
     - name: Create CI Release (master push)
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -85,8 +92,8 @@ jobs:
         tag_name: ci/auto-build-${{ github.run_number }}
         name: 🤖 CI Build #${{ github.run_number }}
         files: |
-          app/build/outputs/apk/debug/sisterfuture-debug-${{ github.run_number }}.apk
-          sisterfuture-release-signed-${{ github.run_number }}.apk
+          app/build/outputs/apk/debug/*.apk
+          ${{ steps.sign_release.outputs.signedReleaseFile }}
         prerelease: true
         generate_release_notes: true
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -99,8 +106,10 @@ jobs:
           
           ---
           ### 📦 下载
-          - **Debug 版**: `sisterfuture-debug-${{ github.run_number }}.apk` (自动签名，仅供测试)
-          - **Release 版**: `sisterfuture-release-signed-${{ github.run_number }}.apk` (正式签名，可覆盖安装)
+          - **Debug 版**: `sisterfuture-debug-v*.apk` (自动签名，仅供测试)
+            - 文件名格式：`sisterfuture-debug-v{versionName}-{versionCode}-{buildTime}.apk`
+          - **Release 版**: `sisterfuture-release-signed-*.apk` (正式签名，可覆盖安装)
+            - 文件名格式：`sisterfuture-release-v{versionName}-{versionCode}-{buildTime}-signed.apk`
           
           ⚠️ Release 版本使用正式证书签名，支持覆盖安装和正式分发。
           
