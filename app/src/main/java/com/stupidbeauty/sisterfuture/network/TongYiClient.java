@@ -384,7 +384,6 @@ public class TongYiClient
         {
           String dataPart = line.substring(5).trim();
           
-          FileLogger.d(TAG, "[SSE Data] " + (dataPart.length() > 500 ? dataPart.substring(0, 500) + "..." : dataPart));
 
           if (!dataPart.isEmpty())
           {
