@@ -152,3 +152,18 @@ tasks.withType(JavaCompile).configureEach {
         '--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED',
     ]
 }
+// 自定义 APK 输出文件名，包含版本信息
+android.applicationVariants.all { variant ->
+    variant.outputs.all { output ->
+        def versionName = variant.versionName
+        def versionCode = variant.versionCode
+        def buildTime = new Date().format('yyyyMMdd-HHmmss', TimeZone.getTimeZone('Asia/Shanghai'))
+        def buildType = variant.buildType.name
+        
+        if (buildType == 'debug') {
+            outputFileName = "sisterfuture-debug-v${versionName}-${versionCode}-${buildTime}.apk"
+        } else {
+            outputFileName = "sisterfuture-release-v${versionName}-${versionCode}-${buildTime}.apk"
+        }
+    }
+}
