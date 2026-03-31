@@ -104,8 +104,9 @@ android
     multiDexEnabled true
     
     // 配置支持的 SO 库架构 - 仅保留手机端需要的架构
-    ndk {
-      abiFilters 'arm64-v8a', 'armeabi-v7a'
+    ndk
+    {
+      abiFilters "armeabi", "armeabi-v7a", "arm64-v8a"
     }
   }
 
