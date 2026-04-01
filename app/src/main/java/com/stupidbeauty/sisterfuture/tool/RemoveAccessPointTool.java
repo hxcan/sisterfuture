@@ -4,8 +4,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import android.content.Context;
 import android.util.Log;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPoint;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 
 public class RemoveAccessPointTool implements Tool {
     private static final String TAG = "RemoveAccessPointTool";
