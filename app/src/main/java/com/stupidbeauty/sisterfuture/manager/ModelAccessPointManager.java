@@ -13,6 +13,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import android.content.SharedPreferences;
+
 
 
 
@@ -27,6 +29,8 @@ public class ModelAccessPointManager
   private List<ModelAccessPoint> accessPoints;
   private int currentAccessPointIndex;
   private static final String PERSISTENT_FILE_NAME = "model_access_points.json"; // 持久化存储文件名
+  private static final String PREFS_NAME = "model_access_point_prefs";
+  private static final String KEY_CURRENT_INDEX = "current_index";
   private Context context; // 上下文用于访问应用私有目录
   
   // 🔥 #4657 接入点死循环修复 v2 - 连续失败计数器
@@ -80,7 +84,8 @@ public class ModelAccessPointManager
       // addAccessPoint("Aliyun Qwen3.5-35b-a3b", ... aliyunKey ...);
     }
 
-    this.currentAccessPointIndex = 0; // 默认指向第一个访问点
+    // 🔧 从 SharedPreferences 加载上次使用的索引
+    this.currentAccessPointIndex = loadCurrentIndex();
     this.consecutiveFailures = 0; // 初始化计数器
   }
 
@@ -187,6 +192,26 @@ public class ModelAccessPointManager
     } catch (Exception e) {
       FileLogger.e(TAG, "Failed to save to persistent storage", e);
     }
+  }
+
+  /**
+   * 从 SharedPreferences 加载当前索引
+   * @return 上次保存的索引，默认为 0
+   */
+  private int loadCurrentIndex() {
+    SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    int index = prefs.getInt(KEY_CURRENT_INDEX, 0);
+    FileLogger.d(TAG, "Loaded current index from SharedPreferences: " + index);
+    return index;
+  }
+
+  /**
+   * 保存当前索引到 SharedPreferences
+   */
+  private void saveCurrentIndex() {
+    SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    prefs.edit().putInt(KEY_CURRENT_INDEX, currentAccessPointIndex).apply();
+    FileLogger.d(TAG, "Saved current index to SharedPreferences: " + currentAccessPointIndex);
   }
 
   /**
@@ -299,6 +324,9 @@ public class ModelAccessPointManager
       FileLogger.d(TAG, "🔁 [AP_SWITCH] 循环切换到第一个：index=0");
     }
     
+    // 🔧 保存新索引到 SharedPreferences
+    saveCurrentIndex();
+    
     // 记录切换后的状态
     int newIndex = currentAccessPointIndex;
     String newApName = (newIndex >= 0 && newIndex < accessPoints.size()) 
@@ -372,6 +400,9 @@ public class ModelAccessPointManager
       FileLogger.w(TAG, "Index out of bounds after removal, corrected to: " + currentAccessPointIndex);
     }
     
+    // 🔧 保存新索引到 SharedPreferences
+    saveCurrentIndex();
+    
     return true;
   }
 
@@ -385,6 +416,10 @@ public class ModelAccessPointManager
       if (accessPoints.get(i).getName().equals(name)) {
         this.currentAccessPointIndex = i;
         FileLogger.i(TAG, "Switched to access point: " + name + ", index: " + i);
+        
+        // 🔧 保存新索引到 SharedPreferences
+        saveCurrentIndex();
+        
         return true;
       }
     }
