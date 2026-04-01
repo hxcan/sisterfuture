@@ -2,8 +2,8 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPoint;
 
 public class GetCurrentAccessPointInfoTool implements Tool
 {
