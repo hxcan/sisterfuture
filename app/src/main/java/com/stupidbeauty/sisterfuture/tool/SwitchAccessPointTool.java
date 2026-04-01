@@ -1,6 +1,6 @@
 package com.stupidbeauty.sisterfuture.tool;
 
-import com.stupidbeauty.sisterfuture.manager.ModelAccessPoint;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 import android.util.Log;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
