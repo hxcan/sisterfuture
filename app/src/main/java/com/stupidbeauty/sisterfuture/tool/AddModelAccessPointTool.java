@@ -6,6 +6,7 @@ import org.json.JSONObject;
 import android.content.Context;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 
 public class AddModelAccessPointTool implements Tool 
 {
@@ -137,8 +138,8 @@ public class AddModelAccessPointTool implements Tool
    * 辅助方法：直接调用 Manager 的底层逻辑保存带 apiKey 的 AccessPoint
    */
   private void addAccessPointWithApiKey(String name, String baseUrl, String chatEndpoint, String modelName, String apiKey) {
-    com.stupidbeauty.sisterfuture.manager.ModelAccessPoint newPoint = 
-      new com.stupidbeauty.sisterfuture.manager.ModelAccessPoint(name, baseUrl, chatEndpoint, modelName, apiKey);
+    ModelAccessPoint newPoint = 
+      new ModelAccessPoint(name, baseUrl, chatEndpoint, modelName, apiKey);
     
     modelAccessPointManager.addAccessPointInternal(newPoint);
     
