@@ -222,6 +222,37 @@ public class ContextManager
                   FileLogger.w(TAG, "[addRawMessage] Skip: arguments is not a JSONObject (type: " + (parsed != null ? parsed.getClass().getSimpleName() : "null") + ")");
                   return;
                 }
+                
+                // Enhanced validation: check each parameter value for unquoted strings
+                JSONObject argsObj = (JSONObject) parsed;
+                JSONArray keys = argsObj.names();
+                if (keys != null)
+                {
+                  for (int j = 0; j < keys.length(); j++)
+                  {
+                    String key = keys.getString(j);
+                    Object value = argsObj.opt(key);
+                    
+                    // Reject string values that appear unquoted in the original JSON
+                    // This catches cases like {"runId": latest} where 'latest' should be "latest"
+                    if (value instanceof String)
+                    {
+                      String strValue = (String) value;
+                      // Check for common problematic patterns: latest, none, null, true, false, numbers
+                      if (strValue.matches("^(latest|none|null|true|false|\\d+)$"))
+                      {
+                        // Check if the original JSON string contains this value without quotes
+                        // Pattern: "key": value (without quotes around value)
+                        String unquotedPattern = "\"" + key + "\"\\s*:\\s*" + strValue + "(?![\"\\w])";
+                        if (argumentsStr.matches(".*" + unquotedPattern + ".*"))
+                        {
+                          FileLogger.w(TAG, "[addRawMessage] Skip: argument '" + key + "' has unquoted value '" + strValue + "'");
+                          return;
+                        }
+                      }
+                    }
+                  }
+                }
               }
               catch (JSONException e)
               {
@@ -342,6 +373,33 @@ public class ContextManager
               if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
               {
                 return false;
+              }
+              
+              // Enhanced validation: check for unquoted string values
+              JSONObject argsObj = (JSONObject) parsed;
+              JSONArray keys = argsObj.names();
+              if (keys != null)
+              {
+                for (int j = 0; j < keys.length(); j++)
+                {
+                  String key = keys.getString(j);
+                  Object value = argsObj.opt(key);
+                  
+                  if (value instanceof String)
+                  {
+                    String strValue = (String) value;
+                    if (strValue.matches("^(latest|none|null|true|false|\\d+)$"))
+                    {
+                      // Check if the original JSON string contains this value without quotes
+                      String unquotedPattern = "\"" + key + "\"\\s*:\\s*" + strValue + "(?![\"\\w])";
+                      if (argumentsStr.matches(".*" + unquotedPattern + ".*"))
+                      {
+                        FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: unquoted value '" + strValue + "' for key '" + key + "'");
+                        return false;
+                      }
+                    }
+                  }
+                }
               }
             }
             catch (JSONException e)
