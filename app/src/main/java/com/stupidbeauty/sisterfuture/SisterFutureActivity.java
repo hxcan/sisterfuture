@@ -10,7 +10,6 @@ import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
 import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
 import android.os.Handler;
 import android.os.Looper;
-import com.stupidbeauty.codeposition.CodePosition;
 import java.io.FileDescriptor;
 import android.os.Build;
 import com.stupidbeauty.sisterfuture.bean.MemoryEntity;
