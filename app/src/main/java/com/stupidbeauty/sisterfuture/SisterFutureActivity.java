@@ -92,6 +92,7 @@ import com.iflytek.cloud.ErrorCode;
 import com.iflytek.cloud.RecognizerListener;
 import com.iflytek.cloud.RecognizerResult;
 import com.iflytek.cloud.SpeechConstant;
+import com.iflytek.cloud.SpeechError;
 import com.iflytek.cloud.SpeechUtility;
 import com.stupidbeauty.sisterfuture.network.TongYiClient;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
