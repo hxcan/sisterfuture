@@ -31,11 +31,11 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import com.stupidbeauty.sisterfuture.network.TongYiClient;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.tool.Tool;
 import com.stupidbeauty.sisterfuture.bean.ToolCall;
 import com.stupidbeauty.sisterfuture.bean.Function;
@@ -47,7 +47,7 @@ import android.util.Log;
 public class SummaryAndShareTool implements Tool
 {
   private static final String TAG = "SummaryAndShareTool";
-  private static final String DOWNLOAD_URL = "https://stupidbeauty.com/Blog/article/1864/未来姐姐:小朋友的虚拟小伙伴";
+  private static final String DOWNLOAD_URL = "https://stupidbeauty.com/Blog/article/1864/未来姐姐：小朋友的虚拟小伙伴";
   private Context context;
   private ModelAccessPointManager accessPointManager;
   private ToolManager toolManager;
@@ -85,7 +85,7 @@ public class SummaryAndShareTool implements Tool
     {
       JSONObject functionDef = new JSONObject();
       functionDef.put("name", "summarize_and_share");
-      functionDef.put("description", "当用户明确要求总结和向外分享时调用，不可以自作主张地调用。如果妳不提供summary参数，那么这个工具会做网络请求，会唤起其它应用，导致聊天流程被打断，所以过于轻易地调用的话会严重影响到体验。如果是用户复制粘贴过来的文字，里面以'来自未来姐姐的总结：'等字样开头，也不应当调用此工具。本工具会主动请求大模型生成对当前上下文聊天内容的总结，要求用最简化的文字总结出当前结论以及问题的主题，使得当用户将这段文字复制粘贴到任何现存的人工智能助手中去时，对方都能够理解相关的信息并继续对话。");
+      functionDef.put("description", "当用户明确要求总结和向外分享时调用，不可以自作主张地调用。如果妳不提供 summary 参数，那么这个工具会做网络请求，会唤起其它应用，导致聊天流程被打断，所以过于轻易地调用的话会严重影响到体验。如果是用户复制粘贴过来的文字，里面以'来自未来姐姐的总结：'等字样开头，也不应当调用此工具。本工具会主动请求大模型生成对当前上下文聊天内容的总结，要求用最简化的文字总结出当前结论以及问题的主题，使得当用户将这段文字复制粘贴到任何现存的人工智能助手中去时，对方都能够理解相关的信息并继续对话。");
 
       functionDef.put("parameters", new JSONObject()
         .put("type", "object")
@@ -181,8 +181,8 @@ public class SummaryAndShareTool implements Tool
                           "- 仅输出核心结论与主题，不包含任何情绪、动作、角色描述；\n" +
                           "- 用最精炼的语言，让其他 AI 助手在接收到后能立即理解上下文并继续对话；\n" +
                           "- 不要输出任何工具调用格式、JSON 结构或额外说明；\n" +
-                          "- 不要用markdown格式化，这是为了向外用文字分享，格式化没有意义；\n" +
-                          "- 总字数不超过280字。";
+                          "- 不要用 markdown 格式化，这是为了向外用文字分享，格式化没有意义；\n" +
+                          "- 总字数不超过 280 字。";
 
       JSONArray finalMessages = new JSONArray();
       finalMessages.put(new JSONObject()

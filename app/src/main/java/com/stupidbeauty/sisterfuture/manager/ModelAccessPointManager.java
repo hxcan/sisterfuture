@@ -1,4 +1,4 @@
-package com.stupidbeauty.sisterfuture.network;
+package com.stupidbeauty.sisterfuture.manager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +13,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+
 
 
 
