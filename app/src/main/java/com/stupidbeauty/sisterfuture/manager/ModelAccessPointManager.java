@@ -1,4 +1,4 @@
-package com.stupidbeauty.sisterfuture.network;
+package com.stupidbeauty.sisterfuture.manager;
 
 import java.util.ArrayList;
 import java.util.List;
