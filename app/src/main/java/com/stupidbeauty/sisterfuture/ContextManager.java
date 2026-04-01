@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.List;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 public class ContextManager
 {
@@ -203,23 +205,28 @@ public class ContextManager
                 return;
               }
               
+              // General validation: detect any unquoted string identifiers in JSON
+              if (hasUnquotedStringValues(argumentsStr))
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains unquoted string values");
+                return;
+              }
+              
               // Strict JSON validation
               try
               {
                 JSONTokener tokener = new JSONTokener(argumentsStr);
                 Object parsed = tokener.nextValue();
                 
-                // Check if there's trailing content
                 if (tokener.more())
                 {
                   FileLogger.w(TAG, "[addRawMessage] Skip: arguments has trailing content after JSON");
                   return;
                 }
                 
-                // Must be a JSONObject
                 if (!(parsed instanceof JSONObject))
                 {
-                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments is not a JSONObject (type: " + (parsed != null ? parsed.getClass().getSimpleName() : "null") + ")");
+                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments is not a JSONObject");
                   return;
                 }
               }
@@ -241,22 +248,50 @@ public class ContextManager
 
     List<JSONObject> historyBefore = getHistory();
     FileLogger.i(TAG, "[addRawMessage CALL] role=" + message.optString("role", "unknown") + 
-      ", has_tool_calls=" + message.has("tool_calls") + 
-      ", tool_calls_count=" + (message.has("tool_calls") ? message.optJSONArray("tool_calls").length() : 0));
+      ", has_tool_calls=" + message.has("tool_calls"));
 
     List<JSONObject> history = getHistory();
     FileLogger.i(TAG, "[addRawMessage BEFORE] History count: " + history.size());
     
     history.add(message);
-    FileLogger.i(TAG, "[addRawMessage] Message added, before: " + historyBefore.size() + " -> after: " + history.size());
-    FileLogger.i(TAG, "[addRawMessage] Last msg verify: role=" + message.optString("role", "unknown") + 
-      ", has_tool_calls=" + message.has("tool_calls"));
+    FileLogger.i(TAG, "[addRawMessage] Message added: " + historyBefore.size() + " -> " + history.size());
     
     history = removeOldHistoryEntries(history);
-    FileLogger.i(TAG, "[removeOldHistoryEntries] After: " + history.size());
-    
     saveHistory(history);
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
+  }
+
+  /**
+   * General validation: check if JSON string contains unquoted string values.
+   * Strategy: Remove all quoted strings, then look for alphabetic identifiers after colons.
+   * Valid JSON values: "quoted", number, true, false, null, {, [, }
+   * Invalid: unquoted identifiers like latest, abc, test_value
+   */
+  private boolean hasUnquotedStringValues(String jsonStr)
+  {
+    // Step 1: Remove all properly quoted strings (including escaped quotes)
+    String withoutQuotedStrings = jsonStr.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", "\"\"");
+    
+    // Step 2: Look for pattern: : followed by whitespace and an identifier
+    // Identifiers start with letter/underscore, followed by alphanumeric/underscore
+    Pattern pattern = Pattern.compile(":\\s*([a-zA-Z_][a-zA-Z0-9_]*)");
+    Matcher matcher = pattern.matcher(withoutQuotedStrings);
+    
+    while (matcher.find())
+    {
+      String identifier = matcher.group(1);
+      
+      // Step 3: Check if it's NOT a valid JSON keyword
+      if (!identifier.equals("true") && 
+          !identifier.equals("false") && 
+          !identifier.equals("null"))
+      {
+        FileLogger.d(TAG, "[hasUnquotedStringValues] Found unquoted identifier: " + identifier);
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   private void addMessage(String role, String content)
@@ -323,6 +358,13 @@ public class ContextManager
           if (function.has("arguments"))
           {
             String argumentsStr = function.getString("arguments");
+            
+            // General validation: check for unquoted string values
+            if (hasUnquotedStringValues(argumentsStr))
+            {
+              FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: unquoted string values");
+              return false;
+            }
             
             try
             {
@@ -401,7 +443,6 @@ public class ContextManager
               pendingToolCallsObject = null;
               continue;
             }
-
           }
           else
           {
