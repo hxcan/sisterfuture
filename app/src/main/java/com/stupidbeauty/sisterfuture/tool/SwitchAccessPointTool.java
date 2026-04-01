@@ -1,6 +1,6 @@
 package com.stupidbeauty.sisterfuture.tool;
 
-import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPoint;
 import android.util.Log;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
@@ -11,7 +11,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 import org.json.JSONObject;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 
 public class SwitchAccessPointTool implements Tool
 {
@@ -186,7 +186,7 @@ public class SwitchAccessPointTool implements Tool
 
     // 构造返回结果
     JSONObject result = new JSONObject();
-    result.put("message", "已成功切换到接入点: " + targetName);
+    result.put("message", "已成功切换到接入点：" + targetName);
     result.put("current_access_point", switchedAccessPoint.getName());
     result.put("base_url", switchedAccessPoint.getBaseUrl());
     result.put("chat_endpoint", switchedAccessPoint.getChatEndpoint());
