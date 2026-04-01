@@ -32,7 +32,7 @@ import android.media.MediaPlayer;
 import android.os.Bundle;
 import com.stupidbeauty.sisterfuture.network.TongYiClient;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
-import com.stupidbeauty.sisterfuture.manager.ModelAccessPoint;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
