@@ -12,6 +12,8 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import com.stupidbeauty.sisterfuture.utils.CrashHandler;
+
 
 /**
  * 应用程序对象。
@@ -43,6 +45,9 @@ public class SisterFutureApplication extends Application
 		// #4834 初始化文件日志系统
 		FileLogger.init(this);
 		Log.i("SisterFutureApplication", "✅ FileLogger 已初始化");
+		
+		// #4968 初始化全局崩溃检测器
+		CrashHandler.init(this);
 	} //public void onCreate()
 
 	/**
