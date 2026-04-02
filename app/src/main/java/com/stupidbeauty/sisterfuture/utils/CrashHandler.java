@@ -1,6 +1,7 @@
 package com.stupidbeauty.sisterfuture.utils;
 
 import android.content.Context;
+import android.content.pm.PackageInfo;
 import android.os.Build;
 import android.util.Log;
 
@@ -103,7 +104,7 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
         report.append("\n【应用信息】\n");
         report.append("包名：").append(context.getPackageName()).append("\n");
         try {
-            var packageInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            PackageInfo packageInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
             report.append("版本名：").append(packageInfo.versionName).append("\n");
             report.append("版本码：").append(packageInfo.versionCode).append("\n");
         } catch (Exception e) {
