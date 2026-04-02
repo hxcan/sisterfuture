@@ -33,9 +33,22 @@ public class MemoryManager
   private static final String TAG="SisterFutureActivity"; //!<输出调试信息时使用的标记。
     private final BoxStore boxStore;
     private final Box<MemoryEntity> memoryBox;
+    
+    // 单例模式：全局唯一的 BoxStore 实例
+    private static BoxStore sInstanceBoxStore = null;
+    private static final Object sLock = new Object();
 
     public MemoryManager(Context context) {
-        this.boxStore = MyObjectBox.builder().androidContext(context).build();
+        // 检查是否已有 BoxStore 实例，避免重复创建
+        synchronized (sLock) {
+            if (sInstanceBoxStore == null) {
+                Log.i(TAG, CodePosition.newInstance().toString() + "✅ 首次创建 BoxStore 实例");
+                sInstanceBoxStore = MyObjectBox.builder().androidContext(context).build();
+            } else {
+                Log.i(TAG, CodePosition.newInstance().toString() + "⚠️ 复用已存在的 BoxStore 实例");
+            }
+            this.boxStore = sInstanceBoxStore;
+        }
         this.memoryBox = boxStore.boxFor(MemoryEntity.class);
     }
 
@@ -91,6 +104,17 @@ public class MemoryManager
     // 获取 BoxStore（用于其他操作）
     public BoxStore getBoxStore() {
         return boxStore;
+    }
+    
+    // 关闭 BoxStore（仅在应用退出时调用）
+    public static void closeBoxStore() {
+        synchronized (sLock) {
+            if (sInstanceBoxStore != null && !sInstanceBoxStore.isClosed()) {
+                Log.i(TAG, CodePosition.newInstance().toString() + "🔒 关闭 BoxStore 实例");
+                sInstanceBoxStore.close();
+                sInstanceBoxStore = null;
+            }
+        }
     }
 
     // 记住主人的喜好
