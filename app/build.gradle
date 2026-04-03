@@ -5,3 +5,115 @@
   // 🆕 Android Crash Detector - Global exception handler with crash logging to external storage
   implementation 'com.github.hxcan:android-crash-detector:2026.4.5'
 }
+
+android 
+{
+  lint 
+  {
+    baseline = file("lint-baseline.xml")
+  }
+
+  buildFeatures 
+  {
+    buildConfig = true
+  }
+
+  compileSdkVersion 33
+  buildToolsVersion '28.0.3'
+  namespace 'com.stupidbeauty.sisterfuture'
+
+  signingConfigs {
+    debug {
+      storeFile file('../keystore.31/debug.keystore')
+      storePassword 'android'
+      keyAlias 'androiddebugkey'
+      keyPassword 'android'
+    }
+  }
+
+  buildTypes 
+  {
+    release 
+    {
+      minifyEnabled false
+      proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+    }
+    debug
+    {
+      signingConfig signingConfigs.debug
+    }
+  }
+
+  defaultConfig 
+  {
+    applicationId "com.stupidbeauty.sisterfuture"
+    minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
+    targetSdkVersion 28
+    versionCode 1091
+    versionName "2026.3.26"
+    multiDexEnabled true
+    
+    // 配置支持的 SO 库架构 - 仅保留手机端需要的架构
+    ndk
+    {
+      abiFilters "armeabi", "armeabi-v7a", "arm64-v8a"
+    }
+  }
+
+  sourceSets 
+  {
+    main 
+    {
+      jniLibs.srcDirs = ['libs']
+    }
+  }
+
+    aaptOptions {
+        noCompress "tflite"
+    }
+
+    // #4800 抑制 D8 警告 - 针对第三方库的 stack map 表警告
+    dexOptions {
+        additionalParameters = [
+            '--no-warnings'
+        ]
+    }
+}
+
+// # https://stackoverflow.com/questions/65380359/lomboks-access-to-jdk-compilers-internal-packages-incompatible-with-java-16
+
+// # enable internal JDK API access at runtime
+tasks.withType(JavaCompile).configureEach {
+    options.fork = true
+    options.forkOptions.jvmArgs += [
+//         # essential for butterknife
+        '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+
+//         # if you need Glide or LomBok
+//         # these may not be the exact list, but it works for me
+        '--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED',
+    ]
+}
+// 自定义 APK 输出文件名，包含版本信息
+android.applicationVariants.all { variant ->
+    variant.outputs.all { output ->
+        def versionName = variant.versionName
+        def versionCode = variant.versionCode
+        def buildTime = new Date().format('yyyyMMdd-HHmmss', TimeZone.getTimeZone('Asia/Shanghai'))
+        def buildType = variant.buildType.name
+        
+        if (buildType == 'debug') {
+            outputFileName = "sisterfuture-debug-v${versionName}-${versionCode}-${buildTime}.apk"
+        } else {
+            outputFileName = "sisterfuture-release-v${versionName}-${versionCode}-${buildTime}.apk"
+        }
+    }
+}
