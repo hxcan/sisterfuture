@@ -975,7 +975,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 argsJsonStr = "{}";
               }
 
-              JSONObject args = new JSONObject(argsJsonStr);
+              // 🔧 #4886 添加 JSON 解析异常处理，容忍格式错误的工具调用参数
+              JSONObject args;
+              try
+              {
+                args = new JSONObject(argsJsonStr);
+              }
+              catch (JSONException e)
+              {
+                FileLogger.e(TAG, "❌ [TOOL_CALL_JSON_ERROR] 工具调用参数 JSON 格式错误，已跳过 | toolName=" + toolName + ", toolCallId=" + toolCallId, e);
+                FileLogger.e(TAG, "   📋 [RAW_ARGS] 原始参数：" + argsJsonStr);
+                continue;
+              }
 
               JSONObject toolCallObject = new JSONObject();
               toolCallObject.put("id", toolCallId);
