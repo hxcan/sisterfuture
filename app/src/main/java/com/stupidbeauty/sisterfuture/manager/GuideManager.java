@@ -28,6 +28,11 @@ public class GuideManager {
     private static final String CODEPLAN_ENDPOINT = "/chat/completions";
     private static final String CODEPLAN_MODEL = "qwen3.5-plus";
 
+    // 🔥 MiniMax 接入点配置
+    private static final String MINIMAX_BASE_URL = "https://api.minimaxi.com/v1";
+    private static final String MINIMAX_ENDPOINT = "/chat/completions";
+    private static final String MINIMAX_MODEL = "MiniMax-M2.5";
+
     public GuideManager(Context context, ModelAccessPointManager modelAccessPointManager, ToolManager toolManager) { 
         this.context = context; 
         this.modelAccessPointManager = modelAccessPointManager; 
@@ -43,11 +48,12 @@ public class GuideManager {
     }
 
     /**
-     * 验证 API Key 格式：支持百炼标准密钥 (sk-) 和 Code Plan 密钥 (cp_/plan_/sf_等)
+     * 验证 API Key 格式：支持百炼标准密钥 (sk-)、Code Plan 密钥 (cp_/plan_/sf_等) 和 MiniMax 密钥
      * 
      * ✅ 支持格式：
      * - 百炼标准：sk- 开头，长度 20-64 字符
      * - Code Plan：cp_/plan_/sf_ 等前缀，长度 20-64 字符
+     * - MiniMax: 任意格式，长度 20-64 字符
      * 
      * @param input 用户输入内容
      * @return true 如果是有效的 API Key
@@ -74,7 +80,8 @@ public class GuideManager {
             return true;
         }
         
-        return false;
+        // 🔥 MiniMax 密钥：任意格式，只要长度符合即可
+        return true;
     }
 
     /**
@@ -85,7 +92,7 @@ public class GuideManager {
     public void processWithGuideLogic(String userInput, ChatCallback callback) {
         if (isEmptyAccessPointList()) {
             if (isValidApiKey(userInput)) {
-                // ✅ 新逻辑：自动创建两个接入点（普通模式，无后缀）
+                // ✅ 新逻辑：自动创建三个接入点（普通模式，无后缀）
                 createAccessPoints(userInput, callback, "");
             } else {
                 // ❌ 无效密钥，提示获取方式并显示实际长度
@@ -94,9 +101,9 @@ public class GuideManager {
                     "👋 你好！我是未来姐姐～\n\n" +
                     "目前尚未配置任何模型接入点。\n\n" +
                     "💡 请按以下步骤操作：\n" +
-                    "1️⃣ 访问 https://dashscope.aliyun.com\n" +
-                    "2️⃣ 申请阿里云百炼 API Key\n" +
-                    "3️⃣ 将密钥（以 sk- 开头，或 cp_/plan_/sf_ 前缀，长度 20-64 字符）粘贴到这里\n\n" +
+                    "1️⃣ 访问阿里云百炼 (https://dashscope.aliyun.com) 或 MiniMax 平台\n" +
+                    "2️⃣ 申请 API Key\n" +
+                    "3️⃣ 将密钥（长度 20-64 字符）粘贴到这里\n\n" +
                     "📝 您输入的密钥长度：" + actualLength + " 字符 (有效范围：20-64)\n\n" +
                     "准备好了吗？✨"
                 );
@@ -119,7 +126,7 @@ public class GuideManager {
             "1️⃣ 输入新的 API Key 添加备用接入点\n" +
             "2️⃣ 系统会在新旧接入点间自动切换\n" +
             "3️⃣ 原有接入点保留，恢复后可继续使用\n\n" +
-            "📝 **请直接粘贴新的 API Key**（sk- 开头，或 cp_/plan_/sf_ 前缀）：\n\n" +
+            "📝 **请直接粘贴新的 API Key**（长度 20-64 字符）：\n\n" +
             "✨ 准备好了吗？"
         );
     }
@@ -139,7 +146,8 @@ public class GuideManager {
                 "📝 您输入的密钥长度：" + apiKey.length() + " 字符 (有效范围：20-64)\n\n" +
                 "✅ **有效格式**：\n" +
                 "- 百炼标准：`sk-` 开头\n" +
-                "- Code Plan：`cp_` / `plan_` / `sf_` 开头\n\n" +
+                "- Code Plan：`cp_` / `plan_` / `sf_` 开头\n" +
+                "- MiniMax: 任意格式\n\n" +
                 "请重新输入正确的 API Key："
             );
         }
@@ -176,6 +184,14 @@ public class GuideManager {
             args2.put("endpoint", CODEPLAN_ENDPOINT);
             args2.put("model_name", CODEPLAN_MODEL);
 
+            // 🔥 3. 创建 MiniMax 接入点
+            JSONObject args3 = new JSONObject();
+            args3.put("api_key", apiKey);
+            args3.put("name", "MiniMax-M2.5" + nameSuffix);
+            args3.put("base_url", MINIMAX_BASE_URL);
+            args3.put("endpoint", MINIMAX_ENDPOINT);
+            args3.put("model_name", MINIMAX_MODEL);
+
             int existingCount = modelAccessPointManager.getAllAccessPoints().size();
             boolean isBackupMode = !nameSuffix.isEmpty();
 
@@ -188,28 +204,58 @@ public class GuideManager {
                     toolManager.executeToolAsync(null, "add_model_access_point", args2, new Tool.OnResultCallback() {
                         @Override
                         public void onResult(JSONObject result2) {
-                            // ✅ 两个接入点都创建成功
-                            if (isBackupMode) {
-                                // 备用模式
-                                callback.onResponse(
-                                    "✅ **备用接入点配置成功！**\n\n" +
-                                    "🔹 已添加两个新接入点：\n" +
-                                    "  1. Qwen-百炼标准 -397B" + nameSuffix + "\n" +
-                                    "  2. Qwen-CodePlan" + nameSuffix + "\n\n" +
-                                    "📊 当前共有 " + (existingCount + 2) + " 个接入点\n" +
-                                    "🚀 系统会自动在新旧接入点间切换，优先使用可用的接入点\n\n" +
-                                    "💡 原有接入点已保留，恢复后可继续使用！"
-                                );
-                            } else {
-                                // 普通模式（首次配置）
-                                callback.onResponse(
-                                    "✅ 接入点配置成功！\n\n" +
-                                    "🔹 已创建两个接入点：\n" +
-                                    "  1. Qwen-百炼标准 -397B\n" +
-                                    "  2. Qwen-CodePlan\n\n" +
-                                    "🚀 系统会自动使用有效的接入点，现在可以享受完整功能了！"
-                                );
-                            }
+                            // Code Plan 创建成功，继续创建 MiniMax 接入点
+                            toolManager.executeToolAsync(null, "add_model_access_point", args3, new Tool.OnResultCallback() {
+                                @Override
+                                public void onResult(JSONObject result3) {
+                                    // ✅ 三个接入点都创建成功
+                                    if (isBackupMode) {
+                                        // 备用模式
+                                        callback.onResponse(
+                                            "✅ **备用接入点配置成功！**\n\n" +
+                                            "🔹 已添加三个新接入点：\n" +
+                                            "  1. Qwen-百炼标准 -397B" + nameSuffix + "\n" +
+                                            "  2. Qwen-CodePlan" + nameSuffix + "\n" +
+                                            "  3. MiniMax-M2.5" + nameSuffix + "\n\n" +
+                                            "📊 当前共有 " + (existingCount + 3) + " 个接入点\n" +
+                                            "🚀 系统会自动在新旧接入点间切换，优先使用可用的接入点\n\n" +
+                                            "💡 原有接入点已保留，恢复后可继续使用！"
+                                        );
+                                    } else {
+                                        // 普通模式（首次配置）
+                                        callback.onResponse(
+                                            "✅ 接入点配置成功！\n\n" +
+                                            "🔹 已创建三个接入点：\n" +
+                                            "  1. Qwen-百炼标准 -397B\n" +
+                                            "  2. Qwen-CodePlan\n" +
+                                            "  3. MiniMax-M2.5\n\n" +
+                                            "🚀 系统会自动使用有效的接入点，现在可以享受完整功能了！"
+                                        );
+                                    }
+                                }
+
+                                @Override
+                                public void onError(Exception e) {
+                                    // MiniMax 创建失败，但前两个已成功
+                                    if (isBackupMode) {
+                                        callback.onResponse(
+                                            "⚠️ 部分配置成功：\n" +
+                                            "✅ Qwen-百炼标准 -397B" + nameSuffix + " 已创建\n" +
+                                            "✅ Qwen-CodePlan" + nameSuffix + " 已创建\n" +
+                                            "❌ MiniMax-M2.5" + nameSuffix + " 配置失败：" + e.getMessage() + "\n\n" +
+                                            "仍可正常使用已创建的两个接入点。"
+                                        );
+                                    } else {
+                                        callback.onResponse(
+                                            "⚠️ 部分配置成功：\n" +
+                                            "✅ Qwen-百炼标准 -397B 已创建\n" +
+                                            "✅ Qwen-CodePlan 已创建\n" +
+                                            "❌ MiniMax-M2.5 配置失败：" + e.getMessage() + "\n\n" +
+                                            "仍可正常使用已创建的两个接入点。"
+                                        );
+                                    }
+                                }
+                            });
                         }
 
                         @Override
@@ -220,7 +266,7 @@ public class GuideManager {
                                     "⚠️ 部分配置成功：\n" +
                                     "✅ Qwen-百炼标准 -397B" + nameSuffix + " 已创建\n" +
                                     "❌ Qwen-CodePlan" + nameSuffix + " 配置失败：" + e.getMessage() + "\n\n" +
-                                    "仍可正常使用新创建的百炼接入点。"
+                                    "仍可正常使用百炼接入点。"
                                 );
                             } else {
                                 callback.onResponse(
@@ -241,7 +287,7 @@ public class GuideManager {
                 }
             });
 
-            callback.onResponse("🔧 正在配置" + (isBackupMode ? "备用" : "双") + "接入点，请稍候...");
+            callback.onResponse("🔧 正在配置" + (isBackupMode ? "备用" : "三") + "接入点，请稍候...");
 
         } catch (Exception e) {
             callback.onError("❌ 处理过程中发生错误：" + e.getMessage());
