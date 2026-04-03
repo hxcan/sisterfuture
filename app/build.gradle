@@ -54,6 +54,9 @@ dependencies
   // Builtin FTP Server - 最新版（用于数据备份）
   // builtinftp 2026.3.31+ includes ftpserver 2026.3.39 with LIST command fix
   implementation 'com.github.hxcan:builtinftp:2026.3.31'
+  
+  // 🆕 Android Crash Detector - Global exception handler with crash logging to external storage
+  implementation 'com.github.hxcan:android-crash-detector:2026.4.5'
 }
 
 android 
