@@ -165,6 +165,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private SpeechRecognizer mIat;
 
+
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
@@ -182,6 +183,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final int FTP_SERVER_PORT = 2123;  // 端口规划：BlindBox.her=2121, JoyMan=2122, SisterFuture=2123
   private BuiltinFtpServer builtinFtpServer = null;
   private BuiltinFtpServerErrorListener builtinFtpServerErrorListener = null;
+
 
 	@Override
   public void onInit(int arg0)
@@ -861,12 +863,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void handleRateLimitError() {
     if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES) {
-      FileLogger.e(TAG, "❌ [RATE_LIMIT] 限流重试次数过多（" + rateLimitRetryCount + " >= " + MAX_RATE_LIMIT_RETRIES + "），放弃");
+      FileLogger.e(TAG, "❌ [RATE_LIMIT] 限流重试次数过多（" + rateLimitRetryCount + " >= " + MAX_RATE_LIMIT_RETRIES + "），切换接入点");
       rateLimitRetryCount = 0;
-      runOnUiThread(() -> {
-        messageAdapter.addMessage(new MessageItem("⚠️ 请求过于频繁，请稍后再试", MessageType.AI));
-        scrollToBottom();
-      });
+      
+      // 🔥 #4824 重试失败后切换接入点
+      int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
+      FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 限流导致接入点标记为不可用，计数器：" + failures);
+      
+      FileLogger.i(TAG, "🔄 [ACCESS_POINT_SWITCH] 限流重试失败，切换到下一个接入点");
+      sendChatRequestTongYi();
       return;
     }
     
