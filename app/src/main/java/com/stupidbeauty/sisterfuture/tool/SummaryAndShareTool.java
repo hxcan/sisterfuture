@@ -18,7 +18,7 @@ import com.stupidbeauty.codeposition.CodePosition;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
 import com.stupidbeauty.sisterfuture.tool.ConversationResetTool;
 import com.stupidbeauty.sisterfuture.tool.GetCurrentTimeTool;
-import com.stupidbeauty.sisterfuture.tool.SwitchAccessPointTool;
+import com.stupidbeauty.sisterfuture.tool.SwitchLargeLanguageModelTool;
 import com.stupidbeauty.sisterfuture.tool.GetCurrentAccessPointInfoTool;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
