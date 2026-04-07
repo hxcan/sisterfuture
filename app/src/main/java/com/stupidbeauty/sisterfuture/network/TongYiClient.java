@@ -200,6 +200,19 @@ public class TongYiClient
         requestBody.put("messages", messages);
         requestBody.put("stream", true);
         requestBody.put("enable_thinking", false);
+        
+        // === 🔒 #新功能：为所有模型添加 Minimax 思考控制参数 ===
+        // 即使不是 Minimax 模型也加上这些参数，让 API 自行判断是否支持
+        JSONObject thinkingParams = new JSONObject();
+        thinkingParams.put("type", "disabled");
+        thinkingParams.put("budget_tokens", 100);
+        requestBody.put("thinking", thinkingParams);
+        
+        JSONObject reasoningParams = new JSONObject();
+        reasoningParams.put("split", true);
+        requestBody.put("reasoning_split", reasoningParams.opt("split"));
+        
+        FileLogger.d(NETWORK_TAG, "🌐 [Minimax] 已添加 Minimax 思考控制参数：reasoning_split=true, thinking.budget_tokens=100");
 
         if (includeTools)
         {
