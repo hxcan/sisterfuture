@@ -204,11 +204,26 @@ public class CreateRedmineTaskTool implements Tool
                     JSONObject error = new JSONObject();
                     error.put("status", "error");
                     
-                    // ✅ 新增：参数完整性引导
+                    // ✅ 新增：通用参数完整性引导（覆盖所有异常类型）
                     String errorMessage = e.getMessage();
                     StringBuilder guidance = new StringBuilder();
                     
-                    if (errorMessage != null && errorMessage.contains("缺少")) {
+                    // 判断是否为参数相关错误（包含特定关键词）
+                    boolean isParamError = false;
+                    if (errorMessage != null) {
+                        String lowerMsg = errorMessage.toLowerCase();
+                        if (lowerMsg.contains("缺少") || 
+                            lowerMsg.contains("no value for") || 
+                            lowerMsg.contains("required") || 
+                            lowerMsg.contains("must be") ||
+                            lowerMsg.contains("empty") ||
+                            lowerMsg.contains("invalid type") ||
+                            lowerMsg.contains("argument")) {
+                            isParamError = true;
+                        }
+                    }
+                    
+                    if (isParamError) {
                         guidance.append("\n\n💡 参数完整性要求：\n");
                         guidance.append("在调用 create_redmine_task 工具时，必须仔细检查所有必需参数和可选参数的传递：\n");
                         guidance.append("- **必需参数**：project_id, subject\n");
@@ -224,6 +239,9 @@ public class CreateRedmineTaskTool implements Tool
                         guidance.append("```\n{\n  \"redmine_url\": \"https://your-redmine.com\",\n  \"username\": \"your_username\",\n  \"password\": \"your_password\",\n  \"project_id\": 123,\n  \"subject\": \"任务标题\",\n  \"description\": \"任务描述\",\n  \"priority\": \"Normal\",\n  \"tracker_id\": 2,\n  \"parent_issue_id\": 456\n}\n```\n\n**重要提醒**：每次调用前务必完整传递所有可获取的参数，避免因为参数缺失或错误导致任务创建失败！\n");
                         
                         errorMessage += "\n" + guidance.toString();
+                    } else {
+                        // 非参数错误（如网络错误、服务器错误），保持原样
+                        errorMessage = errorMessage != null ? errorMessage : "未知错误";
                     }
                     
                     error.put("message", errorMessage);
