@@ -137,5 +137,8 @@ public class ToolRegistry
 
     // 🔥 新增：按行文件编辑工具
     toolManager.registerTool(new EditFileByLineTool(context));
+
+    // 🔥 新增：写剪贴板工具
+    toolManager.registerTool(new WriteClipboardTool(context));
   }
 }
