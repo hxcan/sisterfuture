@@ -692,12 +692,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // 🔍 #5030【救援模式】遍历消息列表，检查所有 tool_call 的 arguments
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 开始检查消息列表中的 tool_call arguments | 消息总数：" + messagesArray.length());
-      for (int i = 0; i < messagesArray.length(); i++) {
-        try {
+      for (int i = 0; i < messagesArray.length(); i++) 
+      {
+        try 
+        {
           JSONObject msg = messagesArray.getJSONObject(i);
           String role = msg.optString("role", "unknown");
           
-          if ("tool".equals(role)) {
+          if ("tool".equals(role)) 
+          {
             String toolCallId = msg.optString("tool_call_id", "unknown");
             String toolName = msg.optString("name", "unknown_tool");
             String content = msg.optString("content", "");
@@ -707,10 +710,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 ", name=" + toolName);
             FileLogger.d(TAG, "   📄 [TOOL_CONTENT] content 长度=" + content.length());
             
-            try {
+            try 
+            {
               new JSONObject(content);
               FileLogger.d(TAG, "   ✅ [JSON_VALID] content 是有效的 JSON");
-            } catch (JSONException e) {
+            }
+            catch (JSONException e) 
+            {
               FileLogger.e(TAG, "   ❌ [JSON_INVALID] content 不是有效的 JSON! Error: " + e.getMessage());
               FileLogger.e(TAG, "   📋 [RAW_CONTENT] 原始内容：" + content);
             }
