@@ -140,5 +140,8 @@ public class ToolRegistry
 
     // 🔥 新增：写剪贴板工具
     toolManager.registerTool(new WriteClipboardTool(context));
+
+    // 🔥 新增：启动应用工具
+    toolManager.registerTool(new LaunchAppTool(context));
   }
 }
