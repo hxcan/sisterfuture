@@ -5,7 +5,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import android.content.Context;
 import android.util.Log;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 
 public class ListAccessPointsTool implements Tool {
     private static final String TAG = "ListAccessPointsTool";

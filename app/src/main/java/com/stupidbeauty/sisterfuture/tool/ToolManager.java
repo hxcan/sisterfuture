@@ -133,10 +133,4 @@ public class ToolManager
   {
     return callTracker;
   }
-
-  // � 新增：获取追踪器（用于测试）
-  public ToolCallTracker getCallTracker()
-  {
-    return callTracker;
-  }
 }

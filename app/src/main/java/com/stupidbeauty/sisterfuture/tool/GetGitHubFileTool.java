@@ -223,11 +223,6 @@ public class GetGitHubFileTool implements Tool {
                         Log.d(TAG, "GetGitHubFile DEBUG: Returning Base64 with length: " + originalLength);
                         if (originalLength > 2500) {
                             Log.w(TAG, "GetGitHubFile WARNING: Large Base64 content detected (" + originalLength + " chars).");
-                        
-                        // 添加完整性验证提示
-                        if (originalLength > 2500) {
-                            Log.w(TAG, "GetGitHubFile WARNING: Large Base64 content detected (" + originalLength + " chars). " +
-                                   "May be truncated by LLM during transfer. Consider using write_memory or add_note for storage.");
                         }
                         }
                     }
@@ -247,7 +242,6 @@ public class GetGitHubFileTool implements Tool {
                     debugInfo.put("warning_if_large", rawContent.length() > 2500);
                 }
                 result.put("debug_info", debugInfo);
-                
                 
                 callback.onResult(result);
             } catch (Exception e) {

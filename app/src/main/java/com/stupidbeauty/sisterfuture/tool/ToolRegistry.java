@@ -1,14 +1,12 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import com.stupidbeauty.sisterfuture.ContextManager;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
 import com.stupidbeauty.sisterfuture.tools.ListPhoneDirectoryTool;
 import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
 import android.content.Context;
-
-
 
 /**
  * 工具注册中心 - 集中管理所有工具的注册逻辑
@@ -42,7 +40,8 @@ public class ToolRegistry
     toolManager.registerTool(new PlanRouteTool(context));
 
     // === 接入点管理工具 ===
-    toolManager.registerTool(new SwitchAccessPointTool(modelAccessPointManager));
+    // 🔥 #4824 重命名：switch_access_point → switch_large_language_model
+    toolManager.registerTool(new SwitchLargeLanguageModelTool(modelAccessPointManager));
     toolManager.registerTool(new GetCurrentAccessPointInfoTool(modelAccessPointManager));
     toolManager.registerTool(new DeveloperInfoTool());
     toolManager.registerTool(new SummaryAndShareTool(context, modelAccessPointManager, toolManager, contextManager));
@@ -96,8 +95,11 @@ public class ToolRegistry
     toolManager.registerTool(new GetGitHubFileTool(context));
     toolManager.registerTool(new CreateGitHubCommitTool(context));
     
-    // � 新增：GitHub Actions 日志获取工具（异步版本，需要 context）
+    // 🔥 新增：GitHub Actions 日志获取工具（异步版本，需要 context）
     toolManager.registerTool(new GetGitHubActionsLogsTool(context));
+    
+    // 🔥 新增：GitHub Pull Request 创建工具
+    toolManager.registerTool(new CreatePullRequestTool(context));
 
     // === 系统提示词管理工具 ===
     toolManager.registerTool(new FuseSystemPromptTool(context));
@@ -132,5 +134,11 @@ public class ToolRegistry
     // === 手机文件访问工具（新增） ===
     toolManager.registerTool(new ListPhoneDirectoryTool(context));
     toolManager.registerTool(new ReadPhoneFileTool(context));
+
+    // 🔥 新增：按行文件编辑工具
+    toolManager.registerTool(new EditFileByLineTool(context));
+
+    // 🔥 新增：写剪贴板工具
+    toolManager.registerTool(new WriteClipboardTool(context));
   }
 }

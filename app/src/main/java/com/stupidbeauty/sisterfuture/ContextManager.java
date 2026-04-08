@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.List;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 public class ContextManager
 {
@@ -131,20 +133,7 @@ public class ContextManager
   
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
-    FileLogger.i(TAG, "#4935 [addToolMessage start] toolCallId=" + toolCallId + ", toolName=" + toolName);
-    
     List<JSONObject> history = getHistory();
-    FileLogger.i(TAG, "[addToolMessage] Current history count: " + history.size());
-    
-    for (int i = 0; i < history.size(); i++)
-    {
-      JSONObject msg = history.get(i);
-      String role = msg.optString("role", "unknown");
-      String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " items" : "none";
-      String toolId = msg.optString("tool_call_id", "none");
-      String contentPreview = msg.optString("content", "").substring(0, Math.min(30, msg.optString("content").length()));
-      FileLogger.i(TAG, "  Msg[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId + ", content=" + contentPreview + "...");
-    }
 
     JSONObject toolMessage = new JSONObject();
     try
@@ -161,23 +150,9 @@ public class ContextManager
     }
 
     history.add(toolMessage);
-    FileLogger.i(TAG, "[addToolMessage] Added tool message, count: " + history.size());
     history = removeOldHistoryEntries(history);
     history = normalizeToolCallMessages(history);
-    FileLogger.i(TAG, "[addToolMessage] Before normalize: " + history.size());
-    history = normalizeToolCallMessages(history);
-    FileLogger.i(TAG, "[addToolMessage] After normalize: " + history.size());
-    
-    for (int i = 0; i < history.size(); i++)
-    {
-      JSONObject msg = history.get(i);
-      String role = msg.optString("role", "unknown");
-      String toolCallIds = msg.has("tool_calls") ? String.valueOf(msg.optJSONArray("tool_calls").length()) + " items" : "none";
-      String toolId = msg.optString("tool_call_id", "none");
-      FileLogger.i(TAG, "  Normalized[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
-    }
     saveHistory(history);
-    FileLogger.i(TAG, "[addToolMessage done] History saved");
   }
 
   public void addUserMessage(String message)
@@ -198,40 +173,18 @@ public class ContextManager
   {
     if (message == null)
     {
-      FileLogger.w(TAG, "#4935 [addRawMessage] Input is null, skip");
       return;
     }
 
-    List<JSONObject> historyBefore = getHistory();
-
-    boolean hasToolCalls = message.has("tool_calls");
-    int toolCallsCount = hasToolCalls ? message.optJSONArray("tool_calls").length() : 0;
-    String contentPreview = message.optString("content", "").substring(0, Math.min(50, message.optString("content").length()));
-    
-    FileLogger.i(TAG, "#4935 [addRawMessage CALL] role=" + role + 
-                  ", has_tool_calls=" + hasToolCalls + 
-                  ", tool_calls_count=" + toolCallsCount +
-                  ", content_preview=\"" + contentPreview + "...\"");
-    
-    // #4935 Log history state before add
-    List<JSONObject> historyBefore = getHistory();
-    FileLogger.i(TAG, "#4935 [addRawMessage BEFORE] History count: " + historyBefore.size());
-    for (int i = 0; i < historyBefore.size(); i++)
+    // Validate tool_calls arguments before adding to history
+    if (message.has("tool_calls"))
     {
-      JSONObject msg = historyBefore.get(i);
-      String msgRole = msg.optString("role", "unknown");
-      String msgToolCalls = msg.has("tool_calls") ? "has_tool_calls(" + msg.optJSONArray("tool_calls").length() + ")" : "none";
-      String msgToolId = msg.optString("tool_call_id", "none");
-      FileLogger.i(TAG, "  Msg[" + i + "] role=" + msgRole + ", tool_calls=" + msgToolCalls + ", tool_call_id=" + msgToolId);
-    }
-
-    try
-    {
-      if (message.has("tool_calls"))
+      try
       {
         JSONArray toolCalls = message.getJSONArray("tool_calls");
         if (toolCalls.length() == 0)
         {
+          FileLogger.w(TAG, "[addRawMessage] Skip: empty tool_calls array");
           return;
         }
 
@@ -244,44 +197,101 @@ public class ContextManager
             if (function.has("arguments"))
             {
               String argumentsStr = function.getString("arguments");
+              
+              // Check length first
+              if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments too long (" + argumentsStr.length() + " > " + MAX_ARGUMENTS_STR_LENGTH + ")");
+                return;
+              }
+              
+              // General validation: detect any unquoted string identifiers in JSON
+              if (hasUnquotedStringValues(argumentsStr))
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains unquoted string values");
+                return;
+              }
+              
+              // Strict JSON validation
               try
               {
-                new JSONObject(argumentsStr);
+                JSONTokener tokener = new JSONTokener(argumentsStr);
+                Object parsed = tokener.nextValue();
+                
+                if (tokener.more())
+                {
+                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments has trailing content after JSON");
+                  return;
+                }
+                
+                if (!(parsed instanceof JSONObject))
+                {
+                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments is not a JSONObject");
+                  return;
+                }
               }
               catch (JSONException e)
               {
-                return;
-              }
-            }
-          }
+                FileLogger.w(TAG, "[addRawMessage] Skip: invalid JSON in arguments - " + e.getMessage());
                 return;
               }
             }
           }
         }
       }
+      catch (JSONException e)
+      {
+        FileLogger.e(TAG, "[addRawMessage] Error checking tool_calls: " + e.getMessage(), e);
+        return;
+      }
     }
-    catch (JSONException e)
-    {
-      FileLogger.e(TAG, "Error checking tool_calls", e);
-    }
+
+    List<JSONObject> historyBefore = getHistory();
+    FileLogger.i(TAG, "[addRawMessage CALL] role=" + message.optString("role", "unknown") + 
+      ", has_tool_calls=" + message.has("tool_calls"));
 
     List<JSONObject> history = getHistory();
+    FileLogger.i(TAG, "[addRawMessage BEFORE] History count: " + history.size());
+    
     history.add(message);
-    FileLogger.i(TAG, "#4935 [addRawMessage] Message added, before: " + historyBefore.size() + " -> after: " + history.size());
+    FileLogger.i(TAG, "[addRawMessage] Message added: " + historyBefore.size() + " -> " + history.size());
     
-    JSONObject lastMsg = history.get(history.size() - 1);
-    String lastRole = lastMsg.optString("role", "unknown");
-    boolean lastHasToolCalls = lastMsg.has("tool_calls");
-    FileLogger.i(TAG, "#4935 [addRawMessage] Last msg verify: role=" + lastRole + ", has_tool_calls=" + lastHasToolCalls);
-
     history = removeOldHistoryEntries(history);
-    
-    FileLogger.i(TAG, "#4935 [removeOldHistoryEntries] After: " + history.size());
-    
     saveHistory(history);
+    FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
+  }
+
+  /**
+   * General validation: check if JSON string contains unquoted string values.
+   * Strategy: Remove all quoted strings, then look for alphabetic identifiers after colons.
+   * Valid JSON values: "quoted", number, true, false, null, {, [, }
+   * Invalid: unquoted identifiers like latest, abc, test_value
+   */
+  private boolean hasUnquotedStringValues(String jsonStr)
+  {
+    // Step 1: Remove all properly quoted strings (including escaped quotes)
+    String withoutQuotedStrings = jsonStr.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", "\"\"");
     
-    FileLogger.i(TAG, "#4935 [addRawMessage DONE] Final count: " + history.size());
+    // Step 2: Look for pattern: : followed by whitespace and an identifier
+    // Identifiers start with letter/underscore, followed by alphanumeric/underscore
+    Pattern pattern = Pattern.compile(":\\s*([a-zA-Z_][a-zA-Z0-9_]*)");
+    Matcher matcher = pattern.matcher(withoutQuotedStrings);
+    
+    while (matcher.find())
+    {
+      String identifier = matcher.group(1);
+      
+      // Step 3: Check if it's NOT a valid JSON keyword
+      if (!identifier.equals("true") && 
+          !identifier.equals("false") && 
+          !identifier.equals("null"))
+      {
+        FileLogger.d(TAG, "[hasUnquotedStringValues] Found unquoted identifier: " + identifier);
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   private void addMessage(String role, String content)
@@ -315,7 +325,6 @@ public class ContextManager
     try
     {
       JSONArray array = new JSONArray(historyStr);
-      FileLogger.d(TAG, "[getHistory] Load history, count: " + array.length());
 
       for (int i = 0; i < array.length(); i++)
       {
@@ -350,11 +359,18 @@ public class ContextManager
           {
             String argumentsStr = function.getString("arguments");
             
+            // General validation: check for unquoted string values
+            if (hasUnquotedStringValues(argumentsStr))
+            {
+              FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: unquoted string values");
+              return false;
+            }
+            
             try
             {
               JSONTokener tokener = new JSONTokener(argumentsStr);
               Object parsed = tokener.nextValue();
-              
+
               if (tokener.more())
               {
                 return false;
@@ -399,9 +415,6 @@ public class ContextManager
       {
         JSONObject currentObject =  history.get(i);
         String roleString = currentObject.getString("role");
-        String toolCallIds = currentObject.has("tool_calls") ? String.valueOf(currentObject.optJSONArray("tool_calls").length()) + " items" : "none";
-        String toolId = currentObject.optString("tool_call_id", "none");
-        FileLogger.d(TAG, "[normalize] Process[" + i + "] role=" + roleString + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
 
         if (roleString.equals("assistant"))
         {
@@ -412,25 +425,8 @@ public class ContextManager
           }
         }
         else if (roleString.equals("tool"))
-            {
-          String answeringtoolCAllId = currentObject.optString("tool_call_id", "none");
-          
-              {
-                JSONObject firstToolCall = toolCalls.getJSONObject(0);
-                toolCallId = firstToolCall.optString("id", "unknown");
-              }
-            }
-            catch (Exception e) {}
-            
-            FileLogger.d(TAG, "[normalize] Found assistant(tool_calls), id=" + toolCallId);
-            pendingToolCallsObject = currentObject;
-            continue;
-          }
-        }
-        else if (roleString.equals("tool"))
         {
           String answeringtoolCAllId = currentObject.optString("tool_call_id", "none");
-          FileLogger.d(TAG, "[normalize] Found tool reply, tool_call_id=" + answeringtoolCAllId);
           
           if (pendingToolCallsObject!=null)
           {
@@ -440,21 +436,17 @@ public class ContextManager
 
             if (toolCAllsId.equals(answeringtoolCAllId))
             {
-              FileLogger.d(TAG, "[normalize] Pair success, add assistant(tool_calls)");
               list.add(pendingToolCallsObject);
               pendingToolCallsObject = null;
             }
             else
             {
-              FileLogger.w(TAG, "[normalize] Pair failed, clear pending");
               pendingToolCallsObject = null;
               continue;
             }
-
           }
           else
           {
-            FileLogger.w(TAG, "[normalize] Orphan tool reply, skip");
             continue;
           }
         }
@@ -467,7 +459,6 @@ public class ContextManager
       e.printStackTrace();
     }
     
-    FileLogger.i(TAG, "[normalizeToolCallMessages done] Output count: " + list.size());
     return list;
   }
 
@@ -481,19 +472,6 @@ public class ContextManager
     saveHistory(newHistory);
   }
 
-      FileLogger.i(TAG, "  NewMsg[" + i + "] role=" + role + ", content=" + content + "...");
-    }
-    
-    if (newHistory.size() > currentMaxRounds * 2)
-    {
-      newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
-      FileLogger.w(TAG, "[replaceHistory] Exceeded limit, truncated to: " + newHistory.size());
-    }
-    
-    saveHistory(newHistory);
-    FileLogger.i(TAG, "[replaceHistory done] History saved");
-  }
-
   private void saveHistory(List<JSONObject> history)
   {
     JSONArray historyArray = new JSONArray(history);
@@ -501,7 +479,6 @@ public class ContextManager
         .putString(KEY_HISTORY, historyArray.toString())
         .putInt("current_max_rounds", currentMaxRounds)
         .apply();
-    FileLogger.d(TAG, "#4935 [saveHistory] Saved, count: " + history.size());
   }
 
   private JSONObject createMessage(String role, String content)

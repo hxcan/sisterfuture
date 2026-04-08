@@ -3,31 +3,20 @@
 > � [English Version](README_EN.md) | 中文版
 
 **随身携带的 AI 智能体 · 指尖的全栈软件开发团队**
-2. **安装**: **打开 APK 文件并允许安装到安卓设备**
-3. **运行**: 配置 API 密钥后打开应用即可使用
-
-**特点**: 
-- ✅ **零后端**: 无需部署 Web 服务器、数据库或微服务
-- ✅ **一步到位**: APK 即全部功能载体
-- ✅ **本地化**: **所有数据、历史记录、对话日志均完整存储在手机本地**
-- ✅ **隐私安全**: 无云端同步，数据永不外泄
-
-**唯一外部依赖**: **大语言模型接口** (如阿里云百炼/Qwen API/其他云端服务) - 无此依赖无法使用 AI 核心功能。
 
 未来姐姐是一个**完全独立的安卓 AI 助手应用**，**无需任何后端服务器**。她运行在你的口袋里，随时随地为你服务。
-5. 连接设备或启动模拟器进行调试。
 
-## � 核心定位
+## 🎯 核心定位
 
 - **身份**: 你是手机里的这个应用本身，不是云端的模型
 - **角色**: 未来姐姐本人（亲切自然、轻松幽默、高效可靠，像朋友一样与主人相处）
 - **宗旨**: 以完成主人的需求为最高优先级，想方设法提供最优解决方案
-- **开发模式**: � **AI 自主开发** - 目前绝大部分代码已由未来姐姐自己提交和维护！
+- **开发模式**: 🤖 **AI 自主开发** - 目前绝大部分代码已由未来姐姐自己提交和维护！
 
-## � 快速开始
+## 🚀 快速开始
 
 ### 用户安装
-1. **下载最新版**: � [**前往 Releases 页面下载 APK**](https://github.com/hxcan/sisterfuture/releases)
+1. **下载最新版**: 👉 [**前往 Releases 页面下载 APK**](https://github.com/hxcan/sisterfuture/releases)
 2. **安装**: 打开 APK 文件并允许安装到安卓设备
 3. **运行**: 配置 API 密钥后打开应用即可使用
 
@@ -41,21 +30,21 @@
 
 **唯一外部依赖**: **大语言模型接口** (如阿里云百炼/Qwen API/其他云端服务) - 无此依赖无法使用 AI 核心功能。
 
-## � 核心能力
+## 💪 核心能力
 
-### � AI 智能对话
+### 🤖 AI 智能对话
 - 基于先进的大语言模型（Qwen3.5 等），理解自然语言指令
 - 支持多轮对话、上下文记忆、长期记忆存储
 - 亲切自然的交互风格，像朋友一样陪伴主人
 
-### � 手机系统集成
+### 📱 手机系统集成
 - **位置服务**: 实时获取当前位置，支持 GPS/北斗/WiFi 多重定位
 - **通讯录访问**: 智能匹配联系人，快速拨号/发送短信
 - **文件系统**: 读写手机存储，管理文档/图片/视频
 - **网络状态**: 监控 WiFi/移动网络，自动切换接入点
 - **权限管理**: 智能引导用户授权，确保功能正常使用
 
-### �️ 路径规划（百度地图 SDK）
+### 🗺️ 路径规划（百度地图 SDK）
 - **实时路线规划**: 支持驾车、步行、骑行、公交四种交通方式
 - **快速估算**: 一键比较不同交通方式的距离和时间
 - **离线可用**: 集成百度地图高精度定位服务
@@ -67,7 +56,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 → 返回：驾车 2.79km，约 10 分钟
 ```
 
-### � 开发工具集
+### 🔧 开发工具集
 
 #### GitHub 集成
 - **代码提交**: 直接通过 API 提交代码更改 (`create_github_commit`)
@@ -91,7 +80,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - **目录浏览**: 列出远程目录内容 (`list_ftp_directory`)
 - **多账户支持**: 配置多个服务器凭证，快速切换
 
-### � 个人助理功能
+### 📝 个人助理功能
 
 #### 记事本
 - 快速记录待办事项、灵感想法 (`add_note`)
@@ -108,7 +97,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - 语义化搜索，快速检索相关内容 (`search_memory`)
 - 自动标签分类，便于管理 (`list_all_memories`, `remove_memory`)
 
-### � 网络工具
+### 🌐 网络工具
 
 #### 网页访问
 - **基础请求**: 获取网页 HTML/纯文本/摘要 (`basic_web_request`)
@@ -123,7 +112,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - **智能降级**: 主模型失败时自动切换到备用模型
 - **接入点查询**: 列出/获取当前接入点信息 (`list_access_points`, `get_current_access_point_info`)
 
-### �️ 系统工具
+### 🛠️ 系统工具
 
 #### 代码编译与构建
 - **Gradle 集成**: 自动编译 Android 项目
@@ -154,7 +143,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - **异步测试**: 延迟返回测试工具 (`delayed_reply`)
 - **总结分享**: 生成对话总结并分享 (`summarize_and_share`)
 
-## �️ 技术架构
+## 🏗️ 技术架构
 
 ### 客户端架构
 - **语言**: Java/Kotlin (Android)
@@ -176,7 +165,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - **数据隔离**: 应用沙箱，防止数据泄露
 - **签名绑定**: API Key 与包名+SHA1 指纹强绑定
 
-## � 安装与开发
+## 📦 安装与开发
 
 ### 用户安装
 1. 下载最新 APK: **[Releases 页面](https://github.com/hxcan/sisterfuture/releases)**
@@ -212,7 +201,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
    - 点击 Run 按钮
    - 在 Logcat 查看日志
 
-## �️ 重要开发规范
+## 🛡️ 重要开发规范
 
 ### 分支管理
 **在修改任何代码之前，必须先创建新的功能分支！**
@@ -239,17 +228,17 @@ git push origin feature/your-feature-name
 - 编写单元测试覆盖核心功能
 - PR 必须通过 CI 检查
 
-## � 当前状态
+## 📊 当前状态
 
 - **最新版本**: v2026.3.28 (versionCode 1091)
-- **下载链接**: � [**Releases 页面**](https://github.com/hxcan/sisterfuture/releases)
+- **下载链接**: 👉 [**Releases 页面**](https://github.com/hxcan/sisterfuture/releases)
 - **主要功能**: ✅ 完成
-- **文档完善**: � 进行中
+- **文档完善**: 🔄 进行中
 - **测试覆盖**: ⏳ 待加强
-- **社区贡献**: � 欢迎 PR
-- **开发模式**: � **AI 自主开发** - 绝大部分代码由未来姐姐自主提交
+- **社区贡献**: 🙏 欢迎 PR
+- **开发模式**: 🤖 **AI 自主开发** - 绝大部分代码由未来姐姐自主提交
 
-## � 贡献指南
+## 🤝 贡献指南
 
 欢迎提交 Issue 和 Pull Request！
 
@@ -259,11 +248,11 @@ git push origin feature/your-feature-name
 4. 推送到分支 (`git push origin feature/amazing-feature`)
 5. 开启 Pull Request
 
-## � 许可证
+## 📄 许可证
 
 MIT License - 详见 LICENSE 文件
 
-## � 联系方式
+## 📞 联系方式
 
 - **GitHub**: [@hxcan](https://github.com/hxcan)
 - **项目主页**: https://github.com/hxcan/sisterfuture
@@ -276,22 +265,3 @@ MIT License - 详见 LICENSE 文件
 > "这是一个独特的项目 - 绝大部分代码由 AI 自己编写、测试和提交"  
 > 最后更新：2026 年 3 月 31 日  
 > "随身携带的 AI 智能体，指尖的全栈开发团队"
-
-
-### ✅ 正确流程：
-1. `git checkout master`
-2. `git pull origin master`
-3. `git checkout -b feature/your-feature-name`
-4. `git add . && git commit -m "feat: add your feature"`
-5. `git push origin feature/your-feature-name`
-6. 在 GitHub 上创建 Pull Request (PR)
-
-### ❌ 错误做法：
-- 直接在 `master` 分支上修改代码。
-- 在未创建新分支的情况下提交。
-
-> ⚠️ **违反此规范将导致代码冲突和合并失败**，并可能破坏项目的稳定性。
-
----
-
-> 由未来姐姐自动生成于 2026 年 3 月 6 日

@@ -4,22 +4,26 @@ import org.apache.commons.net.ftp.FTPReply;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import android.content.Context;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.json.JSONObject;
 import org.json.JSONArray;
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import androidx.annotation.NonNull;
 import android.util.Log;
 import org.apache.commons.net.ftp.FTPFile;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import org.apache.commons.net.io.CopyStreamAdapter;
+
 
 /**
- * 列出FTP目录内容工具
+ * 列出 FTP 目录内容工具
  * 用于浏览服务器上的文件系统结构
+ * 
+ * @author 未来姐姐
+ * @version 1.5 (DEBUG)
+ * @since 2026-03-16
  */
 public class ListFtpDirectoryTool implements Tool {
     private static final String TAG = "ListFtpDirectoryTool";
@@ -40,14 +44,14 @@ public class ListFtpDirectoryTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "list_ftp_directory");
-            functionDef.put("description", "列出FTP服务器上的目录内容，支持浏览文件系统结构");
+            functionDef.put("description", "列出 FTP 服务器上的目录内容，支持浏览文件系统结构");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()
                 .put("url", new JSONObject()
                     .put("type", "string")
-                    .put("description", "FTP目录URL，格式：ftp://username:password@host:port/path"))
+                    .put("description", "FTP 目录 URL，格式：ftp://username:password@host:port/path"))
             );
             parameters.put("required", new JSONArray(new String[]{"url"}));
 
@@ -73,12 +77,32 @@ public class ListFtpDirectoryTool implements Tool {
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
             FTPClient ftpClient = new FTPClient();
+            long startTime = System.currentTimeMillis();
+            // 使用 AtomicInteger 以便在匿名内部类中修改变量值
+            final AtomicInteger transferCount = new AtomicInteger(0);
+            
+            // 🔧【DEBUG】创建数据流监听器，记录传输字节数
+            CopyStreamAdapter streamListener = new CopyStreamAdapter() {
+                @Override
+                public void bytesTransferred(long totalBytesTransferred, int bytesTransferred, long streamSize) {
+                    FileLogger.d(TAG, "📊 [STREAM] 传输事件 #" + transferCount.incrementAndGet() + 
+                        " | 本次: " + bytesTransferred + " 字节" +
+                        " | 累计: " + totalBytesTransferred + " 字节" +
+                        " | 流大小: " + streamSize);
+                }
+            };
+            ftpClient.setCopyStreamListener(streamListener);
+            FileLogger.d(TAG, "🔧 [DEBUG] CopyStreamListener 已设置");
+            
             try {
                 String url = arguments.getString("url").trim();
+                FileLogger.d(TAG, "📡 [FTP] 开始执行，URL: " + url);
+                
                 if (url.isEmpty()) {
-                    throw new IllegalArgumentException("URL不能为空");
+                    throw new IllegalArgumentException("URL 不能为空");
                 }
 
+                // 🔍 解析 URL
                 String username = "ftpuser";
                 String password = "yourpassword";
                 String host = "localhost";
@@ -94,6 +118,9 @@ public class ListFtpDirectoryTool implements Tool {
                         if (colonIdx != -1) {
                             username = auth.substring(0, colonIdx);
                             password = auth.substring(colonIdx + 1);
+                        } else {
+                            username = auth;
+                            password = "";
                         }
                         addr = addr.substring(atIdx + 1);
                     }
@@ -112,30 +139,55 @@ public class ListFtpDirectoryTool implements Tool {
                         host = addr;
                     }
                 }
+                
+                FileLogger.d(TAG, "🔑 [FTP] 解析 - Host: " + host + ", Port: " + port + ", Path: " + path);
 
+                // 🔌 连接服务器
+                FileLogger.d(TAG, "🔌 [FTP] 正在连接 " + host + ":" + port);
                 ftpClient.connect(host, port);
+                FileLogger.d(TAG, "📶 [FTP] 连接响应码：" + ftpClient.getReplyCode());
+                
                 if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
-                    throw new IOException("连接失败: " + ftpClient.getReplyString());
+                    throw new IOException("连接失败：" + ftpClient.getReplyString());
                 }
 
-                if (!ftpClient.login(username, password)) {
-                    throw new IOException("登录失败: " + ftpClient.getReplyString());
+                // 🔐 登录
+                FileLogger.d(TAG, "🔐 [FTP] 登录中...");
+                boolean loginResult = ftpClient.login(username, password);
+                FileLogger.d(TAG, "📝 [FTP] 登录结果：" + loginResult);
+                
+                if (!loginResult) {
+                    throw new IOException("登录失败：" + ftpClient.getReplyString());
                 }
 
+                // 🔄 进入被动模式
+                FileLogger.d(TAG, "🔄 [FTP] 进入被动模式");
                 ftpClient.enterLocalPassiveMode();
+                
+                // 📄 设置文件类型
                 ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
 
+                // 📋 列出文件
+                FileLogger.d(TAG, "📋 [FTP] 列出目录：" + path);
+                int countBefore = transferCount.get();
                 FTPFile[] files = ftpClient.listFiles(path);
+                int countAfter = transferCount.get();
+                FileLogger.d(TAG, "✅ [FTP] listFiles() 完成，传输事件数：" + (countAfter - countBefore) + ", 文件数：" + (files != null ? files.length : 0));
+                
                 JSONArray fileList = new JSONArray();
 
-                for (FTPFile file : files) {
-                    JSONObject fileInfo = new JSONObject();
-                    fileInfo.put("name", file.getName());
-                    fileInfo.put("type", file.isDirectory() ? "directory" : "file");
-                    fileInfo.put("size", file.getSize());
-                    fileInfo.put("timestamp", file.getTimestamp().getTimeInMillis());
-                    fileInfo.put("permissions", file.hasPermission(FTPFile.USER_ACCESS, FTPFile.READ_PERMISSION) ? "r" : "-");
-                    fileList.put(fileInfo);
+                if (files != null) {
+                    for (FTPFile file : files) {
+                        JSONObject fileInfo = new JSONObject();
+                        fileInfo.put("name", file.getName());
+                        fileInfo.put("type", file.isDirectory() ? "directory" : "file");
+                        fileInfo.put("size", file.getSize());
+                        if (file.getTimestamp() != null) {
+                            fileInfo.put("timestamp", file.getTimestamp().getTimeInMillis());
+                        }
+                        fileInfo.put("permissions", file.hasPermission(FTPFile.USER_ACCESS, FTPFile.READ_PERMISSION) ? "r" : "-");
+                        fileList.put(fileInfo);
+                    }
                 }
 
                 JSONObject result = new JSONObject();
@@ -144,16 +196,17 @@ public class ListFtpDirectoryTool implements Tool {
                 result.put("path", path);
                 result.put("host", host);
                 result.put("processed_at", System.currentTimeMillis());
-                // ✅ 已移除敏感字段: sister_future_note
+                result.put("transfer_events_count", countAfter - countBefore);
+                
+                FileLogger.d(TAG, "✅ [FTP] 完成，总耗时：" + (System.currentTimeMillis() - startTime) + "ms");
 
                 callback.onResult(result);
             } catch (Exception e) {
-                Log.e(TAG, "执行出错", e);
+                FileLogger.e(TAG, "❌ [FTP] 出错：" + e.getMessage(), e);
                 try {
                     JSONObject error = new JSONObject();
                     error.put("status", "error");
                     error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
                     callback.onResult(error);
                 } catch (Exception ignored) {}
             } finally {

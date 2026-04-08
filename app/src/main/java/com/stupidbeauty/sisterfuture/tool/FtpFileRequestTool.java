@@ -152,7 +152,7 @@ public class FtpFileRequestTool implements Tool {
                 }
 
                 ftpClient.enterLocalPassiveMode();
-                // � 改为 BINARY 模式，支持文本和二进制文件
+                // 🔥 改为 BINARY 模式，支持文本和二进制文件
                 ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -165,12 +165,12 @@ public class FtpFileRequestTool implements Tool {
                 byte[] fileBytes = outputStream.toByteArray();
                 long fileSize = fileBytes.length;
 
-                // � 关键修改：保存到手机时不限制大小，只在不保存时限制
+                // 🔥 关键修改：保存到手机时不限制大小，只在不保存时限制
                 if (!saveToPhone && fileSize > MAX_FILE_SIZE_FOR_CONTENT) {
                     throw new IOException("文件太大，超过 1MB 限制。请使用 save_to_phone=true 参数直接保存到手机");
                 }
 
-                // � 新增：保存到手机存储逻辑
+                // 🔥 新增：保存到手机存储逻辑
                 if (saveToPhone) {
                     String fileName = getFileNameFromUrl(url);
                     String targetPath = phonePath.isEmpty() 
@@ -179,7 +179,7 @@ public class FtpFileRequestTool implements Tool {
                     
                     WriteResult writeResult = writeToPhoneStorage(targetPath, fileBytes);
                     
-                    // � 保存到手机时不返回文件内容，只返回元数据
+                    // 🔥 保存到手机时不返回文件内容，只返回元数据
                     JSONObject result = new JSONObject();
                     result.put("status", "success");
                     result.put("ftp_url", url);
@@ -341,7 +341,7 @@ public class FtpFileRequestTool implements Tool {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(intent);
             
-            Log.d(TAG, "� 已打开权限申请页面");
+            Log.d(TAG, "📱 已打开权限申请页面");
         } catch (Exception e) {
             Log.e(TAG, "打开权限申请页面失败", e);
             

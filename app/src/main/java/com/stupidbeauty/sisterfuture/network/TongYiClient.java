@@ -6,7 +6,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.tool.Tool;
 import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
@@ -41,7 +41,7 @@ public class TongYiClient
   private NetworkRequester networkRequester;
   private ToolManager toolManager;
 
-  // === � #5028 新增：串行请求队列 ===
+  // === 🔒 #5028 新增：串行请求队列 ===
   private final LinkedBlockingQueue<Runnable> requestQueue = new LinkedBlockingQueue<>();
   private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
     Thread t = new Thread(r, "TongYiClient-Queue-Worker");
@@ -60,12 +60,12 @@ public class TongYiClient
     this.toolManager = toolManager;
     this.networkRequester = new OkHttpNetworkRequester(this.accessPointManager, this.toolManager);
     
-    // === � #5028 启动队列处理器 ===
+    // === 🔒 #5028 启动队列处理器 ===
     startQueueProcessor();
-    FileLogger.i(TAG, "� [QUEUE_INIT] TongYiClient 初始化完成，串行请求队列已启动");
+    FileLogger.i(TAG, "🔒 [QUEUE_INIT] TongYiClient 初始化完成，串行请求队列已启动");
   }
   
-  // === � #5028 队列处理器 ===
+  // === 🔒 #5028 队列处理器 ===
   private void startQueueProcessor() {
     executor.submit(() -> {
       
@@ -74,16 +74,16 @@ public class TongYiClient
           Runnable request = requestQueue.take(); // 阻塞等待下一个请求
           request.run();
         } catch (InterruptedException e) {
-          FileLogger.w(TAG, "� [QUEUE_WORKER] 队列工作线程被中断，退出循环");
+          FileLogger.w(TAG, "🔒 [QUEUE_WORKER] 队列工作线程被中断，退出循环");
           Thread.currentThread().interrupt();
           break;
         } catch (Exception e) {
-          FileLogger.e(TAG, "� [QUEUE_ERROR] 队列执行异常", e);
+          FileLogger.e(TAG, "🔒 [QUEUE_ERROR] 队列执行异常", e);
           // 继续处理下一个请求，不退出循环
         }
       }
       
-      FileLogger.w(TAG, "� [QUEUE_WORKER] 队列工作线程已退出");
+      FileLogger.w(TAG, "🔒 [QUEUE_WORKER] 队列工作线程已退出");
     });
   }
 
@@ -93,9 +93,9 @@ public class TongYiClient
     final int queueSizeBefore = requestQueue.size();
     final int totalRequests = totalRequestsSubmitted.incrementAndGet();
     
-    FileLogger.d(TAG, "� [QUEUE_SUBMIT] 请求 #" + totalRequests + " 提交到队列 | 当前队列长度：" + queueSizeBefore + " | 线程：" + Thread.currentThread().getName());
+    FileLogger.d(TAG, "🔒 [QUEUE_SUBMIT] 请求 #" + totalRequests + " 提交到队列 | 当前队列长度：" + queueSizeBefore + " | 线程：" + Thread.currentThread().getName());
     
-    // === � #5028 将请求提交到队列 ===
+    // === 🔒 #5028 将请求提交到队列 ===
     boolean queued = requestQueue.offer(() -> {
       final long startTime = System.currentTimeMillis();
       final long waitTime = startTime - submitTime;
@@ -114,7 +114,7 @@ public class TongYiClient
         currentQueueSize = queueSizeBefore;
       }
       
-      FileLogger.d(TAG, "� [QUEUE_EXEC] 请求 #" + totalRequests + " 开始执行 | 等待时间：" + waitTime + "ms | 当前队列长度：" + queueSizeNow + " | 线程：" + Thread.currentThread().getName());
+      FileLogger.d(TAG, "🔒 [QUEUE_EXEC] 请求 #" + totalRequests + " 开始执行 | 等待时间：" + waitTime + "ms | 当前队列长度：" + queueSizeNow + " | 线程：" + Thread.currentThread().getName());
       
       try {
         // 执行实际的网络请求
@@ -123,26 +123,26 @@ public class TongYiClient
         final long endTime = System.currentTimeMillis();
         final long executionTime = endTime - startTime;
         
-        FileLogger.d(TAG, "� [QUEUE_DONE] 请求 #" + totalRequests + " 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
+        FileLogger.d(TAG, "🔒 [QUEUE_DONE] 请求 #" + totalRequests + " 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
         
         // 每 10 个请求输出一次统计
         if (totalRequests % 10 == 0) {
           long avgWaitTime = totalWaitTimeMs.get() / totalRequests;
           int highWaterMark = queueSizeHighWaterMark.get();
-          FileLogger.i(TAG, "� [QUEUE_STATS] 队列统计 | 总请求数：" + totalRequests + " | 平均等待时间：" + avgWaitTime + "ms | 队列最大长度：" + highWaterMark);
+          FileLogger.i(TAG, "🔒 [QUEUE_STATS] 队列统计 | 总请求数：" + totalRequests + " | 平均等待时间：" + avgWaitTime + "ms | 队列最大长度：" + highWaterMark);
         }
       } catch (Exception e) {
-        FileLogger.e(TAG, "� [QUEUE_ERROR] 请求 #" + totalRequests + " 执行失败", e);
+        FileLogger.e(TAG, "🔒 [QUEUE_ERROR] 请求 #" + totalRequests + " 执行失败", e);
         throw e;
       }
     });
     
     if (!queued) {
-      FileLogger.e(TAG, "� [QUEUE_REJECTED] 请求 #" + totalRequests + " 被队列拒绝（队列已满）");
+      FileLogger.e(TAG, "🔒 [QUEUE_REJECTED] 请求 #" + totalRequests + " 被队列拒绝（队列已满）");
       listener.onError(new IllegalStateException("请求队列已满，无法接受新请求"));
     }
     
-    FileLogger.d(TAG, "� [QUEUE_ENQUEUED] 请求 #" + totalRequests + " 已加入队列 | 提交后队列长度：" + requestQueue.size());
+    FileLogger.d(TAG, "🔒 [QUEUE_ENQUEUED] 请求 #" + totalRequests + " 已加入队列 | 提交后队列长度：" + requestQueue.size());
   }
 
   public interface OnResponseListener
@@ -172,13 +172,12 @@ public class TongYiClient
         .build();
       this.accessPointManager = accessPointManager;
       this.toolManager = toolManager;
-      FileLogger.d(NETWORK_TAG, "OkHttpNetworkRequester 初始化完成");
     }
 
     @Override
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete)
     {
-      FileLogger.d(NETWORK_TAG, "� [HTTP_START] 开始发起 HTTP 请求 | 线程：" + Thread.currentThread().getName());
+      FileLogger.d(NETWORK_TAG, "🌐 [HTTP_START] 开始发起 HTTP 请求 | 线程：" + Thread.currentThread().getName());
       
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
       String apiKey = null;
@@ -201,6 +200,19 @@ public class TongYiClient
         requestBody.put("messages", messages);
         requestBody.put("stream", true);
         requestBody.put("enable_thinking", false);
+        
+        // === 🔒 #新功能：为所有模型添加 Minimax 思考控制参数 ===
+        // 即使不是 Minimax 模型也加上这些参数，让 API 自行判断是否支持
+        JSONObject thinkingParams = new JSONObject();
+        thinkingParams.put("type", "disabled");
+        thinkingParams.put("budget_tokens", 100);
+        requestBody.put("thinking", thinkingParams);
+        
+        JSONObject reasoningParams = new JSONObject();
+        reasoningParams.put("split", true);
+        requestBody.put("reasoning_split", reasoningParams.opt("split"));
+        
+        FileLogger.d(NETWORK_TAG, "🌐 [Minimax] 已添加 Minimax 思考控制参数：reasoning_split=true, thinking.budget_tokens=100");
 
         if (includeTools)
         {
@@ -253,14 +265,14 @@ public class TongYiClient
           .post(body)
           .build();
 
-        FileLogger.d(NETWORK_TAG, "� [HTTP_ENQUEUE] OkHttp 请求已加入网络队列 | 线程：" + Thread.currentThread().getName());
+        FileLogger.d(NETWORK_TAG, "🌐 [HTTP_ENQUEUE] OkHttp 请求已加入网络队列 | 线程：" + Thread.currentThread().getName());
 
         client.newCall(request).enqueue(new Callback()
         {
           @Override
           public void onFailure(Call call, IOException e)
           {
-            FileLogger.e(NETWORK_TAG, "� [HTTP_FAILURE] 请求失败：" + e.getMessage() + " | 线程：" + Thread.currentThread().getName());
+            FileLogger.e(NETWORK_TAG, "🌐 [HTTP_FAILURE] 请求失败：" + e.getMessage() + " | 线程：" + Thread.currentThread().getName());
             listener.onError(new AccessPointUnavailableException("Current access point is unavailable", e));
           }
 
@@ -268,7 +280,7 @@ public class TongYiClient
           public void onResponse(Call call, Response response) throws IOException
           {
             int statusCode = response.code();
-            FileLogger.d(NETWORK_TAG, "� [HTTP_RESPONSE] HTTP Response Status: " + statusCode + " | 线程：" + Thread.currentThread().getName());
+            FileLogger.d(NETWORK_TAG, "🌐 [HTTP_RESPONSE] HTTP Response Status: " + statusCode + " | 线程：" + Thread.currentThread().getName());
             
             if (!response.isSuccessful())
             {
@@ -311,7 +323,7 @@ public class TongYiClient
               ResponseBody responseBody = response.body();
               if (responseBody != null)
               {
-                FileLogger.d(NETWORK_TAG, "� [HTTP_STREAM_START] 开始处理 SSE 流式响应 | 线程：" + Thread.currentThread().getName());
+                FileLogger.d(NETWORK_TAG, "🌐 [HTTP_STREAM_START] 开始处理 SSE 流式响应 | 线程：" + Thread.currentThread().getName());
                 processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete);
               }
             }
@@ -320,7 +332,7 @@ public class TongYiClient
       }
       catch (Exception e)
       {
-        FileLogger.e(NETWORK_TAG, "� [HTTP_ERROR] 请求构建失败", e);
+        FileLogger.e(NETWORK_TAG, "🌐 [HTTP_ERROR] 请求构建失败", e);
         e.printStackTrace();
         listener.onError(e);
       }
@@ -359,9 +371,6 @@ public class TongYiClient
       {
         lineCount++;
         
-        String linePreview = line.length() > 500 ? line.substring(0, 500) + "..." : line;
-        FileLogger.d(TAG, "[SSE Line " + lineCount + "] " + linePreview);
-        
         if (!htmlChecked)
         {
           htmlChecked = true;
@@ -397,13 +406,8 @@ public class TongYiClient
                     if (!content.isEmpty()) {
                       contentLineCount++;
                       allContentBuilder.append(content);
-                      FileLogger.d(TAG, "[SSE Content #" + contentLineCount + "] " + (content.length() > 200 ? content.substring(0, 200) + "..." : content));
                     } else {
                       FileLogger.d(TAG, "[SSE Content] delta.content is empty");
-                    }
-                    
-                    if (delta.has("tool_calls")) {
-                      FileLogger.d(TAG, "[SSE Tool Calls] delta contains tool_calls");
                     }
                   }
                 }

@@ -12,6 +12,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
+
 /**
  * 文件日志工具类 - #4834
  * 
@@ -175,11 +176,14 @@ public class FileLogger {
     
     /**
      * 轮转日志文件（按日期或大小）
+     * ✅ 修复：文件名添加时间戳确保唯一性，避免同一天内轮转后写入同一文件
      */
     private static void rotateLogFile() {
         try {
             String dateStr = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
-            String logFileName = "sisterfuture_" + dateStr + ".log";
+            // ✅ 修复：添加 HHmmss 时间戳确保文件名唯一
+            String timeStr = new SimpleDateFormat("HHmmss", Locale.getDefault()).format(new Date());
+            String logFileName = "sisterfuture_" + dateStr + "_" + timeStr + ".log";
             currentLogFile = new File(LOG_DIR + logFileName);
             
             if (currentLogFile.exists()) {
@@ -189,7 +193,7 @@ public class FileLogger {
                 currentLogFile.createNewFile();
             }
             
-            // Log.i(TAG, "� 切换到新日志文件：" + currentLogFile.getAbsolutePath());
+            // Log.i(TAG, "📄 切换到新日志文件：" + currentLogFile.getAbsolutePath());
         } catch (IOException e) {
             Log.e(TAG, "创建日志文件失败", e);
             currentLogFile = null;

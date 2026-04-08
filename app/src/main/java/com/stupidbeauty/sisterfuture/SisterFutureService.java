@@ -34,19 +34,32 @@ public class SisterFutureService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // 处理状态更新
-        if (intent != null && intent.hasExtra("update_status")) {
-            String newStatus = intent.getStringExtra("update_status");
-            if (newStatus != null) {
-                currentStatus = newStatus;
-                Notification notification = createNotification(currentStatus);
-                NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                if (manager != null) {
-                    manager.notify(NOTIFICATION_ID, notification);
+        // #4970 修复：添加 Intent null 检查，避免空指针异常
+        if (intent != null) {
+            // 处理状态更新
+            if (intent.hasExtra("update_status")) {
+                String newStatus = intent.getStringExtra("update_status");
+                if (newStatus != null) {
+                    currentStatus = newStatus;
+                    Notification notification = createNotification(currentStatus);
+                    NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                    if (manager != null) {
+                        manager.notify(NOTIFICATION_ID, notification);
+                    }
+                    Log.d(TAG, "通知状态已更新：" + currentStatus);
+                    return START_STICKY;
                 }
-                Log.d(TAG, "通知状态已更新：" + currentStatus);
-                return START_STICKY;
             }
+            
+            // 处理可选的提问
+            String question = intent.getStringExtra("question");
+            if (question != null) {
+                Log.d(TAG, "收到提问：" + question);
+                SisterFutureApplication.handleQuestion(this, question);
+            }
+        } else {
+            // Intent 为 null 时的安全处理（系统重启服务时可能发生）
+            Log.w(TAG, "⚠️ onStartCommand 收到 null Intent，这是系统重启服务的正常行为");
         }
         
         // 启动前台服务
@@ -54,13 +67,6 @@ public class SisterFutureService extends Service {
         startForeground(NOTIFICATION_ID, notification);
         
         Log.d(TAG, "前台服务已启动");
-        
-        // 处理可选的提问
-        String question = intent.getStringExtra("question");
-        if (question != null) {
-            Log.d(TAG, "收到提问：" + question);
-            SisterFutureApplication.handleQuestion(this, question);
-        }
         
         return START_STICKY; // 保持服务运行
     }

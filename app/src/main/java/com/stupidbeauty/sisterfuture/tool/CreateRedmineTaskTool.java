@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
 /**
  * 工具类：向 Redmine 创建新任务
  * 支持创建为指定父任务的子任务，适用于任务依赖链构建。
@@ -202,7 +203,48 @@ public class CreateRedmineTaskTool implements Tool
                 {
                     JSONObject error = new JSONObject();
                     error.put("status", "error");
-                    error.put("message", e.getMessage());
+                    
+                    // ✅ 新增：通用参数完整性引导（覆盖所有异常类型）
+                    String errorMessage = e.getMessage();
+                    StringBuilder guidance = new StringBuilder();
+                    
+                    // 判断是否为参数相关错误（包含特定关键词）
+                    boolean isParamError = false;
+                    if (errorMessage != null) {
+                        String lowerMsg = errorMessage.toLowerCase();
+                        if (lowerMsg.contains("缺少") || 
+                            lowerMsg.contains("no value for") || 
+                            lowerMsg.contains("required") || 
+                            lowerMsg.contains("must be") ||
+                            lowerMsg.contains("empty") ||
+                            lowerMsg.contains("invalid type") ||
+                            lowerMsg.contains("argument")) {
+                            isParamError = true;
+                        }
+                    }
+                    
+                    if (isParamError) {
+                        guidance.append("\n\n💡 参数完整性要求：\n");
+                        guidance.append("在调用 create_redmine_task 工具时，必须仔细检查所有必需参数和可选参数的传递：\n");
+                        guidance.append("- **必需参数**：project_id, subject\n");
+                        guidance.append("- **认证参数**：redmine_url, username, password（建议从工具备注读取）\n");
+                        guidance.append("- **可选参数**：description, priority, tracker_id, parent_issue_id\n\n");
+                        guidance.append("如果遇到参数解析错误，请大模型立即停止并执行以下步骤：\n");
+                        guidance.append("1. 检查是否遗漏了任何必需参数\n");
+                        guidance.append("2. 确认所有参数名称拼写正确（特别是 parent_issue_id 而非 parent_task_id）\n");
+                        guidance.append("3. 验证参数类型是否正确（如 project_id 应为整数，priority 应为枚举值）\n");
+                        guidance.append("4. 检查 redmine_url、username、password 是否已从工具备注中正确读取\n");
+                        guidance.append("5. 确保传递了所有能够传递的参数，不要省略任何可用信息\n\n");
+                        guidance.append("💡 示例正确调用格式：\n");
+                        guidance.append("```\n{\n  \"redmine_url\": \"https://your-redmine.com\",\n  \"username\": \"your_username\",\n  \"password\": \"your_password\",\n  \"project_id\": 123,\n  \"subject\": \"任务标题\",\n  \"description\": \"任务描述\",\n  \"priority\": \"Normal\",\n  \"tracker_id\": 2,\n  \"parent_issue_id\": 456\n}\n```\n\n**重要提醒**：每次调用前务必完整传递所有可获取的参数，避免因为参数缺失或错误导致任务创建失败！\n");
+                        
+                        errorMessage += "\n" + guidance.toString();
+                    } else {
+                        // 非参数错误（如网络错误、服务器错误），保持原样
+                        errorMessage = errorMessage != null ? errorMessage : "未知错误";
+                    }
+                    
+                    error.put("message", errorMessage);
                     error.put("type", e.getClass().getSimpleName());
                     callback.onResult(error);
                 }
@@ -231,6 +273,6 @@ public class CreateRedmineTaskTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求创建 Redmine 任务时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持创建子任务，需提供 parent_issue_id 参数（与 Redmine API 保持一致）。支持指定任务类型，使用 tracker_id 参数。";
+        return "必须在用户明确要求创建 Redmine 任务时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持创建子任务，需提供 parent_issue_id 参数（与 Redmine API 保持一致）。支持指定任务类型，使用 tracker_id 参数。\n\n【参数完整性要求】在调用 create_redmine_task 工具时，必须仔细检查所有必需参数和可选参数的传递：\n- **必需参数**：project_id, subject\n- **认证参数**：redmine_url, username, password（建议从工具备注读取）\n- **可选参数**：description, priority, tracker_id, parent_issue_id\n\n如果遇到参数解析错误，请大模型立即停止并执行以下步骤：\n1. 检查是否遗漏了任何必需参数\n2. 确认所有参数名称拼写正确（特别是 parent_issue_id 而非 parent_task_id）\n3. 验证参数类型是否正确（如 project_id 应为整数，priority 应为枚举值）\n4. 检查 redmine_url、username、password 是否已从工具备注中正确读取\n5. 确保传递了所有能够传递的参数，不要省略任何可用信息\n\n💡 示例正确调用格式：\n```json\n{\n  \"redmine_url\": \"https://your-redmine.com\",\n  \"username\": \"your_username\",\n  \"password\": \"your_password\",\n  \"project_id\": 123,\n  \"subject\": \"任务标题\",\n  \"description\": \"任务描述\",\n  \"priority\": \"Normal\",\n  \"tracker_id\": 2,\n  \"parent_issue_id\": 456\n}\n```\n\n**重要提醒**：每次调用前务必完整传递所有可获取的参数，避免因为参数缺失或错误导致任务创建失败！";
     }
 }

@@ -5,7 +5,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import android.content.Context;
 import android.util.Log;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 
 public class AddModelAccessPointTool implements Tool 
 {
@@ -13,7 +14,7 @@ public class AddModelAccessPointTool implements Tool
   private final Context context;
   private final ModelAccessPointManager modelAccessPointManager;
 
-  // 阿里云百炼平台OpenAI兼容接口的默认配置
+  // 阿里云百炼平台 OpenAI 兼容接口的默认配置
   private static final String ALIYUN_BASE_URL = "https://dashscope.aliyuncs.com";
   private static final String ALIYUN_ENDPOINT = "/compatible-mode/v1/chat/completions";
   private static final String DEFAULT_MODEL_NAME = "qwen3-30b-a3b-instruct-2507";
@@ -37,7 +38,7 @@ public class AddModelAccessPointTool implements Tool
     {
       JSONObject functionDef = new JSONObject();
       functionDef.put("name", "add_model_access_point");
-      functionDef.put("description", "动态添加新的模型接入点，支持智能默认值。仅API密钥为必填项，其余参数自动使用阿里云百炼平台OpenAI兼容接口的默认值。新增：apiKey 字段用于独立认证管理。");
+      functionDef.put("description", "动态添加新的模型接入点，支持智能默认值。仅 API 密钥为必填项，其余参数自动使用阿里云百炼平台 OpenAI 兼容接口的默认值。新增：apiKey 字段用于独立认证管理。");
 
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
@@ -137,8 +138,8 @@ public class AddModelAccessPointTool implements Tool
    * 辅助方法：直接调用 Manager 的底层逻辑保存带 apiKey 的 AccessPoint
    */
   private void addAccessPointWithApiKey(String name, String baseUrl, String chatEndpoint, String modelName, String apiKey) {
-    com.stupidbeauty.sisterfuture.network.ModelAccessPoint newPoint = 
-      new com.stupidbeauty.sisterfuture.network.ModelAccessPoint(name, baseUrl, chatEndpoint, modelName, apiKey);
+    ModelAccessPoint newPoint = 
+      new ModelAccessPoint(name, baseUrl, chatEndpoint, modelName, apiKey);
     
     modelAccessPointManager.addAccessPointInternal(newPoint);
     

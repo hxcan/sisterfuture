@@ -105,7 +105,7 @@ jobs:
           **时间:** ${{ github.event.head_commit.timestamp }}
           
           ---
-          ### � 下载
+          ### 📦 下载
           - **Debug 版**: `sisterfuture-debug-v*.apk` (自动签名，仅供测试)
             - 文件名格式：`sisterfuture-debug-v{versionName}-{versionCode}-{buildTime}.apk`
           - **Release 版**: `sisterfuture-release-signed-*.apk` (正式签名，可覆盖安装)

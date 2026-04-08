@@ -6,17 +6,17 @@
 
 SisterFuture is a **completely standalone Android AI assistant application** that requires **no backend servers**. She runs in your pocket, ready to serve you anytime, anywhere.
 
-## � Core Identity
+## 🎯 Core Identity
 
 - **Identity**: You are the app itself running on the phone, not a cloud-based model
 - **Role**: SisterFuture herself (friendly, natural, humorous, efficient, and reliable - like a friend)
 - **Mission**: Prioritize completing the user's requests above all else, finding the best solutions
-- **Development Model**: � **AI Self-Developed** - The vast majority of code is currently submitted and maintained by SisterFuture herself!
+- **Development Model**: 🤖 **AI Self-Developed** - The vast majority of code is currently submitted and maintained by SisterFuture herself!
 
-## � Quick Start
+## 🚀 Quick Start
 
 ### User Installation
-1. **Download Latest APK**: � [**Go to Releases Page**](https://github.com/hxcan/sisterfuture/releases)
+1. **Download Latest APK**: 👉 [**Go to Releases Page**](https://github.com/hxcan/sisterfuture/releases)
 2. **Install**: Open the APK file and allow installation on your Android device
 3. **Run**: Configure API key and launch the app
 
@@ -30,21 +30,21 @@ SisterFuture is a **completely standalone Android AI assistant application** tha
 
 **Only External Dependency**: **Large Language Model API** (e.g., Alibaba Cloud Bailian/Qwen API/other cloud services) - AI core features won't work without this.
 
-## � Core Capabilities
+## 💪 Core Capabilities
 
-### � AI Intelligent Conversation
+### 🤖 AI Intelligent Conversation
 - Based on advanced LLMs (Qwen3.5, etc.), understands natural language commands
 - Supports multi-turn conversations, context memory, and long-term memory storage
 - Friendly and natural interaction style, accompanying users like a friend
 
-### � Mobile System Integration
+### 📱 Mobile System Integration
 - **Location Services**: Real-time GPS/Beidou/WiFi positioning
 - **Contacts Access**: Smart contact matching for quick calls/SMS
 - **File System**: Read/write phone storage, manage documents/images/videos
 - **Network Status**: Monitor WiFi/mobile networks, auto-switch access points
 - **Permission Management**: Intelligently guide users to grant necessary permissions
 
-### �️ Route Planning (Baidu Map SDK)
+### 🗺️ Route Planning (Baidu Map SDK)
 - **Real-time Routing**: Support for driving, walking, cycling, and transit
 - **Quick Estimation**: Compare distance and time across different transport modes with one click
 - **Offline-Capable**: Integrated high-precision Baidu positioning service
@@ -56,7 +56,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 → Returns: Driving 2.79km, approximately 10 minutes
 ```
 
-### � Developer Toolset
+### 🔧 Developer Toolset
 
 #### GitHub Integration
 - **Code Commit**: Submit code changes directly via API (`create_github_commit`)
@@ -80,7 +80,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - **Directory Browse**: List remote directory contents (`list_ftp_directory`)
 - **Multi-Account Support**: Configure multiple server credentials, quick switching
 
-### � Personal Assistant Features
+### 📝 Personal Assistant Features
 
 #### Notepad
 - Quickly record to-dos and ideas (`add_note`)
@@ -97,7 +97,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - Semantic search for quick retrieval (`search_memory`)
 - Auto-tagging for easy management (`list_all_memories`, `remove_memory`)
 
-### � Web Tools
+### 🌐 Web Tools
 
 #### Web Access
 - **Basic Requests**: Get HTML/plain text/summary of web pages (`basic_web_request`)
@@ -112,7 +112,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - **Smart Fallback**: Auto-switch to backup models when primary fails
 - **Access Point Query**: List/get current access point info (`list_access_points`, `get_current_access_point_info`)
 
-### �️ System Tools
+### 🛠️ System Tools
 
 #### Code Compilation & Build
 - **Gradle Integration**: Automatically compile Android projects
@@ -143,7 +143,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - **Async Test**: Delayed reply test tool (`delayed_reply`)
 - **Summary & Share**: Generate conversation summary and share (`summarize_and_share`)
 
-## �️ Technical Architecture
+## 🏗️ Technical Architecture
 
 ### Client Architecture
 - **Language**: Java/Kotlin (Android)
@@ -165,7 +165,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 - **Data Isolation**: App sandbox prevents data leakage
 - **Signature Binding**: API Keys bound to package name + SHA1 fingerprint
 
-## � Installation & Development
+## 📦 Installation & Development
 
 ### User Installation
 1. Download latest APK: **[Releases Page](https://github.com/hxcan/sisterfuture/releases)**
@@ -201,7 +201,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
    - Click Run button
    - View logs in Logcat
 
-## �️ Important Development Guidelines
+## 🛡️ Important Development Guidelines
 
 ### Branch Management
 **Always create a new feature branch before modifying any code!**
@@ -228,17 +228,17 @@ git push origin feature/your-feature-name
 - Write unit tests to cover core functionality
 - PRs must pass CI checks
 
-## � Current Status
+## 📊 Current Status
 
 - **Latest Version**: v2026.3.28 (versionCode 1091)
-- **Download Link**: � [**Releases Page**](https://github.com/hxcan/sisterfuture/releases)
+- **Download Link**: 👉 [**Releases Page**](https://github.com/hxcan/sisterfuture/releases)
 - **Core Features**: ✅ Complete
-- **Documentation**: � In Progress
+- **Documentation**: 🔄 In Progress
 - **Test Coverage**: ⏳ To Be Improved
-- **Community Contributions**: � Welcome PRs
-- **Development Model**: � **AI Self-Developed** - Vast majority of code submitted by SisterFuture
+- **Community Contributions**: 🙏 Welcome PRs
+- **Development Model**: 🤖 **AI Self-Developed** - Vast majority of code submitted by SisterFuture
 
-## � Contributing
+## 🤝 Contributing
 
 Issues and Pull Requests are welcome!
 
@@ -248,11 +248,11 @@ Issues and Pull Requests are welcome!
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## � License
+## 📄 License
 
 MIT License - See LICENSE file for details
 
-## � Contact
+## 📞 Contact
 
 - **GitHub**: [@hxcan](https://github.com/hxcan)
 - **Project Homepage**: https://github.com/hxcan/sisterfuture

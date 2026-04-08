@@ -4,6 +4,7 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import okhttp3.*;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.util.Base64;
@@ -13,10 +14,17 @@ import java.util.concurrent.Executors;
 /**
  * 通用 HTTP 请求工具 - 支持任意外部 API 调用
  * 作为"瑞士军刀"临时验证工具，不执行脚本、不存凭证
+ *
+ * <p>新增功能：
+ * - 连续遇到 JsonException 错误时自动添加参数检查引导
+ * - 帮助快速定位参数格式问题
  */
 public class GenericWebRequestTool implements Tool {
     private static final String TAG = "GenericWebRequestTool";
     private static final int DEFAULT_TIMEOUT_SEC = 30;
+    // 连续 JsonException 错误计数器
+    private static int consecutiveJsonExceptionCount = 0;
+    private static final int JSON_EXCEPTION_THRESHOLD = 2;
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final OkHttpClient client = new OkHttpClient.Builder()
@@ -37,12 +45,12 @@ public class GenericWebRequestTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "generic_web_request");
-            functionDef.put("description", "通用 HTTP 请求工具，支持 GET/POST/PUT/DELETE/PATCH，可自定义 Headers/Auth/Body，用于临时 API 验证和调试。不执行 JavaScript，不持久化敏感凭证。");
+            functionDef.put("description", "通用 HTTP 请求工具，支持 GET/POST/PUT/DELETE/PATCH，可自定义 Headers/Auth/Body，用于临时 API 验证和调试。不执行 JavaScript，不持久化敏感凭证。超时默认 30 秒 (可配置)。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             JSONObject properties = new JSONObject();
-            
+
             JSONObject methodParam = new JSONObject();
             methodParam.put("type", "string");
             JSONArray enumValues = new JSONArray();
@@ -50,27 +58,27 @@ public class GenericWebRequestTool implements Tool {
             methodParam.put("enum", enumValues);
             methodParam.put("description", "HTTP 方法 (必填): GET|POST|PUT|DELETE|PATCH");
             properties.put("method", methodParam);
-            
+
             JSONObject urlParam = new JSONObject();
             urlParam.put("type", "string");
             urlParam.put("description", "目标 URL (必填)");
             properties.put("url", urlParam);
-            
+
             JSONObject headersParam = new JSONObject();
             headersParam.put("type", "object");
             headersParam.put("description", "自定义 Header 对象 (可选)");
             properties.put("headers", headersParam);
-            
+
             JSONObject bodyParam = new JSONObject();
             bodyParam.put("type", "string");
             bodyParam.put("description", "请求体内容 (JSON/String/Form) (POST/PUT 时选填)");
             properties.put("body", bodyParam);
-            
+
             JSONObject paramsObjParam = new JSONObject();
             paramsObjParam.put("type", "object");
             paramsObjParam.put("description", "URL Query 参数 (可选)");
             properties.put("params", paramsObjParam);
-            
+
             JSONObject authTypeParam = new JSONObject();
             authTypeParam.put("type", "string");
             JSONArray authEnums = new JSONArray();
@@ -79,18 +87,18 @@ public class GenericWebRequestTool implements Tool {
             authTypeParam.put("default", "\"none\"");
             authTypeParam.put("description", "认证方式 (可选)");
             properties.put("auth_type", authTypeParam);
-            
+
             JSONObject authValueParam = new JSONObject();
             authValueParam.put("type", "string");
             authValueParam.put("description", "认证凭据 (根据 auth_type 填充) (可选)");
             properties.put("auth_value", authValueParam);
-            
+
             JSONObject timeoutParam = new JSONObject();
             timeoutParam.put("type", "integer");
             timeoutParam.put("default", 30);
             timeoutParam.put("description", "超时时间 (秒) (可选)");
             properties.put("timeout_sec", timeoutParam);
-            
+
             parameters.put("properties", properties);
             JSONArray required = new JSONArray();
             required.put("method").put("url");
@@ -112,6 +120,18 @@ public class GenericWebRequestTool implements Tool {
     @Override
     public boolean isAsync() {
         return true;
+    }
+
+    /**
+     * 生成 JsonException 参数检查引导文本
+     */
+    private static String generateJsonExceptionGuide() {
+        return "💡 参数检查提示：\n请检查以下参数格式是否正确：\n" +
+               "- method: 应为 \"GET\"|\"POST\"|\"PUT\"|\"DELETE\"|\"PATCH\" (大写)\n" +
+               "- url: 应为完整的 HTTP/HTTPS URL\n" +
+               "- body: 如果是 JSON 字符串，请确保 JSON 格式有效\n" +
+               "- auth_type: 应为 \"none\"|\"basic\"|\"bearer\"|\"api_key\" (小写)\n" +
+               "- headers: 应为 JSON 对象格式 {\"key\": \"value\"}";
     }
 
     @Override
@@ -278,6 +298,23 @@ public class GenericWebRequestTool implements Tool {
                     error.put("message", e.getMessage());
                     error.put("type", e.getClass().getSimpleName());
                     error.put("stack_trace", e.toString());
+
+                    // JsonException 错误处理增强
+                    if (e instanceof JSONException) {
+                        // 是 JsonException，增加计数器
+                        consecutiveJsonExceptionCount++;
+                        error.put("consecutive_json_exception_count", consecutiveJsonExceptionCount);
+
+                        // 连续 2 次或以上，添加参数检查引导
+                        if (consecutiveJsonExceptionCount >= JSON_EXCEPTION_THRESHOLD) {
+                            error.put("json_exception_guide", generateJsonExceptionGuide());
+                            android.util.Log.w(TAG, "连续 JsonException 次数已达阈值，添加参数检查引导");
+                        }
+                    } else {
+                        // 其他错误，重置计数器
+                        consecutiveJsonExceptionCount = 0;
+                    }
+
                     callback.onResult(error);
                 } catch (Exception ignored) {}
             }
