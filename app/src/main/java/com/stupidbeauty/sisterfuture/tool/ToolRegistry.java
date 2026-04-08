@@ -9,6 +9,7 @@ import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
 import android.content.Context;
 
 
+
 /**
  * 工具注册中心 - 集中管理所有工具的注册逻辑
  * 
@@ -34,10 +35,11 @@ public class ToolRegistry
     Context context)
   {
     // === 基础工具 ===
-    // 🔥 #4791 修改：传入 toolManager 参数
+    // � #4791 修改：传入 toolManager 参数
     toolManager.registerTool(new ConversationResetTool(contextManager, toolManager));
     toolManager.registerTool(new GetCurrentTimeTool());
     toolManager.registerTool(new GetLocationTool(context));
+    toolManager.registerTool(new PlanRouteTool(context));
 
     // === 接入点管理工具 ===
     toolManager.registerTool(new SwitchAccessPointTool(modelAccessPointManager));
@@ -93,6 +95,9 @@ public class ToolRegistry
     // === GitHub 相关工具 ===
     toolManager.registerTool(new GetGitHubFileTool(context));
     toolManager.registerTool(new CreateGitHubCommitTool(context));
+    
+    // � 新增：GitHub Actions 日志获取工具（异步版本，需要 context）
+    toolManager.registerTool(new GetGitHubActionsLogsTool(context));
 
     // === 系统提示词管理工具 ===
     toolManager.registerTool(new FuseSystemPromptTool(context));

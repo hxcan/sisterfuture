@@ -12,6 +12,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
+
+
 
 
 
@@ -27,7 +30,7 @@ public class ModelAccessPointManager
   private static final String PERSISTENT_FILE_NAME = "model_access_points.json"; // 持久化存储文件名
   private Context context; // 上下文用于访问应用私有目录
   
-  // 🔥 #4657 接入点死循环修复 v2 - 连续失败计数器
+  // � #4657 接入点死循环修复 v2 - 连续失败计数器
   private int consecutiveFailures = 0;
   private static final int FAILURE_THRESHOLD_MULTIPLIER = 2; // 阈值 = 接入点数量 × 2
   
@@ -93,7 +96,22 @@ public class ModelAccessPointManager
       ModelAccessPoint newPoint = new ModelAccessPoint(name, baseUrl, chatEndpoint, modelName);
       accessPoints.add(newPoint);
       saveToPersistentStorage(); // 添加后立即保存
-      Log.i(TAG, "Added new access point: " + name + " and saved to storage");
+      FileLogger.i(TAG, "Added new access point: " + name + " and saved to storage");
+  }
+
+  /**
+   * 动态添加新的接入点（带 apiKey），并立即持久化存储
+   * @param name 接入点名称
+   * @param baseUrl 基础 URL
+   * @param chatEndpoint 聊天接口端点
+   * @param modelName 模型名称
+   * @param apiKey API 密钥
+   */
+  public void addAccessPoint(String name, String baseUrl, String chatEndpoint, String modelName, String apiKey) {
+      ModelAccessPoint newPoint = new ModelAccessPoint(name, baseUrl, chatEndpoint, modelName, apiKey);
+      accessPoints.add(newPoint);
+      saveToPersistentStorage(); // 添加后立即保存
+      FileLogger.i(TAG, "Added new access point with apiKey: " + name + " and saved to storage");
   }
 
   /**
@@ -118,7 +136,7 @@ public class ModelAccessPointManager
   public void addAccessPointInternal(ModelAccessPoint point) {
       accessPoints.add(point);
       saveToPersistentStorage();
-      Log.i(TAG, "Added access point with internal method: " + point.getName());
+      FileLogger.i(TAG, "Added access point with internal method: " + point.getName());
   }
 
   /**
@@ -127,7 +145,7 @@ public class ModelAccessPointManager
   private void loadFromPersistentStorage() {
     File file = new File(context.getFilesDir(), PERSISTENT_FILE_NAME);
     if (!file.exists()) {
-      Log.i(TAG, "Persistent file not found, using default access points");
+      FileLogger.i(TAG, "Persistent file not found, using default access points");
       return;
     }
     
@@ -144,9 +162,9 @@ public class ModelAccessPointManager
         String apiKey = null;
         try {
           apiKey = obj.getString("apiKey");
-          Log.d(TAG, "Loaded apiKey for access point " + obj.getString("name"));
+          FileLogger.d(TAG, "Loaded apiKey for access point " + obj.getString("name"));
         } catch (JSONException e) {
-          Log.d(TAG, "No apiKey found for access point, setting to null");
+          FileLogger.d(TAG, "No apiKey found for access point, setting to null");
         }
         
         accessPoints.add(new ModelAccessPoint(
@@ -157,9 +175,8 @@ public class ModelAccessPointManager
           apiKey // 传入 apiKey 参数
         ));
       }
-      Log.i(TAG, "Loaded " + accessPoints.size() + " access points from persistent storage");
     } catch (Exception e) {
-      Log.e(TAG, "Failed to load from persistent storage", e);
+      FileLogger.e(TAG, "Failed to load from persistent storage", e);
     }
   }
 
@@ -184,9 +201,9 @@ public class ModelAccessPointManager
         jsonArray.put(obj);
       }
       fos.write(jsonArray.toString().getBytes(StandardCharsets.UTF_8));
-      Log.i(TAG, "Saved " + accessPoints.size() + " access points to persistent storage");
+      FileLogger.i(TAG, "Saved " + accessPoints.size() + " access points to persistent storage");
     } catch (Exception e) {
-      Log.e(TAG, "Failed to save to persistent storage", e);
+      FileLogger.e(TAG, "Failed to save to persistent storage", e);
     }
   }
 
@@ -198,7 +215,7 @@ public class ModelAccessPointManager
   {
     if (currentAccessPointIndex < accessPoints.size())
     {
-      Log.i(TAG, "getCurrentBaseUrl, access point index: " + currentAccessPointIndex + ", model name: " + accessPoints.get(currentAccessPointIndex).getBaseUrl());
+      FileLogger.i(TAG, "getCurrentBaseUrl, access point index: " + currentAccessPointIndex + ", model name: " + accessPoints.get(currentAccessPointIndex).getBaseUrl());
       return accessPoints.get(currentAccessPointIndex).getBaseUrl();
     }
     return null;
@@ -212,7 +229,7 @@ public class ModelAccessPointManager
   {
     if (currentAccessPointIndex < accessPoints.size())
     {
-      Log.i(TAG, "getCurrentModelName, access point index: " + currentAccessPointIndex + ", model name: " + accessPoints.get(currentAccessPointIndex).getModelName());
+      FileLogger.i(TAG, "getCurrentModelName, access point index: " + currentAccessPointIndex + ", model name: " + accessPoints.get(currentAccessPointIndex).getModelName());
       return accessPoints.get(currentAccessPointIndex).getModelName();
     }
     return null;
@@ -254,7 +271,7 @@ public class ModelAccessPointManager
   }
 
   /**
-   * 🔥 #4657 检查连续失败次数是否超过阈值
+   * � #4657 检查连续失败次数是否超过阈值
    * @return true 如果超过阈值，需要触发备用接入点向导
    */
   public boolean checkFailureThreshold() {
@@ -262,49 +279,93 @@ public class ModelAccessPointManager
     boolean exceeded = consecutiveFailures >= threshold;
     
     if (exceeded) {
-      Log.w(TAG, "🔥 连续失败次数超过阈值：" + consecutiveFailures + " >= " + threshold + " (接入点数量：" + accessPoints.size() + ")");
+      Log.w(TAG, "� 连续失败次数超过阈值：" + consecutiveFailures + " >= " + threshold + " (接入点数量：" + accessPoints.size() + ")");
     }
     
     return exceeded;
   }
 
   /**
-   * 🔥 #4657 报告当前接入点不可用，切换到下一个并增加计数器
+   * � #4657 报告当前接入点不可用，切换到下一个并增加计数器
    * @return 当前连续失败次数
    */
   public int reportCurrentAccessPointUnavailable()
   {
+    return currentAccessPointIndex;
+  }
+
+  /**
+   * � #4657 检查连续失败次数是否超过阈值
+   * @return true 如果超过阈值，需要触发备用接入点向导
+   */
+  public boolean checkFailureThreshold() {
+    int threshold = Math.max(1, accessPoints.size() * FAILURE_THRESHOLD_MULTIPLIER);
+    boolean exceeded = consecutiveFailures >= threshold;
+    
+    FileLogger.d(TAG, "� [THRESHOLD_CHECK] consecutiveFailures=" + consecutiveFailures + 
+                  ", threshold=" + threshold + ", exceeded=" + exceeded);
+    
+    if (exceeded) {
+      FileLogger.w(TAG, "� 连续失败次数超过阈值：" + consecutiveFailures + " >= " + threshold + " (接入点数量：" + accessPoints.size() + ")");
+    }
+    
+    return exceeded;
+  }
+
+  /**
+   * � #4657 报告当前接入点不可用，切换到下一个并增加计数器
+   * @return 当前连续失败次数
+   */
+  public int reportCurrentAccessPointUnavailable()
+  {
+    // 缓存切换前的状态
+    int oldIndex = currentAccessPointIndex;
+    String oldApName = (oldIndex >= 0 && oldIndex < accessPoints.size()) 
+        ? accessPoints.get(oldIndex).getName() : "N/A";
+    
     // 递增计数器
     consecutiveFailures++;
+    
+    FileLogger.d(TAG, "� [FAILURE_COUNT] reportCurrentAccessPointUnavailable: " + consecutiveFailures);
+    FileLogger.d(TAG, "� [AP_SWITCH] 切换前：index=" + oldIndex + ", name=" + oldApName + ", totalSize=" + accessPoints.size());
     
     // 切换到下一个接入点
     if (currentAccessPointIndex < accessPoints.size() - 1)
     {
       currentAccessPointIndex++;
+      FileLogger.d(TAG, "➡️ [AP_SWITCH] 正常切换到下一个：index=" + currentAccessPointIndex);
     }
     else
     {
       currentAccessPointIndex = 0; // 循环回到第一个访问点
+      FileLogger.d(TAG, "� [AP_SWITCH] 循环切换到第一个：index=0");
     }
     
+    // 记录切换后的状态
+    int newIndex = currentAccessPointIndex;
+    String newApName = (newIndex >= 0 && newIndex < accessPoints.size()) 
+        ? accessPoints.get(newIndex).getName() : "N/A";
+    
     int threshold = Math.max(1, accessPoints.size() * FAILURE_THRESHOLD_MULTIPLIER);
-    Log.i(TAG, "🔥 接入点不可用，切换索引：" + currentAccessPointIndex + ", 连续失败次数：" + consecutiveFailures + "/" + threshold);
+    FileLogger.i(TAG, "� [AP_SWITCH_COMPLETE] 切换完成：" + oldIndex + "(" + oldApName + ") → " + 
+                  newIndex + "(" + newApName + ") | 连续失败次数：" + consecutiveFailures + "/" + threshold);
     
     return consecutiveFailures;
   }
 
   /**
-   * 🔥 #4657 重置连续失败计数器（请求成功时调用）
+   * � #4657 重置连续失败计数器（请求成功时调用）
    */
   public void resetFailureCount() {
     if (consecutiveFailures > 0) {
-      Log.i(TAG, "✅ 请求成功，重置连续失败计数器：" + consecutiveFailures + " → 0");
+      FileLogger.d(TAG, "� [FAILURE_COUNT] resetFailureCount: " + consecutiveFailures + " -> 0");
+      FileLogger.i(TAG, "✅ 请求成功，重置连续失败计数器：" + consecutiveFailures + " → 0");
       consecutiveFailures = 0;
     }
   }
 
   /**
-   * 🔥 #4657 获取当前连续失败次数（用于调试）
+   * � #4657 获取当前连续失败次数（用于调试）
    * @return 连续失败次数
    */
   public int getConsecutiveFailures() {
@@ -318,39 +379,46 @@ public class ModelAccessPointManager
    */
   public boolean removeAccessPoint(int index) {
     if (index < 0 || index >= accessPoints.size()) {
-      Log.e(TAG, "Invalid index: " + index + ". Available range is 0 to " + (accessPoints.size() - 1));
+      FileLogger.e(TAG, "Invalid index: " + index + ". Available range is 0 to " + (accessPoints.size() - 1));
       return false;
     }
 
     // 禁止删除当前激活的接入点
     if (accessPoints.get(index).equals(getCurrentAccessPoint())) {
-      Log.e(TAG, "Cannot delete the currently active access point. Please switch to another access point first.");
+      FileLogger.e(TAG, "Cannot delete the currently active access point. Please switch to another access point first.");
       return false;
     }
 
-    // 🔧 FIX #4624: 执行删除操作前缓存当前索引值
+    // � FIX #4624: 执行删除操作前缓存当前索引值
     int oldIndex = currentAccessPointIndex;
     
     // 执行删除操作并更新当前索引（如果需要）
     accessPoints.remove(index);
     saveToPersistentStorage();
     
-    // 🔧 修复核心：删除后立即验证索引有效性
+    // � 修复核心：删除后立即验证索引有效性
     if (index <= currentAccessPointIndex && accessPoints.size() > 0) {
       // 如果删除的是当前索引或之前的节点，且列表不为空，则索引应减 1
       currentAccessPointIndex = Math.max(0, currentAccessPointIndex - 1);
-      Log.i(TAG, "Removed node at index=" + index + ", adjusted currentAccessPointIndex from " + oldIndex + " to " + currentAccessPointIndex);
+      FileLogger.i(TAG, "Removed node at index=" + index + ", adjusted currentAccessPointIndex from " + oldIndex + " to " + currentAccessPointIndex);
     } else if (accessPoints.size() == 0) {
       // 如果删除后列表为空，重置为 0
       currentAccessPointIndex = 0;
-      Log.i(TAG, "Removed last node, reset currentAccessPointIndex to 0");
+      FileLogger.i(TAG, "Removed last node, reset currentAccessPointIndex to 0");
     }
     
-    // 🔧 强制刷新：确保所有后续操作使用最新的列表和索引
+    // � 强制刷新：确保所有后续操作使用最新的列表和索引
     Log.i(TAG, "After removal: size=" + accessPoints.size() + ", currentIndex=" + currentAccessPointIndex);
     if (accessPoints.size() > 0 && currentAccessPointIndex >= accessPoints.size()) {
       currentAccessPointIndex = accessPoints.size() - 1;
       Log.w(TAG, "Index out of bounds after removal, corrected to: " + currentAccessPointIndex);
+    }
+    
+    // � 强制刷新：确保所有后续操作使用最新的列表和索引
+    FileLogger.i(TAG, "After removal: size=" + accessPoints.size() + ", currentIndex=" + currentAccessPointIndex);
+    if (accessPoints.size() > 0 && currentAccessPointIndex >= accessPoints.size()) {
+      currentAccessPointIndex = accessPoints.size() - 1;
+      FileLogger.w(TAG, "Index out of bounds after removal, corrected to: " + currentAccessPointIndex);
     }
     
     return true;
@@ -358,6 +426,19 @@ public class ModelAccessPointManager
 
   /**
    * 根据名称精准切换到指定的接入点
+   * @param name 目标接入点的名称
+   * @return 如果切换成功返回 true，如果未找到该名称的接入点返回 false
+   */
+  public boolean switchToAccessPointByName(String name) {
+    for (int i = 0; i < accessPoints.size(); i++) {
+      if (accessPoints.get(i).getName().equals(name)) {
+        this.currentAccessPointIndex = i;
+        FileLogger.i(TAG, "Switched to access point: " + name + ", index: " + i);
+        return true;
+      }
+    }
+    FileLogger.w(TAG, "Access point not found: " + name);
+    return false;
    * @param name 目标接入点的名称
    * @return 如果切换成功返回 true，如果未找到该名称的接入点返回 false
    */

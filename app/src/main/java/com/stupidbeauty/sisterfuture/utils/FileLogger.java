@@ -69,7 +69,7 @@ public class FileLogger {
             File logDir = new File(LOG_DIR);
             if (!logDir.exists()) {
                 boolean created = logDir.mkdirs();
-                Log.i(TAG, "📁 创建日志目录：" + LOG_DIR + " - " + (created ? "成功" : "失败"));
+                Log.i(TAG, "� 创建日志目录：" + LOG_DIR + " - " + (created ? "成功" : "失败"));
             }
             
             // 清理旧日志
@@ -189,7 +189,7 @@ public class FileLogger {
                 currentLogFile.createNewFile();
             }
             
-            Log.i(TAG, "📄 切换到新日志文件：" + currentLogFile.getAbsolutePath());
+            // Log.i(TAG, "� 切换到新日志文件：" + currentLogFile.getAbsolutePath());
         } catch (IOException e) {
             Log.e(TAG, "创建日志文件失败", e);
             currentLogFile = null;
@@ -222,7 +222,7 @@ public class FileLogger {
                     boolean deleted = logFile.delete();
                     if (deleted) {
                         deletedCount++;
-                        Log.i(TAG, "🗑️ 删除旧日志文件：" + logFile.getName());
+                        Log.i(TAG, "�️ 删除旧日志文件：" + logFile.getName());
                     }
                 }
             }

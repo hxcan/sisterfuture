@@ -50,6 +50,10 @@ dependencies
   
   // #4834 添加 Timber 日志库（用于日志输出到外置存储）
   implementation 'com.jakewharton.timber:timber:5.0.1'
+  
+  // Builtin FTP Server - 最新版（用于数据备份）
+  implementation 'com.github.hxcan:builtinftp:2025.12.15'
+  implementation 'com.github.hxcan:ftpserver:2023.9.8'
 }
 
 android 
@@ -84,7 +88,8 @@ android
       minifyEnabled false
       proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
     }
-    debug {
+    debug
+    {
       signingConfig signingConfigs.debug
     }
   }
@@ -94,12 +99,13 @@ android
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
     targetSdkVersion 28
-    versionCode 934
-    versionName "2026.3.18"
+    versionCode 1091
+    versionName "2026.3.26"
     multiDexEnabled true
     
     // 配置支持的 SO 库架构
-    ndk {
+    ndk
+    {
       abiFilters "armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
     }
   }
@@ -116,6 +122,12 @@ android
         noCompress "tflite"
     }
 
+    // #4800 抑制 D8 警告 - 针对第三方库的 stack map 表警告
+    dexOptions {
+        additionalParameters = [
+            '--no-warnings'
+        ]
+    }
 }
 
 // # https://stackoverflow.com/questions/65380359/lomboks-access-to-jdk-compilers-internal-packages-incompatible-with-java-16
@@ -139,4 +151,19 @@ tasks.withType(JavaCompile).configureEach {
         '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
         '--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED',
     ]
+}
+// 自定义 APK 输出文件名，包含版本信息
+android.applicationVariants.all { variant ->
+    variant.outputs.all { output ->
+        def versionName = variant.versionName
+        def versionCode = variant.versionCode
+        def buildTime = new Date().format('yyyyMMdd-HHmmss', TimeZone.getTimeZone('Asia/Shanghai'))
+        def buildType = variant.buildType.name
+        
+        if (buildType == 'debug') {
+            outputFileName = "sisterfuture-debug-v${versionName}-${versionCode}-${buildTime}.apk"
+        } else {
+            outputFileName = "sisterfuture-release-v${versionName}-${versionCode}-${buildTime}.apk"
+        }
+    }
 }

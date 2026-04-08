@@ -28,6 +28,7 @@ public class ContextManager
   private static final int INITIAL_MAX_ROUNDS = 5;
   private SharedPreferences sharedPreferences;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
+  private int MAX_ARGUMENTS_STR_LENGTH = 226810;
 
   public ContextManager(Context context)
   {
@@ -35,7 +36,13 @@ public class ContextManager
     currentMaxRounds = sharedPreferences.getInt("current_max_rounds", INITIAL_MAX_ROUNDS);
     
     cleanupInvalidToolCallsOnStartup();
-    FileLogger.d(TAG, "ContextManager init, currentMaxRounds=" + currentMaxRounds);
+  }
+
+  private boolean inDebugMessageIndexRange(int i)
+  {
+    int rangeMaximal = 1890;
+    int rangeMinimal= 0;
+    return true;
   }
 
   private void cleanupInvalidToolCallsOnStartup()
@@ -44,21 +51,36 @@ public class ContextManager
     
     if (historyStr.isEmpty())
     {
-      FileLogger.d(TAG, "[Startup cleanup] History empty, skip");
       return;
     }
     
     List<JSONObject> history = new ArrayList<>();
     int invalidCount = 0;
+    int blankAssistantCount = 0;
     
     try
     {
       JSONArray array = new JSONArray(historyStr);
-      FileLogger.i(TAG, "[Startup cleanup] Start, original count: " + array.length());
       
       for (int i = 0; i < array.length(); i++)
       {
         JSONObject currentObject = array.getJSONObject(i);
+        
+        String role = currentObject.optString("role", "");
+        String content = currentObject.optString("content", "");
+        boolean hasToolCalls = currentObject.has("tool_calls");
+        
+        if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
+        {
+          blankAssistantCount++;
+          continue;
+        }
+
+        if ((!(inDebugMessageIndexRange(i))) && (hasToolCalls))
+        {
+          continue;
+        }
+        
         if (isValidToolCallMessage(currentObject))
         {
           history.add(currentObject);
@@ -66,20 +88,14 @@ public class ContextManager
         else
         {
           invalidCount++;
-          FileLogger.w(TAG, "[Startup cleanup] Skip invalid JSON at index: " + i);
         }
       }
       
       history = normalizeToolCallMessages(history);
       
-      if (invalidCount > 0 || history.size() < array.length())
+      if (invalidCount > 0 || blankAssistantCount > 0 || history.size() < array.length())
       {
-        FileLogger.w(TAG, "[Startup cleanup] Removed " + invalidCount + " invalid messages");
         saveHistory(history);
-      }
-      else
-      {
-        FileLogger.d(TAG, "[Startup cleanup] History clean, no changes");
       }
     }
     catch (Exception e)
@@ -146,9 +162,8 @@ public class ContextManager
 
     history.add(toolMessage);
     FileLogger.i(TAG, "[addToolMessage] Added tool message, count: " + history.size());
-
     history = removeOldHistoryEntries(history);
-    
+    history = normalizeToolCallMessages(history);
     FileLogger.i(TAG, "[addToolMessage] Before normalize: " + history.size());
     history = normalizeToolCallMessages(history);
     FileLogger.i(TAG, "[addToolMessage] After normalize: " + history.size());
@@ -161,7 +176,6 @@ public class ContextManager
       String toolId = msg.optString("tool_call_id", "none");
       FileLogger.i(TAG, "  Normalized[" + i + "] role=" + role + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
     }
-
     saveHistory(history);
     FileLogger.i(TAG, "[addToolMessage done] History saved");
   }
@@ -180,7 +194,6 @@ public class ContextManager
     addMessage("assistant", message);
   }
 
-  // #4935 Enhanced: Add detailed logs to track message addition timing
   public void addRawMessage(JSONObject message)
   {
     if (message == null)
@@ -189,8 +202,8 @@ public class ContextManager
       return;
     }
 
-    // #4935 Key: Log addRawMessage call details
-    String role = message.optString("role", "unknown");
+    List<JSONObject> historyBefore = getHistory();
+
     boolean hasToolCalls = message.has("tool_calls");
     int toolCallsCount = hasToolCalls ? message.optJSONArray("tool_calls").length() : 0;
     String contentPreview = message.optString("content", "").substring(0, Math.min(50, message.optString("content").length()));
@@ -219,7 +232,6 @@ public class ContextManager
         JSONArray toolCalls = message.getJSONArray("tool_calls");
         if (toolCalls.length() == 0)
         {
-          FileLogger.w(TAG, "#4935 [addRawMessage] Empty tool_calls detected, filtered");
           return;
         }
 
@@ -238,9 +250,10 @@ public class ContextManager
               }
               catch (JSONException e)
               {
-                FileLogger.w(TAG, "Skip invalid JSON tool_call arguments: " + argumentsStr);
-                FileLogger.w(TAG, "   tool_call name: " + function.optString("name", "unknown"));
-                FileLogger.w(TAG, "#4935 [addRawMessage] Skipped due to invalid JSON, count remains: " + historyBefore.size());
+                return;
+              }
+            }
+          }
                 return;
               }
             }
@@ -255,7 +268,6 @@ public class ContextManager
 
     List<JSONObject> history = getHistory();
     history.add(message);
-    
     FileLogger.i(TAG, "#4935 [addRawMessage] Message added, before: " + historyBefore.size() + " -> after: " + history.size());
     
     JSONObject lastMsg = history.get(history.size() - 1);
@@ -282,6 +294,11 @@ public class ContextManager
   {
     List<JSONObject> history = getHistory();
     return new JSONArray(history);
+  }
+
+  public void logFullHistory(String prefix)
+  {
+    List<JSONObject> history = getHistory();
   }
 
   public List<JSONObject> getHistory()
@@ -340,19 +357,22 @@ public class ContextManager
               
               if (tokener.more())
               {
-                FileLogger.w(TAG, "Invalid JSON: extra data - \"" + argumentsStr + "\"");
                 return false;
+              }
               }
               
               if (!(parsed instanceof JSONObject))
               {
-                FileLogger.w(TAG, "Invalid JSON: not JSONObject, type=" + parsed.getClass().getName());
+                return false;
+              }
+
+              if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
+              {
                 return false;
               }
             }
             catch (JSONException e)
             {
-              FileLogger.w(TAG, "Invalid JSON: " + e.getMessage());
               return false;
             }
           }
@@ -362,15 +382,12 @@ public class ContextManager
     }
     catch (JSONException e)
     {
-      FileLogger.w(TAG, "Error during validation: " + e.getMessage());
       return false;
     }
   }
 
   private List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory)
   {
-    FileLogger.i(TAG, "[normalizeToolCallMessages start] Input count: " + oldHistory.size());
-    
     List<JSONObject> history = oldHistory;
     List<JSONObject> list = new ArrayList<>();
 
@@ -382,7 +399,6 @@ public class ContextManager
       {
         JSONObject currentObject =  history.get(i);
         String roleString = currentObject.getString("role");
-
         String toolCallIds = currentObject.has("tool_calls") ? String.valueOf(currentObject.optJSONArray("tool_calls").length()) + " items" : "none";
         String toolId = currentObject.optString("tool_call_id", "none");
         FileLogger.d(TAG, "[normalize] Process[" + i + "] role=" + roleString + ", tool_calls=" + toolCallIds + ", tool_call_id=" + toolId);
@@ -391,11 +407,14 @@ public class ContextManager
         {
           if (currentObject.has("tool_calls"))
           {
-            String toolCallId = "unknown";
-            try
+            pendingToolCallsObject = currentObject;
+            continue;
+          }
+        }
+        else if (roleString.equals("tool"))
             {
-              JSONArray toolCalls = currentObject.getJSONArray("tool_calls");
-              if (toolCalls.length() > 0)
+          String answeringtoolCAllId = currentObject.optString("tool_call_id", "none");
+          
               {
                 JSONObject firstToolCall = toolCalls.getJSONObject(0);
                 toolCallId = firstToolCall.optString("id", "unknown");
@@ -418,8 +437,6 @@ public class ContextManager
             JSONArray toolCALLSArray = pendingToolCallsObject.getJSONArray("tool_calls");
             JSONObject toolCallsFirst = toolCALLSArray.getJSONObject(0);
             String toolCAllsId = toolCallsFirst.getString("id");
-
-            FileLogger.d(TAG, "[normalize] Pair check: pending id=" + toolCAllsId + ", tool id=" + answeringtoolCAllId);
 
             if (toolCAllsId.equals(answeringtoolCAllId))
             {
@@ -454,16 +471,16 @@ public class ContextManager
     return list;
   }
 
-  // #4935 Added: Detailed logs for replaceHistory
   public void replaceHistory(List<JSONObject> newHistory)
   {
-    FileLogger.i(TAG, "#4935 [replaceHistory start] New history count: " + newHistory.size());
-    
-    for (int i = 0; i < newHistory.size(); i++)
+    if (newHistory.size() > currentMaxRounds * 2)
     {
-      JSONObject msg = newHistory.get(i);
-      String role = msg.optString("role", "unknown");
-      String content = msg.optString("content", "").substring(0, Math.min(50, msg.optString("content").length()));
+      newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
+    }
+    
+    saveHistory(newHistory);
+  }
+
       FileLogger.i(TAG, "  NewMsg[" + i + "] role=" + role + ", content=" + content + "...");
     }
     
@@ -509,13 +526,10 @@ public class ContextManager
       currentMaxRounds++;
       saveHistory(getHistory());
     }
-    FileLogger.i(TAG, "Increase max rounds to: " + currentMaxRounds);
   }
 
   public void decreaseMaxRounds()
   {
-    FileLogger.i(TAG, "Max rounds before decrease: " + currentMaxRounds);
-
     List<JSONObject> history = getHistory();
     int idealMaxRounds = history.size() /2 -1 ;
 
@@ -525,6 +539,5 @@ public class ContextManager
       history = removeOldHistoryEntries(history);
       saveHistory(history);
     }
-    FileLogger.i(TAG, "Decrease max rounds to: " + currentMaxRounds);
   }
 }
