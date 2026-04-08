@@ -714,40 +714,44 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             }
           } // if ("tool".equals(role)) 
           
-          if ("assistant".equals(role)) {
+          if ("assistant".equals(role)) 
+          {
             JSONArray toolCalls = msg.optJSONArray("tool_calls");
-            if (toolCalls != null && toolCalls.length() > 0) {
-              FileLogger.w(TAG, "🤖 [ASSISTANT_MESSAGE] 索引=" + i + 
-                  ", role=assistant, tool_calls 数量=" + toolCalls.length());
-              
-              for (int j = 0; j < toolCalls.length(); j++) {
+            if (toolCalls != null && toolCalls.length() > 0) 
+            {
+              for (int j = 0; j < toolCalls.length(); j++) 
+              {
                 JSONObject toolCall = toolCalls.getJSONObject(j);
                 String id = toolCall.optString("id", "unknown");
                 JSONObject func = toolCall.optJSONObject("function");
                 
-                if (func != null) {
+                if (func != null) 
+                {
                   String funcName = func.optString("name", "unknown_function");
                   String args = func.optString("arguments", "");
                   
                   FileLogger.w(TAG, "   🔧 [TOOL_CALL] 索引=" + j + 
                       ", id=" + id + ", name=" + funcName);
-                  FileLogger.d(TAG, "      📄 [ARGUMENTS] arguments 长度=" + args.length());
                   
                   // ✅ 先输出原始内容（无论有效无效）
                   FileLogger.d(TAG, "      📋 [RAW_ARGS] 原始参数：" + args);
                   
                   // 尝试解析 arguments 是否为有效 JSON
-                  try {
+                  try 
+                  {
                     new JSONObject(args);
-                    FileLogger.d(TAG, "      ✅ [JSON_VALID] 解析成功");
-                  } catch (JSONException e) {
+                  }
+                  catch (JSONException e) 
+                  {
                     FileLogger.e(TAG, "      ❌ [JSON_INVALID] 解析失败：" + e.getMessage());
                   }
                 }
               }
             }
           }
-        } catch (JSONException e) {
+        }
+        catch (JSONException e) 
+        {
           FileLogger.e(TAG, "❌ [PARSE_ERROR] 解析消息 #" + i + " 失败", e);
         }
       }
