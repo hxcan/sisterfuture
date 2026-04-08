@@ -705,22 +705,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             String toolName = msg.optString("name", "unknown_tool");
             String content = msg.optString("content", "");
             
-            FileLogger.w(TAG, "🔧 [TOOL_MESSAGE] 索引=" + i + 
-                ", role=tool, tool_call_id=" + toolCallId + 
-                ", name=" + toolName);
-            FileLogger.d(TAG, "   📄 [TOOL_CONTENT] content 长度=" + content.length());
-            
             try 
             {
               new JSONObject(content);
-              FileLogger.d(TAG, "   ✅ [JSON_VALID] content 是有效的 JSON");
             }
             catch (JSONException e) 
             {
-              FileLogger.e(TAG, "   ❌ [JSON_INVALID] content 不是有效的 JSON! Error: " + e.getMessage());
-              FileLogger.e(TAG, "   📋 [RAW_CONTENT] 原始内容：" + content);
             }
-          }
+          } // if ("tool".equals(role)) 
           
           if ("assistant".equals(role)) {
             JSONArray toolCalls = msg.optJSONArray("tool_calls");
