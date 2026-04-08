@@ -22,17 +22,14 @@ public class GetIssuesListTool implements Tool {
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-
     public GetIssuesListTool(Context context) {
         this.context = context;
     }
-
 
     @Override
     public String getName() {
         return "get_issues_list";
     }
-
 
     @Override
     public JSONObject getDefinition() {
@@ -54,8 +51,8 @@ public class GetIssuesListTool implements Tool {
                     .put("type", "string")
                     .put("description", "登录密码"))
                 .put("project_id", new JSONObject()
-                    .put("type", "integer")
-                    .put("description", "可选：项目ID，用于查询特定项目的任务列表"))
+                    .put("type", "long")
+                    .put("description", "可选：项目ID，用于查询特定项目的任务列表（支持64位长整数）"))
                 .put("limit", new JSONObject()
                     .put("type", "integer")
                     .put("description", "每页数量，默认25"))
@@ -64,7 +61,6 @@ public class GetIssuesListTool implements Tool {
                     .put("description", "偏移量，默认0"))
             );
             parameters.put("required", new JSONArray(new String[]{"redmine_url", "username", "password"}));
-
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
@@ -73,18 +69,15 @@ public class GetIssuesListTool implements Tool {
         }
     }
 
-
     @Override
     public boolean shouldInclude() {
         return true;
     }
 
-
     @Override
     public boolean isAsync() {
         return true;
     }
-
 
     @Override
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
@@ -94,10 +87,9 @@ public class GetIssuesListTool implements Tool {
                 String redmineUrl = arguments.optString("redmine_url", "").trim();
                 String username = arguments.optString("username", "").trim();
                 String password = arguments.optString("password", "").trim();
-                int projectId = arguments.optInt("project_id", -1);
+                long projectId = arguments.optLong("project_id", -1);
                 int limit = arguments.optInt("limit",25);
                 int offset = arguments.optInt("offset", 0);
-
 
                 // 2. 尝试从备注恢复默认值
                 if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty()) {
@@ -113,7 +105,6 @@ public class GetIssuesListTool implements Tool {
                     }
                 }
 
-
                 // 3. 验证必要参数
                 if (redmineUrl.isEmpty()) {
                     throw new IllegalArgumentException("缺少 redmine_url 参数，且未在备注中配置");
@@ -125,7 +116,6 @@ public class GetIssuesListTool implements Tool {
                     throw new IllegalArgumentException("缺少 password 参数，且未在备注中配置");
                 }
 
-
                 // 4. 构建请求
                 OkHttpClient client = new OkHttpClient();
                 HttpUrl.Builder urlBuilder = HttpUrl.parse(redmineUrl + "/issues.json")
@@ -134,39 +124,32 @@ public class GetIssuesListTool implements Tool {
                     .addQueryParameter("limit", String.valueOf(limit))
                     .addQueryParameter("offset", String.valueOf(offset));
 
-
                 // 添加项目过滤
                 if (projectId > 0) {
                     urlBuilder.addQueryParameter("project_id", String.valueOf(projectId));
                 }
-
 
                 Request request = new Request.Builder()
                     .url(urlBuilder.build())
                     .header("Authorization", Credentials.basic(username, password))
                     .build();
 
-
                 Response response = client.newCall(request).execute();
-
 
                 if (!response.isSuccessful()) {
                     throw new IOException("请求失败: " + response.code() + " " + response.message());
                 }
-
 
                 ResponseBody body = response.body();
                 if (body == null) {
                     throw new IOException("返回体为空");
                 }
 
-
                 String resultStr = body.string();
                 JSONObject result = new JSONObject();
                 result.put("tasks", new JSONObject(resultStr)); // 包装为标准响应
                 result.put("status", "success");
                 result.put("fetched_at", System.currentTimeMillis());
-
 
                 callback.onResult(result);
             } catch (Exception e) {
@@ -183,7 +166,6 @@ public class GetIssuesListTool implements Tool {
             }
         });
     }
-
 
     // --- 工具备注支持 ---
     @Override
