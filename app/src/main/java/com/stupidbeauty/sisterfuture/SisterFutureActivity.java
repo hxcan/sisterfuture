@@ -730,11 +730,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   String funcName = func.optString("name", "unknown_function");
                   String args = func.optString("arguments", "");
                   
-                  FileLogger.w(TAG, "   🔧 [TOOL_CALL] 索引=" + j + 
-                      ", id=" + id + ", name=" + funcName);
-                  
                   // ✅ 先输出原始内容（无论有效无效）
-                  FileLogger.d(TAG, "      📋 [RAW_ARGS] 原始参数：" + args);
                   
                   // 尝试解析 arguments 是否为有效 JSON
                   try 

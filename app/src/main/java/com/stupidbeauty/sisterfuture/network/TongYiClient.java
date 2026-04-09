@@ -93,8 +93,6 @@ public class TongYiClient
     final int queueSizeBefore = requestQueue.size();
     final int totalRequests = totalRequestsSubmitted.incrementAndGet();
     
-    FileLogger.d(TAG, "🔒 [QUEUE_SUBMIT] 请求 #" + totalRequests + " 提交到队列 | 当前队列长度：" + queueSizeBefore + " | 线程：" + Thread.currentThread().getName());
-    
     // === 🔒 #5028 将请求提交到队列 ===
     boolean queued = requestQueue.offer(() -> {
       final long startTime = System.currentTimeMillis();

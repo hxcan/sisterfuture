@@ -208,10 +208,10 @@ public class ModelAccessPointManager
   /**
    * 保存当前索引到 SharedPreferences
    */
-  private void saveCurrentIndex() {
+  private void saveCurrentIndex() 
+  {
     SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     prefs.edit().putInt(KEY_CURRENT_INDEX, currentAccessPointIndex).apply();
-    FileLogger.d(TAG, "Saved current index to SharedPreferences: " + currentAccessPointIndex);
   }
 
   /**
