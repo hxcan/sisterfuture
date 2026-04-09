@@ -333,6 +333,20 @@ public class TongYiClient
       catch (Exception e)
       {
         FileLogger.e(NETWORK_TAG, "🌐 [HTTP_ERROR] 请求构建失败", e);
+        
+        // === 🔒 #5029 新增：检测 Authorization header 编码错误 ===
+        // 当出现 IllegalArgumentException 且错误信息包含 "Unexpected char" 或 "Authorization" 时
+        // 视为凭证损坏，触发接入点切换
+        if (e instanceof IllegalArgumentException) {
+          String errorMsg = e.getMessage();
+          if (errorMsg != null && (errorMsg.contains("Unexpected char") || errorMsg.contains("Authorization"))) {
+            FileLogger.w(NETWORK_TAG, "⚠️ 检测到 Authorization header 编码错误，标记接入点不可用");
+            accessPointManager.reportCurrentAccessPointUnavailable();
+            listener.onError(new AccessPointUnavailableException("Invalid authorization header: " + errorMsg, e));
+            return;
+          }
+        }
+        
         e.printStackTrace();
         listener.onError(e);
       }
