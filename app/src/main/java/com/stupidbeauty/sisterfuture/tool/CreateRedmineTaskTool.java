@@ -47,7 +47,7 @@ public class CreateRedmineTaskTool implements Tool
 
       JSONObject priorityEnum = new JSONObject();
       priorityEnum.put("type", "string");
-      priorityEnum.put("enum", new JSONArray(new String[]{"Low", "Normal", "High", "Urgent"})); // ✅ 修复：使用 JSONArray 替代 String[]
+      priorityEnum.put("enum", new JSONArray(new String[]{"Low", "Normal", "High", "Urgent"}));
       priorityEnum.put("description", "任务优先级，默认为 Normal");
 
       JSONObject parameters = new JSONObject();
@@ -64,13 +64,13 @@ public class CreateRedmineTaskTool implements Tool
           .put("description", "登录密码"))
         .put("project_id", new JSONObject()
           .put("type", "integer")
-          .put("description", "目标项目 ID"))
+          .put("description", "目标项目 ID（支持长整型，如 JoyMan 生成的 750160066086）"))
         .put("subject", new JSONObject()
           .put("type", "string")
           .put("description", "任务标题"))
         .put("parent_issue_id", new JSONObject()
           .put("type", "integer")
-          .put("description", "可选：父任务 ID，用于创建子任务（与 Redmine API 保持一致）"))
+          .put("description", "可选：父任务 ID，用于创建子任务（支持长整型）"))
         .put("description", new JSONObject()
           .put("type", "string")
           .put("description", "任务描述，可选"))
@@ -114,12 +114,30 @@ public class CreateRedmineTaskTool implements Tool
                 String redmineUrl = arguments.optString("redmine_url", "").trim();
                 String username = arguments.optString("username", "").trim();
                 String password = arguments.optString("password", "").trim();
-                int projectId = arguments.getInt("project_id");
+                
+                // ✅ 修复：支持长整型 project_id（JoyMan 生成的 12-14 位数字）
+                long projectId;
+                Object projectIdObj = arguments.opt("project_id");
+                if (projectIdObj == null) {
+                    throw new IllegalArgumentException("缺少必需参数：project_id");
+                }
+                if (projectIdObj instanceof Number) {
+                    projectId = ((Number) projectIdObj).longValue();
+                } else {
+                    try {
+                        projectId = Long.parseLong(projectIdObj.toString().trim());
+                    } catch (NumberFormatException e) {
+                        throw new IllegalArgumentException("project_id 必须为有效的整数或长整型");
+                    }
+                }
+                
                 String subject = arguments.getString("subject");
                 String description = arguments.optString("description", "");
                 String priority = arguments.optString("priority", "Normal");
-                Integer parentIssueId = arguments.optInt("parent_issue_id", -1); // -1 表示无父任务 ✅ 参数名修正
-                Integer trackerId = arguments.optInt("tracker_id", -1); // -1 表示未指定
+                
+                // ✅ 同步修复：parent_issue_id 也改为 long 类型
+                long parentIssueId = arguments.optLong("parent_issue_id", -1);
+                long trackerId = arguments.optLong("tracker_id", -1);
 
                 // 2. 尝试从备注恢复凭证
                 if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty())
@@ -155,7 +173,7 @@ public class CreateRedmineTaskTool implements Tool
                 issueJson.put("priority_id", getPriorityId(priority));
 
                 if (parentIssueId > 0) {
-                    issueJson.put("parent_issue_id", parentIssueId); // ✅ 正确方式
+                    issueJson.put("parent_issue_id", parentIssueId);
                 }
                 
                 if (trackerId > 0) {
@@ -204,11 +222,9 @@ public class CreateRedmineTaskTool implements Tool
                     JSONObject error = new JSONObject();
                     error.put("status", "error");
                     
-                    // ✅ 新增：通用参数完整性引导（覆盖所有异常类型）
                     String errorMessage = e.getMessage();
                     StringBuilder guidance = new StringBuilder();
                     
-                    // 判断是否为参数相关错误（包含特定关键词）
                     boolean isParamError = false;
                     if (errorMessage != null) {
                         String lowerMsg = errorMessage.toLowerCase();
@@ -229,18 +245,11 @@ public class CreateRedmineTaskTool implements Tool
                         guidance.append("- **必需参数**：project_id, subject\n");
                         guidance.append("- **认证参数**：redmine_url, username, password（建议从工具备注读取）\n");
                         guidance.append("- **可选参数**：description, priority, tracker_id, parent_issue_id\n\n");
-                        guidance.append("如果遇到参数解析错误，请大模型立即停止并执行以下步骤：\n");
-                        guidance.append("1. 检查是否遗漏了任何必需参数\n");
-                        guidance.append("2. 确认所有参数名称拼写正确（特别是 parent_issue_id 而非 parent_task_id）\n");
-                        guidance.append("3. 验证参数类型是否正确（如 project_id 应为整数，priority 应为枚举值）\n");
-                        guidance.append("4. 检查 redmine_url、username、password 是否已从工具备注中正确读取\n");
-                        guidance.append("5. 确保传递了所有能够传递的参数，不要省略任何可用信息\n\n");
                         guidance.append("💡 示例正确调用格式：\n");
-                        guidance.append("```\n{\n  \"redmine_url\": \"https://your-redmine.com\",\n  \"username\": \"your_username\",\n  \"password\": \"your_password\",\n  \"project_id\": 123,\n  \"subject\": \"任务标题\",\n  \"description\": \"任务描述\",\n  \"priority\": \"Normal\",\n  \"tracker_id\": 2,\n  \"parent_issue_id\": 456\n}\n```\n\n**重要提醒**：每次调用前务必完整传递所有可获取的参数，避免因为参数缺失或错误导致任务创建失败！\n");
+                        guidance.append("```\n{\n  \"redmine_url\": \"https://your-redmine.com\",\n  \"username\": \"your_username\",\n  \"password\": \"your_password\",\n  \"project_id\": 750160066086,\n  \"subject\": \"任务标题\",\n  \"description\": \"任务描述\",\n  \"priority\": \"Normal\",\n  \"tracker_id\": 2,\n  \"parent_issue_id\": 456\n}\n```\n\n**重要提醒**：每次调用前务必完整传递所有可获取的参数！\n");
                         
                         errorMessage += "\n" + guidance.toString();
                     } else {
-                        // 非参数错误（如网络错误、服务器错误），保持原样
                         errorMessage = errorMessage != null ? errorMessage : "未知错误";
                     }
                     
@@ -253,9 +262,6 @@ public class CreateRedmineTaskTool implements Tool
         });
     }
 
-    /**
-    * 根据优先级名称获取 ID（适配 Java 8）
-    */
     private int getPriorityId(String priority)
     {
         String lowerPriority = priority.toLowerCase();
@@ -266,13 +272,12 @@ public class CreateRedmineTaskTool implements Tool
         else if ("urgent".equals(lowerPriority))
             return 5;
         else
-            return 2; // Normal
+            return 2;
     }
 
-    // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求创建 Redmine 任务时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持创建子任务，需提供 parent_issue_id 参数（与 Redmine API 保持一致）。支持指定任务类型，使用 tracker_id 参数。\n\n【参数完整性要求】在调用 create_redmine_task 工具时，必须仔细检查所有必需参数和可选参数的传递：\n- **必需参数**：project_id, subject\n- **认证参数**：redmine_url, username, password（建议从工具备注读取）\n- **可选参数**：description, priority, tracker_id, parent_issue_id\n\n如果遇到参数解析错误，请大模型立即停止并执行以下步骤：\n1. 检查是否遗漏了任何必需参数\n2. 确认所有参数名称拼写正确（特别是 parent_issue_id 而非 parent_task_id）\n3. 验证参数类型是否正确（如 project_id 应为整数，priority 应为枚举值）\n4. 检查 redmine_url、username、password 是否已从工具备注中正确读取\n5. 确保传递了所有能够传递的参数，不要省略任何可用信息\n\n💡 示例正确调用格式：\n```json\n{\n  \"redmine_url\": \"https://your-redmine.com\",\n  \"username\": \"your_username\",\n  \"password\": \"your_password\",\n  \"project_id\": 123,\n  \"subject\": \"任务标题\",\n  \"description\": \"任务描述\",\n  \"priority\": \"Normal\",\n  \"tracker_id\": 2,\n  \"parent_issue_id\": 456\n}\n```\n\n**重要提醒**：每次调用前务必完整传递所有可获取的参数，避免因为参数缺失或错误导致任务创建失败！";
+        return "必须在用户明确要求创建 Redmine 任务时才调用此工具。project_id 参数现在支持长整型（如 JoyMan 生成的 750160066086）。\n\n💡 示例正确调用格式：\n```json\n{\n  \"project_id\": 750160066086,\n  \"subject\": \"任务标题\"\n}\n```";
     }
 }
