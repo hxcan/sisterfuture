@@ -62,7 +62,6 @@ public class TongYiClient
     
     // === 🔒 #5028 启动队列处理器 ===
     startQueueProcessor();
-    FileLogger.i(TAG, "🔒 [QUEUE_INIT] TongYiClient 初始化完成，串行请求队列已启动");
   }
   
   // === 🔒 #5028 队列处理器 ===
@@ -92,8 +91,6 @@ public class TongYiClient
     final long submitTime = System.currentTimeMillis();
     final int queueSizeBefore = requestQueue.size();
     final int totalRequests = totalRequestsSubmitted.incrementAndGet();
-    
-    FileLogger.d(TAG, "🔒 [QUEUE_SUBMIT] 请求 #" + totalRequests + " 提交到队列 | 当前队列长度：" + queueSizeBefore + " | 线程：" + Thread.currentThread().getName());
     
     // === 🔒 #5028 将请求提交到队列 ===
     boolean queued = requestQueue.offer(() -> {
@@ -177,8 +174,6 @@ public class TongYiClient
     @Override
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete)
     {
-      FileLogger.d(NETWORK_TAG, "🌐 [HTTP_START] 开始发起 HTTP 请求 | 线程：" + Thread.currentThread().getName());
-      
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
       String apiKey = null;
       
@@ -264,8 +259,6 @@ public class TongYiClient
           .addHeader("Content-Type", "application/json")
           .post(body)
           .build();
-
-        FileLogger.d(NETWORK_TAG, "🌐 [HTTP_ENQUEUE] OkHttp 请求已加入网络队列 | 线程：" + Thread.currentThread().getName());
 
         client.newCall(request).enqueue(new Callback()
         {

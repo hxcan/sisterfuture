@@ -198,20 +198,21 @@ public class ModelAccessPointManager
    * 从 SharedPreferences 加载当前索引
    * @return 上次保存的索引，默认为 0
    */
-  private int loadCurrentIndex() {
+  private int loadCurrentIndex() 
+  {
     SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     int index = prefs.getInt(KEY_CURRENT_INDEX, 0);
-    FileLogger.d(TAG, "Loaded current index from SharedPreferences: " + index);
+
     return index;
   }
 
   /**
    * 保存当前索引到 SharedPreferences
    */
-  private void saveCurrentIndex() {
+  private void saveCurrentIndex() 
+  {
     SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     prefs.edit().putInt(KEY_CURRENT_INDEX, currentAccessPointIndex).apply();
-    FileLogger.d(TAG, "Saved current index to SharedPreferences: " + currentAccessPointIndex);
   }
 
   /**
@@ -281,14 +282,13 @@ public class ModelAccessPointManager
    * 🔥 #4657 检查连续失败次数是否超过阈值
    * @return true 如果超过阈值，需要触发备用接入点向导
    */
-  public boolean checkFailureThreshold() {
+  public boolean checkFailureThreshold() 
+  {
     int threshold = Math.max(1, accessPoints.size() * FAILURE_THRESHOLD_MULTIPLIER);
     boolean exceeded = consecutiveFailures >= threshold;
     
-    FileLogger.d(TAG, "🎯 [THRESHOLD_CHECK] consecutiveFailures=" + consecutiveFailures + 
-                  ", threshold=" + threshold + ", exceeded=" + exceeded);
-    
-    if (exceeded) {
+    if (exceeded) 
+    {
       FileLogger.w(TAG, "🔥 连续失败次数超过阈值：" + consecutiveFailures + " >= " + threshold + " (接入点数量：" + accessPoints.size() + ")");
     }
     
@@ -331,10 +331,6 @@ public class ModelAccessPointManager
     int newIndex = currentAccessPointIndex;
     String newApName = (newIndex >= 0 && newIndex < accessPoints.size()) 
         ? accessPoints.get(newIndex).getName() : "N/A";
-    
-    int threshold = Math.max(1, accessPoints.size() * FAILURE_THRESHOLD_MULTIPLIER);
-    FileLogger.i(TAG, "🔥 [AP_SWITCH_COMPLETE] 切换完成：" + oldIndex + "(" + oldApName + ") → " + 
-                  newIndex + "(" + newApName + ") | 连续失败次数：" + consecutiveFailures + "/" + threshold);
     
     return consecutiveFailures;
   }
