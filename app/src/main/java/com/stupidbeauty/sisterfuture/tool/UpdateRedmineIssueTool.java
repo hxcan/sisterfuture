@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
 /**
  * 工具类：更新 Redmine 任务信息
  * 本工具基于 Redmine API 的 'Updating an issue' 接口，用于更新任务的任意属性。
@@ -66,7 +67,7 @@ public class UpdateRedmineIssueTool implements Tool
                     .put("type", "string")
                     .put("description", "登录密码"))
                 .put("task_id", new JSONObject()
-                    .put("type", "integer")
+                    .put("type", "long")
                     .put("description", "要更新的目标任务 ID"))
                 .put("subject", new JSONObject()
                     .put("type", "string")
@@ -76,24 +77,24 @@ public class UpdateRedmineIssueTool implements Tool
                     .put("description", "可选：任务的新描述"))
                 .put("priority", priorityEnum)
                 .put("status_id", new JSONObject()
-                    .put("type", "integer")
+                    .put("type", "long")
                     .put("description", "可选：任务的新状态 ID"))
                 .put("notes", new JSONObject()
                     .put("type", "string")
                     .put("description", "可选：要添加的评论内容"))
                 .put("parent_issue_id", new JSONObject()
-                    .put("type", "integer")
+                    .put("type", "long")
                     .put("description", "可选：新的上级任务 ID，用于调整任务父子关系"))
                 .put("project_id", new JSONObject()
-                    .put("type", "integer")
+                    .put("type", "long")
                     .put("description", "可选：新的项目 ID，用于将任务移动到其他项目"))
                 .put("blocked_by_ids", new JSONObject()
                     .put("type", "array")
-                    .put("items", new JSONObject().put("type", "integer"))
+                    .put("items", new JSONObject().put("type", "long"))
                     .put("description", "可选：此任务被哪些任务阻塞"))
                 .put("blocking_ids", new JSONObject()
                     .put("type", "array")
-                    .put("items", new JSONObject().put("type", "integer"))
+                    .put("items", new JSONObject().put("type", "long"))
                     .put("description", "可选：此任务阻塞了哪些任务"))
             );
             parameters.put("required", new JSONArray(new String[]{"redmine_url", "username", "password", "task_id"}));
@@ -131,7 +132,7 @@ public class UpdateRedmineIssueTool implements Tool
                 String redmineUrl = arguments.optString("redmine_url", "").trim();
                 String username = arguments.optString("username", "").trim();
                 String password = arguments.optString("password", "").trim();
-                int taskId = arguments.getInt("task_id");
+                long taskId = arguments.getLong("task_id");
 
                 // 2. 尝试从备注恢复凭证 - 改进 JSON 解析错误处理
                 if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty())
@@ -211,21 +212,21 @@ public class UpdateRedmineIssueTool implements Tool
                     issueJson.put("priority_id", getPriorityId(arguments.getString("priority")));
                 }
                 if (arguments.has("status_id")) {
-                    issueJson.put("status_id", arguments.getInt("status_id"));
+                    issueJson.put("status_id", arguments.getLong("status_id"));
                 }
                 if (arguments.has("notes")) {
                     issueJson.put("notes", arguments.getString("notes"));
                 }
                 if (arguments.has("parent_issue_id")) {
                     if (!arguments.isNull("parent_issue_id")) {
-                        issueJson.put("parent_issue_id", arguments.getInt("parent_issue_id"));
+                        issueJson.put("parent_issue_id", arguments.getLong("parent_issue_id"));
                     } else {
                         // 显式设置为 null 来移除父任务关系
                         issueJson.put("parent_issue_id", JSONObject.NULL);
                     }
                 }
                 if (arguments.has("project_id")) {
-                    issueJson.put("project_id", arguments.getInt("project_id"));
+                    issueJson.put("project_id", arguments.getLong("project_id"));
                 }
                 
                 // 处理任务阻挡关系
