@@ -612,7 +612,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     final long requestId = System.currentTimeMillis();
     currentRequestId = requestId;
-    FileLogger.d(TAG, "🆔 [REQUEST_ID] 开始发送请求 #" + requestId + " | 当前接入点索引：" + modelAccessPointManager.getCurrentAccessPointIndex());
     
     SisterFutureService.updateNotificationStatus(this, "正在发送请求...");
 
