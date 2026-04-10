@@ -8,6 +8,7 @@ import com.stupidbeauty.sisterfuture.tools.ListPhoneDirectoryTool;
 import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
 import android.content.Context;
 
+
 /**
  * 工具注册中心 - 集中管理所有工具的注册逻辑
  * 
@@ -143,5 +144,8 @@ public class ToolRegistry
 
     // 🔥 新增：启动应用工具
     toolManager.registerTool(new LaunchAppTool(context));
+
+    // 🔥 新增：获取已安装应用列表工具
+    toolManager.registerTool(new GetInstalledAppsTool(context));
   }
 }
