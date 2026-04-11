@@ -54,7 +54,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.io.FileInputStream;
 import android.Manifest;
-import android.app.Activity;
+import androidx.appcompat.app.AppCompatActivity;
 import android.app.ActivityOptions;
 import android.app.WallpaperManager;
 import android.media.MediaScannerConnection;
@@ -125,7 +125,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import android.util.Base64;
 
-public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
+public class SisterFutureActivity extends AppCompatActivity implements TextToSpeech.OnInitListener
 {
   private GuideManager guideManager ;
 
@@ -168,6 +168,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   @BindView(R.id.commandRecognizebutton2) Button commandRecognizebutton2;
   @BindView(R.id.thinking_overlay) TextView thinking_overlay;
   @BindView(R.id.progressBar) ProgressBar progressBar;
+  
   // 🆕 绑定上传图片按钮
   @BindView(R.id.uploadImageButton) Button uploadImageButton;
   
@@ -255,7 +256,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   public void onUploadImageButton() {
     // 打开图片选择器
     if (imagePickerLauncher != null) {
-      imagePickerLauncher.launch("image/*");
+      imagePickerLauncher.launch("image\/*");
     } else {
       Toast.makeText(this, "图片选择器未初始化", Toast.LENGTH_SHORT).show();
     }
@@ -289,7 +290,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         imageContent.put("type", "image_url");
         
         JSONObject imageUrl = new JSONObject();
-        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+        imageUrl.put("url", "data:image\/jpeg;base64," + currentImageBase64);
         imageContent.put("image_url", imageUrl);
         
         contentArray.put(imageContent);
@@ -500,7 +501,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
 
     mIat.setParameter(SpeechConstant.AUDIO_FORMAT, "wav");
-    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
+    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "\/msc\/asr.wav");
 
     return result;
   }
@@ -596,7 +597,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         FileLogger.d(TAG, "🔄 [AUTO_RESUME] 开始发送自动恢复请求");
         sendChatRequestTongYi();
       }, 500);
-    }
+   }
     else
     {
       FileLogger.d(TAG, "🔄 [AUTO_RESUME] 不需要自动恢复");
@@ -743,6 +744,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         recognizeResulttextView.setEnabled(false);
         sendButtonn2.setEnabled(false);
         commandRecognizebutton2.setEnabled(false);
+        
         // 🆕 同时禁用上传按钮
         if (uploadImageButton != null) {
           uploadImageButton.setEnabled(false);
@@ -764,6 +766,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         recognizeResulttextView.setEnabled(true);
         sendButtonn2.setEnabled(true);
         commandRecognizebutton2.setEnabled(true);
+        
         // 🆕 同时启用上传按钮
         if (uploadImageButton != null) {
           uploadImageButton.setEnabled(true);
@@ -881,7 +884,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           JSONObject imageContent = new JSONObject();
           imageContent.put("type", "image_url");
           JSONObject imageUrl = new JSONObject();
-          imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+          imageUrl.put("url", "data:image\/jpeg;base64," + currentImageBase64);
           imageContent.put("image_url", imageUrl);
           contentArray.put(imageContent);
           
@@ -958,6 +961,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 {
                   String funcName = func.optString("name", "unknown_function");
                   String args = func.optString("arguments", "");
+                  
                   
                   // ✅ 先输出原始内容（无论有效无效）
                   
@@ -1553,9 +1557,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     AsyncHttpServer server=new AsyncHttpServer();
     CommitTextCallback commitTextCallback=new CommitTextCallback();
-    server.get("/commitText/", commitTextCallback);
+    server.get("\/commitText\/", commitTextCallback);
     PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback();
-    server.get("/phoneInformation/", phoneInformationCallback);
+    server.get("\/phoneInformation\/", phoneInformationCallback);
     server.listen(LanServicePort);
   }
 
@@ -1610,7 +1614,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
-      promptBuilder.append("\n/no_think\n");
+      promptBuilder.append("\n\/no_think\n");
     }
     return promptBuilder.toString();
   }
@@ -1849,7 +1853,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     
     if (parentDir != null && parentDir.exists()) {
       File[] files = parentDir.listFiles();
-      FileLogger.d(TAG, "📋 [FTP_DEBUG] 根目录下文件/目录数量：" + (files != null ? files.length : "null"));
+      FileLogger.d(TAG, "📋 [FTP_DEBUG] 根目录下文件\/目录数量：" + (files != null ? files.length : "null"));
       
       if (files != null) {
         for (File file : files) {
@@ -1857,10 +1861,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
       
-      FileLogger.d(TAG, "📂 [FTP_DEBUG] databases/ 存在：" + new File(parentDir, "databases").exists());
-      FileLogger.d(TAG, "📂 [FTP_DEBUG] shared_prefs/ 存在：" + new File(parentDir, "shared_prefs").exists());
-      FileLogger.d(TAG, "📂 [FTP_DEBUG] files/ 存在：" + new File(parentDir, "files").exists());
-      FileLogger.d(TAG, "📂 [FTP_DEBUG] code_cache/ 存在：" + new File(parentDir, "code_cache").exists());
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] databases\/ 存在：" + new File(parentDir, "databases").exists());
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] shared_prefs\/ 存在：" + new File(parentDir, "shared_prefs").exists());
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] files\/ 存在：" + new File(parentDir, "files").exists());
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] code_cache\/ 存在：" + new File(parentDir, "code_cache").exists());
     }
     
     builtinFtpServer = new BuiltinFtpServer(this);
