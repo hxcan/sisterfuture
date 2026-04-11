@@ -54,6 +54,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.io.FileInputStream;
 import androidx.activity.result.ActivityResultLauncher;
+import android.net.Uri;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import android.util.Base64;
 import androidx.activity.result.contract.ActivityResultContracts;
 import android.Manifest;
 import android.app.Activity;
@@ -171,18 +175,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private SpeechRecognizer mIat;
 
-
-	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
-	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
-
-  // 🔥 #4657 死循环救援模式标记
-  
   // 📷 #280 初始化图片选择器
   private void initImagePicker()
   {
-    imagePickerLauncher = registerForActivityResult(
-      new ActivityResultContracts.StartActivityForResult(),
-      result -> {
+    // 由于 Activity 不支持 registerForActivityResult，需要使用 fragment 或者手动管理 requestCode
+    // 这里我们使用传统的 startActivityForResult 方式
+    // imagePickerLauncher 变量保留但暂不使用
+  }
         if (result.getResultCode() == RESULT_OK && result.getData() != null)
         {
           handleSelectedImage(result.getData());
@@ -190,7 +189,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     );
   }
-  
   // 📷 #280 处理选中的图片
   private void handleSelectedImage(Intent data)
   {
@@ -229,6 +227,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       });
     }
   }
+    }
+  }
   
   // 📷 #280 图片上传按钮点击事件
   @OnClick(R.id.uploadImageButton)
@@ -245,8 +245,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       openImagePicker();
     }
-  }
-  
   // 📷 #280 打开图片选择器
   private void openImagePicker()
   {
@@ -254,13 +252,26 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     pickIntent.setType("image/*");
     try
     {
-      imagePickerLauncher.launch(pickIntent);
+      startActivityForResult(pickIntent, 1001);
       FileLogger.d(TAG, "📷 [IMAGE_PICKER] 已打开图片选择器");
     }
     catch (Exception e)
     {
       FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
       Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
+    }
+  }
+
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data)
+  {
+    super.onActivityResult(requestCode, resultCode, data);
+    
+    if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
+    {
+      handleSelectedImage(data);
+    }
+  }
     }
   }
   
