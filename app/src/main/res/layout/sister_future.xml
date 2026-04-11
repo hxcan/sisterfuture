@@ -65,13 +65,24 @@
     android:layout_alignParentBottom="true"
     android:layout_toLeftOf="@+id/commandRecognizebutton2" />
 
+  <!-- 🆕 图片上传按钮 -->
+  <Button
+    android:layout_width="48dp"
+    android:layout_height="48dp"
+    android:id="@+id/uploadImageButton"
+    android:layout_margin="5dp"
+    android:background="@drawable/ic_image"
+    android:layout_alignParentBottom="true"
+    android:layout_toLeftOf="@+id/sendButtonn2"
+    android:contentDescription="上传图片" />
+
   <EditText
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:id="@+id/recognizeResulttextView"
     android:layout_alignParentBottom="true"
     android:layout_alignParentLeft="true"
-    android:layout_toLeftOf="@+id/sendButtonn2"
+    android:layout_toLeftOf="@+id/uploadImageButton"
     android:inputType="textMultiLine"
     android:imeOptions="actionSend"
     android:maxLines="3" />
