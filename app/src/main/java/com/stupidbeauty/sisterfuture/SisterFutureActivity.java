@@ -258,7 +258,6 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
     if (imagePickerLauncher != null) {
       imagePickerLauncher.launch("image\/*");
       imagePickerLauncher.launch("image/*");
-    }
   }
 
   // 🆕 发送包含图片的消息
@@ -292,7 +291,6 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
         imageUrl.put("url", "data:image\/jpeg;base64," + currentImageBase64);
         imageContent.put("image_url", imageUrl);
         imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
-        
         FileLogger.d(TAG, "📷 [IMAGE] 已添加到消息中，Base64 长度: " + currentImageBase64.length());
       }
       
@@ -501,9 +499,10 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
     mIat.setParameter(SpeechConstant.AUDIO_FORMAT, "wav");
     mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "\/msc\/asr.wav");
 
+    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
+
     return result;
   }
-    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
   {
     List<JSONObject> history = contextManager.getHistory();
     for (JSONObject msg : history)
@@ -884,8 +883,7 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
           imageUrl.put("url", "data:image\/jpeg;base64," + currentImageBase64);
           imageContent.put("image_url", imageUrl);
           contentArray.put(imageContent);
-          
-          currentUserMsg.put("content", contentArray);
+          imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
           imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
           currentImageBase64 = null;
         } else {
@@ -1555,11 +1553,15 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
     CommitTextCallback commitTextCallback=new CommitTextCallback();
     server.get("\/commitText\/", commitTextCallback);
     PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback();
-    server.get("\/phoneInformation\/", phoneInformationCallback);
+  private void startHttpServer()
+  {
+    AsyncHttpServer server=new AsyncHttpServer();
+    CommitTextCallback commitTextCallback=new CommitTextCallback();
+    server.get("/commitText/", commitTextCallback);
+    PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback();
+    server.get("/phoneInformation/", phoneInformationCallback);
     server.listen(LanServicePort);
   }
-
-  private static String buildEnhancedSystemPrompt(ToolManager toolManager, Context context)
     server.get("/commitText/", commitTextCallback);
     PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback();
     server.get("/phoneInformation/", phoneInformationCallback);
@@ -1611,8 +1613,7 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
         }
       }
 
-      promptBuilder.append("\n\/no_think\n");
-    }
+      promptBuilder.append("\n/no_think\n");
     return promptBuilder.toString();
   }
 
