@@ -182,13 +182,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // 这里我们使用传统的 startActivityForResult 方式
     // imagePickerLauncher 变量保留但暂不使用
   }
-        if (result.getResultCode() == RESULT_OK && result.getData() != null)
-        {
-          handleSelectedImage(result.getData());
-        }
-      }
-    );
-  }
   // 📷 #280 处理选中的图片
   private void handleSelectedImage(Intent data)
   {
