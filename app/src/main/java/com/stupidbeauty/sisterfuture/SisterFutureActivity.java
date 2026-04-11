@@ -257,8 +257,7 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
     // 打开图片选择器
     if (imagePickerLauncher != null) {
       imagePickerLauncher.launch("image\/*");
-    } else {
-      Toast.makeText(this, "图片选择器未初始化", Toast.LENGTH_SHORT).show();
+      imagePickerLauncher.launch("image/*");
     }
   }
 
@@ -292,8 +291,7 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
         JSONObject imageUrl = new JSONObject();
         imageUrl.put("url", "data:image\/jpeg;base64," + currentImageBase64);
         imageContent.put("image_url", imageUrl);
-        
-        contentArray.put(imageContent);
+        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
         
         FileLogger.d(TAG, "📷 [IMAGE] 已添加到消息中，Base64 长度: " + currentImageBase64.length());
       }
@@ -505,8 +503,7 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
 
     return result;
   }
-  
-  private void displayExistingContext()
+    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
   {
     List<JSONObject> history = contextManager.getHistory();
     for (JSONObject msg : history)
@@ -889,8 +886,7 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
           contentArray.put(imageContent);
           
           currentUserMsg.put("content", contentArray);
-          
-          // 清空图片
+          imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
           currentImageBase64 = null;
         } else {
           // 普通文本消息
@@ -1564,8 +1560,9 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
   }
 
   private static String buildEnhancedSystemPrompt(ToolManager toolManager, Context context)
-  {
-    SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
+    server.get("/commitText/", commitTextCallback);
+    PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback();
+    server.get("/phoneInformation/", phoneInformationCallback);
 
     StringBuilder promptBuilder = new StringBuilder();
 
@@ -1620,8 +1617,7 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
   }
 
   @Override
-	protected void onCreate(Bundle savedInstanceState) 
-	{
+      promptBuilder.append("\n/no_think\n");
 		super.onCreate(savedInstanceState);
 		requestWindowFeature(Window.FEATURE_NO_TITLE);
 		setContentView(R.layout.sister_future);
@@ -1860,8 +1856,7 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
           FileLogger.d(TAG, "  - 📄 [FTP_DEBUG] " + (file.isDirectory() ? "DIR" : "FILE") + ": " + file.getName());
         }
       }
-      
-      FileLogger.d(TAG, "📂 [FTP_DEBUG] databases\/ 存在：" + new File(parentDir, "databases").exists());
+      FileLogger.d(TAG, "📋 [FTP_DEBUG] 根目录下文件/目录数量：" + (files != null ? files.length : "null"));
       FileLogger.d(TAG, "📂 [FTP_DEBUG] shared_prefs\/ 存在：" + new File(parentDir, "shared_prefs").exists());
       FileLogger.d(TAG, "📂 [FTP_DEBUG] files\/ 存在：" + new File(parentDir, "files").exists());
       FileLogger.d(TAG, "📂 [FTP_DEBUG] code_cache\/ 存在：" + new File(parentDir, "code_cache").exists());
@@ -1869,8 +1864,10 @@ public class SisterFutureActivity extends AppCompatActivity implements TextToSpe
     
     builtinFtpServer = new BuiltinFtpServer(this);
     builtinFtpServerErrorListener = new BuiltinFtpServerErrorListener();
-    
-    builtinFtpServer.setPort(FTP_SERVER_PORT);
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] databases/ 存在：" + new File(parentDir, "databases").exists());
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] shared_prefs/ 存在：" + new File(parentDir, "shared_prefs").exists());
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] files/ 存在：" + new File(parentDir, "files").exists());
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] code_cache/ 存在：" + new File(parentDir, "code_cache").exists());
     builtinFtpServer.setAllowActiveMode(false);
     builtinFtpServer.setErrorListener(builtinFtpServerErrorListener);
     builtinFtpServer.start();
