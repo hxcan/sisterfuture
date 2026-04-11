@@ -155,6 +155,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private static final int LanServicePort =10471;
   private String voiceRecognizeResultString;
+  // 📷 #280 图片输入功能相关变量
+  private ActivityResultLauncher<Intent> imagePickerLauncher;
+  private String currentImageBase64 = null;
+  private Button uploadImageButton;
   private Vibrator vibrator;
   @BindView(R.id.sendButtonn2) Button sendButtonn2;
   @BindView(R.id.commandRecognizebutton2) Button commandRecognizebutton2;
@@ -170,6 +174,155 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
   // 🔥 #4657 死循环救援模式标记
+  
+  // 📷 #280 初始化图片选择器
+  private void initImagePicker()
+  {
+    imagePickerLauncher = registerForActivityResult(
+      new ActivityResultContracts.StartActivityForResult(),
+      result -> {
+        if (result.getResultCode() == RESULT_OK && result.getData() != null)
+        {
+          handleSelectedImage(result.getData());
+        }
+      }
+    );
+  }
+  
+  // 📷 #280 处理选中的图片
+  private void handleSelectedImage(Intent data)
+  {
+    try
+    {
+      Uri imageUri = data.getData();
+      if (imageUri == null) return;
+      
+      InputStream inputStream = getContentResolver().openInputStream(imageUri);
+      if (inputStream == null) return;
+      
+      ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+      byte[] buffer = new byte[4096];
+      int bytesRead;
+      while ((bytesRead = inputStream.read(buffer)) != -1)
+      {
+        byteArrayOutputStream.write(buffer, 0, bytesRead);
+      }
+      inputStream.close();
+      
+      byte[] imageBytes = byteArrayOutputStream.toByteArray();
+      currentImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
+      
+      runOnUiThread(() -> {
+        Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
+        uploadImageButton.setVisibility(View.VISIBLE);
+      });
+      
+      FileLogger.i(TAG, "📷 [IMAGE_LOADED] 图片已加载，Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "❌ [IMAGE_ERROR] 加载图片失败", e);
+      runOnUiThread(() -> {
+        Toast.makeText(this, "❌ 图片加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+      });
+    }
+  }
+  
+  // 📷 #280 图片上传按钮点击事件
+  @OnClick(R.id.uploadImageButton)
+  public void onUploadImageButton()
+  {
+    if (currentImageBase64 != null)
+    {
+      currentImageBase64 = null;
+      uploadImageButton.setVisibility(View.GONE);
+      Toast.makeText(this, "🗑️ 已清除图片", Toast.LENGTH_SHORT).show();
+      FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 用户清除了暂存的图片");
+    }
+    else
+    {
+      openImagePicker();
+    }
+  }
+  
+  // 📷 #280 打开图片选择器
+  private void openImagePicker()
+  {
+    Intent pickIntent = new Intent(Intent.ACTION_PICK);
+    pickIntent.setType("image/*");
+    try
+    {
+      imagePickerLauncher.launch(pickIntent);
+      FileLogger.d(TAG, "📷 [IMAGE_PICKER] 已打开图片选择器");
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
+      Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
+    }
+  }
+  
+  // 📷 #280 发送带图片的消息
+  private void sendMessageWithImage(String textMessage)
+  {
+    boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
+    
+    if (!hasImage && (textMessage == null || textMessage.trim().isEmpty()))
+    {
+      FileLogger.w(TAG, "⚠️ [SEND_CANCELLED] 没有图片和文字，取消发送");
+      return;
+    }
+    
+    if (hasImage)
+    {
+      FileLogger.i(TAG, "📷 [SEND_WITH_IMAGE] 发送带图片的消息 | 文字长度：" + (textMessage != null ? textMessage.length() : 0) + " | Base64 长度：" + currentImageBase64.length());
+      
+      try
+      {
+        JSONArray contentArray = new JSONArray();
+        
+        if (textMessage != null && !textMessage.trim().isEmpty())
+        {
+          JSONObject textContent = new JSONObject();
+          textContent.put("type", "text");
+          textContent.put("text", textMessage);
+          contentArray.put(textContent);
+        }
+        
+        JSONObject imageContent = new JSONObject();
+        imageContent.put("type", "image_url");
+        
+        JSONObject imageUrl = new JSONObject();
+        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+        imageContent.put("image_url", imageUrl);
+        contentArray.put(imageContent);
+        
+        JSONObject currentUserMsg = new JSONObject();
+        currentUserMsg.put("role", "user");
+        currentUserMsg.put("content", contentArray);
+        
+        contextManager.addRawMessage(currentUserMsg);
+        messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : textMessage, MessageType.USER));
+        
+        currentImageBase64 = null;
+        uploadImageButton.setVisibility(View.GONE);
+        
+        scrollToBottom();
+        sendChatRequestTongYi();
+      }
+      catch (JSONException e)
+      {
+        FileLogger.e(TAG, "❌ [MULTIMODAL_ERROR] 构建多模态消息失败", e);
+        runOnUiThread(() -> {
+          Toast.makeText(this, "❌ 构建消息失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        });
+      }
+    }
+    else
+    {
+      sendMessageToSister(textMessage);
+    }
+  }
   private boolean isDeadlockRescueMode = false;
   
   // ⚠️ #4824 HTTP 429 限流重试计数器
@@ -498,11 +651,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       return;
     }
 
-    mIat.setParameter(SpeechConstant.AUDIO_FORMAT, "wav");
-    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
-
-    return result;
+    sendChatRequestTongYi();
   }
+  
+  @OnClick(R.id.sendButtonn2)
+  public void sendButtonn2()
   {
     voiceRecognizeResultString = recognizeResulttextView.getText().toString();
     sendMessageToSister(voiceRecognizeResultString);
@@ -881,27 +1034,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }, delayMs);
   }
 
-          JSONObject imageContent = new JSONObject();
-          imageContent.put("type", "image_url");
-          JSONObject imageUrl = new JSONObject();
-          imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
-          imageContent.put("image_url", imageUrl);
-          contentArray.put(imageContent);
-          
-          currentUserMsg.put("content", contentArray);
-          
-          // 🆕 清空图片
-          currentImageBase64 = null;
-        } else {
-          // 🆕 普通文本消息
-          currentUserMsg.put("content", voiceRecognizeResultString);
-        }
-        
-        messagesArray.put(currentUserMsg);
-        
-        if (hasImage) {
-          FileLogger.d(TAG, "📷 [IMAGE] 已添加图片到消息中");
-        }
+  private boolean isHtmlResponse(String content)
+  {
+    if (content == null || content.isEmpty())
+    {
+      return false;
     }
     
     String trimmedContent = content.trim();
@@ -1410,6 +1547,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     initServices();
     initData();
+    initImagePicker();
     initTools();
     initView();
     checkPermission();
@@ -1552,15 +1690,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void requestNotificationPermission() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-  private void startHttpServer()
-  {
-    AsyncHttpServer server=new AsyncHttpServer();
-    CommitTextCallback commitTextCallback=new CommitTextCallback();
-    server.get("/commitText/", commitTextCallback);
-    PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback();
-    server.get("/phoneInformation/", phoneInformationCallback);
-    server.listen(LanServicePort);
-  }
+      if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+          != PackageManager.PERMISSION_GRANTED) {
+        FileLogger.d(TAG, "请求 POST_NOTIFICATIONS 权限");
+        ActivityCompat.requestPermissions(this,
+            new String[]{Manifest.permission.POST_NOTIFICATIONS},
+            NOTIFICATION_PERMISSION_REQUEST);
+      } else {
+        FileLogger.d(TAG, "POST_NOTIFICATIONS 权限已授予");
       }
     }
   }
@@ -1615,7 +1752,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     Intent intent = new Intent();
     intent.setComponent(new ComponentName("com.stupidbeauty.shutdownat2100androidnative", "com.stupidbeauty.shutdownat2100androidnative.TimeCheckService"));
     startService(intent);
-      promptBuilder.append("\n/no_think\n");
+  }
+
+  private void initializeMsc()
+  {
+    SpeechUtility.createUtility(this, SpeechConstant.APPID+"=56e142d3");
+    mIat= SpeechRecognizer.createRecognizer(this, null);
   }
 
   private void startBuiltinFtpServer() {
