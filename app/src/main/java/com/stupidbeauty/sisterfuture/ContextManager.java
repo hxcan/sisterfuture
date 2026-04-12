@@ -420,6 +420,7 @@ public class ContextManager
           if (currentObject.has("tool_calls"))
           {
             pendingToolCallsObject = currentObject;
+            FileLogger.d(TAG, "[normalizeToolCallMessages] Found assistant with tool_calls, pending=" + (pendingToolCallsObject != null));
             continue;
           }
         }
@@ -439,6 +440,7 @@ public class ContextManager
               if (toolCallId.equals(answeringtoolCAllId))
               {
                 matched = true;
+                FileLogger.d(TAG, "[normalizeToolCallMessages] Tool message matched tool_call_id=" + answeringtoolCAllId + " at index " + tc);
                 break;
               }
             }
@@ -446,15 +448,18 @@ public class ContextManager
             {
               list.add(pendingToolCallsObject);
               pendingToolCallsObject = null;
+              FileLogger.d(TAG, "[normalizeToolCallMessages] Added assistant+tool pair, pending cleared");
             }
             else
             {
+              FileLogger.w(TAG, "[normalizeToolCallMessages] Tool message tool_call_id=" + answeringtoolCAllId + " did NOT match any pending tool_call, pending cleared!");
               pendingToolCallsObject = null;
               continue;
             }
           }
           else
           {
+            FileLogger.w(TAG, "[normalizeToolCallMessages] Tool message tool_call_id=" + answeringtoolCAllId + " found but pendingToolCallsObject is null, skipping!");
             continue;
           }
         }
@@ -467,6 +472,7 @@ public class ContextManager
       e.printStackTrace();
     }
     
+    FileLogger.d(TAG, "[normalizeToolCallMessages] Input count: " + oldHistory.size() + ", Output count: " + list.size());
     return list;
   }
 
