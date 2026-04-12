@@ -42,11 +42,10 @@
       android:networkSecurityConfig="@xml/network_security_config"
       android:fullBackupContent="@xml/backup_descriptor"
       android:hasFragileUserData="true"
-      android:hasFragileUserData="true"
       android:largeHeap="true"
       android:usesCleartextTraffic="true"
       tools:ignore="GoogleAppIndexingWarning">
-
+      
       <!-- 百度地图 API Key -->
       <!-- AK 与包名 + SHA1 签名指纹强绑定，即使被反编译也无法在其他应用中使用 -->
       <meta-data
@@ -58,7 +57,7 @@
           android:name="com.baidu.location.f"
           android:enabled="true"
           android:process=":remote" />
-
+      
       <uses-library
         android:name="org.apache.http.legacy"
         android:required="false" 
@@ -87,7 +86,7 @@
                 android:value="false" />
         </receiver>
 
-        <!-- 前台服务 - 显示持久匕通知，防止应用被杀死 -->
+        <!-- 前台服务 - 显示持久化通知，防止应用被杀死 -->
         <service
             android:name="com.stupidbeauty.sisterfuture.SisterFutureService"
             android:enabled="true"
