@@ -409,6 +409,7 @@ public class ContextManager
     try
     {
       JSONObject pendingToolCallsObject = null;
+      List<String> matchedToolCallIds = new ArrayList<>();
 
       for (int i = 0; i < history.size(); i++)
       {
@@ -420,6 +421,7 @@ public class ContextManager
           if (currentObject.has("tool_calls"))
           {
             pendingToolCallsObject = currentObject;
+            matchedToolCallIds.clear();
             FileLogger.d(TAG, "[normalizeToolCallMessages] Found assistant with tool_calls, pending=" + (pendingToolCallsObject != null));
             continue;
           }
@@ -432,30 +434,33 @@ public class ContextManager
           {
             JSONArray toolCallsArray = pendingToolCallsObject.getJSONArray("tool_calls");
             boolean matched = false;
-            // 🔧 #759641628752 修复：遍历所有 tool_calls 而非只检查第一个
             for (int tc = 0; tc < toolCallsArray.length(); tc++)
             {
               JSONObject toolCall = toolCallsArray.getJSONObject(tc);
               String toolCallId = toolCall.optString("id", "");
-              if (toolCallId.equals(answeringtoolCAllId))
+              if (toolCallId.equals(answeringtoolCAllId) && !matchedToolCallIds.contains(toolCallId))
               {
                 matched = true;
+                matchedToolCallIds.add(toolCallId);
                 FileLogger.d(TAG, "[normalizeToolCallMessages] Tool message matched tool_call_id=" + answeringtoolCAllId + " at index " + tc);
                 break;
               }
             }
             if (matched)
             {
-              list.add(pendingToolCallsObject);
-              pendingToolCallsObject = null;
-              FileLogger.d(TAG, "[normalizeToolCallMessages] Added assistant+tool pair, pending cleared");
+              if (matchedToolCallIds.size() == pendingToolCallsObject.getJSONArray("tool_calls").length())
+              {
+                list.add(pendingToolCallsObject);
+                pendingToolCallsObject = null;
+                matchedToolCallIds.clear();
+                FileLogger.d(TAG, "[normalizeToolCallMessages] Added assistant+tool pair, pending cleared");
+              }
             }
             else
             {
-              FileLogger.w(TAG, "[normalizeToolCallMessages] Tool message tool_call_id=" + answeringtoolCAllId + " did NOT match any pending tool_call, pending cleared!");
-              pendingToolCallsObject = null;
-              continue;
+              FileLogger.w(TAG, "[normalizeToolCallMessages] Tool message tool_call_id=" + answeringtoolCAllId + " did NOT match any pending tool_call!");
             }
+            continue;
           }
           else
           {
@@ -465,6 +470,12 @@ public class ContextManager
         }
 
         list.add(currentObject);
+      }
+      
+      if (pendingToolCallsObject != null)
+      {
+        list.add(pendingToolCallsObject);
+        FileLogger.w(TAG, "[normalizeToolCallMessages] Pending assistant with tool_calls added at end, but some tool messages may be missing");
       }
     }
     catch (Exception e)
