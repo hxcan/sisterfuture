@@ -220,8 +220,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       });
     }
   }
-    }
-  }
   
   // 📷 #280 图片上传按钮点击事件
   @OnClick(R.id.uploadImageButton)
@@ -263,8 +261,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
     {
       handleSelectedImage(data);
-    }
-  }
     }
   }
   
@@ -1451,7 +1447,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 		public void onEvent(int i, int i1, int i2, Bundle bundle)
 		{
     }
-	};
+	;}
 
   private final View.OnTouchListener commandRecognizeButtonTouchListener=new View.OnTouchListener()
   {
