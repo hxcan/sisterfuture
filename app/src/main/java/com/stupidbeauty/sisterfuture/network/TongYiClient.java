@@ -33,6 +33,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TongYiClient
 {
@@ -190,6 +192,107 @@ public class TongYiClient
 
       try
       {
+        // 🔍 #5031 调试：打印发送给 API 的 messages 结构
+        FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] ========== 开始打印 messages ==========");
+        FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] messages 数量：" + messages.length());
+        for (int i = 0; i < messages.length(); i++)
+        {
+          try
+          {
+            JSONObject msg = messages.getJSONObject(i);
+            String role = msg.optString("role", "unknown");
+            boolean hasToolCalls = msg.has("tool_calls");
+            String toolCallId = msg.optString("tool_call_id", "");
+            String toolName = msg.optString("name", "");
+            
+            // 打印 role 和关键字段
+            FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] msg[" + i + "] role=" + role + ", hasToolCalls=" + hasToolCalls + ", tool_call_id=" + toolCallId + ", tool_name=" + toolName);
+            
+            // 如果有 tool_calls，打印详细信息
+            if (hasToolCalls)
+            {
+              JSONArray toolCalls = msg.getJSONArray("tool_calls");
+              FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES]   tool_calls 数量：" + toolCalls.length());
+              for (int j = 0; j < toolCalls.length(); j++)
+              {
+                JSONObject tc = toolCalls.getJSONObject(j);
+                String tcId = tc.optString("id", "unknown");
+                JSONObject func = tc.optJSONObject("function");
+                if (func != null)
+                {
+                  String funcName = func.optString("name", "unknown");
+                  String argsPreview = func.optString("arguments", "").length() > 100 ? func.optString("arguments", "").substring(0, 100) + "..." : func.optString("arguments", "");
+                  FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES]     tool_call[" + j + "] id=" + tcId + ", name=" + funcName + ", args_preview=" + argsPreview);
+                }
+              }
+            }
+            
+            // 如果是 tool message，打印 content 预览
+            if ("tool".equals(role) && !toolCallId.isEmpty())
+            {
+              String content = msg.optString("content", "");
+              String contentPreview = content.length() > 100 ? content.substring(0, 100) + "..." : content;
+              FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES]   tool message content preview: " + contentPreview);
+            }
+          }
+          catch (Exception e)
+          {
+            FileLogger.e(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] 解析消息 " + i + " 失败：" + e.getMessage());
+          }
+        }
+        FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] ========== messages 打印完成 ==========");
+        
+        // 🔍 #5031 检查：如果有 assistant 的 tool_calls，检查是否有对应的 tool message
+        boolean hasAssistantToolCalls = false;
+        List<String> toolCallIdsWithoutResponse = new ArrayList<>();
+        for (int i = 0; i < messages.length(); i++)
+        {
+          try
+          {
+            JSONObject msg = messages.getJSONObject(i);
+            String role = msg.optString("role", "");
+            if ("assistant".equals(role) && msg.has("tool_calls"))
+            {
+              hasAssistantToolCalls = true;
+              JSONArray toolCalls = msg.getJSONArray("tool_calls");
+              for (int j = 0; j < toolCalls.length(); j++)
+              {
+                String tcId = toolCalls.getJSONObject(j).optString("id", "unknown");
+                // 检查是否有对应的 tool message
+                boolean hasResponse = false;
+                for (int k = 0; k < messages.length(); k++)
+                {
+                  JSONObject otherMsg = messages.getJSONObject(k);
+                  if ("tool".equals(otherMsg.optString("role", "")) && tcId.equals(otherMsg.optString("tool_call_id", "")))
+                  {
+                    hasResponse = true;
+                    break;
+                  }
+                }
+                if (!hasResponse)
+                {
+                  toolCallIdsWithoutResponse.add(tcId);
+                }
+              }
+            }
+          }
+          catch (Exception e)
+          {
+            // ignore
+          }
+        }
+        if (hasAssistantToolCalls)
+        {
+          if (!toolCallIdsWithoutResponse.isEmpty())
+          {
+            FileLogger.w(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] ⚠️ 检测到 tool_calls 缺少对应的 tool message！缺失的 IDs：" + toolCallIdsWithoutResponse);
+          }
+          else
+          {
+            FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] ✓ 所有 tool_calls 都有对应的 tool message");
+          }
+        }
+
         JSONObject requestBody = new JSONObject();
         requestBody.put("model", accessPointManager.getCurrentModelName());
         requestBody.put("messages", messages);
