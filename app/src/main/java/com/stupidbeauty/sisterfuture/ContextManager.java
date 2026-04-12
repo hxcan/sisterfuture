@@ -370,7 +370,7 @@ public class ContextManager
             {
               JSONTokener tokener = new JSONTokener(argumentsStr);
               Object parsed = tokener.nextValue();
-
+              
               if (tokener.more())
               {
                 return false;
@@ -380,7 +380,7 @@ public class ContextManager
               {
                 return false;
               }
-
+              
               if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
               {
                 return false;
@@ -429,11 +429,20 @@ public class ContextManager
           
           if (pendingToolCallsObject!=null)
           {
-            JSONArray toolCALLSArray = pendingToolCallsObject.getJSONArray("tool_calls");
-            JSONObject toolCallsFirst = toolCALLSArray.getJSONObject(0);
-            String toolCAllsId = toolCallsFirst.getString("id");
-
-            if (toolCAllsId.equals(answeringtoolCAllId))
+            JSONArray toolCallsArray = pendingToolCallsObject.getJSONArray("tool_calls");
+            boolean matched = false;
+            // 🔧 #759641628752 修复：遍历所有 tool_calls 而非只检查第一个
+            for (int tc = 0; tc < toolCallsArray.length(); tc++)
+            {
+              JSONObject toolCall = toolCallsArray.getJSONObject(tc);
+              String toolCallId = toolCall.optString("id", "");
+              if (toolCallId.equals(answeringtoolCAllId))
+              {
+                matched = true;
+                break;
+              }
+            }
+            if (matched)
             {
               list.add(pendingToolCallsObject);
               pendingToolCallsObject = null;
