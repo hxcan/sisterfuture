@@ -1136,7 +1136,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           String fullAnswer = accumulatedAnswer.toString();
           
           // 🔍 #759909257401 检测连续重复回复
-          if (repeatDetectionManager != null && repeatDetectionManager.recordAndCheck(fullAnswer))
+          // ⚠️ #5031 跳过工具调用消息的空回复检测（工具调用时 content 为空是正常的）
+          boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
+          
+          if (!hasToolCalls && repeatDetectionManager != null && repeatDetectionManager.recordAndCheck(fullAnswer))
           {
             FileLogger.e(TAG, "🚨 [REPEAT_THRESHOLD_REACHED] 检测到连续 3 次相同回复，触发接入点切换！");
             
