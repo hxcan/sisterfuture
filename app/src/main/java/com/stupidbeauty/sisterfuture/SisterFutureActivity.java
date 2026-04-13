@@ -116,6 +116,7 @@ import android.content.pm.PackageManager;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import com.stupidbeauty.sisterfuture.manager.RepeatDetectionManager;
 
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
@@ -126,6 +127,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private ModelAccessPointManager modelAccessPointManager;
   private ToolManager toolManager;
   private MemoryManager memoryManager;
+  private RepeatDetectionManager repeatDetectionManager;
 
   private Map<Integer, String> indexToOriginalIdMap = new HashMap<>();
   private Map<String, Function> partialToolArgs = new HashMap<>();
@@ -1132,6 +1134,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         runOnUiThread(() ->
         {
           String fullAnswer = accumulatedAnswer.toString();
+          
+          // 🔍 #759909257401 检测连续重复回复
+          if (repeatDetectionManager != null && repeatDetectionManager.recordAndCheck(fullAnswer))
+          {
+            FileLogger.e(TAG, "🚨 [REPEAT_THRESHOLD_REACHED] 检测到连续 3 次相同回复，触发接入点切换！");
+            
+            int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
+            FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 重复回复导致接入点标记为不可用，计数器：" + failures);
+            
+            FileLogger.i(TAG, "🔄 [ACCESS_POINT_SWITCH] 因重复回复切换到下一个接入点");
+            
+            repeatDetectionManager.reset();
+            
+            modelAccessPointManager.resetFailureCount();
+          }
+          
           ttsSayReply(fullAnswer);
           contextManager.addAssistantMessage(fullAnswer);
           contextManager.increaseMaxRounds();
@@ -1430,6 +1448,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     contextManager = new ContextManager(this);
     modelAccessPointManager = new ModelAccessPointManager(this);
     memoryManager = new MemoryManager(this);
+    repeatDetectionManager = new RepeatDetectionManager();
   }
 
   private void initTools()
