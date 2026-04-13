@@ -19,6 +19,7 @@ public class RepeatDetectionManager
 {
   private static final String TAG = "RepeatDetectionManager";
   private static final int REPEAT_THRESHOLD = 3; // 连续重复次数阈值
+  private static final String EMPTY_REPLY_MARKER = "[EMPTY_REPLY]"; // 空回复标记
   
   private List<String> recentReplies;
   private int consecutiveRepeatCount;
@@ -39,31 +40,38 @@ public class RepeatDetectionManager
    */
   public boolean recordAndCheck(String reply)
   {
-    if (reply == null || reply.trim().isEmpty())
+    // 🔍 #759909257401 处理空回复：将空回复视为一种特殊的"重复内容"
+    String normalizedReply = reply;
+    boolean isEmptyReply = (reply == null || reply.trim().isEmpty());
+    
+    if (isEmptyReply)
     {
-      FileLogger.d(TAG, "⚠️ [REPEAT_CHECK] 回复为空，跳过检测");
-      return false;
+      FileLogger.d(TAG, "⚠️ [REPEAT_CHECK] 收到空回复，使用特殊标记");
+      normalizedReply = EMPTY_REPLY_MARKER;
+    }
+    else
+    {
+      FileLogger.d(TAG, "🔍 [REPEAT_CHECK] 收到回复 | 长度=" + reply.length() + " | 前 50 字符=" + 
+        (reply.length() > 50 ? reply.substring(0, 50) + "..." : reply));
     }
 
-    FileLogger.d(TAG, "🔍 [REPEAT_CHECK] 收到回复 | 长度=" + reply.length() + " | 前 50 字符=" + 
-      (reply.length() > 50 ? reply.substring(0, 50) + "..." : reply));
-
     // 检查是否与上一次回复相同
-    if (lastReply != null && lastReply.equals(reply))
+    if (lastReply != null && lastReply.equals(normalizedReply))
     {
       consecutiveRepeatCount++;
-      FileLogger.w(TAG, "⚠️ [REPEAT_DETECTED] 检测到重复回复 | 连续次数=" + consecutiveRepeatCount + " / " + REPEAT_THRESHOLD);
+      FileLogger.w(TAG, "⚠️ [REPEAT_DETECTED] 检测到重复回复 | 连续次数=" + consecutiveRepeatCount + " / " + REPEAT_THRESHOLD + 
+        (isEmptyReply ? " (空回复)" : ""));
     }
     else
     {
       // 回复不同，重置计数器
       consecutiveRepeatCount = 1;
-      FileLogger.d(TAG, "✅ [REPLY_CHANGED] 回复内容已变化，重置计数器");
+      FileLogger.d(TAG, "✅ [REPLY_CHANGED] 回复内容已变化，重置计数器 | 类型=" + (isEmptyReply ? "空回复" : "正常回复"));
     }
 
     // 更新历史记录
-    lastReply = reply;
-    recentReplies.add(reply);
+    lastReply = normalizedReply;
+    recentReplies.add(normalizedReply);
     
     // 保持队列大小不超过阈值
     if (recentReplies.size() > REPEAT_THRESHOLD)
@@ -76,7 +84,8 @@ public class RepeatDetectionManager
     
     if (shouldSwitch)
     {
-      FileLogger.e(TAG, "🚨 [REPEAT_THRESHOLD_REACHED] 连续重复次数达到阈值！建议切换接入点");
+      FileLogger.e(TAG, "🚨 [REPEAT_THRESHOLD_REACHED] 连续重复次数达到阈值！建议切换接入点 | 类型=" + 
+        (isEmptyReply ? "空回复" : "相同内容回复"));
     }
 
     return shouldSwitch;
