@@ -31,13 +31,50 @@ public class ContextManager
   private SharedPreferences sharedPreferences;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
   private int MAX_ARGUMENTS_STR_LENGTH = 226810;
+  
+  // ✅ 新增：内存中的历史列表（唯一真相源）
+  private List<JSONObject> memoryHistory;
 
   public ContextManager(Context context)
   {
     sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     currentMaxRounds = sharedPreferences.getInt("current_max_rounds", INITIAL_MAX_ROUNDS);
     
+    // ✅ 启动时从 SP 加载到内存
+    loadHistoryFromSharedPreferences();
+    
     cleanupInvalidToolCallsOnStartup();
+  }
+
+  // ✅ 新增：从 SP 加载历史到内存
+  private void loadHistoryFromSharedPreferences()
+  {
+    String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
+    
+    if (historyStr.isEmpty())
+    {
+      memoryHistory = new ArrayList<>();
+      FileLogger.d(TAG, "📥 [LOAD] 从 SharedPreferences 加载历史：空");
+      return;
+    }
+    
+    try
+    {
+      JSONArray array = new JSONArray(historyStr);
+      memoryHistory = new ArrayList<>();
+      
+      for (int i = 0; i < array.length(); i++)
+      {
+        memoryHistory.add(array.getJSONObject(i));
+      }
+      
+      FileLogger.d(TAG, "📥 [LOAD] 从 SharedPreferences 加载历史：" + memoryHistory.size() + " 条");
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "❌ [LOAD] 加载历史失败：" + e.getMessage(), e);
+      memoryHistory = new ArrayList<>();
+    }
   }
 
   private boolean inDebugMessageIndexRange(int i)
@@ -49,20 +86,19 @@ public class ContextManager
 
   private void cleanupInvalidToolCallsOnStartup()
   {
-    String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
-    
-    if (historyStr.isEmpty())
+    if (memoryHistory == null || memoryHistory.isEmpty())
     {
+      FileLogger.d(TAG, "🧹 [CLEANUP] 内存历史为空，跳过清理");
       return;
     }
     
-    List<JSONObject> history = new ArrayList<>();
+    List<JSONObject> history = new ArrayList<>(memoryHistory);
     int invalidCount = 0;
     int blankAssistantCount = 0;
     
     try
     {
-      JSONArray array = new JSONArray(historyStr);
+      JSONArray array = new JSONArray(history);
       
       for (int i = 0; i < array.length(); i++)
       {
@@ -99,6 +135,7 @@ public class ContextManager
       if (invalidCount > 0 || blankAssistantCount > 0 || history.size() < array.length())
       {
         saveHistory(history);
+        FileLogger.i(TAG, "🧹 [CLEANUP] 清理完成，新历史：" + memoryHistory.size() + " 条");
       }
     }
     catch (Exception e)
@@ -310,33 +347,29 @@ public class ContextManager
   public void logFullHistory(String prefix)
   {
     List<JSONObject> history = getHistory();
+    FileLogger.i(TAG, "📋 [" + prefix + "] 历史消息列表（共 " + history.size() + " 条）:");
+    for (int i = 0; i < history.size(); i++)
+    {
+      JSONObject msg = history.get(i);
+      String role = msg.optString("role", "unknown");
+      String content = msg.optString("content", "");
+      boolean hasToolCalls = msg.has("tool_calls");
+      FileLogger.i(TAG, "  [" + i + "] role=" + role + 
+                    ", hasToolCalls=" + hasToolCalls + 
+                    ", contentLength=" + content.length());
+    }
   }
 
+  // ✅ 修改：直接返回内存中的历史列表（唯一真相源）
   public List<JSONObject> getHistory()
   {
-    String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
-
-    if (historyStr.isEmpty())
+    if (memoryHistory == null)
     {
-      return new ArrayList<>();
+      FileLogger.w(TAG, "⚠️ [GET] 内存历史未初始化，重新加载");
+      loadHistoryFromSharedPreferences();
     }
-
-    List<JSONObject> list = new ArrayList<>();
-
-    try
-    {
-      JSONArray array = new JSONArray(historyStr);
-
-      for (int i = 0; i < array.length(); i++)
-      {
-        list.add(array.getJSONObject(i));
-      }
-    }
-    catch (Exception e)
-    {
-      e.printStackTrace();
-    }
-    return list;
+    FileLogger.d(TAG, "📖 [GET] 获取历史，当前内存大小：" + (memoryHistory != null ? memoryHistory.size() : 0));
+    return memoryHistory;
   }
 
   private boolean isValidToolCallMessage(JSONObject message)
@@ -567,13 +600,28 @@ public class ContextManager
     saveHistory(newHistory);
   }
 
+  // ✅ 修改：同时更新内存和 SP，内存是唯一真相源
   private void saveHistory(List<JSONObject> history)
   {
-    JSONArray historyArray = new JSONArray(history);
-    sharedPreferences.edit()
-        .putString(KEY_HISTORY, historyArray.toString())
-        .putInt("current_max_rounds", currentMaxRounds)
-        .apply();
+    // 1. 更新内存（唯一真相源）
+    memoryHistory = new ArrayList<>(history);
+    FileLogger.d(TAG, "💾 [SAVE] 更新内存历史：" + memoryHistory.size() + " 条");
+    
+    // 2. 异步保存到 SP（持久化）
+    try
+    {
+      JSONArray historyArray = new JSONArray(history);
+      sharedPreferences.edit()
+          .putString(KEY_HISTORY, historyArray.toString())
+          .putInt("current_max_rounds", currentMaxRounds)
+          .apply();  // apply() 异步没关系，因为读取的是内存
+      
+      FileLogger.d(TAG, "💾 [SAVE] 保存历史到 SharedPreferences：" + history.size() + " 条");
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "❌ [SAVE] 保存历史失败：" + e.getMessage(), e);
+    }
   }
 
   private JSONObject createMessage(String role, String content)
