@@ -93,7 +93,8 @@ public class ContextManager
         }
       }
       
-      history = normalizeToolCallMessages(history);
+      // ✅ 启动清理使用标准模式（非严厉模式），保留悬而未决的工具调用
+      history = normalizeToolCallMessages(history, false);
       
       if (invalidCount > 0 || blankAssistantCount > 0 || history.size() < array.length())
       {
@@ -151,7 +152,7 @@ public class ContextManager
 
     history.add(toolMessage);
     history = removeOldHistoryEntries(history);
-    history = normalizeToolCallMessages(history);
+    history = normalizeToolCallMessages(history, false);
     saveHistory(history);
   }
 
@@ -160,7 +161,7 @@ public class ContextManager
     addMessage("user", message);
     
     List<JSONObject> history = getHistory();
-    history = normalizeToolCallMessages(history);
+    history = normalizeToolCallMessages(history, false);
     saveHistory(history);
   }
 
