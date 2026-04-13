@@ -1258,7 +1258,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void scrollToBottom()
   {
-    articleListmyRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() -1);
+    if (messageAdapter.getItemCount() > 0)
+    {
+      articleListmyRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+    }
   }
 
   @Override
