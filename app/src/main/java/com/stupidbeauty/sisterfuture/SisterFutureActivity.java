@@ -150,7 +150,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   // 📷 #280 图片输入功能相关变量
   private ActivityResultLauncher<Intent> imagePickerLauncher;
   private String currentImageBase64 = null;
-  private Button uploadImageButton;
+  @BindView(R.id.uploadImageButton) Button uploadImageButton;
 
   private static final int PERMISSIONS_REQUEST =1;
   private static final int NOTIFICATION_PERMISSION_REQUEST = 1001;
