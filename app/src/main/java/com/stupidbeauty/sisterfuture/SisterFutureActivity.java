@@ -1148,6 +1148,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             repeatDetectionManager.reset();
             // 注意：此处不调用 modelAccessPointManager.resetFailureCount()
             // 因为这是真正的接入点问题，应保留失败计数
+            
+            // 🔄 切换接入点后，立即重新发送请求（与 onError() 中的逻辑保持一致）
+            FileLogger.d(TAG, "🔄 [RETRY] 准备重试，使用新接入点发送请求");
+            sendChatRequestTongYi();
+            return; // 不再继续处理当前回复，等待新请求的结果
           }
           
           ttsSayReply(fullAnswer);
