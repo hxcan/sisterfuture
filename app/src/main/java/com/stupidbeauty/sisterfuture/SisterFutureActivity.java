@@ -656,7 +656,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       accumulatedAnswer.setLength(0);
       showThinkingOverlay();
 
-      JSONArray historyArray = contextManager.getMessagesArray();
+      // 🌌 #759909257401 平行宇宙时间线理论：发送请求前清理悬而未决的工具调用
+      FileLogger.d(TAG, "🌌 [TIMELINE_BRANCH] 准备创建新时间线，调用严厉模式 normalize");
+      
+      // 获取当前历史并应用严厉模式清理
+      List<JSONObject> history = contextManager.getHistory();
+      List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
+      
+      JSONArray historyArray = new JSONArray(cleanedHistory);
       JSONArray messagesArray = new JSONArray();
 
       try

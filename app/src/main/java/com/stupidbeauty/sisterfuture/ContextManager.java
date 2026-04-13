@@ -93,7 +93,8 @@ public class ContextManager
         }
       }
       
-      history = normalizeToolCallMessages(history);
+      // ✅ 启动清理使用标准模式（非严厉模式），保留悬而未决的工具调用
+      history = normalizeToolCallMessages(history, false);
       
       if (invalidCount > 0 || blankAssistantCount > 0 || history.size() < array.length())
       {
@@ -151,7 +152,7 @@ public class ContextManager
 
     history.add(toolMessage);
     history = removeOldHistoryEntries(history);
-    history = normalizeToolCallMessages(history);
+    history = normalizeToolCallMessages(history, false);
     saveHistory(history);
   }
 
@@ -160,7 +161,7 @@ public class ContextManager
     addMessage("user", message);
     
     List<JSONObject> history = getHistory();
-    history = normalizeToolCallMessages(history);
+    history = normalizeToolCallMessages(history, false);
     saveHistory(history);
   }
 
@@ -401,10 +402,29 @@ public class ContextManager
     }
   }
 
-  private List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory)
+  /**
+   * 标准化工具调用消息，配对 assistant+tool_calls 与对应的 tool 回复
+   * 
+   * @param oldHistory 原始历史记录
+   * @return 标准化后的历史记录
+   */
+  public List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory)
+  {
+    return normalizeToolCallMessages(oldHistory, false);
+  }
+
+  /**
+   * 标准化工具调用消息，支持严厉模式
+   * 
+   * @param oldHistory 原始历史记录
+   * @param strictMode 严厉模式：true=移除所有未匹配的 assistant+tool_calls；false=保留等待后续回复
+   * @return 标准化后的历史记录
+   */
+  public List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory, boolean strictMode)
   {
     List<JSONObject> history = oldHistory;
     List<JSONObject> list = new ArrayList<>();
+    int cleanedCount = 0;
 
     try
     {
@@ -472,7 +492,18 @@ public class ContextManager
         list.add(currentObject);
       }
       
-      if (pendingToolCallsObject != null)
+      // 🔍 #759909257401 严厉模式：移除所有未匹配的 assistant+tool_calls 消息
+      if (strictMode && pendingToolCallsObject != null)
+      {
+        cleanedCount = removePendingAssistantMessages(list, pendingToolCallsObject);
+        FileLogger.i(TAG, "🔄 [TIMELINE_BRANCH] 创建新时间线，清理悬而未决的工具调用消息");
+        FileLogger.i(TAG, "🗑️ [CLEANED] 共清理 " + cleanedCount + " 条未完成的工具调用消息");
+        FileLogger.i(TAG, "📝 [INFO] 当前历史长度：" + list.size());
+        
+        // ✅ 严厉模式下需要显式保存清理后的历史
+        saveHistory(list);
+      }
+      else if (pendingToolCallsObject != null)
       {
         list.add(pendingToolCallsObject);
         FileLogger.w(TAG, "[normalizeToolCallMessages] Pending assistant with tool_calls added at end, but some tool messages may be missing");
@@ -483,8 +514,47 @@ public class ContextManager
       e.printStackTrace();
     }
     
-    FileLogger.d(TAG, "[normalizeToolCallMessages] Input count: " + oldHistory.size() + ", Output count: " + list.size());
+    FileLogger.d(TAG, "[normalizeToolCallMessages] Input count: " + oldHistory.size() + ", Output count: " + list.size() + (strictMode ? " (strict mode)" : ""));
     return list;
+  }
+
+  /**
+   * 移除未完成的 assistant+tool_calls 消息（严厉模式专用）
+   * 
+   * @param list 当前历史列表
+   * @param pendingObject 待移除的未完成消息
+   * @return 移除的消息数量
+   */
+  private int removePendingAssistantMessages(List<JSONObject> list, JSONObject pendingObject)
+  {
+    int removedCount = 0;
+    
+    try
+    {
+      JSONArray toolCalls = pendingObject.optJSONArray("tool_calls");
+      if (toolCalls != null)
+      {
+        for (int i = 0; i < toolCalls.length(); i++)
+        {
+          JSONObject toolCall = toolCalls.getJSONObject(i);
+          String callId = toolCall.optString("id", "unknown");
+          JSONObject func = toolCall.optJSONObject("function");
+          String toolName = func != null ? func.optString("name", "unknown") : "unknown";
+          
+          FileLogger.w(TAG, "🗑️ [CLEANED] 移除未完成的 tool_call: " + callId + " (" + toolName + ")");
+          removedCount++;
+        }
+      }
+      
+      // 不将 pendingObject 添加到 list 中，相当于移除了这条消息
+      FileLogger.d(TAG, "[removePendingAssistantMessages] Removed " + removedCount + " pending tool_calls");
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "[removePendingAssistantMessages] Error: " + e.getMessage(), e);
+    }
+    
+    return removedCount;
   }
 
   public void replaceHistory(List<JSONObject> newHistory)
