@@ -1146,8 +1146,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.i(TAG, "🔄 [ACCESS_POINT_SWITCH] 因重复回复切换到下一个接入点");
             
             repeatDetectionManager.reset();
-            
-            modelAccessPointManager.resetFailureCount();
+            // 注意：此处不调用 modelAccessPointManager.resetFailureCount()
+            // 因为这是真正的接入点问题，应保留失败计数
           }
           
           ttsSayReply(fullAnswer);
