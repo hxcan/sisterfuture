@@ -401,8 +401,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     String role = lastMsg.optString("role", "");
     String toolCallId = lastMsg.optString("tool_call_id", "");
     
-    FileLogger.d(TAG, "🔄 [AUTO_RESUME] 检查最后一条消息：role=" + role + ", toolCallId=" + toolCallId);
-    
     boolean shouldResume = false;
     String resumeReason = "";
     
@@ -419,9 +417,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     
     if (shouldResume)
     {
-      FileLogger.i(TAG, "🔄 [AUTO_RESUME] 触发自动恢复：" + resumeReason);
-      
-      new Handler(Looper.getMainLooper()).postDelayed(() -> {
+      new Handler(Looper.getMainLooper()).postDelayed(() -> 
+      {
         FileLogger.d(TAG, "🔄 [AUTO_RESUME] 开始发送自动恢复请求");
         sendChatRequestTongYi();
       }, 500);
@@ -863,12 +860,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     else
     {
-      FileLogger.w(TAG, "语音识别结果为空");
     }
   }
 
-  private void handleRateLimitError() {
-    if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES) {
+  private void handleRateLimitError() 
+  {
+    if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES) 
+    {
       FileLogger.e(TAG, "❌ [RATE_LIMIT] 限流重试次数过多（" + rateLimitRetryCount + " >= " + MAX_RATE_LIMIT_RETRIES + "），切换接入点");
       rateLimitRetryCount = 0;
       
@@ -882,9 +880,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     
     int delayMs = 1000 * (1 << rateLimitRetryCount);
-    FileLogger.w(TAG, "⏳ [RATE_LIMIT] 限流重试 #" + rateLimitRetryCount + "，等待 " + delayMs + "ms");
     
-    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+    new Handler(Looper.getMainLooper()).postDelayed(() -> 
+    {
       rateLimitRetryCount++;
       sendChatRequestTongYi();
     }, delayMs);
@@ -1443,7 +1441,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       articleListmyRecyclerView.post(() -> 
       {
         scrollToBottom();
-        FileLogger.d(TAG, "冷启动完成，已自动滚动到最新消息");
       });
     }
 	}
@@ -1531,7 +1528,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
         if (!result)
         {
-          FileLogger.d(TAG, "权限不足：" + permissionString);
           break;
         }
       }
@@ -1568,16 +1564,20 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
-  private void requestNotificationPermission() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+  private void requestNotificationPermission() 
+  {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 
+    {
       if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-          != PackageManager.PERMISSION_GRANTED) {
+          != PackageManager.PERMISSION_GRANTED) 
+      {
         FileLogger.d(TAG, "请求 POST_NOTIFICATIONS 权限");
         ActivityCompat.requestPermissions(this,
             new String[]{Manifest.permission.POST_NOTIFICATIONS},
             NOTIFICATION_PERMISSION_REQUEST);
-      } else {
-        FileLogger.d(TAG, "POST_NOTIFICATIONS 权限已授予");
+      }
+      else 
+      {
       }
     }
   }
@@ -1640,7 +1640,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     mIat= SpeechRecognizer.createRecognizer(this, null);
   }
 
-  private void startBuiltinFtpServer() {
+  private void startBuiltinFtpServer() 
+  {
     File rootDir = getFilesDir();
     File parentDir = rootDir.getParentFile();
     
@@ -1648,17 +1649,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     FileLogger.d(TAG, "📂 [FTP_DEBUG] 应用私有目录（FTP 根目录）：" + parentDir.getAbsolutePath());
     FileLogger.d(TAG, "📂 [FTP_DEBUG] 根目录是否存在：" + (parentDir != null ? parentDir.exists() : "null"));
     
-    if (parentDir != null && parentDir.exists()) {
+    if (parentDir != null && parentDir.exists()) 
+    {
       File[] files = parentDir.listFiles();
       FileLogger.d(TAG, "📋 [FTP_DEBUG] 根目录下文件/目录数量：" + (files != null ? files.length : "null"));
       
-      if (files != null) {
-        for (File file : files) {
-          FileLogger.d(TAG, "  - 📄 [FTP_DEBUG] " + (file.isDirectory() ? "DIR" : "FILE") + ": " + file.getName());
-        }
-      }
-      
-      FileLogger.d(TAG, "📂 [FTP_DEBUG] databases/ 存在：" + new File(parentDir, "databases").exists());
       FileLogger.d(TAG, "📂 [FTP_DEBUG] shared_prefs/ 存在：" + new File(parentDir, "shared_prefs").exists());
       FileLogger.d(TAG, "📂 [FTP_DEBUG] files/ 存在：" + new File(parentDir, "files").exists());
       FileLogger.d(TAG, "📂 [FTP_DEBUG] code_cache/ 存在：" + new File(parentDir, "code_cache").exists());
