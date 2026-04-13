@@ -519,6 +519,25 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText("");
   }
 
+  // 📷 #280 图片上传按钮点击事件
+  @OnClick(R.id.uploadImageButton)
+  public void onUploadImageButton()
+  {
+    if (currentImageBase64 != null)
+    {
+      // 已有图片，清除它
+      currentImageBase64 = null;
+      uploadImageButton.setVisibility(View.GONE);
+      Toast.makeText(this, "🗑️ 已清除图片", Toast.LENGTH_SHORT).show();
+      FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 用户清除了暂存的图片");
+    }
+    else
+    {
+      // 没有图片，打开相册选择
+      openImagePicker();
+    }
+  }
+
   private void sendChatRequest() 
   {
     recognizeResulttextView.setText("");
