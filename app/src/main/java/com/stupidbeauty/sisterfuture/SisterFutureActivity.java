@@ -497,9 +497,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         // UI 显示
         messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : message, MessageType.USER));
         
-        // 清除暂存的图片
+        // ✅ 发送完成后清除图片缓存，但保持按钮可见
         currentImageBase64 = null;
-        uploadImageButton.setVisibility(View.GONE);
+        // 不再隐藏按钮，保持始终可见
+        // uploadImageButton.setVisibility(View.GONE); // ❌ 移除这行
         
         scrollToBottom();
         
@@ -628,25 +629,21 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText("");
   }
 
-  // 📷 #280 图片上传按钮点击事件
+  // 📷 #280 图片上传按钮点击事件 - 始终可见
   @OnClick(R.id.uploadImageButton)
   public void onUploadImageButton()
   {
     FileLogger.d(TAG, "📷 [CLICK] 图片按钮被点击了！当前状态：hasImage=" + (currentImageBase64 != null));
     
+    // ✅ 如果有旧图片，先清除它
     if (currentImageBase64 != null)
     {
-      // 已有图片，清除它
       currentImageBase64 = null;
-      uploadImageButton.setVisibility(View.GONE);
-      Toast.makeText(this, "🗑️ 已清除图片", Toast.LENGTH_SHORT).show();
-      FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 用户清除了暂存的图片");
+      FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 清除了旧图片，准备选择新图片");
     }
-    else
-    {
-      // 没有图片，打开相册选择
-      openImagePicker();
-    }
+    
+    // ✅ 始终打开相册选择器（不再隐藏按钮）
+    openImagePicker();
   }
 
   private void sendChatRequest() 
@@ -1908,7 +1905,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       runOnUiThread(() -> {
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
-        uploadImageButton.setVisibility(View.VISIBLE);
+        // ✅ 不再隐藏按钮，保持始终可见
+        // uploadImageButton.setVisibility(View.VISIBLE); // 本来就可见，不需要设置
       });
       
       FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
