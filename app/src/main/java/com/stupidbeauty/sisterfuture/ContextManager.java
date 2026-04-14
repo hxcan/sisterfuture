@@ -67,9 +67,7 @@ public class ContextManager
       {
         memoryHistory.add(array.getJSONObject(i));
       }
-      
-      FileLogger.d(TAG, "📥 [LOAD] 从 SharedPreferences 加载历史：" + memoryHistory.size() + " 条");
-    }
+    } // try
     catch (Exception e)
     {
       FileLogger.e(TAG, "❌ [LOAD] 加载历史失败：" + e.getMessage(), e);
@@ -477,7 +475,7 @@ public class ContextManager
           {
             pendingToolCallsObject = currentObject;
             matchedToolCallIds.clear();
-            FileLogger.d(TAG, "[normalizeToolCallMessages] Found assistant with tool_calls, pending=" + (pendingToolCallsObject != null));
+
             continue;
           }
         }
@@ -497,7 +495,7 @@ public class ContextManager
               {
                 matched = true;
                 matchedToolCallIds.add(toolCallId);
-                FileLogger.d(TAG, "[normalizeToolCallMessages] Tool message matched tool_call_id=" + answeringtoolCAllId + " at index " + tc);
+
                 break;
               }
             }
@@ -514,7 +512,6 @@ public class ContextManager
                 pendingToolCallsObject = null;
                 matchedToolCallIds.clear();
                 matchedToolMessages.clear();  // 清空暂存列表
-                FileLogger.d(TAG, "[normalizeToolCallMessages] Added assistant+tool pair, pending cleared");
               }
             }
             else
