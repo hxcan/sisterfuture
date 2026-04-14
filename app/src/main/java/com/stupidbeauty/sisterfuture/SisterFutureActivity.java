@@ -52,6 +52,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import androidx.activity.result.ActivityResultLauncher;
+import android.net.Uri;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import android.util.Base64;
+import androidx.activity.result.contract.ActivityResultContracts;
 import java.io.FileInputStream;
 import android.Manifest;
 import android.app.Activity;
@@ -140,6 +146,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final String DEFAULT_INPUT_TEXT = "君不见，黄河之水天上来，奔流到海不复回，君不见，高堂明镜悲白发，朝如青丝暮成雪，人生得意须尽欢，莫使金樽空对月";
 
   private StringBuilder accumulatedAnswer = new StringBuilder();
+
+  // 📷 #280 图片输入功能相关变量
+  private ActivityResultLauncher<Intent> imagePickerLauncher;
+  private String currentImageBase64 = null;
+  @BindView(R.id.uploadImageButton) Button uploadImageButton;
 
   private static final int PERMISSIONS_REQUEST =1;
   private static final int NOTIFICATION_PERMISSION_REQUEST = 1001;
@@ -506,6 +517,27 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     voiceRecognizeResultString = recognizeResulttextView.getText().toString();
     sendMessageToSister(voiceRecognizeResultString);
     recognizeResulttextView.setText("");
+  }
+
+  // 📷 #280 图片上传按钮点击事件
+  @OnClick(R.id.uploadImageButton)
+  public void onUploadImageButton()
+  {
+    FileLogger.d(TAG, "📷 [CLICK] 图片按钮被点击了！当前状态：hasImage=" + (currentImageBase64 != null));
+    
+    if (currentImageBase64 != null)
+    {
+      // 已有图片，清除它
+      currentImageBase64 = null;
+      uploadImageButton.setVisibility(View.GONE);
+      Toast.makeText(this, "🗑️ 已清除图片", Toast.LENGTH_SHORT).show();
+      FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 用户清除了暂存的图片");
+    }
+    else
+    {
+      // 没有图片，打开相册选择
+      openImagePicker();
+    }
   }
 
   private void sendChatRequest() 
@@ -1228,7 +1260,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void scrollToBottom()
   {
-    articleListmyRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() -1);
+    if (messageAdapter.getItemCount() > 0)
+    {
+      articleListmyRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+    }
   }
 
   @Override
@@ -1425,6 +1460,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     initServices();
     initData();
+    initImagePicker();
     initTools();
     initView();
     checkPermission();
@@ -1678,6 +1714,148 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     };
     timerObj.schedule(timerTaskObj, 2000);
+  }
+
+  // 📷 #280 初始化图片选择器
+  private void initImagePicker()
+  {
+    // 由于 Activity 不支持 registerForActivityResult，需要使用传统的 startActivityForResult 方式
+    FileLogger.d(TAG, "📷 [IMAGE_PICKER_INIT] 图片选择器已初始化");
+  }
+
+  // 📷 #280 处理选中的图片
+  private void handleSelectedImage(Intent data)
+  {
+    try
+    {
+      Uri imageUri = data.getData();
+      if (imageUri == null) return;
+      
+      InputStream inputStream = getContentResolver().openInputStream(imageUri);
+      if (inputStream == null) return;
+      
+      ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+      byte[] buffer = new byte[4096];
+      int bytesRead;
+      while ((bytesRead = inputStream.read(buffer)) != -1)
+      {
+        byteArrayOutputStream.write(buffer, 0, bytesRead);
+      }
+      inputStream.close();
+      
+      byte[] imageBytes = byteArrayOutputStream.toByteArray();
+      currentImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
+      
+      runOnUiThread(() -> {
+        Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
+        uploadImageButton.setVisibility(View.VISIBLE);
+      });
+      
+      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "❌ [IMAGE_ERROR] 加载图片失败", e);
+      runOnUiThread(() -> {
+        Toast.makeText(this, "❌ 图片加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+      });
+    }
+  }
+
+  // 📷 #280 打开图片选择器
+  private void openImagePicker()
+  {
+    FileLogger.d(TAG, "📂 [PICKER] 准备打开相册选择器...");
+    
+    Intent pickIntent = new Intent(Intent.ACTION_PICK);
+    pickIntent.setType("image/*");
+    try
+    {
+      startActivityForResult(pickIntent, 1001);
+      FileLogger.d(TAG, "📷 [IMAGE_PICKER] 已打开图片选择器");
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
+      Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
+    }
+  }
+
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data)
+  {
+    super.onActivityResult(requestCode, resultCode, data);
+    
+    FileLogger.d(TAG, "🔄 [RESULT] 收到相册返回结果 | requestCode=" + requestCode + " | resultCode=" + resultCode);
+    
+    if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
+    {
+      handleSelectedImage(data);
+    }
+  }
+
+  // 📷 #280 发送带图片的消息
+  private void sendMessageWithImage(String textMessage)
+  {
+    boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
+    
+    FileLogger.i(TAG, "🚀 [SEND] 准备发送图片消息 | hasImage=" + hasImage + " | 文字长度：" + (textMessage != null ? textMessage.length() : 0) + " | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
+    
+    if (!hasImage && (textMessage == null || textMessage.trim().isEmpty()))
+    {
+      FileLogger.w(TAG, "⚠️ [SEND_CANCELLED] 没有图片和文字，取消发送");
+      return;
+    }
+    
+    if (hasImage)
+    {
+      FileLogger.i(TAG, "📷 [SEND_WITH_IMAGE] 发送带图片的消息 | 文字长度：" + (textMessage != null ? textMessage.length() : 0) + " | Base64 长度：" + currentImageBase64.length());
+      
+      try
+      {
+        JSONArray contentArray = new JSONArray();
+        
+        if (textMessage != null && !textMessage.trim().isEmpty())
+        {
+          JSONObject textContent = new JSONObject();
+          textContent.put("type", "text");
+          textContent.put("text", textMessage);
+          contentArray.put(textContent);
+        }
+        
+        JSONObject imageContent = new JSONObject();
+        imageContent.put("type", "image_url");
+        
+        JSONObject imageUrl = new JSONObject();
+        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+        imageContent.put("image_url", imageUrl);
+        contentArray.put(imageContent);
+        
+        JSONObject currentUserMsg = new JSONObject();
+        currentUserMsg.put("role", "user");
+        currentUserMsg.put("content", contentArray);
+        
+        contextManager.addRawMessage(currentUserMsg);
+        messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : textMessage, MessageType.USER));
+        
+        currentImageBase64 = null;
+        uploadImageButton.setVisibility(View.GONE);
+        
+        scrollToBottom();
+        sendChatRequestTongYi();
+      }
+      catch (JSONException e)
+      {
+        FileLogger.e(TAG, "❌ [MULTIMODAL_ERROR] 构建多模态消息失败", e);
+        runOnUiThread(() -> {
+          Toast.makeText(this, "❌ 构建消息失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        });
+      }
+    }
+    else
+    {
+      sendMessageToSister(textMessage);
+    }
   }
 
 }
