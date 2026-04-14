@@ -729,12 +729,43 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // 🔍 #5030【救援模式】遍历消息列表，检查所有 tool_call 的 arguments
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 开始检查消息列表中的 tool_call arguments | 消息总数：" + messagesArray.length());
+      
+      // 🖼️ 检测是否有图片消息在上下文中
+      boolean hasImageInContext = false;
+      int imageMessageIndex = -1;
+      
       for (int i = 0; i < messagesArray.length(); i++) 
       {
         try 
         {
           JSONObject msg = messagesArray.getJSONObject(i);
           String role = msg.optString("role", "unknown");
+          
+          if ("user".equals(role)) {
+            Object contentObj = msg.opt("content");
+            if (contentObj instanceof JSONArray) {
+              JSONArray contentArray = (JSONArray) contentObj;
+              for (int j = 0; j < contentArray.length(); j++) {
+                JSONObject item = contentArray.optJSONObject(j);
+                if (item != null && "image_url".equals(item.optString("type"))) {
+                  hasImageInContext = true;
+                  imageMessageIndex = i;
+                  
+                  // 获取 Base64 前 50 字符用于验证
+                  JSONObject imageUrl = item.optJSONObject("image_url");
+                  if (imageUrl != null) {
+                    String url = imageUrl.optString("url", "");
+                    if (url.startsWith("data:image/jpeg;base64,")) {
+                      String base64 = url.substring(21);
+                      String preview = base64.length() > 50 ? base64.substring(0, 50) + "..." : base64;
+                      FileLogger.i(TAG, "🖼️ [IMAGE_IN_CONTEXT] 检测到图片消息 | 位置=" + i + " | Base64 长度=" + base64.length() + " | 前 50 字符：" + preview);
+                    }
+                  }
+                  break;
+                }
+              }
+            }
+          }
           
           if ("tool".equals(role)) 
           {
@@ -788,7 +819,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           FileLogger.e(TAG, "❌ [PARSE_ERROR] 解析消息 #" + i + " 失败", e);
         }
       }
+      
+      if (hasImageInContext) {
+        FileLogger.i(TAG, "✅ [IMAGE_CONFIRMED] 图片消息已确认存在于上下文中 | 总消息数=" + messagesArray.length());
+      } else {
+        FileLogger.w(TAG, "⚠️ [IMAGE_MISSING] 上下文中未检测到图片消息 | 总消息数=" + messagesArray.length());
+      }
+      
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
+      
+      // 📤 发送请求前记录
+      FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
 
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
@@ -799,6 +840,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
           
           lastSuccessRequestId = requestId;
+          
+          // 🤖 记录 AI 响应
+          int responseLength = response != null ? response.length() : 0;
+          String responsePreview = response != null && response.length() > 100 ? response.substring(0, 100) + "..." : response;
+          FileLogger.i(TAG, "🤖 [AI_RESPONSE] 收到 AI 响应 | 长度=" + responseLength + " | 前 100 字符：" + responsePreview);
           
           parseTongYiResponse(response);
         }
@@ -813,7 +859,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             return;
           }
           
-          FileLogger.e(TAG, "请求出错：" + error.getClass().getSimpleName() + " - " + error.getMessage());
+          // ❌ 记录 AI 错误
+          String errorType = error.getClass().getSimpleName();
+          String errorMsg = error.getMessage();
+          FileLogger.e(TAG, "❌ [AI_ERROR] AI 响应错误 | 错误类型=" + errorType + " | 错误信息=" + errorMsg);
+          
+          FileLogger.e(TAG, "请求出错：" + errorType + " - " + errorMsg);
           hideThinkingOverlay();
           
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "请求出错，请重试");
@@ -1836,6 +1887,21 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         currentUserMsg.put("content", contentArray);
         
         contextManager.addRawMessage(currentUserMsg);
+        
+        // ✅ 确认图片消息已添加到上下文
+        List<JSONObject> history = contextManager.getHistory();
+        int contextSize = history != null ? history.size() : 0;
+        FileLogger.i(TAG, "✅ [CONTEXT_ADDED] 图片消息已添加到上下文 | 消息总数=" + contextSize + " | Base64 长度=" + currentImageBase64.length());
+        
+        // 📋 验证最后一条消息
+        if (contextSize > 0) {
+          JSONObject lastMsg = history.get(contextSize - 1);
+          String lastRole = lastMsg.optString("role", "unknown");
+          Object lastContent = lastMsg.opt("content");
+          int contentLength = lastContent != null ? lastContent.toString().length() : 0;
+          FileLogger.i(TAG, "📋 [CONTEXT_PREVIEW] 最后一条消息类型=" + lastRole + " | content 字段长度=" + contentLength);
+        }
+        
         messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : textMessage, MessageType.USER));
         
         currentImageBase64 = null;
