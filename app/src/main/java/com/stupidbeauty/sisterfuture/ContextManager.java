@@ -615,7 +615,6 @@ public class ContextManager
           }
           else
           {
-            FileLogger.i(TAG, "  [" + i + "] role=" + role + ", contentType=" + contentType);
           }
         }
       }
