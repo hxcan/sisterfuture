@@ -457,7 +457,7 @@ public class ContextManager
     try
     {
       // 🔍 新增：记录输入历史的消息类型
-      FileLogger.i(TAG, "📝 [INPUT] 开始处理输入历史，共 " + oldHistory.size() + " 条消息");
+      
       for (int i = 0; i < oldHistory.size(); i++)
       {
         JSONObject msg = oldHistory.get(i);
@@ -488,8 +488,6 @@ public class ContextManager
           contentLength = 0;
           FileLogger.w(TAG, "[normalizeToolCallMessages] Unexpected content type: " + contentType);
         }
-        
-        FileLogger.i(TAG, "  [" + i + "] role=" + role + ", contentType=" + contentType + ", contentLength=" + contentLength);
         
         // 🖼️ 特别标记多模态消息
         if ("user".equals(role) && (contentObj instanceof JSONArray))
