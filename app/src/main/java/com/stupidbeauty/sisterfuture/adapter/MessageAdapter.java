@@ -167,28 +167,55 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
+            Log.d(TAG, "🔍 [BIND] 开始绑定用户消息 | hasImageUrl=" + (message.getImageUrl() != null));
+            
             // 🖼️ 检测是否有图片
             if (message.getImageUrl() != null && !message.getImageUrl().isEmpty()) {
+                Log.d(TAG, "🖼️ [IMAGE_FOUND] 检测到图片 | Base64 长度=" + message.getImageUrl().length());
+                
                 try {
+                    // 处理 Base64 前缀
+                    String base64Data = message.getImageUrl();
+                    if (base64Data.startsWith("data:image")) {
+                        // 去除 data:image/jpeg;base64, 前缀
+                        int commaIndex = base64Data.indexOf(',');
+                        if (commaIndex > 0) {
+                            base64Data = base64Data.substring(commaIndex + 1);
+                            Log.d(TAG, "✂️ [PREFIX_REMOVED] 已去除 Base64 前缀 | 前 50 字符=" + base64Data.substring(0, Math.min(50, base64Data.length())));
+                        }
+                    }
+                    
                     // 解码 Base64 图片
-                    byte[] decodedString = Base64.decode(message.getImageUrl(), Base64.DEFAULT);
+                    byte[] decodedString = Base64.decode(base64Data, Base64.DEFAULT);
+                    Log.d(TAG, "📦 [DECODED] Base64 解码完成 | 字节数组长度=" + decodedString.length);
+                    
                     Bitmap decodedBitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
                     
-                    // 显示图片
-                    imageView.setImageBitmap(decodedBitmap);
-                    imageView.setVisibility(View.VISIBLE);
-                    
-                    // 文字部分只显示非图片内容（如果有）
-                    textView.setText(message.getText());
+                    if (decodedBitmap != null) {
+                        Log.d(TAG, "✅ [BITMAP_OK] Bitmap 解码成功 | 尺寸=" + decodedBitmap.getWidth() + "x" + decodedBitmap.getHeight());
+                        
+                        // 显示图片
+                        imageView.setImageBitmap(decodedBitmap);
+                        imageView.setVisibility(View.VISIBLE);
+                        
+                        // 文字部分只显示非图片内容（如果有）
+                        textView.setText(message.getText() != null ? message.getText() : "");
+                        Log.d(TAG, "📝 [TEXT_SET] 文字已设置 | 长度=" + (message.getText() != null ? message.getText().length() : 0));
+                    } else {
+                        Log.e(TAG, "❌ [BITMAP_NULL] BitmapFactory.decodeByteArray 返回 null");
+                        imageView.setVisibility(View.GONE);
+                        textView.setText(message.getText() != null ? message.getText() : "");
+                    }
                 } catch (Exception e) {
-                    Log.e(TAG, "❌ 图片解码失败", e);
+                    Log.e(TAG, "❌ [DECODE_ERROR] 图片解码失败", e);
                     imageView.setVisibility(View.GONE);
-                    textView.setText(message.getText());
+                    textView.setText(message.getText() != null ? message.getText() : "");
                 }
             } else {
+                Log.d(TAG, "🚫 [NO_IMAGE] 没有图片数据");
                 // 没有图片，隐藏 ImageView，只显示文字
                 imageView.setVisibility(View.GONE);
-                textView.setText(message.getText());
+                textView.setText(message.getText() != null ? message.getText() : "");
             }
         }
     }
