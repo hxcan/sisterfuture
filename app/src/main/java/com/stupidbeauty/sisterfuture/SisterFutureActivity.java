@@ -523,6 +523,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   @OnClick(R.id.uploadImageButton)
   public void onUploadImageButton()
   {
+    FileLogger.d(TAG, "📷 [CLICK] 图片按钮被点击了！当前状态：hasImage=" + (currentImageBase64 != null));
+    
     if (currentImageBase64 != null)
     {
       // 已有图片，清除它
@@ -1749,7 +1751,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         uploadImageButton.setVisibility(View.VISIBLE);
       });
       
-      FileLogger.i(TAG, "📷 [IMAGE_LOADED] 图片已加载，Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
+      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
     }
     catch (Exception e)
     {
@@ -1763,6 +1765,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   // 📷 #280 打开图片选择器
   private void openImagePicker()
   {
+    FileLogger.d(TAG, "📂 [PICKER] 准备打开相册选择器...");
+    
     Intent pickIntent = new Intent(Intent.ACTION_PICK);
     pickIntent.setType("image/*");
     try
@@ -1782,6 +1786,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     super.onActivityResult(requestCode, resultCode, data);
     
+    FileLogger.d(TAG, "🔄 [RESULT] 收到相册返回结果 | requestCode=" + requestCode + " | resultCode=" + resultCode);
+    
     if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
     {
       handleSelectedImage(data);
@@ -1792,6 +1798,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void sendMessageWithImage(String textMessage)
   {
     boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
+    
+    FileLogger.i(TAG, "🚀 [SEND] 准备发送图片消息 | hasImage=" + hasImage + " | 文字长度：" + (textMessage != null ? textMessage.length() : 0) + " | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
     
     if (!hasImage && (textMessage == null || textMessage.trim().isEmpty()))
     {
