@@ -351,19 +351,70 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     for (JSONObject msg : history)
     {
       String role = msg.optString("role");
-      String content = msg.optString("content");
+      Object contentObj = msg.opt("content");
       String toolCallId = msg.optString("tool_call_id");
       JSONArray toolCalls = msg.optJSONArray("tool_calls");
 
       if ("tool".equals(role) && !toolCallId.isEmpty())
       {
         String toolName = msg.optString("name", "unknown_tool");
+        String content = msg.optString("content");
         String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
         messageAdapter.addMessage(new MessageItem(displayText, MessageType.TOOL_CALL_RESULT));
       }
-      else if ("user".equals(role) && !content.isEmpty())
+      else if ("user".equals(role))
       {
-        messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
+        // 🖼️ 检测是否为多模态消息（包含图片）
+        if (contentObj instanceof JSONArray)
+        {
+          JSONArray contentArray = (JSONArray) contentObj;
+          StringBuilder textBuilder = new StringBuilder();
+          String imageUrl = null;
+          
+          for (int i = 0; i < contentArray.length(); i++)
+          {
+            try
+            {
+              JSONObject item = contentArray.optJSONObject(i);
+              if (item == null) continue;
+              
+              String type = item.optString("type");
+              if ("text".equals(type))
+              {
+                textBuilder.append(item.optString("text"));
+              }
+              else if ("image_url".equals(type))
+              {
+                JSONObject imageUrlObj = item.optJSONObject("image_url");
+                if (imageUrlObj != null)
+                {
+                  String url = imageUrlObj.optString("url");
+                  if (url != null && url.startsWith("data:image/jpeg;base64,"))
+                  {
+                    // 提取 Base64 部分（去掉前缀）
+                    imageUrl = url.substring(21);
+                  }
+                }
+              }
+            }
+            catch (Exception e)
+            {
+              Log.e(TAG, "解析多模态消息失败", e);
+            }
+          }
+          
+          // 使用三参数构造函数，传递文字和图片
+          messageAdapter.addMessage(new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl));
+        }
+        else
+        {
+          // 纯文本消息
+          String content = msg.optString("content");
+          if (!content.isEmpty())
+          {
+            messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
+          }
+        }
       }
       else if ("assistant".equals(role))
       {
@@ -389,9 +440,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           }
           messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
         }
-        else if (!content.isEmpty())
+        else if (!msg.optString("content").isEmpty())
         {
-          messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
+          messageAdapter.addMessage(new MessageItem(msg.optString("content"), MessageType.AI));
         }
       }
     }
@@ -494,8 +545,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         int contextSize = history != null ? history.size() : 0;
         FileLogger.i(TAG, "✅ [CONTEXT_ADDED] 多模态消息已添加到上下文 | 消息总数=" + contextSize);
         
-        // UI 显示 - 🖼️ 传递图片数据到 MessageItem
-        messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : message, MessageType.USER, hasImage ? currentImageBase64 : null));
+        // UI 显示 - 🖼️ 传递图片数据到 MessageItem，保留原始文字
+        messageAdapter.addMessage(new MessageItem(message != null ? message : "", MessageType.USER, hasImage ? currentImageBase64 : null));
         
         // ✅ 发送完成后清除图片缓存，但保持按钮可见
         currentImageBase64 = null;
