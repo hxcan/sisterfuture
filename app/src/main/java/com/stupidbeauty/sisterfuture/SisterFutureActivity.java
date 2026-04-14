@@ -440,75 +440,184 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
+  // 📷 #280 修改：统一处理纯文本和多模态消息
   public void sendMessageToSister(String message)
   {
     if (message == null || message.trim().isEmpty())
     {
-      return;
+      // 如果没有文字但有图片，仍然可以发送图片
+      if (currentImageBase64 == null || currentImageBase64.isEmpty())
+      {
+        return;
+      }
     }
 
-    messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
-    contextManager.addUserMessage(message);
+    boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
     
-    if (isDeadlockRescueMode) {
-      FileLogger.d(TAG, "🔥 [RESCUE_MODE] 处于死循环救援模式，处理 API Key 输入");
-      guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
-        @Override
-        public void onResponse(String response) {
-          runOnUiThread(() -> {
-            messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
-            scrollToBottom();
-            ttsSayReply(response);
-            if (response.contains("✅")) {
-              FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
-              isDeadlockRescueMode = false;
-              FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
-              modelAccessPointManager.resetFailureCount();
-              FileLogger.i(TAG, "✅ [FAILURE_RESET] 救援成功，计数器已重置：" + modelAccessPointManager.getConsecutiveFailures());
+    // 🖼️ 检测是否有图片，构建多模态消息或纯文本消息
+    if (hasImage)
+    {
+      FileLogger.i(TAG, "📷 [SEND_WITH_IMAGE] 发送带图片的消息 | 文字长度：" + (message != null ? message.length() : 0) + " | Base64 长度：" + currentImageBase64.length());
+      
+      try
+      {
+        JSONArray contentArray = new JSONArray();
+        
+        // 添加文字部分（如果有）
+        if (message != null && !message.trim().isEmpty())
+        {
+          JSONObject textContent = new JSONObject();
+          textContent.put("type", "text");
+          textContent.put("text", message);
+          contentArray.put(textContent);
+        }
+        
+        // 添加图片部分
+        JSONObject imageContent = new JSONObject();
+        imageContent.put("type", "image_url");
+        
+        JSONObject imageUrl = new JSONObject();
+        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+        imageContent.put("image_url", imageUrl);
+        contentArray.put(imageContent);
+        
+        // 构建完整的用户消息
+        JSONObject userMessage = new JSONObject();
+        userMessage.put("role", "user");
+        userMessage.put("content", contentArray);
+        
+        // ✅ 添加到上下文管理器（唯一真相源）
+        contextManager.addRawMessage(userMessage);
+        
+        // 验证是否成功添加
+        List<JSONObject> history = contextManager.getHistory();
+        int contextSize = history != null ? history.size() : 0;
+        FileLogger.i(TAG, "✅ [CONTEXT_ADDED] 多模态消息已添加到上下文 | 消息总数=" + contextSize);
+        
+        // UI 显示
+        messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : message, MessageType.USER));
+        
+        // 清除暂存的图片
+        currentImageBase64 = null;
+        uploadImageButton.setVisibility(View.GONE);
+        
+        scrollToBottom();
+        
+        // 继续发送请求
+        if (isDeadlockRescueMode) {
+          // 救援模式下不处理，由救援逻辑接管
+          return;
+        }
+        
+        if (guideManager != null && guideManager.isEmptyAccessPointList())
+        {
+          guideManager.processWithGuideLogic(message != null ? message : "", new GuideManager.ChatCallback()
+          {
+            @Override
+            public void onResponse(String response) {
+              runOnUiThread(() -> {
+                messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
+                scrollToBottom();
+                ttsSayReply(response);
+                if (response.contains("✅")) {
+                  FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
+                  isDeadlockRescueMode = false;
+                  FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
+                  modelAccessPointManager.resetFailureCount();
+                  FileLogger.i(TAG, "✅ [FAILURE_RESET] 救援成功，计数器已重置：" + modelAccessPointManager.getConsecutiveFailures());
+                }
+              });
+            }
+
+            @Override
+            public void onError(String error) {
+              runOnUiThread(() -> {
+                messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+                scrollToBottom();
+              });
             }
           });
+          return;
         }
 
-        @Override
-        public void onError(String error) {
-          runOnUiThread(() -> {
-            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-            scrollToBottom();
-          });
-        }
-      });
-      return;
-    }
-    
-    if (guideManager != null && guideManager.isEmptyAccessPointList())
-    {
-      guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
+        sendChatRequestTongYi();
+      }
+      catch (JSONException e)
       {
-        @Override
-        public void onResponse(String message)
-        {
-          runOnUiThread(() ->
-          {
-            messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
-            scrollToBottom();
-            ttsSayReply(message);
-          });
-        }
-
-        @Override
-        public void onError(String error)
-        {
-          runOnUiThread(() ->
-          {
-            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-            scrollToBottom();
-          });
-        }
-      });
-      return;
+        FileLogger.e(TAG, "❌ [MULTIMODAL_ERROR] 构建多模态消息失败", e);
+        runOnUiThread(() -> {
+          Toast.makeText(SisterFutureActivity.this, "❌ 构建消息失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        });
+      }
     }
+    else
+    {
+      // 📝 纯文本消息处理（原有逻辑）
+      FileLogger.i(TAG, "📝 [SEND_TEXT] 发送纯文本消息 | 长度：" + message.length());
+      
+      messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
+      contextManager.addUserMessage(message);
+      
+      if (isDeadlockRescueMode) {
+        FileLogger.d(TAG, "🔥 [RESCUE_MODE] 处于死循环救援模式，处理 API Key 输入");
+        guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
+          @Override
+          public void onResponse(String response) {
+            runOnUiThread(() -> {
+              messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
+              scrollToBottom();
+              ttsSayReply(response);
+              if (response.contains("✅")) {
+                FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
+                isDeadlockRescueMode = false;
+                FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
+                modelAccessPointManager.resetFailureCount();
+                FileLogger.i(TAG, "✅ [FAILURE_RESET] 救援成功，计数器已重置：" + modelAccessPointManager.getConsecutiveFailures());
+              }
+            });
+          }
 
-    sendChatRequestTongYi();
+          @Override
+          public void onError(String error) {
+            runOnUiThread(() -> {
+              messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+              scrollToBottom();
+            });
+          }
+        });
+        return;
+      }
+      
+      if (guideManager != null && guideManager.isEmptyAccessPointList())
+      {
+        guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
+        {
+          @Override
+          public void onResponse(String message)
+          {
+            runOnUiThread(() ->
+            {
+              messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+              scrollToBottom();
+              ttsSayReply(message);
+            });
+          }
+
+          @Override
+          public void onError(String error)
+          {
+            runOnUiThread(() ->
+            {
+              messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+              scrollToBottom();
+            });
+          }
+        });
+        return;
+      }
+
+      sendChatRequestTongYi();
+    }
   }
   
   @OnClick(R.id.sendButtonn2)
@@ -1842,85 +1951,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
     {
       handleSelectedImage(data);
-    }
-  }
-
-  // 📷 #280 发送带图片的消息
-  private void sendMessageWithImage(String textMessage)
-  {
-    boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
-    
-    FileLogger.i(TAG, "🚀 [SEND] 准备发送图片消息 | hasImage=" + hasImage + " | 文字长度：" + (textMessage != null ? textMessage.length() : 0) + " | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
-    
-    if (!hasImage && (textMessage == null || textMessage.trim().isEmpty()))
-    {
-      FileLogger.w(TAG, "⚠️ [SEND_CANCELLED] 没有图片和文字，取消发送");
-      return;
-    }
-    
-    if (hasImage)
-    {
-      FileLogger.i(TAG, "📷 [SEND_WITH_IMAGE] 发送带图片的消息 | 文字长度：" + (textMessage != null ? textMessage.length() : 0) + " | Base64 长度：" + currentImageBase64.length());
-      
-      try
-      {
-        JSONArray contentArray = new JSONArray();
-        
-        if (textMessage != null && !textMessage.trim().isEmpty())
-        {
-          JSONObject textContent = new JSONObject();
-          textContent.put("type", "text");
-          textContent.put("text", textMessage);
-          contentArray.put(textContent);
-        }
-        
-        JSONObject imageContent = new JSONObject();
-        imageContent.put("type", "image_url");
-        
-        JSONObject imageUrl = new JSONObject();
-        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
-        imageContent.put("image_url", imageUrl);
-        contentArray.put(imageContent);
-        
-        JSONObject currentUserMsg = new JSONObject();
-        currentUserMsg.put("role", "user");
-        currentUserMsg.put("content", contentArray);
-        
-        contextManager.addRawMessage(currentUserMsg);
-        
-        // ✅ 确认图片消息已添加到上下文
-        List<JSONObject> history = contextManager.getHistory();
-        int contextSize = history != null ? history.size() : 0;
-        FileLogger.i(TAG, "✅ [CONTEXT_ADDED] 图片消息已添加到上下文 | 消息总数=" + contextSize + " | Base64 长度=" + currentImageBase64.length());
-        
-        // 📋 验证最后一条消息
-        if (contextSize > 0) {
-          JSONObject lastMsg = history.get(contextSize - 1);
-          String lastRole = lastMsg.optString("role", "unknown");
-          Object lastContent = lastMsg.opt("content");
-          int contentLength = lastContent != null ? lastContent.toString().length() : 0;
-          FileLogger.i(TAG, "📋 [CONTEXT_PREVIEW] 最后一条消息类型=" + lastRole + " | content 字段长度=" + contentLength);
-        }
-        
-        messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : textMessage, MessageType.USER));
-        
-        currentImageBase64 = null;
-        uploadImageButton.setVisibility(View.GONE);
-        
-        scrollToBottom();
-        sendChatRequestTongYi();
-      }
-      catch (JSONException e)
-      {
-        FileLogger.e(TAG, "❌ [MULTIMODAL_ERROR] 构建多模态消息失败", e);
-        runOnUiThread(() -> {
-          Toast.makeText(this, "❌ 构建消息失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
-        });
-      }
-    }
-    else
-    {
-      sendMessageToSister(textMessage);
     }
   }
 
