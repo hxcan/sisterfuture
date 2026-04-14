@@ -456,6 +456,35 @@ public class ContextManager
 
     try
     {
+      // 🔍 新增：记录输入历史的消息类型
+      FileLogger.i(TAG, "📝 [INPUT] 开始处理输入历史，共 " + oldHistory.size() + " 条消息");
+      for (int i = 0; i < oldHistory.size(); i++)
+      {
+        JSONObject msg = oldHistory.get(i);
+        String role = msg.optString("role", "unknown");
+        Object contentObj = msg.opt("content");
+        String contentType = (contentObj instanceof JSONArray) ? "JSONArray" : "String";
+        int contentLength = (contentObj instanceof String) ? ((String) contentObj).length() : ((JSONArray) contentObj).length();
+        
+        FileLogger.i(TAG, "  [" + i + "] role=" + role + ", contentType=" + contentType + ", contentLength=" + contentLength);
+        
+        // 🖼️ 特别标记多模态消息
+        if ("user".equals(role) && (contentObj instanceof JSONArray))
+        {
+          JSONArray contentArray = (JSONArray) contentObj;
+          FileLogger.i(TAG, "🖼️ [MULTIMODAL] 检测到多模态用户消息，包含 " + contentArray.length() + " 个元素");
+          for (int j = 0; j < contentArray.length(); j++)
+          {
+            JSONObject item = contentArray.optJSONObject(j);
+            if (item != null)
+            {
+              String type = item.optString("type", "unknown");
+              FileLogger.i(TAG, "    [" + j + "] type=" + type);
+            }
+          }
+        }
+      }
+
       JSONObject pendingToolCallsObject = null;
       List<String> matchedToolCallIds = new ArrayList<>();
       // ✅ 新增：暂存匹配的 tool 消息
@@ -543,9 +572,39 @@ public class ContextManager
         list.add(pendingToolCallsObject);
         FileLogger.w(TAG, "[normalizeToolCallMessages] Pending assistant with tool_calls added at end, but some tool messages may be missing");
       }
+      
+      // 🔍 新增：记录输出历史的消息类型
+      FileLogger.i(TAG, "📤 [OUTPUT] 处理完成，输出历史共 " + list.size() + " 条消息");
+      int userMessageCount = 0;
+      int preservedMultimodalCount = 0;
+      for (int i = 0; i < list.size(); i++)
+      {
+        JSONObject msg = list.get(i);
+        String role = msg.optString("role", "unknown");
+        Object contentObj = msg.opt("content");
+        String contentType = (contentObj instanceof JSONArray) ? "JSONArray" : "String";
+        
+        if ("user".equals(role))
+        {
+          userMessageCount++;
+          if (contentObj instanceof JSONArray)
+          {
+            preservedMultimodalCount++;
+            FileLogger.i(TAG, "  [" + i + "] ✅ PRESERVED: role=" + role + ", contentType=" + contentType + " (多模态消息)");
+          }
+          else
+          {
+            FileLogger.i(TAG, "  [" + i + "] role=" + role + ", contentType=" + contentType);
+          }
+        }
+      }
+      
+      FileLogger.i(TAG, "📊 [SUMMARY] 输入 " + oldHistory.size() + " 条 -> 输出 " + list.size() + " 条，清理 " + cleanedCount + " 条");
+      FileLogger.i(TAG, "📊 [SUMMARY] 用户消息：" + userMessageCount + " 条，其中多模态消息：" + preservedMultimodalCount + " 条");
     }
     catch (Exception e)
     {
+      FileLogger.e(TAG, "❌ [ERROR] normalizeToolCallMessages 异常：" + e.getMessage(), e);
       e.printStackTrace();
     }
     
