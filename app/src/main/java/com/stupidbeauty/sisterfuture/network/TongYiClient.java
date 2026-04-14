@@ -140,8 +140,6 @@ public class TongYiClient
       FileLogger.e(TAG, "🔒 [QUEUE_REJECTED] 请求 #" + totalRequests + " 被队列拒绝（队列已满）");
       listener.onError(new IllegalStateException("请求队列已满，无法接受新请求"));
     }
-    
-    FileLogger.d(TAG, "🔒 [QUEUE_ENQUEUED] 请求 #" + totalRequests + " 已加入队列 | 提交后队列长度：" + requestQueue.size());
   }
 
   public interface OnResponseListener
