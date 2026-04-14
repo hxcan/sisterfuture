@@ -494,8 +494,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         int contextSize = history != null ? history.size() : 0;
         FileLogger.i(TAG, "✅ [CONTEXT_ADDED] 多模态消息已添加到上下文 | 消息总数=" + contextSize);
         
-        // UI 显示
-        messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : message, MessageType.USER));
+        // UI 显示 - 🖼️ 传递图片数据到 MessageItem
+        messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : message, MessageType.USER, hasImage ? currentImageBase64 : null));
         
         // ✅ 发送完成后清除图片缓存，但保持按钮可见
         currentImageBase64 = null;

@@ -20,6 +20,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.ImageView;
 import com.stupidbeauty.sisterfuture.R;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -38,6 +39,9 @@ import io.noties.markwon.core.CorePlugin;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
 import io.noties.markwon.ext.tables.TablePlugin;
 import android.util.Log;
+import android.util.Base64;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 
 public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final int TYPE_USER = 0;
@@ -125,6 +129,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
     public static class UserMessageViewHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.user_text) TextView textView;
+        @BindView(R.id.user_image) ImageView imageView; // 🖼️ 新增
 
         public UserMessageViewHolder(View itemView) {
             super(itemView);
@@ -162,8 +167,29 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
-            // User 消息不限制长度
-            textView.setText(message.getText());
+            // 🖼️ 检测是否有图片
+            if (message.getImageUrl() != null && !message.getImageUrl().isEmpty()) {
+                try {
+                    // 解码 Base64 图片
+                    byte[] decodedString = Base64.decode(message.getImageUrl(), Base64.DEFAULT);
+                    Bitmap decodedBitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+                    
+                    // 显示图片
+                    imageView.setImageBitmap(decodedBitmap);
+                    imageView.setVisibility(View.VISIBLE);
+                    
+                    // 文字部分只显示非图片内容（如果有）
+                    textView.setText(message.getText());
+                } catch (Exception e) {
+                    Log.e(TAG, "❌ 图片解码失败", e);
+                    imageView.setVisibility(View.GONE);
+                    textView.setText(message.getText());
+                }
+            } else {
+                // 没有图片，隐藏 ImageView，只显示文字
+                imageView.setVisibility(View.GONE);
+                textView.setText(message.getText());
+            }
         }
     }
 
