@@ -1733,7 +1733,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     File parentDir = rootDir.getParentFile();
     
     FileLogger.d(TAG, "📁 [FTP_DEBUG] 应用 files 目录：" + rootDir.getAbsolutePath());
-    FileLogger.d(TAG, "📂 [FTP_DEBUG] 应用私有目录（FTP 根目录）：" + parentDir.getAbsolutePath());
+
     FileLogger.d(TAG, "📂 [FTP_DEBUG] 根目录是否存在：" + (parentDir != null ? parentDir.exists() : "null"));
     
     if (parentDir != null && parentDir.exists()) 
