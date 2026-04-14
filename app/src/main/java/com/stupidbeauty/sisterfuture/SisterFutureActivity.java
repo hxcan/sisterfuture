@@ -391,8 +391,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   String url = imageUrlObj.optString("url");
                   if (url != null && url.startsWith("data:image/jpeg;base64,"))
                   {
-                    // 提取 Base64 部分（去掉前缀）
-                    imageUrl = url.substring(21);
+                    // ✅ 修复：使用 lastIndexOf(',') 动态查找逗号位置，替代硬编码的 substring(21)
+                    int commaIndex = url.lastIndexOf(',');
+                    if (commaIndex > 0) {
+                      imageUrl = url.substring(commaIndex + 1);
+                    } else {
+                      imageUrl = url;
+                    }
                   }
                 }
               }
@@ -913,7 +918,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   if (imageUrl != null) {
                     String url = imageUrl.optString("url", "");
                     if (url.startsWith("data:image/jpeg;base64,")) {
-                      String base64 = url.substring(21);
+                      // ✅ 同样修复此处的 substring 逻辑
+                      int commaIndex = url.lastIndexOf(',');
+                      String base64 = (commaIndex > 0) ? url.substring(commaIndex + 1) : url;
                       String preview = base64.length() > 50 ? base64.substring(0, 50) + "..." : base64;
                       FileLogger.i(TAG, "🖼️ [IMAGE_IN_CONTEXT] 检测到图片消息 | 位置=" + i + " | Base64 长度=" + base64.length() + " | 前 50 字符：" + preview);
                     }
