@@ -463,8 +463,31 @@ public class ContextManager
         JSONObject msg = oldHistory.get(i);
         String role = msg.optString("role", "unknown");
         Object contentObj = msg.opt("content");
-        String contentType = (contentObj instanceof JSONArray) ? "JSONArray" : "String";
-        int contentLength = (contentObj instanceof String) ? ((String) contentObj).length() : ((JSONArray) contentObj).length();
+        
+        // ✅ 修复 #4886：添加 null 检查和类型安全处理
+        String contentType;
+        int contentLength;
+        if (contentObj == null)
+        {
+          contentType = "null";
+          contentLength = 0;
+        }
+        else if (contentObj instanceof String)
+        {
+          contentType = "String";
+          contentLength = ((String) contentObj).length();
+        }
+        else if (contentObj instanceof JSONArray)
+        {
+          contentType = "JSONArray";
+          contentLength = ((JSONArray) contentObj).length();
+        }
+        else
+        {
+          contentType = contentObj.getClass().getSimpleName();
+          contentLength = 0;
+          FileLogger.w(TAG, "[normalizeToolCallMessages] Unexpected content type: " + contentType);
+        }
         
         FileLogger.i(TAG, "  [" + i + "] role=" + role + ", contentType=" + contentType + ", contentLength=" + contentLength);
         
