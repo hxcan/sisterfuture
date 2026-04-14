@@ -829,7 +829,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
       
       // 📤 发送请求前记录
-      FileLogger.i(TAG, "📤 [SENDING] 开始发送 {} 条消息给 AI 服务", messagesArray.length());
+      FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
 
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
