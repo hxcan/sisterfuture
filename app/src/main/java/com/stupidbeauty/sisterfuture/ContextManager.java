@@ -283,11 +283,8 @@ public class ContextManager
     }
 
     List<JSONObject> historyBefore = getHistory();
-    FileLogger.i(TAG, "[addRawMessage CALL] role=" + message.optString("role", "unknown") + 
-      ", has_tool_calls=" + message.has("tool_calls"));
 
     List<JSONObject> history = getHistory();
-    FileLogger.i(TAG, "[addRawMessage BEFORE] History count: " + history.size());
     
     history.add(message);
     FileLogger.i(TAG, "[addRawMessage] Message added: " + historyBefore.size() + " -> " + history.size());
@@ -366,7 +363,7 @@ public class ContextManager
       FileLogger.w(TAG, "⚠️ [GET] 内存历史未初始化，重新加载");
       loadHistoryFromSharedPreferences();
     }
-    FileLogger.d(TAG, "📖 [GET] 获取历史，当前内存大小：" + (memoryHistory != null ? memoryHistory.size() : 0));
+
     return memoryHistory;
   }
 
@@ -552,7 +549,6 @@ public class ContextManager
       e.printStackTrace();
     }
     
-    FileLogger.d(TAG, "[normalizeToolCallMessages] Input count: " + oldHistory.size() + ", Output count: " + list.size() + (strictMode ? " (strict mode)" : ""));
     return list;
   }
 
