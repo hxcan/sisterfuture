@@ -511,7 +511,18 @@ public class ContextManager
           
           if (pendingToolCallsObject!=null)
           {
-            JSONArray toolCallsArray = pendingToolCallsObject.getJSONArray("tool_calls");
+            // ✅ 修复 #4886：添加 null 安全检查
+            JSONArray toolCallsArray = pendingToolCallsObject.optJSONArray("tool_calls");
+            if (toolCallsArray == null)
+            {
+              FileLogger.w(TAG, "[normalizeToolCallMessages] pendingToolCallsObject exists but tool_calls is null, skipping!");
+              pendingToolCallsObject = null;
+              matchedToolCallIds.clear();
+              matchedToolMessages.clear();
+              list.add(currentObject);
+              continue;
+            }
+            
             boolean matched = false;
             for (int tc = 0; tc < toolCallsArray.length(); tc++)
             {
@@ -530,7 +541,7 @@ public class ContextManager
               // ✅ 暂存匹配的 tool 消息
               matchedToolMessages.add(currentObject);
               
-              if (matchedToolCallIds.size() == pendingToolCallsObject.getJSONArray("tool_calls").length())
+              if (matchedToolCallIds.size() == toolCallsArray.length())
               {
                 // ✅ 所有 tool 都匹配完成，按顺序添加
                 list.add(pendingToolCallsObject);  // 先添加 assistant
