@@ -339,22 +339,6 @@ public class ContextManager
     return new JSONArray(history);
   }
 
-  public void logFullHistory(String prefix)
-  {
-    List<JSONObject> history = getHistory();
-    FileLogger.i(TAG, "📋 [" + prefix + "] 历史消息列表（共 " + history.size() + " 条）:");
-    for (int i = 0; i < history.size(); i++)
-    {
-      JSONObject msg = history.get(i);
-      String role = msg.optString("role", "unknown");
-      String content = msg.optString("content", "");
-      boolean hasToolCalls = msg.has("tool_calls");
-      FileLogger.i(TAG, "  [" + i + "] role=" + role + 
-                    ", hasToolCalls=" + hasToolCalls + 
-                    ", contentLength=" + content.length());
-    }
-  }
-
   // ✅ 修改：直接返回内存中的历史列表（唯一真相源）
   public List<JSONObject> getHistory()
   {

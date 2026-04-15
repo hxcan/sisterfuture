@@ -728,8 +728,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     FileLogger.w(TAG, "🔍 [CONTEXT_LENGTH] 检测到上下文超长错误，自动缩短上下文");
     
-    contextManager.logFullHistory("ContextLengthError");
-    
     runOnUiThread(() ->
     {
       String displayMessage = errorMessage + "\n⚠️ 上下文超长，自动缩短后重试";
@@ -833,8 +831,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
         }
       }
-
-      contextManager.logFullHistory("BeforeSendRequest");
 
       // 🔍 #5030【救援模式】遍历消息列表，检查所有 tool_call 的 arguments
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 开始检查消息列表中的 tool_call arguments | 消息总数：" + messagesArray.length());
