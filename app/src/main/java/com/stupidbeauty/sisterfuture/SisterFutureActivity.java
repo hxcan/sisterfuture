@@ -351,19 +351,75 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     for (JSONObject msg : history)
     {
       String role = msg.optString("role");
-      String content = msg.optString("content");
+      Object contentObj = msg.opt("content");
       String toolCallId = msg.optString("tool_call_id");
       JSONArray toolCalls = msg.optJSONArray("tool_calls");
 
       if ("tool".equals(role) && !toolCallId.isEmpty())
       {
         String toolName = msg.optString("name", "unknown_tool");
+        String content = msg.optString("content");
         String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
         messageAdapter.addMessage(new MessageItem(displayText, MessageType.TOOL_CALL_RESULT));
       }
-      else if ("user".equals(role) && !content.isEmpty())
+      else if ("user".equals(role))
       {
-        messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
+        // 🖼️ 检测是否为多模态消息（包含图片）
+        if (contentObj instanceof JSONArray)
+        {
+          JSONArray contentArray = (JSONArray) contentObj;
+          StringBuilder textBuilder = new StringBuilder();
+          String imageUrl = null;
+          
+          for (int i = 0; i < contentArray.length(); i++)
+          {
+            try
+            {
+              JSONObject item = contentArray.optJSONObject(i);
+              if (item == null) continue;
+              
+              String type = item.optString("type");
+              if ("text".equals(type))
+              {
+                textBuilder.append(item.optString("text"));
+              }
+              else if ("image_url".equals(type))
+              {
+                JSONObject imageUrlObj = item.optJSONObject("image_url");
+                if (imageUrlObj != null)
+                {
+                  String url = imageUrlObj.optString("url");
+                  if (url != null && url.startsWith("data:image/jpeg;base64,"))
+                  {
+                    // ✅ 修复：使用 lastIndexOf(',') 动态查找逗号位置，替代硬编码的 substring(21)
+                    int commaIndex = url.lastIndexOf(',');
+                    if (commaIndex > 0) {
+                      imageUrl = url.substring(commaIndex + 1);
+                    } else {
+                      imageUrl = url;
+                    }
+                  }
+                }
+              }
+            }
+            catch (Exception e)
+            {
+              Log.e(TAG, "解析多模态消息失败", e);
+            }
+          }
+          
+          // 使用三参数构造函数，传递文字和图片
+          messageAdapter.addMessage(new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl));
+        }
+        else
+        {
+          // 纯文本消息
+          String content = msg.optString("content");
+          if (!content.isEmpty())
+          {
+            messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
+          }
+        }
       }
       else if ("assistant".equals(role))
       {
@@ -389,9 +445,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           }
           messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
         }
-        else if (!content.isEmpty())
+        else if (!msg.optString("content").isEmpty())
         {
-          messageAdapter.addMessage(new MessageItem(content, MessageType.AI));
+          messageAdapter.addMessage(new MessageItem(msg.optString("content"), MessageType.AI));
         }
       }
     }
@@ -494,12 +550,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         int contextSize = history != null ? history.size() : 0;
         FileLogger.i(TAG, "✅ [CONTEXT_ADDED] 多模态消息已添加到上下文 | 消息总数=" + contextSize);
         
-        // UI 显示
-        messageAdapter.addMessage(new MessageItem(hasImage ? "📷 [图片消息]" : message, MessageType.USER));
+        // UI 显示 - 🖼️ 传递图片数据到 MessageItem，保留原始文字
+        messageAdapter.addMessage(new MessageItem(message != null ? message : "", MessageType.USER, hasImage ? currentImageBase64 : null));
         
-        // 清除暂存的图片
+        // ✅ 发送完成后清除图片缓存，但保持按钮可见
         currentImageBase64 = null;
-        uploadImageButton.setVisibility(View.GONE);
+        // 不再隐藏按钮，保持始终可见
+        // uploadImageButton.setVisibility(View.GONE); // ❌ 移除这行
         
         scrollToBottom();
         
@@ -628,25 +685,21 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText("");
   }
 
-  // 📷 #280 图片上传按钮点击事件
+  // 📷 #280 图片上传按钮点击事件 - 始终可见
   @OnClick(R.id.uploadImageButton)
   public void onUploadImageButton()
   {
     FileLogger.d(TAG, "📷 [CLICK] 图片按钮被点击了！当前状态：hasImage=" + (currentImageBase64 != null));
     
+    // ✅ 如果有旧图片，先清除它
     if (currentImageBase64 != null)
     {
-      // 已有图片，清除它
       currentImageBase64 = null;
-      uploadImageButton.setVisibility(View.GONE);
-      Toast.makeText(this, "🗑️ 已清除图片", Toast.LENGTH_SHORT).show();
-      FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 用户清除了暂存的图片");
+      FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 清除了旧图片，准备选择新图片");
     }
-    else
-    {
-      // 没有图片，打开相册选择
-      openImagePicker();
-    }
+    
+    // ✅ 始终打开相册选择器（不再隐藏按钮）
+    openImagePicker();
   }
 
   private void sendChatRequest() 
@@ -861,7 +914,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   if (imageUrl != null) {
                     String url = imageUrl.optString("url", "");
                     if (url.startsWith("data:image/jpeg;base64,")) {
-                      String base64 = url.substring(21);
+                      // ✅ 同样修复此处的 substring 逻辑
+                      int commaIndex = url.lastIndexOf(',');
+                      String base64 = (commaIndex > 0) ? url.substring(commaIndex + 1) : url;
                       String preview = base64.length() > 50 ? base64.substring(0, 50) + "..." : base64;
                       FileLogger.i(TAG, "🖼️ [IMAGE_IN_CONTEXT] 检测到图片消息 | 位置=" + i + " | Base64 长度=" + base64.length() + " | 前 50 字符：" + preview);
                     }
@@ -1904,7 +1959,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       runOnUiThread(() -> {
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
-        uploadImageButton.setVisibility(View.VISIBLE);
+        // ✅ 不再隐藏按钮，保持始终可见
+        // uploadImageButton.setVisibility(View.VISIBLE); // 本来就可见，不需要设置
       });
       
       FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
