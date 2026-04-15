@@ -579,7 +579,7 @@ public class ContextManager
       }
       
       // 🔍 新增：记录输出历史的消息类型
-      FileLogger.i(TAG, "📤 [OUTPUT] 处理完成，输出历史共 " + list.size() + " 条消息");
+      
       int userMessageCount = 0;
       int preservedMultimodalCount = 0;
       for (int i = 0; i < list.size(); i++)
@@ -603,7 +603,6 @@ public class ContextManager
         }
       }
       
-      FileLogger.i(TAG, "📊 [SUMMARY] 输入 " + oldHistory.size() + " 条 -> 输出 " + list.size() + " 条，清理 " + cleanedCount + " 条");
       FileLogger.i(TAG, "📊 [SUMMARY] 用户消息：" + userMessageCount + " 条，其中多模态消息：" + preservedMultimodalCount + " 条");
     }
     catch (Exception e)
@@ -679,8 +678,6 @@ public class ContextManager
           .putString(KEY_HISTORY, historyArray.toString())
           .putInt("current_max_rounds", currentMaxRounds)
           .apply();  // apply() 异步没关系，因为读取的是内存
-      
-      FileLogger.d(TAG, "💾 [SAVE] 保存历史到 SharedPreferences：" + history.size() + " 条");
     }
     catch (Exception e)
     {
