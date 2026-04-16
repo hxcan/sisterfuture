@@ -24,14 +24,14 @@ public class SearchFileInRepoTool implements Tool {
 
     @Override
     public String getName() {
-        return "search_file_in_repo";
+        return "searchFileInRepo";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject func = new JSONObject();
-            func.put("name", "search_file_in_repo");
+            func.put("name", "searchFileInRepo");
             func.put("description", "基于 GitHub Code Search API 智能搜索仓库文件，支持文件名模式和路径过滤");
             JSONObject params = new JSONObject();
             params.put("type", "object");
