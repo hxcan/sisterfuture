@@ -31,7 +31,7 @@ public class GetRedmineTaskInfoTool implements Tool
   @Override
   public String getName()
   {
-    return "get_redmine_task_info";
+    return "getRedmineTaskInfo";
   }
 
   @Override
@@ -40,7 +40,7 @@ public class GetRedmineTaskInfoTool implements Tool
     try
     {
       JSONObject functionDef = new JSONObject();
-      functionDef.put("name", "get_redmine_task_info");
+      functionDef.put("name", "getRedmineTaskInfo");
       functionDef.put("description", "获取 Redmine 中指定任务的详细信息。需要提供 Redmine 实例地址、登录凭证和任务编号。");
 
       JSONObject parameters = new JSONObject();
