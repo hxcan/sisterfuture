@@ -56,8 +56,8 @@ public class GetRedmineTaskInfoTool implements Tool
           .put("type", "string")
           .put("description", "登录密码"))
         .put("task_id", new JSONObject()
-          .put("type", "integer")
-          .put("description", "要查询的任务编号"))
+          .put("type", "long")
+          .put("description", "要查询的任务编号（支持长整型 ID，如 JoyMan 生成的 12-14 位数字）"))
       );
       parameters.put("required", new JSONArray(new String[]{"task_id"}));
 
@@ -86,7 +86,7 @@ public class GetRedmineTaskInfoTool implements Tool
         executor.execute(() -> {
             try {
                 // 1. 获取参数
-                int taskId = arguments.getInt("task_id");
+                long taskId = arguments.getLong("task_id");
                 String redmineUrl = arguments.optString("redmine_url", "").trim();
                 String username = arguments.optString("username", "").trim();
                 String password = arguments.optString("password", "").trim();
@@ -118,7 +118,7 @@ public class GetRedmineTaskInfoTool implements Tool
 
                 // 4. 构建请求
                 OkHttpClient client = new OkHttpClient();
-                // 在URL构建处升级为多重包含：
+                // 在 URL 构建处升级为多重包含：
                 HttpUrl url = HttpUrl.parse(redmineUrl + "/issues/" + taskId + ".json")
                     .newBuilder()
                     .addQueryParameter("include", "journals,relations,attachments,children,watchers,time_entries") // 五重数据维度全解锁
@@ -132,7 +132,7 @@ public class GetRedmineTaskInfoTool implements Tool
                 Response response = client.newCall(request).execute();
 
                 if (!response.isSuccessful()) {
-                    throw new IOException("请求失败: " + response.code() + " " + response.message());
+                    throw new IOException("请求失败：" + response.code() + " " + response.message());
                 }
 
                 ResponseBody body = response.body();
