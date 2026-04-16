@@ -1254,11 +1254,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               {
                 SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在执行：" + toolName);
                 
+                // 🔍 添加日志：工具执行开始
+                FileLogger.d(TAG, "🔧 [TOOL_EXEC_START] 执行异步工具 | id=" + toolCallId + " | name=" + toolName);
+                
                 toolManager.executeToolAsync(toolCallId, toolName, args, new Tool.OnResultCallback()
                 {
                   @Override
                   public void onResult(JSONObject result)
                   {
+                    // 🔍 添加日志：异步工具成功回调
+                    FileLogger.d(TAG, "🔧 [TOOL_ASYNC_RESULT] 异步工具成功 | id=" + toolCallId + " | name=" + toolName);
+                    
                     synchronized (pendingResults)
                     {
                       try
@@ -1268,6 +1274,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         wrapper.put("name", toolName);
                         wrapper.put("result", result);
                         pendingResults.put(toolCallId, wrapper);
+                        FileLogger.d(TAG, "🔧 [TOOL_PENDING_UPDATE] pendingResults 大小：" + pendingResults.size() + " / total=" + toolCallsArray.length());
                       }
                       catch (Exception e)
                       {
@@ -1276,6 +1283,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
                       if (pendingResults.size() == toolCallsArray.length())
                       {
+                        FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成，准备调用 postProcessToolResults");
                         postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
                       }
                     }
@@ -1284,21 +1292,32 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   @Override
                   public void onError(Exception e)
                   {
-                    FileLogger.e(TAG, "异步工具失败：" + toolName + ", toolCallId=" + toolCallId, e);
-                    postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
+                    // 🔍 添加日志：异步工具失败回调
+                    FileLogger.e(TAG, "❌ [TOOL_ASYNC_ERROR] 异步工具失败 | id=" + toolCallId + " | name=" + toolName + " | error=" + e.getMessage());
+                    
+                    synchronized (pendingResults)
+                    {
+                      FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发，pendingResults 大小：" + pendingResults.size() + " / total=" + toolCallsArray.length());
+                      postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
+                    }
                   }
                 });
               }
               else
               {
+                // 🔍 添加日志：同步工具执行
+                FileLogger.d(TAG, "🔧 [TOOL_SYNC_EXEC] 执行同步工具 | id=" + toolCallId + " | name=" + toolName);
+                
                 JSONObject toolResult = new JSONObject();
 
                 try
                 {
                   toolResult = toolManager.executeTool(toolName, args);
+                  FileLogger.d(TAG, "🔧 [TOOL_SYNC_SUCCESS] 同步工具成功 | id=" + toolCallId + " | name=" + toolName);
                 }
                 catch (IllegalArgumentException e)
                 {
+                  FileLogger.e(TAG, "❌ [TOOL_SYNC_ILLEGAL_ARG] 同步工具参数错误 | id=" + toolCallId + " | name=" + toolName, e);
                   JSONObject errorResult = new JSONObject();
                   errorResult.put("error", e.getMessage());
                   errorResult.put("tool_name", toolName);
@@ -1307,6 +1326,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 }
                 catch (Exception e)
                 {
+                  FileLogger.e(TAG, "❌ [TOOL_SYNC_ERROR] 同步工具执行出错 | id=" + toolCallId + " | name=" + toolName, e);
                   JSONObject errorResult = new JSONObject();
                   errorResult.put("error", "工具执行出错：" + e.getMessage());
                   errorResult.put("tool_name", toolName);
@@ -1345,6 +1365,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
             if (pendingResults.size() == toolCallsArray.length())
             {
+              FileLogger.d(TAG, "🔧 [TOOL_SYNC_ALL_COMPLETE] 同步工具全部完成，准备调用 postProcessToolResults");
               postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
             }
           }
@@ -1427,25 +1448,37 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                                     JSONObject assistantMessage,
                                     JSONArray toolCallsArray)
   {
+    // 🔍 添加入口日志
+    FileLogger.d(TAG, "🔧 [POST_PROCESS_ENTER] 进入 postProcessToolResults | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
+    
     runOnUiThread(() ->
     {
       try
       {
+        int validResultsCount = 0;
+        
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
           String id = call.getString("id");
           JSONObject wrapper = pendingResults.get(id);
+          
           if (wrapper != null)
           {
             String name = wrapper.getString("name");
             JSONObject result = wrapper.getJSONObject("result");
 
-            if (!toolManager.tryMarkToolCallAsReplied(id))
+            // 🔍 添加幂等性检查日志
+            boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
+            FileLogger.d(TAG, "🔧 [TOOL_IDEMPOTENCY] 幂等性检查 | id=" + id + " | name=" + name + " | isDuplicate=" + isDuplicate);
+            
+            if (isDuplicate)
             {
               FileLogger.w(TAG, "⚠️ 忽略重复的工具回复消息，toolCallId=" + id + ", toolName=" + name);
               continue;
             }
+            
+            validResultsCount++;
 
             contextManager.addToolMessage(id, name, result.toString());
             FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
@@ -1460,6 +1493,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
         clearAccumulatedToolCalls();
 
+        // 🔍 添加触发新请求前的日志
+        FileLogger.i(TAG, "🚀 [TOOL_REQUEST_TRIGGER] 准备触发新请求 | validResultsCount=" + validResultsCount + " | totalTools=" + toolCallsArray.length());
         sendChatRequestTongYi();
       }
       catch (Exception e)
