@@ -134,6 +134,19 @@ public class SearchFileInRepoTool implements Tool {
                 result.put("count", results.length());
                 result.put("files", results);
                 result.put("fetched_at", System.currentTimeMillis());
+                
+                // ⚠️ 重要提示：当搜索返回结果数量为 0 时
+                if (results.length() == 0) {
+                    String note = "GitHub Code Search API 可能未索引目标仓库，或搜索接口本身不可靠\n" +
+                                  "此时应在回复中建议大模型尝试其他方式寻找文件，例如：\n" +
+                                  "- 使用 `get_github_file` 工具直接读取已知路径的文件\n" +
+                                  "- 通过 `list_ftp_directory` 或 `list_phone_directory` 扫描本地/FTP 目录\n" +
+                                  "- 询问用户确认文件是否存在或提供确切路径\n" +
+                                  "- 尝试不同的 fileNamePattern 或 pathPattern 组合\n" +
+                                  "- 不要重复使用 search_file_in_repo 工具进行相同条件的搜索";
+                    result.put("sister_future_note", note);
+                }
+                
                 callback.onResult(result);
 
             } catch (Exception e) {
@@ -151,6 +164,6 @@ public class SearchFileInRepoTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求搜索 GitHub 文件时才调用此工具。\nToken 读取优先级：\n1. 优先使用大模型传入的参数 token（若有）\n2. 其次从工具备注中读取 github_token\n3. 两者皆无时返回友好错误提示\n严禁自行硬编码 token。";
+        return "必须在用户明确要求搜索 GitHub 文件时才调用此工具。\nToken 读取优先级：\n1. 优先使用大模型传入的参数 token（若有）\n2. 其次从工具备注中读取 github_token\n3. 两者皆无时返回友好错误提示\n严禁自行硬编码 token。\n\n⚠️ **重要提示：当搜索返回结果数量为 0 时**\n- GitHub Code Search API 可能未索引目标仓库，或搜索接口本身不可靠\n- 此时应在回复中建议大模型尝试其他方式寻找文件，例如：\n  - 使用 `get_github_file` 工具直接读取已知路径的文件\n  - 通过 `list_ftp_directory` 或 `list_phone_directory` 扫描目录\n  - 询问用户确认文件是否存在或提供确切路径\n  - 尝试不同的文件名模式或路径模式组合\n- 不要重复使用 search_file_in_repo 工具进行相同条件的搜索";
     }
 }
