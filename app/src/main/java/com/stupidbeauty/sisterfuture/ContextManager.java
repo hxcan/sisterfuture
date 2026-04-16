@@ -90,17 +90,15 @@ public class ContextManager
       return;
     }
     
-    List<JSONObject> history = new ArrayList<>(memoryHistory);
     int invalidCount = 0;
     int blankAssistantCount = 0;
     
     try
     {
-      JSONArray array = new JSONArray(history);
-      
-      for (int i = 0; i < array.length(); i++)
+      // 🔍 遍历原始 memoryHistory，仅统计无效消息数量，不修改列表
+      for (int i = 0; i < memoryHistory.size(); i++)
       {
-        JSONObject currentObject = array.getJSONObject(i);
+        JSONObject currentObject = memoryHistory.get(i);
         
         String role = currentObject.optString("role", "");
         String content = currentObject.optString("content", "");
@@ -117,23 +115,25 @@ public class ContextManager
           continue;
         }
         
-        if (isValidToolCallMessage(currentObject))
-        {
-          history.add(currentObject);
-        }
-        else
+        if (!isValidToolCallMessage(currentObject))
         {
           invalidCount++;
+          FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，将在 normalize 中处理");
         }
       }
       
-      // ✅ 启动清理使用标准模式（非严厉模式），保留悬而未决的工具调用
-      history = normalizeToolCallMessages(history, false);
+      // ✅ 直接对完整的 memoryHistory 进行 normalize 处理
+      List<JSONObject> normalizedHistory = normalizeToolCallMessages(memoryHistory, false);
       
-      if (invalidCount > 0 || blankAssistantCount > 0 || history.size() < array.length())
+      // ✅ 只有当 normalize 改变了历史时才保存
+      if (invalidCount > 0 || blankAssistantCount > 0 || normalizedHistory.size() != memoryHistory.size())
       {
-        saveHistory(history);
-        FileLogger.i(TAG, "🧹 [CLEANUP] 清理完成，新历史：" + memoryHistory.size() + " 条");
+        saveHistory(normalizedHistory);
+        FileLogger.i(TAG, "🧹 [CLEANUP] 清理完成 | 无效消息：" + invalidCount + " | 空白助手消息：" + blankAssistantCount + " | 新历史：" + normalizedHistory.size() + " 条");
+      }
+      else
+      {
+        FileLogger.d(TAG, "🧹 [CLEANUP] 无需清理，历史保持原样");
       }
     }
     catch (Exception e)
