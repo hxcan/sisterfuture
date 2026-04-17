@@ -1450,46 +1450,48 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       try
       {
-        int validResultsCount = 0;
-        
+        // 🔑 关键修复：遍历所有工具，检查幂等性
+        // 如果发现任何一个工具已处理过，说明已经触发过请求，直接返回
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
           String id = call.getString("id");
           JSONObject wrapper = pendingResults.get(id);
           
-          if (wrapper != null)
+          if (wrapper == null)
           {
-            String name = wrapper.getString("name");
-            JSONObject result = wrapper.getJSONObject("result");
-
-            // 🔍 添加幂等性检查日志
-            boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
-            FileLogger.d(TAG, "🔧 [TOOL_IDEMPOTENCY] 幂等性检查 | id=" + id + " | name=" + name + " | isDuplicate=" + isDuplicate);
-            
-            if (isDuplicate)
-            {
-              FileLogger.w(TAG, "⚠️ 忽略重复的工具回复消息，toolCallId=" + id + ", toolName=" + name);
-              continue;
-            }
-            
-            validResultsCount++;
-
-            contextManager.addToolMessage(id, name, result.toString());
-            FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
-            messageAdapter.addMessage(
-              new MessageItem(
-                "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
-                MessageType.TOOL_CALL_RESULT
-              )
-            );
+            FileLogger.w(TAG, "⚠️ [SKIP] 工具结果不存在 | id=" + id);
+            continue;
           }
+          
+          String name = wrapper.getString("name");
+          JSONObject result = wrapper.getJSONObject("result");
+
+          // 🔑 关键：检查幂等性
+          boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
+          
+          if (isDuplicate)
+          {
+            FileLogger.w(TAG, "⚠️ [DUPLICATE] 发现重复工具 | id=" + id + " | name=" + name + " | 说明已处理过，跳过本次请求触发");
+            return; // ✅ 直接返回，不触发新请求
+          }
+          
+          // 只有未处理过的工具才添加消息
+          FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
+          contextManager.addToolMessage(id, name, result.toString());
+          FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
+          messageAdapter.addMessage(
+            new MessageItem(
+              "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
+              MessageType.TOOL_CALL_RESULT
+            )
+          );
         }
 
         clearAccumulatedToolCalls();
 
-        // 🔍 添加触发新请求前的日志
-        FileLogger.i(TAG, "🚀 [TOOL_REQUEST_TRIGGER] 准备触发新请求 | validResultsCount=" + validResultsCount + " | totalTools=" + toolCallsArray.length());
+        // 🔑 能走到这里，说明没有重复的工具，需要触发新请求
+        FileLogger.i(TAG, "🚀 [TRIGGER] 准备触发新请求 | toolCallsCount=" + toolCallsArray.length());
         sendChatRequestTongYi();
       }
       catch (Exception e)
