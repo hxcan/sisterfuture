@@ -534,58 +534,6 @@ public class ContextManager
 
     try
     {
-      // 🔍 新增：记录输入历史的消息类型
-      
-      for (int i = 0; i < oldHistory.size(); i++)
-      {
-        JSONObject msg = oldHistory.get(i);
-        String role = msg.optString("role", "unknown");
-        Object contentObj = msg.opt("content");
-        
-        // ✅ 修复 #4886：添加 null 检查和类型安全处理
-        String contentType;
-        int contentLength;
-        if (contentObj == null)
-        {
-          contentType = "null";
-          contentLength = 0;
-        }
-        else if (contentObj instanceof String)
-        {
-          contentType = "String";
-          contentLength = ((String) contentObj).length();
-        }
-        else if (contentObj instanceof JSONArray)
-        {
-          contentType = "JSONArray";
-          contentLength = ((JSONArray) contentObj).length();
-        }
-        else
-        {
-          contentType = contentObj.getClass().getSimpleName();
-          contentLength = 0;
-          FileLogger.w(TAG, "[normalizeToolCallMessages] Unexpected content type: " + contentType);
-        }
-        
-        FileLogger.i(TAG, "  [" + i + "] role=" + role + ", contentType=" + contentType + ", contentLength=" + contentLength);
-        
-        // 🖼️ 特别标记多模态消息
-        if ("user".equals(role) && (contentObj instanceof JSONArray))
-        {
-          JSONArray contentArray = (JSONArray) contentObj;
-          FileLogger.i(TAG, "🖼️ [MULTIMODAL] 检测到多模态用户消息，包含 " + contentArray.length() + " 个元素");
-          for (int j = 0; j < contentArray.length(); j++)
-          {
-            JSONObject item = contentArray.optJSONObject(j);
-            if (item != null)
-            {
-              String type = item.optString("type", "unknown");
-              FileLogger.i(TAG, "    [" + j + "] type=" + type);
-            }
-          }
-        }
-      }
-
       JSONObject pendingToolCallsObject = null;
       List<String> matchedToolCallIds = new ArrayList<>();
       // ✅ 新增：暂存匹配的 tool 消息
@@ -674,7 +622,7 @@ public class ContextManager
         FileLogger.w(TAG, "[normalizeToolCallMessages] Pending assistant with tool_calls added at end, but some tool messages may be missing");
       }
       
-      // 🔍 新增：记录输出历史的消息类型
+      // 🔍 新增：记录输出历史的消息类型（精简版）
       FileLogger.i(TAG, "📤 [OUTPUT] 处理完成，输出历史共 " + list.size() + " 条消息");
       int userMessageCount = 0;
       int preservedMultimodalCount = 0;
@@ -683,7 +631,6 @@ public class ContextManager
         JSONObject msg = list.get(i);
         String role = msg.optString("role", "unknown");
         Object contentObj = msg.opt("content");
-        String contentType = (contentObj instanceof JSONArray) ? "JSONArray" : "String";
         
         if ("user".equals(role))
         {
@@ -691,11 +638,7 @@ public class ContextManager
           if (contentObj instanceof JSONArray)
           {
             preservedMultimodalCount++;
-            FileLogger.i(TAG, "  [" + i + "] ✅ PRESERVED: role=" + role + ", contentType=" + contentType + " (多模态消息)");
-          }
-          else
-          {
-            FileLogger.i(TAG, "  [" + i + "] role=" + role + ", contentType=" + contentType);
+            FileLogger.i(TAG, "  [" + i + "] ✅ PRESERVED: 多模态用户消息");
           }
         }
       }
