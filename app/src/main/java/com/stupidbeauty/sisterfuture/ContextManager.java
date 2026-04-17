@@ -709,7 +709,6 @@ public class ContextManager
   {
     // 1. 更新内存（唯一真相源）
     memoryHistory = new ArrayList<>(history);
-    FileLogger.d(TAG, "💾 [SAVE] 更新内存历史：" + memoryHistory.size() + " 条");
     
     // 2. 异步保存到 SP（持久化）
     try
@@ -719,8 +718,6 @@ public class ContextManager
           .putString(KEY_HISTORY, historyArray.toString())
           .putInt("current_max_rounds", currentMaxRounds)
           .apply();  // apply() 异步没关系，因为读取的是内存
-      
-      FileLogger.d(TAG, "💾 [SAVE] 保存历史到 SharedPreferences：" + history.size() + " 条");
     }
     catch (Exception e)
     {
