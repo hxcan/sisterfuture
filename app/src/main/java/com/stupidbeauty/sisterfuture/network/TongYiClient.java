@@ -204,7 +204,6 @@ public class TongYiClient
             String toolName = msg.optString("name", "");
             
             // 打印 role 和关键字段
-            FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] msg[" + i + "] role=" + role + ", hasToolCalls=" + hasToolCalls + ", tool_call_id=" + toolCallId + ", tool_name=" + toolName);
             
             // 如果有 tool_calls，打印详细信息
             if (hasToolCalls)
@@ -219,7 +218,7 @@ public class TongYiClient
                 if (func != null)
                 {
                   String funcName = func.optString("name", "unknown");
-                  String argsPreview = func.optString("arguments", "").length() > 100 ? func.optString("arguments", "").substring(0, 100) + "..." : func.optString("arguments", "");
+                  String argsPreview = func.optString("arguments", "").length() > 1000 ? func.optString("arguments", "").substring(0, 1000) + "..." : func.optString("arguments", "");
                   FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES]     tool_call[" + j + "] id=" + tcId + ", name=" + funcName + ", args_preview=" + argsPreview);
                 }
               }

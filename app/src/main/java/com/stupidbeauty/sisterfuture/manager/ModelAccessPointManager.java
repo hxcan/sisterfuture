@@ -237,7 +237,6 @@ public class ModelAccessPointManager
   {
     if (currentAccessPointIndex < accessPoints.size())
     {
-      FileLogger.i(TAG, "getCurrentModelName, access point index: " + currentAccessPointIndex + ", model name: " + accessPoints.get(currentAccessPointIndex).getModelName());
       return accessPoints.get(currentAccessPointIndex).getModelName();
     }
     return null;

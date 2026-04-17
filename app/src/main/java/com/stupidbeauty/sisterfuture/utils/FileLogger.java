@@ -159,7 +159,8 @@ public class FileLogger {
             
             // 格式化日志行
             String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
-            String filteredMessage = filterSensitiveInfo(message);
+            // String filteredMessage = filterSensitiveInfo(message);
+            String filteredMessage = message;
             String logLine = String.format("%s %s/%s: %s\n", timestamp, level, tag, filteredMessage);
             
             // 追加写入

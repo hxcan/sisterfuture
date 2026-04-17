@@ -90,17 +90,15 @@ public class ContextManager
       return;
     }
     
-    List<JSONObject> history = new ArrayList<>(memoryHistory);
     int invalidCount = 0;
     int blankAssistantCount = 0;
     
     try
     {
-      JSONArray array = new JSONArray(history);
-      
-      for (int i = 0; i < array.length(); i++)
+      // 🔍 遍历原始 memoryHistory，仅统计无效消息数量，不修改列表
+      for (int i = 0; i < memoryHistory.size(); i++)
       {
-        JSONObject currentObject = array.getJSONObject(i);
+        JSONObject currentObject = memoryHistory.get(i);
         
         String role = currentObject.optString("role", "");
         String content = currentObject.optString("content", "");
@@ -117,23 +115,25 @@ public class ContextManager
           continue;
         }
         
-        if (isValidToolCallMessage(currentObject))
-        {
-          history.add(currentObject);
-        }
-        else
+        if (!isValidToolCallMessage(currentObject))
         {
           invalidCount++;
+          FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，将在 normalize 中处理");
         }
       }
       
-      // ✅ 启动清理使用标准模式（非严厉模式），保留悬而未决的工具调用
-      history = normalizeToolCallMessages(history, false);
+      // ✅ 直接对完整的 memoryHistory 进行 normalize 处理
+      List<JSONObject> normalizedHistory = normalizeToolCallMessages(memoryHistory, false);
       
-      if (invalidCount > 0 || blankAssistantCount > 0 || history.size() < array.length())
+      // ✅ 只有当 normalize 改变了历史时才保存
+      if (invalidCount > 0 || blankAssistantCount > 0 || normalizedHistory.size() != memoryHistory.size())
       {
-        saveHistory(history);
-        FileLogger.i(TAG, "🧹 [CLEANUP] 清理完成，新历史：" + memoryHistory.size() + " 条");
+        saveHistory(normalizedHistory);
+        FileLogger.i(TAG, "🧹 [CLEANUP] 清理完成 | 无效消息：" + invalidCount + " | 空白助手消息：" + blankAssistantCount + " | 新历史：" + normalizedHistory.size() + " 条");
+      }
+      else
+      {
+        FileLogger.d(TAG, "🧹 [CLEANUP] 无需清理，历史保持原样");
       }
     }
     catch (Exception e)
@@ -248,6 +248,13 @@ public class ContextManager
                 return;
               }
               
+              // 🔧 #763065048722 新增：严格语法完整性检查
+              if (!isJsonSyntaxComplete(argumentsStr))
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments syntax incomplete or malformed");
+                return;
+              }
+              
               // Strict JSON validation
               try
               {
@@ -295,6 +302,86 @@ public class ContextManager
   }
 
   /**
+   * 🔧 #763065048722 新增：检查 JSON 语法完整性
+   * 检测括号匹配、引号闭合等基本语法结构
+   */
+  private boolean isJsonSyntaxComplete(String jsonStr)
+  {
+    if (jsonStr == null || jsonStr.trim().isEmpty())
+    {
+      return false;
+    }
+    
+    // 1. 检查括号匹配
+    int braceCount = 0;
+    int bracketCount = 0;
+    boolean inString = false;
+    boolean escaped = false;
+    
+    for (int i = 0; i < jsonStr.length(); i++)
+    {
+      char c = jsonStr.charAt(i);
+      
+      if (escaped)
+      {
+        escaped = false;
+        continue;
+      }
+      
+      if (c == '\\' && inString)
+      {
+        escaped = true;
+        continue;
+      }
+      
+      if (c == '"' && !escaped)
+      {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString)
+      {
+        if (c == '{') braceCount++;
+        else if (c == '}') braceCount--;
+        else if (c == '[') bracketCount++;
+        else if (c == ']') bracketCount--;
+        
+        // 如果括号计数为负，说明闭合符号多于开启符号
+        if (braceCount < 0 || bracketCount < 0)
+        {
+          FileLogger.d(TAG, "[isJsonSyntaxComplete] Mismatched brackets at position " + i);
+          return false;
+        }
+      }
+    }
+    
+    // 检查是否所有括号都闭合
+    if (braceCount != 0 || bracketCount != 0)
+    {
+      FileLogger.d(TAG, "[isJsonSyntaxComplete] Unclosed brackets: brace=" + braceCount + ", bracket=" + bracketCount);
+      return false;
+    }
+    
+    // 检查是否在字符串中间结束
+    if (inString)
+    {
+      FileLogger.d(TAG, "[isJsonSyntaxComplete] Unclosed string");
+      return false;
+    }
+    
+    // 2. 检查是否以合理的字符开始和结束
+    String trimmed = jsonStr.trim();
+    if (!trimmed.startsWith("{") || !trimmed.endsWith("}"))
+    {
+      FileLogger.d(TAG, "[isJsonSyntaxComplete] Does not start with { or end with }");
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
    * General validation: check if JSON string contains unquoted string values.
    * Strategy: Remove all quoted strings, then look for alphabetic identifiers after colons.
    * Valid JSON values: "quoted", number, true, false, null, {, [, }
@@ -339,6 +426,22 @@ public class ContextManager
     return new JSONArray(history);
   }
 
+  public void logFullHistory(String prefix)
+  {
+    List<JSONObject> history = getHistory();
+    FileLogger.i(TAG, "📋 [" + prefix + "] 历史消息列表（共 " + history.size() + " 条）:");
+    for (int i = 0; i < history.size(); i++)
+    {
+      JSONObject msg = history.get(i);
+      String role = msg.optString("role", "unknown");
+      String content = msg.optString("content", "");
+      boolean hasToolCalls = msg.has("tool_calls");
+      FileLogger.i(TAG, "  [" + i + "] role=" + role + 
+                    ", hasToolCalls=" + hasToolCalls + 
+                    ", contentLength=" + content.length());
+    }
+  }
+
   // ✅ 修改：直接返回内存中的历史列表（唯一真相源）
   public List<JSONObject> getHistory()
   {
@@ -376,6 +479,13 @@ public class ContextManager
             if (hasUnquotedStringValues(argumentsStr))
             {
               FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: unquoted string values");
+              return false;
+            }
+            
+            // 🔧 #763065048722 新增：严格语法完整性检查
+            if (!isJsonSyntaxComplete(argumentsStr))
+            {
+              FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: syntax incomplete");
               return false;
             }
             
@@ -441,7 +551,7 @@ public class ContextManager
     try
     {
       // 🔍 新增：记录输入历史的消息类型
-      
+      FileLogger.i(TAG, "📝 [INPUT] 开始处理输入历史，共 " + oldHistory.size() + " 条消息");
       for (int i = 0; i < oldHistory.size(); i++)
       {
         JSONObject msg = oldHistory.get(i);
@@ -472,6 +582,8 @@ public class ContextManager
           contentLength = 0;
           FileLogger.w(TAG, "[normalizeToolCallMessages] Unexpected content type: " + contentType);
         }
+        
+        FileLogger.i(TAG, "  [" + i + "] role=" + role + ", contentType=" + contentType + ", contentLength=" + contentLength);
         
         // 🖼️ 特别标记多模态消息
         if ("user".equals(role) && (contentObj instanceof JSONArray))
@@ -579,7 +691,7 @@ public class ContextManager
       }
       
       // 🔍 新增：记录输出历史的消息类型
-      
+      FileLogger.i(TAG, "📤 [OUTPUT] 处理完成，输出历史共 " + list.size() + " 条消息");
       int userMessageCount = 0;
       int preservedMultimodalCount = 0;
       for (int i = 0; i < list.size(); i++)
@@ -599,10 +711,12 @@ public class ContextManager
           }
           else
           {
+            FileLogger.i(TAG, "  [" + i + "] role=" + role + ", contentType=" + contentType);
           }
         }
       }
       
+      FileLogger.i(TAG, "📊 [SUMMARY] 输入 " + oldHistory.size() + " 条 -> 输出 " + list.size() + " 条，清理 " + cleanedCount + " 条");
       FileLogger.i(TAG, "📊 [SUMMARY] 用户消息：" + userMessageCount + " 条，其中多模态消息：" + preservedMultimodalCount + " 条");
     }
     catch (Exception e)
@@ -678,6 +792,8 @@ public class ContextManager
           .putString(KEY_HISTORY, historyArray.toString())
           .putInt("current_max_rounds", currentMaxRounds)
           .apply();  // apply() 异步没关系，因为读取的是内存
+      
+      FileLogger.d(TAG, "💾 [SAVE] 保存历史到 SharedPreferences：" + history.size() + " 条");
     }
     catch (Exception e)
     {
