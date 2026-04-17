@@ -1001,11 +1001,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           lastSuccessRequestId = requestId;
           
-          // 🤖 记录 AI 响应
-          int responseLength = response != null ? response.length() : 0;
-          String responsePreview = response != null && response.length() > 100 ? response.substring(0, 100) + "..." : response;
-          FileLogger.i(TAG, "🤖 [AI_RESPONSE] 收到 AI 响应 | 长度=" + responseLength + " | 前 100 字符：" + responsePreview);
-          
           parseTongYiResponse(response);
         }
 
