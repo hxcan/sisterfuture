@@ -1922,18 +1922,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     File rootDir = getFilesDir();
     File parentDir = rootDir.getParentFile();
     
-    FileLogger.d(TAG, "📁 [FTP_DEBUG] 应用 files 目录：" + rootDir.getAbsolutePath());
-
-    FileLogger.d(TAG, "📂 [FTP_DEBUG] 根目录是否存在：" + (parentDir != null ? parentDir.exists() : "null"));
-    
     if (parentDir != null && parentDir.exists()) 
     {
       File[] files = parentDir.listFiles();
-      FileLogger.d(TAG, "📋 [FTP_DEBUG] 根目录下文件/目录数量：" + (files != null ? files.length : "null"));
-      
-      FileLogger.d(TAG, "📂 [FTP_DEBUG] shared_prefs/ 存在：" + new File(parentDir, "shared_prefs").exists());
-      FileLogger.d(TAG, "📂 [FTP_DEBUG] files/ 存在：" + new File(parentDir, "files").exists());
-      FileLogger.d(TAG, "📂 [FTP_DEBUG] code_cache/ 存在：" + new File(parentDir, "code_cache").exists());
     }
     
     builtinFtpServer = new BuiltinFtpServer(this);
