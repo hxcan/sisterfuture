@@ -209,7 +209,7 @@ public class TongYiClient
             if (hasToolCalls)
             {
               JSONArray toolCalls = msg.getJSONArray("tool_calls");
-              FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES]   tool_calls 数量：" + toolCalls.length());
+
               for (int j = 0; j < toolCalls.length(); j++)
               {
                 JSONObject tc = toolCalls.getJSONObject(j);
