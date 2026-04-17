@@ -622,7 +622,7 @@ public class ContextManager
         FileLogger.w(TAG, "[normalizeToolCallMessages] Pending assistant with tool_calls added at end, but some tool messages may be missing");
       }
       
-      // 🔍 新增：记录输出历史的消息类型（精简版）
+      // 🔍 新增：记录输出历史的统计信息（精简版）
       FileLogger.i(TAG, "📤 [OUTPUT] 处理完成，输出历史共 " + list.size() + " 条消息");
       int userMessageCount = 0;
       int preservedMultimodalCount = 0;
@@ -638,7 +638,6 @@ public class ContextManager
           if (contentObj instanceof JSONArray)
           {
             preservedMultimodalCount++;
-            FileLogger.i(TAG, "  [" + i + "] ✅ PRESERVED: 多模态用户消息");
           }
         }
       }
