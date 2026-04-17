@@ -253,7 +253,6 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
         else 
         {
-          FileLogger.d(TAG, "🚫 [NO_IMAGE] 没有图片数据");
           // 没有图片，隐藏 ImageView，只显示文字
           imageView.setImageBitmap(null); // 清除旧图片，防止复用
           imageView.setVisibility(View.GONE);
