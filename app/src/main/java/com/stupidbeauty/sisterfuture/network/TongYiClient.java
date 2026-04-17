@@ -190,55 +190,6 @@ public class TongYiClient
 
       try
       {
-        // 🔍 #5031 调试：打印发送给 API 的 messages 结构
-        FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] ========== 开始打印 messages ==========");
-        FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] messages 数量：" + messages.length());
-        for (int i = 0; i < messages.length(); i++)
-        {
-          try
-          {
-            JSONObject msg = messages.getJSONObject(i);
-            String role = msg.optString("role", "unknown");
-            boolean hasToolCalls = msg.has("tool_calls");
-            String toolCallId = msg.optString("tool_call_id", "");
-            String toolName = msg.optString("name", "");
-            
-            // 打印 role 和关键字段
-            
-            // 如果有 tool_calls，打印详细信息
-            if (hasToolCalls)
-            {
-              JSONArray toolCalls = msg.getJSONArray("tool_calls");
-
-              for (int j = 0; j < toolCalls.length(); j++)
-              {
-                JSONObject tc = toolCalls.getJSONObject(j);
-                String tcId = tc.optString("id", "unknown");
-                JSONObject func = tc.optJSONObject("function");
-                if (func != null)
-                {
-                  String funcName = func.optString("name", "unknown");
-                  String argsPreview = func.optString("arguments", "").length() > 1000 ? func.optString("arguments", "").substring(0, 1000) + "..." : func.optString("arguments", "");
-                  FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES]     tool_call[" + j + "] id=" + tcId + ", name=" + funcName + ", args_preview=" + argsPreview);
-                }
-              }
-            }
-            
-            // 如果是 tool message，打印 content 预览
-            if ("tool".equals(role) && !toolCallId.isEmpty())
-            {
-              String content = msg.optString("content", "");
-              String contentPreview = content.length() > 100 ? content.substring(0, 100) + "..." : content;
-              FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES]   tool message content preview: " + contentPreview);
-            }
-          }
-          catch (Exception e)
-          {
-            FileLogger.e(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] 解析消息 " + i + " 失败：" + e.getMessage());
-          }
-        }
-        FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] ========== messages 打印完成 ==========");
-        
         // 🔍 #5031 检查：如果有 assistant 的 tool_calls，检查是否有对应的 tool message
         boolean hasAssistantToolCalls = false;
         List<String> toolCallIdsWithoutResponse = new ArrayList<>();
@@ -282,11 +233,11 @@ public class TongYiClient
         {
           if (!toolCallIdsWithoutResponse.isEmpty())
           {
-            FileLogger.w(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] ⚠️ 检测到 tool_calls 缺少对应的 tool message！缺失的 IDs：" + toolCallIdsWithoutResponse);
+            FileLogger.w(NETWORK_TAG, "🔍 [VALIDATION] ⚠️ 检测到 tool_calls 缺少对应的 tool message！缺失的 IDs：" + toolCallIdsWithoutResponse);
           }
           else
           {
-            FileLogger.d(NETWORK_TAG, "🔍 [DEBUG_MESSAGES] ✓ 所有 tool_calls 都有对应的 tool message");
+            FileLogger.d(NETWORK_TAG, "🔍 [VALIDATION] ✓ 所有 tool_calls 都有对应的 tool message");
           }
         }
 

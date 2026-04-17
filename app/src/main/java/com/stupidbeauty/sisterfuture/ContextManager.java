@@ -622,8 +622,7 @@ public class ContextManager
         FileLogger.w(TAG, "[normalizeToolCallMessages] Pending assistant with tool_calls added at end, but some tool messages may be missing");
       }
       
-      // 🔍 新增：记录输出历史的消息类型（精简版）
-      FileLogger.i(TAG, "📤 [OUTPUT] 处理完成，输出历史共 " + list.size() + " 条消息");
+      // 🔍 新增：记录输出历史的统计信息（精简版）
       int userMessageCount = 0;
       int preservedMultimodalCount = 0;
       for (int i = 0; i < list.size(); i++)
@@ -638,7 +637,6 @@ public class ContextManager
           if (contentObj instanceof JSONArray)
           {
             preservedMultimodalCount++;
-            FileLogger.i(TAG, "  [" + i + "] ✅ PRESERVED: 多模态用户消息");
           }
         }
       }
@@ -709,7 +707,6 @@ public class ContextManager
   {
     // 1. 更新内存（唯一真相源）
     memoryHistory = new ArrayList<>(history);
-    FileLogger.d(TAG, "💾 [SAVE] 更新内存历史：" + memoryHistory.size() + " 条");
     
     // 2. 异步保存到 SP（持久化）
     try
@@ -719,8 +716,6 @@ public class ContextManager
           .putString(KEY_HISTORY, historyArray.toString())
           .putInt("current_max_rounds", currentMaxRounds)
           .apply();  // apply() 异步没关系，因为读取的是内存
-      
-      FileLogger.d(TAG, "💾 [SAVE] 保存历史到 SharedPreferences：" + history.size() + " 条");
     }
     catch (Exception e)
     {
