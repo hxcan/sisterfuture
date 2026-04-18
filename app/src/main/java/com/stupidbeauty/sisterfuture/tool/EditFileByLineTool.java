@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 
+
 /**
  * 按行文件编辑工具
  * 
@@ -92,17 +93,17 @@ public class EditFileByLineTool implements Tool
                             .put("enum", new JSONArray(new String[]{"insert", "delete", "update", "replace"})))
                         .put("lineNumber", new JSONObject()
                             .put("type", "integer")
-                            .put("description", "行号（用于 insert/update 操作）"))
+                            .put("description", "行号（用于 insert/update 操作），从 1 开始计数"))
                         .put("lines", new JSONObject()
                             .put("type", "array")
                             .put("items", new JSONObject().put("type", "string"))
                             .put("description", "要插入的行内容数组（用于 insert 操作）"))
                         .put("startLine", new JSONObject()
                             .put("type", "integer")
-                            .put("description", "起始行号（用于 delete/replace 操作）"))
+                            .put("description", "起始行号（用于 delete/replace 操作），从 1 开始计数"))
                         .put("endLine", new JSONObject()
                             .put("type", "integer")
-                            .put("description", "结束行号（不包含，用于 delete/replace 操作）"))
+                            .put("description", "结束行号（不包含，用于 delete/replace 操作），从 1 开始计数"))
                         .put("newLine", new JSONObject()
                             .put("type", "string")
                             .put("description", "新的行内容（用于 update 操作）"))
@@ -269,7 +270,7 @@ public class EditFileByLineTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求编辑文件或创建新文件时才调用此工具。支持三种输入模式：'content'（直接内容）、'filepath'（文件路径）、'create'（创建新文件）。创建新文件时需提供 outputPath 参数且 outputType 必须为 'filepath'。操作类型包括：insert（插入行）、delete（删除行）、update（修改单行）、replace（批量替换行）。行号从 0 开始计数。";
+        return "必须在用户明确要求编辑文件或创建新文件时才调用此工具。支持三种输入模式：'content'（直接内容）、'filepath'（文件路径）、'create'（创建新文件）。创建新文件时需提供 outputPath 参数且 outputType 必须为 'filepath'。操作类型包括：insert（插入行）、delete（删除行）、update（修改单行）、replace（批量替换行）。行号从 1 开始计数，符合主流编辑器（VS Code, IntelliJ IDEA, GitHub）的习惯。";
     }
 
     /**
@@ -310,17 +311,22 @@ public class EditFileByLineTool implements Tool
 
     /**
      * 应用插入操作
+     * 行号从 1 开始计数
      */
     private List<String> applyInsert(List<String> lines, JSONObject op) throws Exception
     {
         int lineNumber = op.getInt("lineNumber");
         JSONArray newLines = op.getJSONArray("lines");
         
-        int targetLine = Math.max(0, Math.min(lineNumber, lines.size()));
+        // 行号从 1 开始，转换为内部索引（从 0 开始）
+        int targetIndex = lineNumber - 1;
+        
+        // 边界处理：如果行号大于总行数，插入到末尾；如果小于 1，插入到开头
+        int insertPosition = Math.max(0, Math.min(targetIndex, lines.size()));
         
         for (int i = 0; i < newLines.length(); i++)
         {
-            lines.add(targetLine + i, newLines.getString(i));
+            lines.add(insertPosition + i, newLines.getString(i));
         }
         
         return lines;
@@ -328,14 +334,20 @@ public class EditFileByLineTool implements Tool
 
     /**
      * 应用删除操作
+     * 行号从 1 开始计数
      */
     private List<String> applyDelete(List<String> lines, JSONObject op) throws Exception
     {
         int startLine = op.getInt("startLine");
-        int endLine = op.optInt("endLine", lines.size());
+        int endLine = op.optInt("endLine", lines.size() + 1);
         
-        int start = Math.max(0, startLine);
-        int end = Math.min(endLine, lines.size());
+        // 行号从 1 开始，转换为内部索引（从 0 开始）
+        int startIndex = startLine - 1;
+        int endIndex = endLine - 1;
+        
+        // 边界处理
+        int start = Math.max(0, startIndex);
+        int end = Math.min(endIndex, lines.size());
         
         if (start >= end)
         {
@@ -348,23 +360,28 @@ public class EditFileByLineTool implements Tool
 
     /**
      * 应用更新操作
+     * 行号从 1 开始计数
      */
     private List<String> applyUpdate(List<String> lines, JSONObject op) throws Exception
     {
         int lineNumber = op.getInt("lineNumber");
         String newLine = op.getString("newLine");
         
-        if (lineNumber < 0 || lineNumber >= lines.size())
+        // 行号从 1 开始，转换为内部索引（从 0 开始）
+        int index = lineNumber - 1;
+        
+        if (index < 0 || index >= lines.size())
         {
-            throw new IllegalArgumentException("Invalid line number: " + lineNumber + ". File has " + lines.size() + " lines.");
+            throw new IllegalArgumentException("Invalid line number: " + lineNumber + ". File has " + lines.size() + " lines. Line numbers start from 1.");
         }
         
-        lines.set(lineNumber, newLine);
+        lines.set(index, newLine);
         return lines;
     }
 
     /**
      * 应用替换操作
+     * 行号从 1 开始计数
      */
     private List<String> applyReplace(List<String> lines, JSONObject op) throws Exception
     {
@@ -372,12 +389,17 @@ public class EditFileByLineTool implements Tool
         int endLine = op.getInt("endLine");
         JSONArray newLines = op.getJSONArray("newLines");
         
-        int start = Math.max(0, startLine);
-        int end = Math.min(endLine, lines.size());
+        // 行号从 1 开始，转换为内部索引（从 0 开始）
+        int startIndex = startLine - 1;
+        int endIndex = endLine - 1;
+        
+        // 边界处理
+        int start = Math.max(0, startIndex);
+        int end = Math.min(endIndex, lines.size());
         
         if (start >= end)
         {
-            throw new IllegalArgumentException("Invalid range: " + start + "-" + end + ". File has " + lines.size() + " lines.");
+            throw new IllegalArgumentException("Invalid range: " + startLine + "-" + endLine + ". File has " + lines.size() + " lines. Line numbers start from 1.");
         }
         
         List<String> replacement = new ArrayList<>();
