@@ -262,7 +262,7 @@ public class GetGitHubFileTool implements Tool
                     return;
                 }
 
-                // 正常的返回逻辑（不解码Base64）
+                // 正常的返回逻辑（不解码 Base64）
                 if (resultJson.has("content") && resultJson.getString("encoding").equals("base64"))
                 {
                     String encodedContent = resultJson.getString("content");
@@ -357,6 +357,6 @@ public class GetGitHubFileTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求读取 GitHub 文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 github_token 等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严谨工具自行验证 JSON 格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试 404 等错误情况。\n\n新增功能：\n- 支持通过参数 encoding=\"base64\" 可选返回 Base64 编码的原始文件内容（不自动解码）\n- 对于二进制文件（.keystore, .png, .jpg 等），建议默认使用 base64 模式以避免数据损坏\n- 支持 save_to_phone 参数：将文件直接保存到手机存储，避免大文件返回撑爆上下文\n- 支持 phone_path 参数：指定手机保存路径\n- 适用场景建议：\n - 二进制文件（.keystore, .apk, .png 等）必须使用 encoding=\"base64\"\n - 大文件建议使用 save_to_phone=true 直接保存到手机";
+        return "必须在用户明确要求读取 GitHub 文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 github_token 等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试 404 等错误情况。\n\n新增功能：\n- 支持通过参数 encoding=\"base64\" 可选返回 Base64 编码的原始文件内容（不自动解码）\n- 对于二进制文件（.keystore, .png, .jpg 等），建议默认使用 base64 模式以避免数据损坏\n- 支持 save_to_phone 参数：将文件直接保存到手机存储，避免大文件返回撑爆上下文\n- 支持 phone_path 参数：指定手机保存路径\n- 适用场景建议：\n - 二进制文件（.keystore, .apk, .png 等）必须使用 encoding=\"base64\"\n - 大文件建议使用 save_to_phone=true 直接保存到手机";
     }
 }
