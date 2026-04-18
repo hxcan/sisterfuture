@@ -32,7 +32,7 @@ public class CreateGitHubCommitTool implements Tool
   @Override
   public String getName()
   {
-    return "create_github_commit";
+    return "createGithubCommit";
   }
 
   @Override
@@ -41,7 +41,7 @@ public class CreateGitHubCommitTool implements Tool
     try
     {
       JSONObject functionDef = new JSONObject();
-      functionDef.put("name", "create_github_commit");
+      functionDef.put("name", "createGithubCommit");
       functionDef.put("description", "通过 GitHub API 向指定仓库的分支提交新的代码更改。此操作涉及多个步骤：获取文件信息、创建 Blob、创建 Tree、创建 Commit 和更新引用。支持文本和二进制文件上传，支持嵌套目录创建。支持删除文件（设置 delete=true）。");
 
       JSONObject parameters = new JSONObject();
@@ -302,7 +302,7 @@ public class CreateGitHubCommitTool implements Tool
             result.put("fetched_at", System.currentTimeMillis());
 
             JSONObject debugInfo = new JSONObject();
-            debugInfo.put("tool_name", "create_github_commit");
+            debugInfo.put("tool_name", "createGithubCommit");
             debugInfo.put("params", new JSONObject()
               .put("owner", owner)
               .put("repo", repo)
@@ -582,7 +582,7 @@ public class CreateGitHubCommitTool implements Tool
           result.put("fetched_at", System.currentTimeMillis());
 
           JSONObject debugInfo = new JSONObject();
-          debugInfo.put("tool_name", "create_github_commit");
+          debugInfo.put("tool_name", "createGithubCommit");
           debugInfo.put("params", new JSONObject()
             .put("owner", owner)
             .put("repo", repo)
