@@ -448,15 +448,18 @@ public class CreateGitHubCommitTool implements Tool
           Response getRefResponse = client.newCall(getRefRequest).execute();
           if (!getRefResponse.isSuccessful())
           {
-            // 💡 新增：智能错误提示 - 分支不存在
+            // 💡 新增：智能错误提示 - 分支不存在或分支保护
             String errorMessage = "获取分支引用失败：" + getRefResponse.code() + " " + getRefResponse.message();
             if (getRefResponse.code() == 404 || getRefResponse.code() == 422)
             {
-              errorMessage += "\n\n💡 sister_future 建议：这个错误通常是因为目标分支不存在哦～\n" +
-                "请先确认：\n" +
-                "- 分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
-                "- 是否需要先创建分支？可以使用 create_git_branch 工具\n" +
-                "- 建议使用 get_github_file 工具先确认分支是否存在";
+              errorMessage += "\n\n💡 sister_future 建议：这个错误通常有以下几种可能：\n" +
+                "1️⃣ **分支不存在**：请先确认分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
+                "2️⃣ **分支保护**：主分支可能开启了保护规则，需要管理员权限或通过 Pull Request 合并\n" +
+                "3️⃣ **Token 权限不足**：请检查 Token 是否有该仓库的写入权限\n\n" +
+                "解决方案：\n" +
+                "- 使用 get_github_file 工具先确认分支是否存在\n" +
+                "- 如需修改受保护的分支，请先创建新分支再提交 PR\n" +
+                "- 或使用 create_git_branch 工具创建新分支";
             }
             throw new IOException(errorMessage);
           }
@@ -553,15 +556,18 @@ public class CreateGitHubCommitTool implements Tool
           Response updateRefResponse = client.newCall(updateRefRequest).execute();
           if (!updateRefResponse.isSuccessful())
           {
-            // 💡 新增：智能错误提示 - 分支引用更新失败（通常是分支不存在）
+            // 💡 新增：智能错误提示 - 分支引用更新失败（通常是分支不存在或分支保护）
             String errorMessage = "更新分支引用失敗：" + updateRefResponse.code() + " " + updateRefResponse.message();
             if (updateRefResponse.code() == 404 || updateRefResponse.code() == 422)
             {
-              errorMessage += "\n\n💡 sister_future 建议：这个错误通常是因为目标分支不存在哦～\n" +
-                "请先确认：\n" +
-                "- 分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
-                "- 是否需要先创建分支？可以使用 create_git_branch 工具\n" +
-                "- 建议使用 get_github_file 工具先确认分支是否存在";
+              errorMessage += "\n\n💡 sister_future 建议：这个错误通常有以下几种可能：\n" +
+                "1️⃣ **分支不存在**：请先确认分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
+                "2️⃣ **分支保护**：主分支可能开启了保护规则，需要管理员权限或通过 Pull Request 合并\n" +
+                "3️⃣ **Token 权限不足**：请检查 Token 是否有该仓库的写入权限\n\n" +
+                "解决方案：\n" +
+                "- 使用 get_github_file 工具先确认分支是否存在\n" +
+                "- 如需修改受保护的分支，请先创建新分支再提交 PR\n" +
+                "- 或使用 create_git_branch 工具创建新分支";
             }
             throw new IOException(errorMessage);
           }
@@ -607,11 +613,14 @@ public class CreateGitHubCommitTool implements Tool
             {
               if (e.getMessage().contains("分支") || e.getMessage().contains("ref"))
               {
-                String friendlyTip = "\n\n💡 sister_future 建议：这个错误通常是因为目标分支不存在哦～\n" +
-                  "请先确认：\n" +
-                  "- 分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
-                  "- 是否需要先创建分支？可以使用 create_git_branch 工具\n" +
-                  "- 建议使用 get_github_file 工具先确认分支是否存在";
+                String friendlyTip = "\n\n💡 sister_future 建议：这个错误通常有以下几种可能：\n" +
+                  "1️⃣ **分支不存在**：请先确认分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
+                  "2️⃣ **分支保护**：主分支可能开启了保护规则，需要管理员权限或通过 Pull Request 合并\n" +
+                  "3️⃣ **Token 权限不足**：请检查 Token 是否有该仓库的写入权限\n\n" +
+                  "解决方案：\n" +
+                  "- 使用 get_github_file 工具先确认分支是否存在\n" +
+                  "- 如需修改受保护的分支，请先创建新分支再提交 PR\n" +
+                  "- 或使用 create_git_branch 工具创建新分支";
                 error.put("message", error.getString("message") + friendlyTip);
               }
             }
