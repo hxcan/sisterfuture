@@ -32,7 +32,7 @@ public class CreateGitHubCommitTool implements Tool
   @Override
   public String getName()
   {
-    return "create_github_commit";
+    return "createGithubCommit";
   }
 
   @Override
@@ -41,7 +41,7 @@ public class CreateGitHubCommitTool implements Tool
     try
     {
       JSONObject functionDef = new JSONObject();
-      functionDef.put("name", "create_github_commit");
+      functionDef.put("name", "createGithubCommit");
       functionDef.put("description", "通过 GitHub API 向指定仓库的分支提交新的代码更改。此操作涉及多个步骤：获取文件信息、创建 Blob、创建 Tree、创建 Commit 和更新引用。支持文本和二进制文件上传，支持嵌套目录创建。支持删除文件（设置 delete=true）。");
 
       JSONObject parameters = new JSONObject();
@@ -302,7 +302,7 @@ public class CreateGitHubCommitTool implements Tool
             result.put("fetched_at", System.currentTimeMillis());
 
             JSONObject debugInfo = new JSONObject();
-            debugInfo.put("tool_name", "create_github_commit");
+            debugInfo.put("tool_name", "createGithubCommit");
             debugInfo.put("params", new JSONObject()
               .put("owner", owner)
               .put("repo", repo)
@@ -448,7 +448,20 @@ public class CreateGitHubCommitTool implements Tool
           Response getRefResponse = client.newCall(getRefRequest).execute();
           if (!getRefResponse.isSuccessful())
           {
-            throw new IOException("获取分支引用失败：" + getRefResponse.code() + " " + getRefResponse.message());
+            // 💡 新增：智能错误提示 - 分支不存在或分支保护
+            String errorMessage = "获取分支引用失败：" + getRefResponse.code() + " " + getRefResponse.message();
+            if (getRefResponse.code() == 404 || getRefResponse.code() == 422)
+            {
+              errorMessage += "\n\n💡 sister_future 建议：这个错误通常有以下几种可能：\n" +
+                "1️⃣ **分支不存在**：请先确认分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
+                "2️⃣ **分支保护**：主分支可能开启了保护规则，需要管理员权限或通过 Pull Request 合并\n" +
+                "3️⃣ **Token 权限不足**：请检查 Token 是否有该仓库的写入权限\n\n" +
+                "解决方案：\n" +
+                "- 使用 get_github_file 工具先确认分支是否存在\n" +
+                "- 如需修改受保护的分支，请先创建新分支再提交 PR\n" +
+                "- 或使用 create_git_branch 工具创建新分支";
+            }
+            throw new IOException(errorMessage);
           }
 
           JSONObject refInfo = new JSONObject(getRefResponse.body().string());
@@ -543,7 +556,20 @@ public class CreateGitHubCommitTool implements Tool
           Response updateRefResponse = client.newCall(updateRefRequest).execute();
           if (!updateRefResponse.isSuccessful())
           {
-            throw new IOException("更新分支引用失敗：" + updateRefResponse.code() + " " + updateRefResponse.message());
+            // 💡 新增：智能错误提示 - 分支引用更新失败（通常是分支不存在或分支保护）
+            String errorMessage = "更新分支引用失敗：" + updateRefResponse.code() + " " + updateRefResponse.message();
+            if (updateRefResponse.code() == 404 || updateRefResponse.code() == 422)
+            {
+              errorMessage += "\n\n💡 sister_future 建议：这个错误通常有以下几种可能：\n" +
+                "1️⃣ **分支不存在**：请先确认分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
+                "2️⃣ **分支保护**：主分支可能开启了保护规则，需要管理员权限或通过 Pull Request 合并\n" +
+                "3️⃣ **Token 权限不足**：请检查 Token 是否有该仓库的写入权限\n\n" +
+                "解决方案：\n" +
+                "- 使用 get_github_file 工具先确认分支是否存在\n" +
+                "- 如需修改受保护的分支，请先创建新分支再提交 PR\n" +
+                "- 或使用 create_git_branch 工具创建新分支";
+            }
+            throw new IOException(errorMessage);
           }
 
           JSONObject result = new JSONObject();
@@ -556,7 +582,7 @@ public class CreateGitHubCommitTool implements Tool
           result.put("fetched_at", System.currentTimeMillis());
 
           JSONObject debugInfo = new JSONObject();
-          debugInfo.put("tool_name", "create_github_commit");
+          debugInfo.put("tool_name", "createGithubCommit");
           debugInfo.put("params", new JSONObject()
             .put("owner", owner)
             .put("repo", repo)
@@ -581,6 +607,24 @@ public class CreateGitHubCommitTool implements Tool
             error.put("status", "error");
             error.put("message", e.getMessage());
             error.put("type", e.getClass().getSimpleName());
+            
+            // 💡 新增：在错误响应中也包含友好提示
+            if (e.getMessage() != null && (e.getMessage().contains("404") || e.getMessage().contains("422")))
+            {
+              if (e.getMessage().contains("分支") || e.getMessage().contains("ref"))
+              {
+                String friendlyTip = "\n\n💡 sister_future 建议：这个错误通常有以下几种可能：\n" +
+                  "1️⃣ **分支不存在**：请先确认分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
+                  "2️⃣ **分支保护**：主分支可能开启了保护规则，需要管理员权限或通过 Pull Request 合并\n" +
+                  "3️⃣ **Token 权限不足**：请检查 Token 是否有该仓库的写入权限\n\n" +
+                  "解决方案：\n" +
+                  "- 使用 get_github_file 工具先确认分支是否存在\n" +
+                  "- 如需修改受保护的分支，请先创建新分支再提交 PR\n" +
+                  "- 或使用 create_git_branch 工具创建新分支";
+                error.put("message", error.getString("message") + friendlyTip);
+              }
+            }
+            
             callback.onResult(error);
           }
           catch (Exception ignored)
