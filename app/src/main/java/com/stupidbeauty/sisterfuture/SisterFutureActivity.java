@@ -1505,7 +1505,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     if (messageAdapter.getItemCount() > 0)
     {
-      articleListmyRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+      // ✅ 修复 #753566214831：使用 post() + scrollToPosition() 消除震荡
+      // ❌ 原 smoothScrollToPosition() 会与布局重算冲突，导致界面抖动
+      articleListmyRecyclerView.post(() -> {
+        articleListmyRecyclerView.scrollToPosition(messageAdapter.getItemCount() - 1);
+      });
     }
   }
 
