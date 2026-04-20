@@ -11,7 +11,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.List;
 
 public class SearchFileInRepoTool implements Tool {
     private static final String TAG = "SearchFileInRepo";
@@ -68,16 +67,6 @@ public class SearchFileInRepoTool implements Tool {
     public void executeAsync(@NonNull JSONObject args, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
             try {
-                // 🔥 #761200615112 在解析前获取 ToolManager（用于参数历史记录）
-                ToolManager toolManager = null;
-                try {
-                    // 通过 Context 获取 ToolManager（需要从 Application 或 Activity 传递）
-                    // 这里简化处理，假设可以通过某种方式获取
-                    // 实际实现中需要在 SisterFutureActivity 中传递 toolManager 引用
-                } catch (Exception e) {
-                    Log.w(TAG, "获取 ToolManager 失败，将不使用参数历史记录", e);
-                }
-
                 String owner = args.getString("owner");
                 String repo = args.getString("repo");
                 String pattern = args.getString("fileNamePattern");
@@ -160,46 +149,6 @@ public class SearchFileInRepoTool implements Tool {
                 
                 callback.onResult(result);
 
-            } catch (IllegalArgumentException e) {
-                // 🔥 #761200615112 捕获参数缺失错误，尝试生成引导信息
-                Log.e(TAG, "参数错误：" + e.getMessage(), e);
-                
-                try {
-                    String missingParam = extractMissingParamName(e.getMessage());
-                    String toolName = getName();
-                    
-                    // 尝试从 ToolManager 获取参数历史记录（如果可用）
-                    // 注意：实际实现中需要传递 toolManager 引用
-                    // 这里先返回基础错误信息
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    
-                    if (missingParam != null) {
-                        // 生成友好的引导信息
-                        String guide = "主人，缺少必需参数 '" + missingParam + "' 呢～ (´•̥ ̯ •̥`)\n\n" +
-                                      "💡 提示：请提供该参数的值。\n" +
-                                      "\n如果您之前用过这个工具，我可以帮您回忆一下用过的值哦！\n" +
-                                      "(此功能正在开发中，即将上线～ (≧∇≦) ﾉ)";
-                        
-                        error.put("message", guide);
-                        error.put("missing_parameter", missingParam);
-                    } else {
-                        error.put("message", e.getMessage());
-                    }
-                    
-                    error.put("type", "IllegalArgumentException");
-                    callback.onResult(error);
-                } catch (Exception ex) {
-                    // 如果生成引导信息失败，返回原始错误
-                    try {
-                        JSONObject error = new JSONObject();
-                        error.put("status", "error");
-                        error.put("message", e.getMessage());
-                        error.put("type", "IllegalArgumentException");
-                        callback.onResult(error);
-                    } catch (Exception ignored) {}
-                }
-                
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
                 try {
@@ -211,33 +160,6 @@ public class SearchFileInRepoTool implements Tool {
                 } catch (Exception ignored) {}
             }
         });
-    }
-
-    /**
-     * 从错误信息中提取缺失的参数名
-     */
-    private String extractMissingParamName(String message) {
-        if (message == null) {
-            return null;
-        }
-        
-        // 匹配 "No value for [paramName]" 格式
-        if (message.contains("No value for ")) {
-            int start = message.indexOf("No value for ") + "No value for ".length();
-            int end = message.indexOf("'", start);
-            if (end == -1) {
-                end = message.length();
-            }
-            return message.substring(start, end).trim().replace("'", "");
-        }
-        
-        // 匹配 "Missing required parameter: [paramName]" 格式
-        if (message.contains("Missing required parameter")) {
-            int start = message.indexOf(": ") + 2;
-            return message.substring(start).trim();
-        }
-        
-        return null;
     }
 
     @Override
