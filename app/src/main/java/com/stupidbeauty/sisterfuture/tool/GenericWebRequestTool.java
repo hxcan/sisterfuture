@@ -11,6 +11,7 @@ import java.util.Base64;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
 /**
  * 通用 HTTP 请求工具 - 支持任意外部 API 调用
  * 作为"瑞士军刀"临时验证工具，不执行脚本、不存凭证
@@ -37,14 +38,14 @@ public class GenericWebRequestTool implements Tool {
 
     @Override
     public String getName() {
-        return "generic_web_request";
+        return "genericWebRequest";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "generic_web_request");
+            functionDef.put("name", "genericWebRequest");
             functionDef.put("description", "通用 HTTP 请求工具，支持 GET/POST/PUT/DELETE/PATCH，可自定义 Headers/Auth/Body，用于临时 API 验证和调试。不执行 JavaScript，不持久化敏感凭证。超时默认 30 秒 (可配置)。");
 
             JSONObject parameters = new JSONObject();
