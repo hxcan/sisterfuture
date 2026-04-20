@@ -8,11 +8,15 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import android.util.Log;
 
+/**
+ * 🔥 #761200615112 工具参数历史记录管理器
+ */
 public class ToolManager
 {
   private static final String TAG = "ToolManager";
   private Map<String, Tool> toolRegistry = new HashMap<>();
   private ToolCallTracker callTracker = new ToolCallTracker();  // 🔥 幂等性追踪器
+  private ToolParameterHistory parameterHistory = new ToolParameterHistory();  // 🔥 参数历史记录
 
   public void registerTool(Tool tool)
   {
@@ -78,6 +82,10 @@ public class ToolManager
       try
       {
         JSONObject result = executeTool(toolName, arguments);
+        
+        // 🔥 #761200615112 记录成功调用的参数
+        recordToolSuccess(toolName, arguments);
+        
         callback.onResult(result);
       }
       catch (Exception e)
@@ -87,8 +95,23 @@ public class ToolManager
     }
     else
     {
-      // 异步工具直接调用
-      tool.executeAsync(arguments, callback);
+      // 异步工具直接调用（在回调中记录）
+      tool.executeAsync(arguments, new Tool.OnResultCallback()
+      {
+        @Override
+        public void onResult(JSONObject result)
+        {
+          // 🔥 #761200615112 记录成功调用的参数
+          recordToolSuccess(toolName, arguments);
+          callback.onResult(result);
+        }
+
+        @Override
+        public void onError(Exception e)
+        {
+          callback.onError(e);
+        }
+      });
     }
   }
 
@@ -132,5 +155,17 @@ public class ToolManager
   public ToolCallTracker getCallTracker()
   {
     return callTracker;
+  }
+
+  // 🔥 #761200615112 新增：获取参数历史记录管理器
+  public ToolParameterHistory getParameterHistory()
+  {
+    return parameterHistory;
+  }
+
+  // 🔥 #761200615112 新增：记录成功调用的参数
+  public void recordToolSuccess(String toolName, JSONObject arguments)
+  {
+    parameterHistory.recordSuccess(toolName, arguments);
   }
 }
