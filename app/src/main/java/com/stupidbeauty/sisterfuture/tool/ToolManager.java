@@ -8,11 +8,15 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import android.util.Log;
 
+/**
+ * 🔥 #761200615112 工具参数历史记录管理器
+ */
 public class ToolManager
 {
   private static final String TAG = "ToolManager";
   private Map<String, Tool> toolRegistry = new HashMap<>();
   private ToolCallTracker callTracker = new ToolCallTracker();  // 🔥 幂等性追踪器
+  private ToolParameterHistory parameterHistory = new ToolParameterHistory();  // 🔥 参数历史记录
 
   public void registerTool(Tool tool)
   {
@@ -78,7 +82,43 @@ public class ToolManager
       try
       {
         JSONObject result = executeTool(toolName, arguments);
+        
+        // 🔥 #761200615112 记录成功调用的参数
+        recordToolSuccess(toolName, arguments);
+        
         callback.onResult(result);
+      }
+      catch (IllegalArgumentException e)
+      {
+        // 🔥 #761200615112 捕获参数缺失错误，生成智能引导
+        Log.e(TAG, "同步工具参数错误：" + e.getMessage(), e);
+        
+        try
+        {
+          String missingParam = extractMissingParamName(e.getMessage());
+          String guide = parameterHistory.generateGuideMessage(toolName, missingParam);
+          
+          JSONObject error = new JSONObject();
+          error.put("status", "error");
+          
+          if (missingParam != null)
+          {
+            error.put("message", guide);
+            error.put("missing_parameter", missingParam);
+          }
+          else
+          {
+            error.put("message", e.getMessage());
+          }
+          
+          error.put("type", "IllegalArgumentException");
+          callback.onResult(error); // 返回友好错误，而不是抛出异常
+        }
+        catch (Exception ex)
+        {
+          Log.w(TAG, "生成引导信息失败，返回原始错误", ex);
+          callback.onError(e); // 如果生成引导失败，返回原始错误
+        }
       }
       catch (Exception e)
       {
@@ -87,8 +127,23 @@ public class ToolManager
     }
     else
     {
-      // 异步工具直接调用
-      tool.executeAsync(arguments, callback);
+      // 异步工具直接调用（在回调中记录）
+      tool.executeAsync(arguments, new Tool.OnResultCallback()
+      {
+        @Override
+        public void onResult(JSONObject result)
+        {
+          // 🔥 #761200615112 记录成功调用的参数
+          recordToolSuccess(toolName, arguments);
+          callback.onResult(result);
+        }
+
+        @Override
+        public void onError(Exception e)
+        {
+          callback.onError(e);
+        }
+      });
     }
   }
 
@@ -132,5 +187,58 @@ public class ToolManager
   public ToolCallTracker getCallTracker()
   {
     return callTracker;
+  }
+
+  // 🔥 #761200615112 新增：获取参数历史记录管理器
+  public ToolParameterHistory getParameterHistory()
+  {
+    return parameterHistory;
+  }
+
+  // 🔥 #761200615112 新增：记录成功调用的参数
+  public void recordToolSuccess(String toolName, JSONObject arguments)
+  {
+    parameterHistory.recordSuccess(toolName, arguments);
+  }
+
+  // 🔥 #761200615112 新增：从错误信息中提取缺失的参数名（通用方法）
+  private String extractMissingParamName(String message)
+  {
+    if (message == null)
+    {
+      return null;
+    }
+    
+    // 匹配 "No value for [paramName]" 格式（org.json 抛出的异常）
+    if (message.contains("No value for "))
+    {
+      int start = message.indexOf("No value for ") + "No value for ".length();
+      int end = message.indexOf("'", start);
+      if (end == -1)
+      {
+        end = message.length();
+      }
+      return message.substring(start, end).trim().replace("'", "");
+    }
+    
+    // 匹配 "Missing required parameter: [paramName]" 格式
+    if (message.contains("Missing required parameter"))
+    {
+      int start = message.indexOf(": ") + 2;
+      return message.substring(start).trim();
+    }
+    
+    // 匹配 "Required parameter '[paramName]' is missing" 格式
+    if (message.contains("Required parameter") && message.contains("is missing"))
+    {
+      int start = message.indexOf("'") + 1;
+      int end = message.indexOf("'", start);
+      if (start > 0 && end > start)
+      {
+        return message.substring(start, end).trim();
+      }
+    }
+    
+    return null;
   }
 }
