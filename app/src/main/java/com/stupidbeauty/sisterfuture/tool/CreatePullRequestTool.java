@@ -37,7 +37,7 @@ public class CreatePullRequestTool implements Tool
     @Override
     public String getName()
     {
-        return "create_pull_request";
+        return "createPullRequest";
     }
 
     @Override
@@ -46,7 +46,7 @@ public class CreatePullRequestTool implements Tool
         try
         {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "create_pull_request");
+            functionDef.put("name", "createPullRequest");
             functionDef.put("description", "通过 GitHub API 创建 Pull Request。支持指定标题、描述、分支、审核者等参数");
 
             JSONObject parameters = new JSONObject();
@@ -328,7 +328,7 @@ public class CreatePullRequestTool implements Tool
                 catch (Exception ex)
                 {
                     FileLogger.e(TAG, "构建错误响应时失败", ex);
-                    // 最后的fallback
+                    // 最后的 fallback
                     callback.onResult(new JSONObject());
                 }
             }
