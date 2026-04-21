@@ -159,7 +159,7 @@ public class ToolManager
               Log.d(TAG, ">>> [ASYNC] 提取到缺失参数: " + missingParam);
               
               String guide = parameterHistory.generateGuideMessage(toolName, missingParam);
-              Log.d(TAG, ">>> [ASYNC] 生成的引导信息: " + (guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null"));
+              Log.d(TAG, ">>> [ASYNC] 生成的引导信息: " + (guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null");
               
               JSONObject error = new JSONObject();
               error.put("status", "error");
