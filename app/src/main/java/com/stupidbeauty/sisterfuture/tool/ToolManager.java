@@ -141,6 +141,40 @@ public class ToolManager
         @Override
         public void onError(Exception e)
         {
+          // 🔥 #761200615112 为异步工具也添加参数缺失智能引导
+          if (e instanceof IllegalArgumentException)
+          {
+            Log.e(TAG, "异步工具参数错误：" + e.getMessage(), e);
+            
+            try
+            {
+              String missingParam = extractMissingParamName(e.getMessage());
+              String guide = parameterHistory.generateGuideMessage(toolName, missingParam);
+              
+              JSONObject error = new JSONObject();
+              error.put("status", "error");
+              
+              if (missingParam != null)
+              {
+                error.put("message", guide);
+                error.put("missing_parameter", missingParam);
+              }
+              else
+              {
+                error.put("message", e.getMessage());
+              }
+              
+              error.put("type", "IllegalArgumentException");
+              callback.onResult(error); // 返回友好错误，而不是抛出异常
+              return;
+            }
+            catch (Exception ex)
+            {
+              Log.w(TAG, "异步工具生成引导信息失败，返回原始错误", ex);
+            }
+          }
+          
+          // 如果不是 IllegalArgumentException 或生成引导失败，返回原始错误
           callback.onError(e);
         }
       });
