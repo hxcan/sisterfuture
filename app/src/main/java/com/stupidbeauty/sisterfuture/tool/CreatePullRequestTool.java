@@ -119,7 +119,7 @@ public class CreatePullRequestTool implements Tool
         executor.execute(() -> {
             try
             {
-                // === 1. 解析参数 ===
+                // === 1. 解析参数 - 让 getString 自然抛出 JSONException
                 String owner = arguments.getString("owner");
                 String repo = arguments.getString("repo");
                 String title = arguments.getString("title");
@@ -134,7 +134,7 @@ public class CreatePullRequestTool implements Tool
                 FileLogger.d(TAG, "参数：head=" + head + ", base=" + base + ", draft=" + draft);
                 FileLogger.d(TAG, "Token 长度：" + (token.isEmpty() ? 0 : token.length()));
 
-                // === 2. 获取 Token（如果未提供）===
+                // === 2. 获取 Token（如果未提供）
                 if (token.isEmpty())
                 {
                     FileLogger.d(TAG, "Token 为空，尝试从备注读取...");
@@ -159,16 +159,11 @@ public class CreatePullRequestTool implements Tool
 
                 if (token.isEmpty())
                 {
-                    FileLogger.e(TAG, "✗ 缺少 GitHub token");
-                    JSONObject error = new JSONObject();
-                    error.put("success", false);
-                    error.put("error", "缺少 GitHub 访问令牌 (token)，且未在备注中配置");
-                    error.put("logs", new JSONArray().put("✗ 错误：缺少 token"));
-                    callback.onResult(error);
-                    return;
+                    // 🔥 修复：抛出标准异常，让 ToolManager 处理
+                    throw new IllegalArgumentException("Missing required parameter: token");
                 }
 
-                // === 3. 构建请求 ===
+                // === 3. 构建请求
                 String apiUrl = API_BASE + "/" + owner + "/" + repo + "/pulls";
                 FileLogger.d(TAG, "API URL: " + apiUrl);
 
@@ -181,7 +176,7 @@ public class CreatePullRequestTool implements Tool
 
                 FileLogger.d(TAG, "请求体：" + prData.toString(2));
 
-                // === 4. 发送 HTTP 请求 ===
+                // === 4. 发送 HTTP 请求
                 OkHttpClient client = new OkHttpClient();
                 
                 RequestBody requestBody = RequestBody.create(
@@ -214,7 +209,7 @@ public class CreatePullRequestTool implements Tool
                         FileLogger.e(TAG, "错误响应：" + responseBody);
                     }
 
-                    // === 5. 处理成功响应 ===
+                    // === 5. 处理成功响应
                     if (statusCode == 201)
                     {
                         JSONObject jsonResponse = new JSONObject(responseBody);
@@ -241,7 +236,7 @@ public class CreatePullRequestTool implements Tool
                         
                         callback.onResult(result);
                     }
-                    // === 6. 处理失败响应 ===
+                    // === 6. 处理失败响应
                     else
                     {
                         String errorMessage = "未知错误";
@@ -297,40 +292,13 @@ public class CreatePullRequestTool implements Tool
             }
             catch (Exception e)
             {
-                // === 7. 捕获异常 ===
+                // === 7. 捕获异常 - 调用 onError 让 ToolManager 处理
                 FileLogger.e(TAG, "✗ 执行异常", e);
                 FileLogger.e(TAG, "异常类型：" + e.getClass().getName());
                 FileLogger.e(TAG, "异常消息：" + (e.getMessage() != null ? e.getMessage() : "null"));
                 
-                // 打印完整堆栈到日志
-                StringBuilder stackTrace = new StringBuilder();
-                for (StackTraceElement element : e.getStackTrace())
-                {
-                    stackTrace.append("  at ").append(element.toString()).append("\n");
-                }
-                FileLogger.e(TAG, "堆栈跟踪:\n" + stackTrace.toString());
-
-                try
-                {
-                    JSONArray logs = new JSONArray();
-                    logs.put("开始创建 Pull Request...");
-                    logs.put("✗ 异常：" + e.getClass().getSimpleName());
-                    logs.put("详情：" + (e.getMessage() != null ? e.getMessage() : "null"));
-
-                    JSONObject result = new JSONObject();
-                    result.put("success", false);
-                    result.put("error", e.getMessage() != null ? e.getMessage() : "Unknown exception: " + e.getClass().getName());
-                    result.put("exception_type", e.getClass().getName());
-                    result.put("logs", logs);
-                    
-                    callback.onResult(result);
-                }
-                catch (Exception ex)
-                {
-                    FileLogger.e(TAG, "构建错误响应时失败", ex);
-                    // 最后的 fallback
-                    callback.onResult(new JSONObject());
-                }
+                // 🔥 修复：调用 onError 而不是 onResult
+                callback.onError(e);
             }
         });
     }
