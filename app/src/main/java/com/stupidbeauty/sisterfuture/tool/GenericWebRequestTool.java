@@ -11,7 +11,6 @@ import java.util.Base64;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-
 /**
  * 通用 HTTP 请求工具 - 支持任意外部 API 调用
  * 作为"瑞士军刀"临时验证工具，不执行脚本、不存凭证
@@ -19,6 +18,7 @@ import java.util.concurrent.Executors;
  * <p>新增功能：
  * - 连续遇到 JsonException 错误时自动添加参数检查引导
  * - 帮助快速定位参数格式问题
+ * - 提供历史参数值推荐
  */
 public class GenericWebRequestTool implements Tool {
     private static final String TAG = "GenericWebRequestTool";
@@ -153,6 +153,13 @@ public class GenericWebRequestTool implements Tool {
                 String authType = arguments.optString("auth_type", "none");
                 String authValue = arguments.optString("auth_value", null);
                 int timeoutSec = arguments.optInt("timeout_sec", DEFAULT_TIMEOUT_SEC);
+
+                // 🔥 记录成功参数到历史
+                ToolParameterHistory.recordParameter(getName(), "url", url);
+                ToolParameterHistory.recordParameter(getName(), "method", method);
+                if (authType != null && !authType.equals("none")) {
+                    ToolParameterHistory.recordParameter(getName(), "auth_type", authType);
+                }
 
                 // 2. 构建请求
                 Request.Builder builder = new Request.Builder().url(url);
@@ -309,7 +316,36 @@ public class GenericWebRequestTool implements Tool {
                         // 连续 2 次或以上，添加参数检查引导
                         if (consecutiveJsonExceptionCount >= JSON_EXCEPTION_THRESHOLD) {
                             error.put("json_exception_guide", generateJsonExceptionGuide());
-                            android.util.Log.w(TAG, "连续 JsonException 次数已达阈值，添加参数检查引导");
+                            
+                            // 🔥 新增：添加历史参数值推荐
+                            JSONObject suggestedValues = new JSONObject();
+                            try {
+                                // 获取 url 的历史值
+                                JSONArray urlHistory = ToolParameterHistory.getRecentValues(getName(), "url", 3);
+                                if (urlHistory.length() > 0) {
+                                    suggestedValues.put("url", urlHistory);
+                                }
+                                
+                                // 获取 method 的历史值
+                                JSONArray methodHistory = ToolParameterHistory.getRecentValues(getName(), "method", 3);
+                                if (methodHistory.length() > 0) {
+                                    suggestedValues.put("method", methodHistory);
+                                }
+                                
+                                // 获取 auth_type 的历史值
+                                JSONArray authTypeHistory = ToolParameterHistory.getRecentValues(getName(), "auth_type", 3);
+                                if (authTypeHistory.length() > 0) {
+                                    suggestedValues.put("auth_type", authTypeHistory);
+                                }
+                                
+                                if (suggestedValues.length() > 0) {
+                                    error.put("suggested_values", suggestedValues);
+                                }
+                            } catch (Exception ex) {
+                                android.util.Log.w(TAG, "获取历史参数值失败", ex);
+                            }
+                            
+                            android.util.Log.w(TAG, "连续 JsonException 次数已达阈值，添加参数检查引导和历史值推荐");
                         }
                     } else {
                         // 其他错误，重置计数器
