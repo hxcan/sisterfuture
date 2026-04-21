@@ -8,7 +8,6 @@ import com.stupidbeauty.sisterfuture.tools.ListPhoneDirectoryTool;
 import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
 import android.content.Context;
 
-
 /**
  * 工具注册中心 - 集中管理所有工具的注册逻辑
  * 
@@ -124,7 +123,8 @@ public class ToolRegistry
     toolManager.registerTool(new RemoveShoppingItemTool(context));
 
     // === SSH 远程命令工具 ===
-    toolManager.registerTool(new RemoteCommandTool(context));
+    // 🔥 修改：RemoteCommandTool → ExecuteRemoteCommandTool
+    toolManager.registerTool(new ExecuteRemoteCommandTool(context));
 
     // === GitHub 文件搜索工具 ===
     toolManager.registerTool(new SearchFileInRepoTool(context));
