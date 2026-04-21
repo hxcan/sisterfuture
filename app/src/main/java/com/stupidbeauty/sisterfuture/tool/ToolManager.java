@@ -83,12 +83,12 @@ public class ToolManager
       }
       catch (IllegalArgumentException e)
       {
-        Log.e(TAG, "同步工具参数错误(IllegalArgumentException)：" + e.getMessage(), e);
+        Log.e(TAG, "同步工具参数错误 (IllegalArgumentException)：" + e.getMessage(), e);
         handleParameterError(e, toolName, callback);
       }
       catch (JSONException e)
       {
-        Log.e(TAG, "同步工具参数错误(JSONException)：" + e.getMessage(), e);
+        Log.e(TAG, "同步工具参数错误 (JSONException)：" + e.getMessage(), e);
         handleParameterError(e, toolName, callback);
       }
       catch (Exception e)
@@ -111,7 +111,7 @@ public class ToolManager
         public void onError(Exception e)
         {
           Log.e(TAG, ">>> [ASYNC] 异步工具出错！tool=" + toolName + ", error=" + e.getMessage(), e);
-          Log.d(TAG, ">>> [ASYNC] 错误类型: " + e.getClass().getName());
+          Log.d(TAG, ">>> [ASYNC] 错误类型：" + e.getClass().getName());
           
           if (e instanceof IllegalArgumentException || e instanceof JSONException)
           {
@@ -120,7 +120,7 @@ public class ToolManager
           }
           else
           {
-            Log.d(TAG, ">>> [ASYNC] 返回原始错误: " + e.getMessage());
+            Log.d(TAG, ">>> [ASYNC] 返回原始错误：" + e.getMessage());
             callback.onError(e);
           }
         }
@@ -133,11 +133,11 @@ public class ToolManager
     try
     {
       String missingParam = extractMissingParamName(e.getMessage());
-      Log.d(TAG, ">>> [HANDLE] 提取到缺失参数: " + missingParam);
+      Log.d(TAG, ">>> [HANDLE] 提取到缺失参数：" + missingParam);
       
       String guide = parameterHistory.generateGuideMessage(toolName, missingParam);
       String guidePreview = guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null";
-      Log.d(TAG, ">>> [HANDLE] 生成的引导信息: " + guidePreview);
+      Log.d(TAG, ">>> [HANDLE] 生成的引导信息：" + guidePreview);
       
       JSONObject error = new JSONObject();
       error.put("status", "error");
@@ -153,6 +153,18 @@ public class ToolManager
       }
       
       error.put("type", e.getClass().getSimpleName());
+      
+      // 🔥 新增：统一添加参数历史候选值推荐
+      try {
+        JSONObject suggestedValues = parameterHistory.getSuggestedValues(toolName);
+        if (suggestedValues != null && suggestedValues.length() > 0) {
+          error.put("suggested_values", suggestedValues);
+          Log.d(TAG, ">>> [HANDLE] 已添加历史参数值推荐：" + suggestedValues.toString());
+        }
+      } catch (Exception ex) {
+        Log.w(TAG, "获取历史参数值失败", ex);
+      }
+      
       Log.d(TAG, ">>> [HANDLE] 准备返回智能引导错误...");
       callback.onResult(error);
       Log.d(TAG, ">>> [HANDLE] 已返回智能引导错误！");
@@ -208,7 +220,7 @@ public class ToolManager
 
   public void recordToolSuccess(String toolName, JSONObject arguments)
   {
-    Log.d(TAG, ">>> [RECORD] 记录工具成功调用: tool=" + toolName + ", args=" + arguments);
+    Log.d(TAG, ">>> [RECORD] 记录工具成功调用：tool=" + toolName + ", args=" + arguments);
     parameterHistory.recordSuccess(toolName, arguments);
   }
 
@@ -228,7 +240,7 @@ public class ToolManager
         end = message.length();
       }
       String param = message.substring(start, end).trim().replace("'", "");
-      Log.d(TAG, ">>> [EXTRACT] 匹配到 'No value for' 格式, 参数名: " + param);
+      Log.d(TAG, ">>> [EXTRACT] 匹配到 'No value for' 格式，参数名：" + param);
       return param;
     }
     
@@ -236,7 +248,7 @@ public class ToolManager
     {
       int start = message.indexOf(": ") + 2;
       String param = message.substring(start).trim();
-      Log.d(TAG, ">>> [EXTRACT] 匹配到 'Missing required parameter' 格式, 参数名: " + param);
+      Log.d(TAG, ">>> [EXTRACT] 匹配到 'Missing required parameter' 格式，参数名：" + param);
       return param;
     }
     
@@ -247,12 +259,12 @@ public class ToolManager
       if (start > 0 && end > start)
       {
         String param = message.substring(start, end).trim();
-        Log.d(TAG, ">>> [EXTRACT] 匹配到 'Required parameter ... is missing' 格式, 参数名: " + param);
+        Log.d(TAG, ">>> [EXTRACT] 匹配到 'Required parameter ... is missing' 格式，参数名：" + param);
         return param;
       }
     }
     
-    Log.d(TAG, ">>> [EXTRACT] 未匹配到任何已知格式, message=" + message);
+    Log.d(TAG, ">>> [EXTRACT] 未匹配到任何已知格式，message=" + message);
     return null;
   }
 }
