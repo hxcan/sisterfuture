@@ -11,14 +11,9 @@ import java.util.Base64;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-
 /**
  * 通用 HTTP 请求工具 - 支持任意外部 API 调用
  * 作为"瑞士军刀"临时验证工具，不执行脚本、不存凭证
- *
- * <p>新增功能：
- * - 连续遇到 JsonException 错误时自动添加参数检查引导
- * - 帮助快速定位参数格式问题
  */
 public class GenericWebRequestTool implements Tool {
     private static final String TAG = "GenericWebRequestTool";
@@ -154,6 +149,13 @@ public class GenericWebRequestTool implements Tool {
                 String authValue = arguments.optString("auth_value", null);
                 int timeoutSec = arguments.optInt("timeout_sec", DEFAULT_TIMEOUT_SEC);
 
+                // 🔥 记录成功参数到历史
+                ToolParameterHistory.recordParameter(getName(), "url", url);
+                ToolParameterHistory.recordParameter(getName(), "method", method);
+                if (authType != null && !authType.equals("none")) {
+                    ToolParameterHistory.recordParameter(getName(), "auth_type", authType);
+                }
+
                 // 2. 构建请求
                 Request.Builder builder = new Request.Builder().url(url);
 
@@ -182,7 +184,6 @@ public class GenericWebRequestTool implements Tool {
                         if (authValue == null || authValue.isEmpty()) {
                             throw new IllegalArgumentException("Basic Auth 需要 auth_value 参数 (格式：username:password)");
                         }
-                        // Fixed: Use android.util.Base64 with NO_WRAP constant
                         byte[] authBytes = authValue.getBytes("UTF-8");
                         String basicAuth = android.util.Base64.encodeToString(authBytes, android.util.Base64.NO_WRAP);
                         builder.header("Authorization", "Basic " + basicAuth);
@@ -201,7 +202,6 @@ public class GenericWebRequestTool implements Tool {
                         break;
                     case "none":
                     default:
-                        // 无认证，跳过
                         break;
                 }
 
@@ -215,7 +215,6 @@ public class GenericWebRequestTool implements Tool {
                         contentType = "application/json";
                     } else if (bodyStr != null && bodyStr.contains("=") && !bodyStr.startsWith("{")) {
                         contentType = "application/x-www-form-urlencoded";
-                        // Fixed: FormBody.Builder requires key-value pair
                         int equalsIndex = bodyStr.indexOf("=");
                         if (equalsIndex > 0) {
                             String key = bodyStr.substring(0, equalsIndex);
@@ -293,31 +292,8 @@ public class GenericWebRequestTool implements Tool {
 
             } catch (Exception e) {
                 android.util.Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    error.put("stack_trace", e.toString());
-
-                    // JsonException 错误处理增强
-                    if (e instanceof JSONException) {
-                        // 是 JsonException，增加计数器
-                        consecutiveJsonExceptionCount++;
-                        error.put("consecutive_json_exception_count", consecutiveJsonExceptionCount);
-
-                        // 连续 2 次或以上，添加参数检查引导
-                        if (consecutiveJsonExceptionCount >= JSON_EXCEPTION_THRESHOLD) {
-                            error.put("json_exception_guide", generateJsonExceptionGuide());
-                            android.util.Log.w(TAG, "连续 JsonException 次数已达阈值，添加参数检查引导");
-                        }
-                    } else {
-                        // 其他错误，重置计数器
-                        consecutiveJsonExceptionCount = 0;
-                    }
-
-                    callback.onResult(error);
-                } catch (Exception ignored) {}
+                // 🔥 修复：调用 onError 让 ToolManager 统一处理
+                callback.onError(e);
             }
         });
     }
