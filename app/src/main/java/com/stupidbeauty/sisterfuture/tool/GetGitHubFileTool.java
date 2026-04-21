@@ -111,7 +111,7 @@ public class GetGitHubFileTool implements Tool
         {
             try
             {
-                // 1. 获取参数
+                // 1. 获取参数 - 让 getString 自然抛出 JSONException
                 String owner = arguments.getString("owner");
                 String repo = arguments.getString("repo");
                 String path = arguments.getString("path");
@@ -122,17 +122,6 @@ public class GetGitHubFileTool implements Tool
                 // 新增参数
                 boolean saveToPhone = arguments.optBoolean("save_to_phone", false);
                 String phonePath = arguments.optString("phone_path", "");
-
-                // 创建结果对象，立即包含请求参数
-                JSONObject result = new JSONObject();
-                result.put("status", "success");
-                result.put("request_params", new JSONObject()
-                    .put("owner", owner)
-                    .put("repo", repo)
-                    .put("path", path)
-                    .put("branch", branch)
-                    .put("encoding", encoding)
-                    .put("save_to_phone", saveToPhone));
 
                 // 2. 尝试从备注恢复默认值
                 if (token.isEmpty())
@@ -151,7 +140,7 @@ public class GetGitHubFileTool implements Tool
                 // 3. 验证必要参数
                 if (token.isEmpty())
                 {
-                    throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
+                    throw new IllegalArgumentException("Missing required parameter: token");
                 }
 
                 // 4. 构建请求
@@ -254,11 +243,12 @@ public class GetGitHubFileTool implements Tool
                     }
 
                     // 返回保存成功信息
-                    result.put("file_saved", true);
-                    result.put("phone_path", phonePath);
-                    result.put("file_size", decodedBytes.length);
-                    result.put("fetched_at", System.currentTimeMillis());
-                    callback.onResult(result);
+                    resultJson = new JSONObject();
+                    resultJson.put("file_saved", true);
+                    resultJson.put("phone_path", phonePath);
+                    resultJson.put("file_size", decodedBytes.length);
+                    resultJson.put("fetched_at", System.currentTimeMillis());
+                    callback.onResult(resultJson);
                     return;
                 }
 
@@ -296,59 +286,13 @@ public class GetGitHubFileTool implements Tool
                     resultJson.remove("content");
                 }
 
-                result.put("file_info", resultJson);
-                result.put("fetched_at", System.currentTimeMillis());
-
-                JSONObject debugInfo = new JSONObject();
-                debugInfo.put("tool_name", "getGitHubFile");
-                debugInfo.put("params", result.getJSONObject("request_params"));
-
-                if (resultJson.has("raw_content"))
-                {
-                    String rawContent = resultJson.getString("raw_content");
-                    debugInfo.put("raw_content_length", rawContent.length());
-                    debugInfo.put("encoding_used", "base64");
-                    debugInfo.put("warning_if_large", rawContent.length() > 2500);
-                }
-
-                result.put("debug_info", debugInfo);
-
-                callback.onResult(result);
+                callback.onResult(resultJson);
             }
             catch (Exception e)
             {
                 Log.e(TAG, "执行出错", e);
-                try
-                {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-
-                    if (arguments != null)
-                    {
-                        error.put("request_params", new JSONObject()
-                            .put("owner", arguments.optString("owner", ""))
-                            .put("repo", arguments.optString("repo", ""))
-                            .put("path", arguments.optString("path", ""))
-                            .put("branch", arguments.optString("branch", "master"))
-                            .put("encoding", arguments.optString("encoding", "text"))
-                            .put("save_to_phone", arguments.optBoolean("save_to_phone", false)));
-                    }
-
-                    error.put("sister_future_note", "⚠️ 读取 GitHub 文件失败，请检查以下参数：\n" +
-                        "1. owner - 仓库所有者是否正确（如 hxcan）\n" +
-                        "2. repo - 仓库名称是否正确（如 sisterfuture）\n" +
-                        "3. path - 文件路径是否正确（如 app/src/main/...）\n" +
-                        "4. branch - 分支名称，默认 master\n" +
-                        "5. token - GitHub 访问令牌是否有效\n\n" +
-                        "提示：可以使用 list_ftp_directory 工具查看仓库目录，或请用户确认正确的文件路径。\n\n" +
-                        "原始错误信息：" + e.getMessage());
-
-                    callback.onResult(error);
-                }
-                catch (Exception ignored)
-                {}
+                // 🔥 修复：调用 onError 而不是 onResult，让 ToolManager 处理智能引导
+                callback.onError(e);
             }
         });
     }
