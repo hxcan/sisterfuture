@@ -16,6 +16,7 @@ import java.util.Comparator;
  * 1. 记录每个工具的成功调用参数
  * 2. 按使用频率排序历史值
  * 3. 当参数缺失时提供智能引导
+ * 4. 提供所有参数的历史候选值推荐
  * 
  * @author 未来姐姐
  * @since 2026-04-20
@@ -191,6 +192,64 @@ public class ToolParameterHistory
         for (int i = 0; i < limit; i++)
         {
             result.add(values.get(i).value);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 🔥 新增：获取所有参数的历史候选值推荐
+     * 
+     * @param toolName 工具名称
+     * @return JSON 对象，包含所有参数的历史候选值
+     */
+    public JSONObject getSuggestedValues(String toolName)
+    {
+        JSONObject result = new JSONObject();
+        
+        Map<String, List<ParameterValue>> toolHistory = history.get(toolName);
+        if (toolHistory == null)
+        {
+            return result;
+        }
+        
+        try
+        {
+            for (Map.Entry<String, List<ParameterValue>> entry : toolHistory.entrySet())
+            {
+                String paramName = entry.getKey();
+                List<ParameterValue> values = entry.getValue();
+                
+                if (values == null || values.isEmpty())
+                {
+                    continue;
+                }
+                
+                // 构建该参数的候选值数组
+                JSONArray valueArray = new JSONArray();
+                int limit = Math.min(3, values.size()); // 最多返回前 3 个
+                
+                for (int i = 0; i < limit; i++)
+                {
+                    ParameterValue pv = values.get(i);
+                    JSONObject valObj = new JSONObject();
+                    valObj.put("value", pv.value);
+                    valObj.put("count", pv.count);
+                    
+                    // 格式化时间戳为 ISO 8601
+                    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+                    sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                    valObj.put("last_used", sdf.format(new java.util.Date(pv.lastUsedTime)));
+                    
+                    valueArray.put(valObj);
+                }
+                
+                result.put(paramName, valueArray);
+            }
+        }
+        catch (Exception e)
+        {
+            android.util.Log.e(TAG, "生成建议值失败", e);
         }
         
         return result;
