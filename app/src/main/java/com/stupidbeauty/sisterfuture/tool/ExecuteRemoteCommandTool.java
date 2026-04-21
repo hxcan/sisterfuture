@@ -14,27 +14,28 @@ import java.io.InputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class RemoteCommandTool implements Tool {
-    private static final String TAG = "RemoteCommandTool";
+public class ExecuteRemoteCommandTool implements Tool {
+    private static final String TAG = "ExecuteRemoteCommand";
     private static final int DEFAULT_TIMEOUT_MS = 60000; // 60 秒默认超时
     
     private final Context context;
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    public RemoteCommandTool(Context context) {
+    public ExecuteRemoteCommandTool(Context context) {
         this.context = context;
     }
 
     @Override
     public String getName() {
-        return "execute_remote_command";
+        // 🔥 修改：工具名改为驼峰风格
+        return "executeRemoteCommand";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "execute_remote_command");
+            functionDef.put("name", "executeRemoteCommand");
             functionDef.put("description", "执行远程 SSH 命令，支持密码或私钥认证");
 
             JSONObject parameters = new JSONObject();
@@ -74,6 +75,7 @@ public class RemoteCommandTool implements Tool {
     public void executeAsync(JSONObject arguments, OnResultCallback callback) {
         executor.execute(() -> {
             try {
+                // 让 getString 自然抛出 JSONException
                 String hostname = arguments.getString("hostname");
                 int port = arguments.optInt("port", 22);
                 String username = arguments.getString("username");
@@ -89,18 +91,8 @@ public class RemoteCommandTool implements Tool {
                 callback.onResult(result.toJson());
             } catch (Exception e) {
                 Log.e(TAG, "Execution failed", e);
-                try {
-                    JSONObject errorResult = new JSONObject()
-                        .put("status", "failed")
-                        .put("stdout", "")
-                        .put("stderr", e.getMessage())
-                        .put("exitCode", -1)
-                        .put("connectionStatus", "failed_to_initiate")
-                        .put("debugInfo", "Unexpected exception: " + e.getClass().getName());
-                    callback.onResult(errorResult);
-                } catch (Exception ex) {
-                    callback.onError(ex);
-                }
+                // 调用 onError 让 ToolManager 处理智能引导
+                callback.onError(e);
             }
         });
     }
@@ -111,7 +103,7 @@ public class RemoteCommandTool implements Tool {
     }
 
     /**
-     * 安全地打印 Session 配置（不使用内部 API）
+     * 安全地打印 Session 配置
      */
     private void logSessionSetup(Session session, String hostname, int port, String username, 
                                 String hostKeyCheckPolicy, long connectTimeoutMs) {
@@ -133,7 +125,7 @@ public class RemoteCommandTool implements Tool {
         String connectionStatus = "unknown";
         Throwable lastError = null;
         long startTime = System.currentTimeMillis();
-
+        
         try {
             debugInfo += String.format("[1] Init JSch at %dms\n", startTime);
             long t1 = System.currentTimeMillis();
@@ -152,7 +144,7 @@ public class RemoteCommandTool implements Tool {
                 session.setPassword(password);
                 connectionStatus = "session_created_with_password";
                 
-                // 🔧 显式设置关键配置
+                // 显式设置关键配置
                 String strictHostCheckValue = "no";
                 int connectTimeoutValue = 3000;
                 int socketTimeoutValue = 30000;
@@ -167,19 +159,19 @@ public class RemoteCommandTool implements Tool {
                 debugInfo += "[6] Setting SocketTimeout=30000ms...\n";
                 session.setConfig("SocketTimeout", String.valueOf(socketTimeoutValue));
                 
-                // 📋 记录配置摘要
+                // 记录配置摘要
                 logSessionSetup(session, hostname, port, username, strictHostCheckValue, connectTimeoutValue);
                 
             } else {
                 debugInfo += "[7] No authentication credentials provided\n";
                 session = jsch.getSession(username, hostname, port);
-                session.setPassword(""); // 尝试空密码（通常失败）
+                session.setPassword(""); // 尝试空密码
                 connectionStatus = "no_credentials";
             }
             
             debugInfo += "\n[8] Connecting to host...\n";
             long connectStart = System.currentTimeMillis();
-            session.connect(3000); // 3 秒连接超时
+            session.connect(3000);
             long connectEnd = System.currentTimeMillis();
             connectionStatus = "connected_successfully";
             debugInfo += String.format("    → Connection established after %dms (%s total)\n", 
@@ -187,64 +179,49 @@ public class RemoteCommandTool implements Tool {
                                      (connectEnd - startTime) + "ms");
 
             debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
-            // ✅ **核心修改：恢复为 ChannelExec（最稳定）**
             channel = (ChannelExec) session.openChannel("exec");
             
-            // ✅ **关键修复：设置错误输出流（防止缓冲区阻塞）**
             errStream = new ByteArrayOutputStream();
             ((ChannelExec) channel).setErrStream(errStream);
             debugInfo += "[10] Allocating command (Standard Exec Mode)... [ERROR STREAM SETUP]\n";
             
-            // ❌ **移除环境变量设置**（避免兼容性问题，参考官方示例）
-            // channel.setEnv("TERM", "xterm");
-            // channel.setEnv("LANG", "zh_CN.UTF-8");
             debugInfo += "[11] Environment variables omitted (per official example compatibility)\n";
             
             channel.setCommand(command);
-
             outStream = new ByteArrayOutputStream();
-
             debugInfo += String.format("[12] Starting command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
             channel.connect(DEFAULT_TIMEOUT_MS);
             
-            // ✅ **完全参考官方示例的读取逻辑**
             debugInfo += "[13] Reading stdout stream until channel closed...\n";
             InputStream inputStream = channel.getInputStream();
             byte[] tmp = new byte[1024];
             long idleStartTime = System.currentTimeMillis();
-            final int MAX_IDLE_MS = 5000; // 最多等待 5 秒空闲时间
+            final int MAX_IDLE_MS = 5000;
             
             while (true) {
-                // 内层循环：尽可能多地读取数据
                 while (inputStream.available() > 0) {
                     int i = inputStream.read(tmp, 0, 1024);
                     if (i < 0) break;
                     outStream.write(tmp, 0, i);
-                    idleStartTime = System.currentTimeMillis(); // 重置空闲计时器
+                    idleStartTime = System.currentTimeMillis();
                 }
                 
-                // 外层循环：检查通道状态
                 if (channel.isClosed()) {
-                    // 如果还有数据未读完，继续读
                     if (inputStream.available() > 0) continue; 
-                    
                     debugInfo += "[14] Channel closed and no more data. Exit status: " + 
                                  Integer.toString(channel.getExitStatus()) + "\n";
                     break;
                 }
                 
-                // 检查是否超过最大空闲时间
                 if ((System.currentTimeMillis() - idleStartTime) > MAX_IDLE_MS) {
                     debugInfo += "    → Detected idle timeout after " + 
                                  Integer.toString(MAX_IDLE_MS / 1000) + "s, stopping read loop.\n";
                     break;
                 }
                 
-                // 短暂休眠避免 busy-loop
                 Thread.sleep(100);
             }
             
-            // ✅ 获取错误流内容用于日志（修复编译错误）
             byte[] errBytes = errStream.toByteArray();
             if (errBytes.length > 0) {
                 debugInfo += String.format("[15] Error stream output:\n%s\n", 
@@ -262,17 +239,15 @@ public class RemoteCommandTool implements Tool {
             
             return new CommandResult("success", stdout, errStream.toString(), exitCode, 
                                     connectionStatus, debugInfo);
-
         } catch (Exception e) {
             connectionStatus = "connection_failed";
             lastError = e;
             
             String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            if (e instanceof java.net.ConnectException) {
+            if (e instanceof java.net.ConnectException)
                 connectionStatus = "network_unreachable";
-            } else if (e instanceof com.jcraft.jsch.JSchException) {
+            else if (e instanceof com.jcraft.jsch.JSchException)
                 connectionStatus = "authentication_failed";
-            }
             
             debugInfo += String.format("ERROR at %dms: %s\n", System.currentTimeMillis() - startTime, errorMsg);
             debugInfo += "Full stack trace available in logs.\n";
@@ -296,16 +271,10 @@ public class RemoteCommandTool implements Tool {
         }
     }
     
-    /**
-     * 检查是否存在可用的私钥
-     */
     private boolean isPrivateKeyAvailable() {
         return false;
     }
     
-    /**
-     * 加载私钥到 JSch（当前为占位符实现）
-     */
     private void loadPrivateKey(JSch jsch) {
         try {
             // TODO: 从 VFS 读取私钥并解析
