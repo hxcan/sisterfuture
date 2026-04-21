@@ -194,6 +194,7 @@ public class CreateGitHubCommitTool implements Tool
       {
         try
         {
+          // 1. 获取参数 - 让 getString 自然抛出 JSONException
           String owner = arguments.getString("owner");
           String repo = arguments.getString("repo");
           String branch = arguments.getString("branch");
@@ -229,7 +230,7 @@ public class CreateGitHubCommitTool implements Tool
 
             if (token.isEmpty())
             {
-              throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
+              throw new IllegalArgumentException("Missing required parameter: token");
             }
 
             OkHttpClient client = new OkHttpClient();
@@ -322,7 +323,7 @@ public class CreateGitHubCommitTool implements Tool
           {
             if (phonePath.isEmpty())
             {
-              throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path 参数");
+              throw new IllegalArgumentException("Missing required parameter: phone_path");
             }
                     
             File phoneFile = new File(phonePath);
@@ -389,7 +390,7 @@ public class CreateGitHubCommitTool implements Tool
 
           if (token.isEmpty())
           {
-            throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
+            throw new IllegalArgumentException("Missing required parameter: token");
           }
 
           OkHttpClient client = new OkHttpClient();
@@ -601,35 +602,8 @@ public class CreateGitHubCommitTool implements Tool
         catch (Exception e)
         {
           FileLogger.e(TAG, "执行出错", e);
-          try
-          {
-            JSONObject error = new JSONObject();
-            error.put("status", "error");
-            error.put("message", e.getMessage());
-            error.put("type", e.getClass().getSimpleName());
-            
-            // 💡 新增：在错误响应中也包含友好提示
-            if (e.getMessage() != null && (e.getMessage().contains("404") || e.getMessage().contains("422")))
-            {
-              if (e.getMessage().contains("分支") || e.getMessage().contains("ref"))
-              {
-                String friendlyTip = "\n\n💡 sister_future 建议：这个错误通常有以下几种可能：\n" +
-                  "1️⃣ **分支不存在**：请先确认分支名称是否正确？（有些仓库用 master，有些用 main）\n" +
-                  "2️⃣ **分支保护**：主分支可能开启了保护规则，需要管理员权限或通过 Pull Request 合并\n" +
-                  "3️⃣ **Token 权限不足**：请检查 Token 是否有该仓库的写入权限\n\n" +
-                  "解决方案：\n" +
-                  "- 使用 get_github_file 工具先确认分支是否存在\n" +
-                  "- 如需修改受保护的分支，请先创建新分支再提交 PR\n" +
-                  "- 或使用 create_git_branch 工具创建新分支";
-                error.put("message", error.getString("message") + friendlyTip);
-              }
-            }
-            
-            callback.onResult(error);
-          }
-          catch (Exception ignored)
-          {
-          }
+          // 🔥 修复：调用 onError 而不是 onResult，让 ToolManager 处理智能引导
+          callback.onError(e);
         }
       }
     );
