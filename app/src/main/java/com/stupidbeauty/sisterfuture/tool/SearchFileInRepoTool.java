@@ -33,6 +33,7 @@ public class SearchFileInRepoTool implements Tool {
             JSONObject func = new JSONObject();
             func.put("name", "searchFileInRepo");
             func.put("description", "基于 GitHub Code Search API 智能搜索仓库文件，支持文件名模式和路径过滤");
+            
             JSONObject params = new JSONObject();
             params.put("type", "object");
             params.put("properties", new JSONObject()
@@ -45,6 +46,7 @@ public class SearchFileInRepoTool implements Tool {
                 .put("token", new JSONObject().put("type", "string").put("description", "GitHub 访问令牌，可选；若未提供则从工具备注读取"))
             );
             params.put("required", new JSONArray(new String[]{"owner", "repo", "fileNamePattern"}));
+            
             func.put("parameters", params);
             return new JSONObject().put("type", "function").put("function", func);
         } catch (Exception e) {
@@ -93,9 +95,9 @@ public class SearchFileInRepoTool implements Tool {
                     }
                 }
                 
-                // 3. 最终无 token，抛出错误
+                // 3. 最终无 token，抛出错误 - 使用 IllegalArgumentException 以便 ToolManager 处理
                 if (token.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 GitHub 访问令牌，请在参数中提供 token 或先在工具备注中配置 github_token");
+                    throw new IllegalArgumentException("Missing required parameter: owner");
                 }
 
                 String query = "filename:" + pattern;
@@ -148,16 +150,10 @@ public class SearchFileInRepoTool implements Tool {
                 }
                 
                 callback.onResult(result);
-
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    callback.onResult(error);
-                } catch (Exception ignored) {}
+                // 🔥 修复：调用 onError 而不是 onResult
+                callback.onError(e);
             }
         });
     }
