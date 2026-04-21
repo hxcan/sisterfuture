@@ -74,6 +74,7 @@ public class RemoteCommandTool implements Tool {
     public void executeAsync(JSONObject arguments, OnResultCallback callback) {
         executor.execute(() -> {
             try {
+                // 🔥 修复：让 getString 自然抛出 JSONException
                 String hostname = arguments.getString("hostname");
                 int port = arguments.optInt("port", 22);
                 String username = arguments.getString("username");
@@ -89,18 +90,8 @@ public class RemoteCommandTool implements Tool {
                 callback.onResult(result.toJson());
             } catch (Exception e) {
                 Log.e(TAG, "Execution failed", e);
-                try {
-                    JSONObject errorResult = new JSONObject()
-                        .put("status", "failed")
-                        .put("stdout", "")
-                        .put("stderr", e.getMessage())
-                        .put("exitCode", -1)
-                        .put("connectionStatus", "failed_to_initiate")
-                        .put("debugInfo", "Unexpected exception: " + e.getClass().getName());
-                    callback.onResult(errorResult);
-                } catch (Exception ex) {
-                    callback.onError(ex);
-                }
+                // 🔥 修复：调用 onError 而不是返回错误对象
+                callback.onError(e);
             }
         });
     }
@@ -133,7 +124,7 @@ public class RemoteCommandTool implements Tool {
         String connectionStatus = "unknown";
         Throwable lastError = null;
         long startTime = System.currentTimeMillis();
-
+        
         try {
             debugInfo += String.format("[1] Init JSch at %dms\n", startTime);
             long t1 = System.currentTimeMillis();
@@ -201,9 +192,7 @@ public class RemoteCommandTool implements Tool {
             debugInfo += "[11] Environment variables omitted (per official example compatibility)\n";
             
             channel.setCommand(command);
-
             outStream = new ByteArrayOutputStream();
-
             debugInfo += String.format("[12] Starting command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
             channel.connect(DEFAULT_TIMEOUT_MS);
             
@@ -262,35 +251,37 @@ public class RemoteCommandTool implements Tool {
             
             return new CommandResult("success", stdout, errStream.toString(), exitCode, 
                                     connectionStatus, debugInfo);
-
         } catch (Exception e) {
             connectionStatus = "connection_failed";
             lastError = e;
             
             String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            if (e instanceof java.net.ConnectException) {
+            if (e instanceof java.net.ConnectException)
                 connectionStatus = "network_unreachable";
-            } else if (e instanceof com.jcraft.jsch.JSchException) {
+            else if (e instanceof com.jcraft.jsch.JSchException)
                 connectionStatus = "authentication_failed";
-            }
             
             debugInfo += String.format("ERROR at %dms: %s\n", System.currentTimeMillis() - startTime, errorMsg);
             debugInfo += "Full stack trace available in logs.\n";
             
             return new CommandResult("failed", "", errorMsg, -1, connectionStatus, debugInfo);
         } finally {
-            if (channel != null && channel.isConnected()) {
+            if (channel != null && channel.isConnected())
+            {
                 debugInfo += "\n[FINALLY] Disconnecting channel...\n";
                 channel.disconnect();
             }
-            if (session != null && session.isConnected()) {
+            if (session != null && session.isConnected())
+            {
                 debugInfo += "[FINALLY] Disconnecting session...\n";
                 session.disconnect();
             }
-            if (outStream != null) {
+            if (outStream != null)
+            {
                 try { outStream.close(); } catch (Exception ignored) {}
             }
-            if (errStream != null) {
+            if (errStream != null)
+            {
                 try { errStream.close(); } catch (Exception ignored) {}
             }
         }
