@@ -96,7 +96,11 @@ public class ToolManager
         try
         {
           String missingParam = extractMissingParamName(e.getMessage());
+          Log.d(TAG, ">>> [SYNC] 提取到缺失参数: " + missingParam);
+          
           String guide = parameterHistory.generateGuideMessage(toolName, missingParam);
+          String guidePreview = guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null";
+          Log.d(TAG, ">>> [SYNC] 生成的引导信息: " + guidePreview);
           
           JSONObject error = new JSONObject();
           error.put("status", "error");
@@ -141,6 +145,52 @@ public class ToolManager
         @Override
         public void onError(Exception e)
         {
+          // 🔥 #761200615112 为异步工具也添加参数缺失智能引导 + 调试日志
+          Log.e(TAG, ">>> [ASYNC] 异步工具出错！tool=" + toolName + ", error=" + e.getMessage(), e);
+          Log.d(TAG, ">>> [ASYNC] 错误类型: " + e.getClass().getName());
+          boolean isIllegalArg = e instanceof IllegalArgumentException;
+          Log.d(TAG, ">>> [ASYNC] 是否为 IllegalArgumentException: " + isIllegalArg);
+          
+          if (e instanceof IllegalArgumentException)
+          {
+            Log.d(TAG, ">>> [ASYNC] 进入智能引导处理流程...");
+            
+            try
+            {
+              String missingParam = extractMissingParamName(e.getMessage());
+              Log.d(TAG, ">>> [ASYNC] 提取到缺失参数: " + missingParam);
+              
+              String guide = parameterHistory.generateGuideMessage(toolName, missingParam);
+              String guidePreview = guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null";
+              Log.d(TAG, ">>> [ASYNC] 生成的引导信息: " + guidePreview);
+              
+              JSONObject error = new JSONObject();
+              error.put("status", "error");
+              
+              if (missingParam != null)
+              {
+                error.put("message", guide);
+                error.put("missing_parameter", missingParam);
+              }
+              else
+              {
+                error.put("message", e.getMessage());
+              }
+              
+              error.put("type", "IllegalArgumentException");
+              Log.d(TAG, ">>> [ASYNC] 准备返回智能引导错误...");
+              callback.onResult(error); // 返回友好错误，而不是抛出异常
+              Log.d(TAG, ">>> [ASYNC] 已返回智能引导错误！");
+              return;
+            }
+            catch (Exception ex)
+            {
+              Log.w(TAG, ">>> [ASYNC] 生成引导信息失败，准备返回原始错误", ex);
+            }
+          }
+          
+          // 如果不是 IllegalArgumentException 或生成引导失败，返回原始错误
+          Log.d(TAG, ">>> [ASYNC] 返回原始错误: " + e.getMessage());
           callback.onError(e);
         }
       });
@@ -198,6 +248,7 @@ public class ToolManager
   // 🔥 #761200615112 新增：记录成功调用的参数
   public void recordToolSuccess(String toolName, JSONObject arguments)
   {
+    Log.d(TAG, ">>> [RECORD] 记录工具成功调用: tool=" + toolName + ", args=" + arguments);
     parameterHistory.recordSuccess(toolName, arguments);
   }
 
@@ -218,14 +269,18 @@ public class ToolManager
       {
         end = message.length();
       }
-      return message.substring(start, end).trim().replace("'", "");
+      String param = message.substring(start, end).trim().replace("'", "");
+      Log.d(TAG, ">>> [EXTRACT] 匹配到 'No value for' 格式, 参数名: " + param);
+      return param;
     }
     
     // 匹配 "Missing required parameter: [paramName]" 格式
     if (message.contains("Missing required parameter"))
     {
       int start = message.indexOf(": ") + 2;
-      return message.substring(start).trim();
+      String param = message.substring(start).trim();
+      Log.d(TAG, ">>> [EXTRACT] 匹配到 'Missing required parameter' 格式, 参数名: " + param);
+      return param;
     }
     
     // 匹配 "Required parameter '[paramName]' is missing" 格式
@@ -235,10 +290,13 @@ public class ToolManager
       int end = message.indexOf("'", start);
       if (start > 0 && end > start)
       {
-        return message.substring(start, end).trim();
+        String param = message.substring(start, end).trim();
+        Log.d(TAG, ">>> [EXTRACT] 匹配到 'Required parameter ... is missing' 格式, 参数名: " + param);
+        return param;
       }
     }
     
+    Log.d(TAG, ">>> [EXTRACT] 未匹配到任何已知格式, message=" + message);
     return null;
   }
 }
