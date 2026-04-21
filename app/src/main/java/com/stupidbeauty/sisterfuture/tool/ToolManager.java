@@ -99,7 +99,8 @@ public class ToolManager
           Log.d(TAG, ">>> [SYNC] 提取到缺失参数: " + missingParam);
           
           String guide = parameterHistory.generateGuideMessage(toolName, missingParam);
-          Log.d(TAG, ">>> [SYNC] 生成的引导信息: " + (guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null");
+          String guidePreview = guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null";
+          Log.d(TAG, ">>> [SYNC] 生成的引导信息: " + guidePreview);
           
           JSONObject error = new JSONObject();
           error.put("status", "error");
@@ -147,7 +148,8 @@ public class ToolManager
           // 🔥 #761200615112 为异步工具也添加参数缺失智能引导 + 调试日志
           Log.e(TAG, ">>> [ASYNC] 异步工具出错！tool=" + toolName + ", error=" + e.getMessage(), e);
           Log.d(TAG, ">>> [ASYNC] 错误类型: " + e.getClass().getName());
-          Log.d(TAG, ">>> [ASYNC] 是否为 IllegalArgumentException: " + (e instanceof IllegalArgumentException));
+          boolean isIllegalArg = e instanceof IllegalArgumentException;
+          Log.d(TAG, ">>> [ASYNC] 是否为 IllegalArgumentException: " + isIllegalArg);
           
           if (e instanceof IllegalArgumentException)
           {
@@ -159,7 +161,8 @@ public class ToolManager
               Log.d(TAG, ">>> [ASYNC] 提取到缺失参数: " + missingParam);
               
               String guide = parameterHistory.generateGuideMessage(toolName, missingParam);
-              Log.d(TAG, ">>> [ASYNC] 生成的引导信息: " + (guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null");
+              String guidePreview = guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null";
+              Log.d(TAG, ">>> [ASYNC] 生成的引导信息: " + guidePreview);
               
               JSONObject error = new JSONObject();
               error.put("status", "error");
