@@ -27,14 +27,15 @@ public class ExecuteRemoteCommandTool implements Tool {
 
     @Override
     public String getName() {
-        return "execute_remote_command";
+        // 🔥 修改：工具名改为驼峰风格
+        return "executeRemoteCommand";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "execute_remote_command");
+            functionDef.put("name", "executeRemoteCommand");
             functionDef.put("description", "执行远程 SSH 命令，支持密码或私钥认证");
 
             JSONObject parameters = new JSONObject();
