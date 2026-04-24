@@ -18,9 +18,6 @@ import java.util.concurrent.Executors;
 public class GenericWebRequestTool implements Tool {
     private static final String TAG = "GenericWebRequestTool";
     private static final int DEFAULT_TIMEOUT_SEC = 30;
-    // 连续 JsonException 错误计数器
-    private static int consecutiveJsonExceptionCount = 0;
-    private static final int JSON_EXCEPTION_THRESHOLD = 2;
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final OkHttpClient client = new OkHttpClient.Builder()
@@ -118,18 +115,6 @@ public class GenericWebRequestTool implements Tool {
         return true;
     }
 
-    /**
-     * 生成 JsonException 参数检查引导文本
-     */
-    private static String generateJsonExceptionGuide() {
-        return "💡 参数检查提示：\n请检查以下参数格式是否正确：\n" +
-               "- method: 应为 \"GET\"|\"POST\"|\"PUT\"|\"DELETE\"|\"PATCH\" (大写)\n" +
-               "- url: 应为完整的 HTTP/HTTPS URL\n" +
-               "- body: 如果是 JSON 字符串，请确保 JSON 格式有效\n" +
-               "- auth_type: 应为 \"none\"|\"basic\"|\"bearer\"|\"api_key\" (小写)\n" +
-               "- headers: 应为 JSON 对象格式 {\"key\": \"value\"}";
-    }
-
     @Override
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
@@ -148,13 +133,6 @@ public class GenericWebRequestTool implements Tool {
                 String authType = arguments.optString("auth_type", "none");
                 String authValue = arguments.optString("auth_value", null);
                 int timeoutSec = arguments.optInt("timeout_sec", DEFAULT_TIMEOUT_SEC);
-
-                // 🔥 记录成功参数到历史
-                ToolParameterHistory.recordParameter(getName(), "url", url);
-                ToolParameterHistory.recordParameter(getName(), "method", method);
-                if (authType != null && !authType.equals("none")) {
-                    ToolParameterHistory.recordParameter(getName(), "auth_type", authType);
-                }
 
                 // 2. 构建请求
                 Request.Builder builder = new Request.Builder().url(url);
