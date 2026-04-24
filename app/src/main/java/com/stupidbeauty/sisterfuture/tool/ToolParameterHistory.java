@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Collections;
 import java.util.Comparator;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
 
 /**
  * 工具参数历史记录管理器
@@ -237,9 +240,9 @@ public class ToolParameterHistory
                     valObj.put("count", pv.count);
                     
                     // 格式化时间戳为 ISO 8601
-                    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
-                    sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-                    valObj.put("last_used", sdf.format(new java.util.Date(pv.lastUsedTime)));
+                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+                    sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                    valObj.put("last_used", sdf.format(new Date(pv.lastUsedTime)));
                     
                     valueArray.put(valObj);
                 }
