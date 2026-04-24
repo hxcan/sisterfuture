@@ -1,5 +1,4 @@
 package com.stupidbeauty.sisterfuture.tool;
-
 import org.json.JSONArray;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -26,9 +25,8 @@ import android.net.Uri;
 import android.os.Environment;
 import android.provider.Settings;
 
-
 /**
- * FTP 文件请求工具增强版
+ * FTP 文件请求工具
  * 用于读取电脑上的文件内容，并支持直接保存到手机存储
  * 
  * 增强功能 (#4976):
@@ -51,14 +49,15 @@ public class FtpFileRequestTool implements Tool {
 
     @Override
     public String getName() {
-        return "ftp_file_request";
+        // 🔥 修改：工具名改为驼峰风格
+        return "ftpFileRequest";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "ftp_file_request");
+            functionDef.put("name", "ftpFileRequest");
             functionDef.put("description", "从 FTP 服务器读取文件内容。支持文本和二进制文件。增强版支持直接保存到手机存储，保存时不限制文件大小且不返回内容。");
 
             JSONObject parameters = new JSONObject();
@@ -75,10 +74,9 @@ public class FtpFileRequestTool implements Tool {
                     .put("description", "手机保存路径（可选，默认 /sdcard/Download/文件名）"))
             );
             parameters.put("required", new JSONArray(new String[]{"url"}));
-
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
-        } catch (Exception e) {
+        } catch (Exception e)
             Log.e(TAG, "Failed to build definition", e);
             return new JSONObject();
         }
@@ -107,7 +105,6 @@ public class FtpFileRequestTool implements Tool {
                 // 新增参数：是否保存到手机
                 boolean saveToPhone = arguments.optBoolean("save_to_phone", false);
                 String phonePath = arguments.optString("phone_path", "");
-
                 String username = "ftpuser";
                 String password = "yourpassword";
                 String host = "localhost";
@@ -134,25 +131,21 @@ public class FtpFileRequestTool implements Tool {
                         if (portIdx != -1) {
                             host = hostPort.substring(0, portIdx);
                             port = Integer.parseInt(hostPort.substring(portIdx + 1));
-                        } else {
+                        } else
                             host = hostPort;
-                        }
-                    } else {
+                    } else
                         host = addr;
-                    }
                 }
 
                 ftpClient.connect(host, port);
                 if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
                     throw new IOException("连接失败：" + ftpClient.getReplyString());
                 }
-
                 if (!ftpClient.login(username, password)) {
                     throw new IOException("登录失败：" + ftpClient.getReplyString());
                 }
-
                 ftpClient.enterLocalPassiveMode();
-                // 🔥 改为 BINARY 模式，支持文本和二进制文件
+                // 改为 BINARY 模式，支持文本和二进制文件
                 ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -164,13 +157,12 @@ public class FtpFileRequestTool implements Tool {
 
                 byte[] fileBytes = outputStream.toByteArray();
                 long fileSize = fileBytes.length;
-
-                // 🔥 关键修改：保存到手机时不限制大小，只在不保存时限制
+                // 关键修改：保存到手机时不限制大小，只在不保存时限制
                 if (!saveToPhone && fileSize > MAX_FILE_SIZE_FOR_CONTENT) {
                     throw new IOException("文件太大，超过 1MB 限制。请使用 save_to_phone=true 参数直接保存到手机");
                 }
 
-                // 🔥 新增：保存到手机存储逻辑
+                // 新增：保存到手机存储逻辑
                 if (saveToPhone) {
                     String fileName = getFileNameFromUrl(url);
                     String targetPath = phonePath.isEmpty() 
@@ -179,7 +171,7 @@ public class FtpFileRequestTool implements Tool {
                     
                     WriteResult writeResult = writeToPhoneStorage(targetPath, fileBytes);
                     
-                    // 🔥 保存到手机时不返回文件内容，只返回元数据
+                    // 保存到手机时不返回文件内容，只返回元数据
                     JSONObject result = new JSONObject();
                     result.put("status", "success");
                     result.put("ftp_url", url);
@@ -227,13 +219,8 @@ public class FtpFileRequestTool implements Tool {
                 }
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    callback.onResult(error);
-                } catch (Exception ignored) {}
+                // 🔥 修复：调用 onError 让 ToolManager 统一处理
+                callback.onError(e);
             } finally {
                 try {
                     if (ftpClient.isConnected()) {
@@ -301,9 +288,8 @@ public class FtpFileRequestTool implements Tool {
         try {
             // 获取应用私有目录
             File privateDir = context.getExternalFilesDir(null);
-            if (privateDir == null) {
+            if (privateDir == null)
                 privateDir = context.getFilesDir();
-            }
             
             File privateFile = new File(privateDir, fileName);
             FileOutputStream fos = new FileOutputStream(privateFile);
