@@ -1,26 +1,21 @@
 package com.stupidbeauty.sisterfuture.tool;
 import org.json.JSONArray;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import java.util.ArrayList;
-import java.util.Arrays;
-import org.apache.commons.net.ftp.FTPReply;
-import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import android.content.Context;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPReply;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Environment;
 import android.provider.Settings;
 
 /**
@@ -51,17 +46,17 @@ public class FtpFileRequestTool implements Tool {
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
-            parameters.put("properties", new JSONObject()
-                .put("url", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "FTP 文件 URL，格式：ftp://username:password@host:port/path"))
-                .put("save_to_phone", new JSONObject()
-                    .put("type", "boolean")
-                    .put("description", "是否将文件保存到手机存储（默认 false）。为 true 时不限制文件大小，不返回文件内容"))
-                .put("phone_path", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "手机保存路径（可选，默认 /sdcard/Download/文件名）"))
-            );
+            JSONObject properties = new JSONObject();
+            properties.put("url", new JSONObject()
+                .put("type", "string")
+                .put("description", "FTP 文件 URL，格式：ftp://username:password@host:port/path"));
+            properties.put("save_to_phone", new JSONObject()
+                .put("type", "boolean")
+                .put("description", "是否将文件保存到手机存储（默认 false）。为 true 时不限制文件大小，不返回文件内容"));
+            properties.put("phone_path", new JSONObject()
+                .put("type", "string")
+                .put("description", "手机保存路径（可选，默认 /sdcard/Download/文件名）"));
+            parameters.put("properties", properties);
             parameters.put("required", new JSONArray(new String[]{"url"}));
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
