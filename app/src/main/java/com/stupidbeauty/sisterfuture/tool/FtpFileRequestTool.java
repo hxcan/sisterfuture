@@ -26,7 +26,6 @@ import android.net.Uri;
 import android.os.Environment;
 import android.provider.Settings;
 
-
 /**
  * FTP 文件请求工具增强版
  * 用于读取电脑上的文件内容，并支持直接保存到手机存储
@@ -51,14 +50,15 @@ public class FtpFileRequestTool implements Tool {
 
     @Override
     public String getName() {
-        return "ftp_file_request";
+        // 🔥 修改：工具名改为驼峰风格
+        return "ftpFileRequest";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "ftp_file_request");
+            functionDef.put("name", "ftpFileRequest");
             functionDef.put("description", "从 FTP 服务器读取文件内容。支持文本和二进制文件。增强版支持直接保存到手机存储，保存时不限制文件大小且不返回内容。");
 
             JSONObject parameters = new JSONObject();
@@ -75,7 +75,6 @@ public class FtpFileRequestTool implements Tool {
                     .put("description", "手机保存路径（可选，默认 /sdcard/Download/文件名）"))
             );
             parameters.put("required", new JSONArray(new String[]{"url"}));
-
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
@@ -107,7 +106,6 @@ public class FtpFileRequestTool implements Tool {
                 // 新增参数：是否保存到手机
                 boolean saveToPhone = arguments.optBoolean("save_to_phone", false);
                 String phonePath = arguments.optString("phone_path", "");
-
                 String username = "ftpuser";
                 String password = "yourpassword";
                 String host = "localhost";
@@ -146,11 +144,9 @@ public class FtpFileRequestTool implements Tool {
                 if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
                     throw new IOException("连接失败：" + ftpClient.getReplyString());
                 }
-
                 if (!ftpClient.login(username, password)) {
                     throw new IOException("登录失败：" + ftpClient.getReplyString());
                 }
-
                 ftpClient.enterLocalPassiveMode();
                 // 🔥 改为 BINARY 模式，支持文本和二进制文件
                 ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
@@ -227,13 +223,8 @@ public class FtpFileRequestTool implements Tool {
                 }
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    callback.onResult(error);
-                } catch (Exception ignored) {}
+                // 🔥 修复：调用 onError 让 ToolManager 统一处理
+                callback.onError(e);
             } finally {
                 try {
                     if (ftpClient.isConnected()) {
