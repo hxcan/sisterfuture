@@ -102,9 +102,42 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         return messages.size();
     }
 
-    public void addMessage(MessageItem message) {
+    // 🔗 新增：添加消息并返回消息项，方便后续关联
+    public MessageItem addMessage(MessageItem message) {
         messages.add(message);
         notifyItemInserted(messages.size() - 1);
+        return message;
+    }
+
+    // 🔗 新增：根据消息 ID 查找位置
+    public int getMessagePositionById(String messageId) {
+        if (messageId == null || messageId.isEmpty()) {
+            FileLogger.w(TAG, "⚠️ [FIND_BY_ID] 消息 ID 为空，无法查找");
+            return -1;
+        }
+        
+        for (int i = 0; i < messages.size(); i++) {
+            MessageItem item = messages.get(i);
+            if (item.getMessageId() != null && item.getMessageId().equals(messageId)) {
+                FileLogger.d(TAG, "🔍 [FOUND] 找到消息 | id=" + messageId + " | position=" + i);
+                return i;
+            }
+        }
+        
+        FileLogger.w(TAG, "⚠️ [NOT_FOUND] 未找到消息 | id=" + messageId);
+        return -1;
+    }
+
+    // 🔗 新增：根据消息 ID 移除消息条目
+    public boolean removeMessageById(String messageId) {
+        int position = getMessagePositionById(messageId);
+        if (position >= 0) {
+            messages.remove(position);
+            notifyItemRemoved(position);
+            FileLogger.i(TAG, "✅ [REMOVED] 已移除消息 | id=" + messageId + " | position=" + position);
+            return true;
+        }
+        return false;
     }
 
     public void updateAiMessage(int position, String newText) {
