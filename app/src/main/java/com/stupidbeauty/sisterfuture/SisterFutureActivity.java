@@ -991,6 +991,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       // 📤 发送请求前记录
       FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
 
+      // 🔗 生成预留消息 ID
+      String currentReservedMessageId = contextManager.reserveMessageId();
+      FileLogger.i(TAG, "🔗 [RESERVE_ID] 已生成预留消息 ID | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
+
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
         @Override
@@ -1093,8 +1097,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       },
       () ->
         {
-        }
-      );
+        },
+        currentReservedMessageId); // 🔗 第 5 个参数：传递预留的消息 ID
     }
     else
     {
