@@ -118,11 +118,9 @@ import com.stupidbeauty.lanime.callback.CommitTextCallback;
 import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
-import android.content.pm.PackageManager;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import com.stupidbeauty.sisterfuture.manager.PermissionManager;
 import com.stupidbeauty.sisterfuture.manager.RepeatDetectionManager;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
@@ -152,19 +150,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private String currentImageBase64 = null;
   @BindView(R.id.uploadImageButton) Button uploadImageButton;
 
-  private static final int PERMISSIONS_REQUEST =1;
-  private static final int NOTIFICATION_PERMISSION_REQUEST = 1001;
   private TongYiClient tongYiClient;
   private boolean isTtsSpeaking = false;
 
-  private static final String PERMISSION_STORAGE = Manifest.permission.WRITE_EXTERNAL_STORAGE;
-  private static final String PERMISSION_RECORD_AUDIO = Manifest.permission.RECORD_AUDIO;
-  private static final String PERMISSION_FINE_LOCATIN = Manifest.permission.ACCESS_FINE_LOCATION;
-  private static final String PERMISSION_INSTALL_PACKAGE = Manifest.permission.REQUEST_INSTALL_PACKAGES;
   private MediaPlayer mediaPlayer;
   private boolean voiceEndDetected=false;
 
   private TextToSpeech mTts;
+
+  // 权限管理器
+  private PermissionManager permissionManager;
 
   private static final int LanServicePort =10471;
   private String voiceRecognizeResultString;
@@ -1714,14 +1709,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     initImagePicker();
     initTools();
     initView();
-    checkPermission();
     connectSignals();
     displayExistingContext();
     
     scheduleStartBuiltinFtpServer();
 
     SisterFutureService.startForegroundService(this);
-    requestNotificationPermission();
     
     if (savedInstanceState == null)
     {
@@ -1740,6 +1733,30 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     startHttpServer();
     mediaPlayer = new MediaPlayer();
     mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+    
+    // 初始化权限管理器
+    permissionManager = new PermissionManager(this, new PermissionManager.PermissionCallback() {
+      @Override
+      public void onAllPermissionsGranted() {
+        FileLogger.d(TAG, "All permissions granted");
+      }
+
+      @Override
+      public void onPermissionDenied(String permission) {
+        FileLogger.w(TAG, "Permission denied: " + permission);
+      }
+
+      @Override
+      public void onNotificationPermissionDenied() {
+        FileLogger.w(TAG, "Notification permission denied");
+      }
+    });
+    
+    // 检查并请求权限
+    if (permissionManager != null) {
+      permissionManager.checkPermission();
+      permissionManager.requestNotificationPermission();
+    }
   }
 
   private void initData()
@@ -1767,7 +1784,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     ButterKnife.bind(this);
     initializeMsc();
-    checkPermission();
     messageAdapter = new MessageAdapter();
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
     articleListmyRecyclerView.setAdapter(messageAdapter);
@@ -1797,90 +1813,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
-  private boolean hasPermission()
-  {
-    boolean result=false;
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
-    {
-      ArrayList<String> articleInfoArrayList = new ArrayList<>();
-        
-      articleInfoArrayList.add(PERMISSION_STORAGE);
-      articleInfoArrayList.add(PERMISSION_RECORD_AUDIO);
-      articleInfoArrayList.add(PERMISSION_FINE_LOCATIN);
-        
-      for(String permissionString: articleInfoArrayList)
-      {
-        result=(checkSelfPermission(permissionString) == PackageManager.PERMISSION_GRANTED);
-          
-        if (!result)
-        {
-          break;
-        }
-      }
-    }
-    else
-    {
-      result=true;
-    }
-
-    return result;
-  }
-
-  private void requestPermission()
-  {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
-    {
-      if ( shouldShowRequestPermissionRationale(PERMISSION_STORAGE)  || shouldShowRequestPermissionRationale(PERMISSION_RECORD_AUDIO) || shouldShowRequestPermissionRationale(PERMISSION_FINE_LOCATIN)  || shouldShowRequestPermissionRationale(PERMISSION_INSTALL_PACKAGE))
-      {
-        Toast.makeText(this, "需要存储和录音权限", Toast.LENGTH_LONG).show();
-      }
-
-      requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN}, PERMISSIONS_REQUEST);
-    }
-  }
-    
-  private void checkPermission()
-  {
-    if (hasPermission())
-    {
-    }
-    else
-    {
-      requestPermission();
-    }
-  }
-
-  private void requestNotificationPermission() 
-  {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 
-    {
-      if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-          != PackageManager.PERMISSION_GRANTED) 
-      {
-        FileLogger.d(TAG, "请求 POST_NOTIFICATIONS 权限");
-        ActivityCompat.requestPermissions(this,
-            new String[]{Manifest.permission.POST_NOTIFICATIONS},
-            NOTIFICATION_PERMISSION_REQUEST);
-      }
-      else 
-      {
-      }
-    }
-  }
-
   @Override
   public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     
-    if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
-      if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-        FileLogger.d(TAG, "✅ POST_NOTIFICATIONS 权限已授予");
-      } else {
-        FileLogger.w(TAG, "⚠️ POST_NOTIFICATIONS 权限被拒绝，通知功能可能不可用");
-        Toast.makeText(this, "通知权限被拒绝，后台通知可能无法显示", Toast.LENGTH_LONG).show();
-      }
-    } else if (requestCode == PERMISSIONS_REQUEST) {
+    // 委托给权限管理器处理
+    if (permissionManager != null) {
+      permissionManager.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
   }
 
