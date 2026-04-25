@@ -5,7 +5,7 @@
       // 📤 发送请求前记录
       FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
 
-      // 🔗 调用带 messageId 的新方法
+      // 🔗 调用带 messageId 的新方法（第 5 个参数）
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
         @Override
@@ -109,5 +109,5 @@
       () ->
         {
         },
-        currentReservedMessageId // 🔗 传递预留的消息 ID
+        currentReservedMessageId // 🔗 第 5 个参数：传递预留的消息 ID
       );
