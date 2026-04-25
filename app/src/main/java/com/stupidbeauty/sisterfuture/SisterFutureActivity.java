@@ -1098,7 +1098,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       () ->
         {
         }
-      );
+      ), currentReservedMessageId // 🔗 第 5 个参数：传递预留的消息 ID
     }
     else
     {
