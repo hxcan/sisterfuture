@@ -35,6 +35,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.UUID;
 
 public class TongYiClient
 {
@@ -55,12 +58,16 @@ public class TongYiClient
   private final AtomicInteger totalRequestsSubmitted = new AtomicInteger(0);
   private final AtomicLong totalWaitTimeMs = new AtomicLong(0);
   private final AtomicInteger queueSizeHighWaterMark = new AtomicInteger(0);
+  
+  // 🔗 新增：requestId ↔ messageId 映射表（用于追踪请求与消息的关联）
+  private final Map<Long, String> requestIdToMessageIdMap = new HashMap<>();
+  private final AtomicLong requestIdCounter = new AtomicLong(0);
 
   public TongYiClient(ModelAccessPointManager accessPointManager, ToolManager toolManager)
   {
     this.accessPointManager = accessPointManager;
     this.toolManager = toolManager;
-    this.networkRequester = new OkHttpNetworkRequester(this.accessPointManager, this.toolManager);
+    this.networkRequester = new OkHttpNetworkRequester(this.accessPointManager, this.toolManager, this);
     
     // === 🔒 #5028 启动队列处理器 ===
     startQueueProcessor();
@@ -88,11 +95,20 @@ public class TongYiClient
     });
   }
 
-  public void sendChatRequest(JSONArray messages, boolean includeTools , OnResponseListener listener, Runnable onStreamComplete)
+  // 🔗 新增：带 messageId 的请求方法
+  public void sendChatRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete, String reservedMessageId)
   {
+    final long requestId = requestIdCounter.incrementAndGet();
     final long submitTime = System.currentTimeMillis();
     final int queueSizeBefore = requestQueue.size();
     final int totalRequests = totalRequestsSubmitted.incrementAndGet();
+    
+    // 🔗 记录 requestId ↔ messageId 映射
+    if (reservedMessageId != null && !reservedMessageId.isEmpty())
+    {
+      requestIdToMessageIdMap.put(requestId, reservedMessageId);
+      FileLogger.d(TAG, "🔗 [MAP_PUT] 请求 - 消息 ID 映射 | requestId=" + requestId + " | messageId=" + reservedMessageId);
+    }
     
     // === 🔒 #5028 将请求提交到队列 ===
     boolean queued = requestQueue.offer(() -> {
@@ -113,16 +129,16 @@ public class TongYiClient
         currentQueueSize = queueSizeBefore;
       }
       
-      FileLogger.d(TAG, "🔒 [QUEUE_EXEC] 请求 #" + totalRequests + " 开始执行 | 等待时间：" + waitTime + "ms | 当前队列长度：" + queueSizeNow + " | 线程：" + Thread.currentThread().getName());
+      FileLogger.d(TAG, "🔒 [QUEUE_EXEC] 请求 #" + totalRequests + " (requestId=" + requestId + ") 开始执行 | 等待时间：" + waitTime + "ms | 当前队列长度：" + queueSizeNow + " | 线程：" + Thread.currentThread().getName());
       
       try {
-        // 执行实际的网络请求
-        networkRequester.sendRequest(messages, includeTools, listener, onStreamComplete);
+        // 执行实际的网络请求，传入 requestId 和 messageId
+        networkRequester.sendRequest(messages, includeTools, listener, onStreamComplete, requestId, reservedMessageId);
         
         final long endTime = System.currentTimeMillis();
         final long executionTime = endTime - startTime;
         
-        FileLogger.d(TAG, "🔒 [QUEUE_DONE] 请求 #" + totalRequests + " 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
+        FileLogger.d(TAG, "🔒 [QUEUE_DONE] 请求 #" + totalRequests + " (requestId=" + requestId + ") 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
         
         // 每 10 个请求输出一次统计
         if (totalRequests % 10 == 0) {
@@ -131,14 +147,45 @@ public class TongYiClient
           FileLogger.i(TAG, "🔒 [QUEUE_STATS] 队列统计 | 总请求数：" + totalRequests + " | 平均等待时间：" + avgWaitTime + "ms | 队列最大长度：" + highWaterMark);
         }
       } catch (Exception e) {
-        FileLogger.e(TAG, "🔒 [QUEUE_ERROR] 请求 #" + totalRequests + " 执行失败", e);
+        FileLogger.e(TAG, "🔒 [QUEUE_ERROR] 请求 #" + totalRequests + " (requestId=" + requestId + ") 执行失败", e);
         throw e;
       }
     });
     
     if (!queued) {
-      FileLogger.e(TAG, "🔒 [QUEUE_REJECTED] 请求 #" + totalRequests + " 被队列拒绝（队列已满）");
+      FileLogger.e(TAG, "🔒 [QUEUE_REJECTED] 请求 #" + totalRequests + " (requestId=" + requestId + ") 被队列拒绝（队列已满）");
       listener.onError(new IllegalStateException("请求队列已满，无法接受新请求"));
+    }
+  }
+  
+  // ✅ 保留旧方法，兼容现有调用（默认 messageId 为 null）
+  public void sendChatRequest(JSONArray messages, boolean includeTools , OnResponseListener listener, Runnable onStreamComplete)
+  {
+    sendChatRequest(messages, includeTools, listener, onStreamComplete, null);
+  }
+  
+  // 🔗 新增：根据 requestId 获取对应的 messageId
+  public String getMessageIdByRequestId(long requestId)
+  {
+    String messageId = requestIdToMessageIdMap.get(requestId);
+    if (messageId != null)
+    {
+      FileLogger.d(TAG, "🔍 [MAP_GET] 找到 messageId | requestId=" + requestId + " | messageId=" + messageId);
+    }
+    else
+    {
+      FileLogger.w(TAG, "⚠️ [MAP_GET] 未找到 messageId | requestId=" + requestId);
+    }
+    return messageId;
+  }
+  
+  // 🔗 新增：清除已完成的 requestId 映射（防止内存泄漏）
+  public void removeRequestIdMapping(long requestId)
+  {
+    String removedId = requestIdToMessageIdMap.remove(requestId);
+    if (removedId != null)
+    {
+      FileLogger.d(TAG, "🗑️ [MAP_REMOVE] 已清除映射 | requestId=" + requestId + " | messageId=" + removedId);
     }
   }
 
@@ -150,7 +197,7 @@ public class TongYiClient
 
   interface NetworkRequester
   {
-    void sendRequest(JSONArray messages, boolean includeTools , OnResponseListener listener, Runnable onStreamComplete);
+    void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete, long requestId, String reservedMessageId);
   }
 
   private static class OkHttpNetworkRequester implements NetworkRequester
@@ -159,8 +206,9 @@ public class TongYiClient
     private final OkHttpClient client;
     private final ModelAccessPointManager accessPointManager;
     private final ToolManager toolManager;
+    private final TongYiClient tongYiClient; // 引用父类，用于访问映射表
 
-    public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager)
+    public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager, TongYiClient tongYiClient)
     {
       this.client = new OkHttpClient.Builder()
         .connectTimeout(500, TimeUnit.MILLISECONDS)
@@ -169,10 +217,11 @@ public class TongYiClient
         .build();
       this.accessPointManager = accessPointManager;
       this.toolManager = toolManager;
+      this.tongYiClient = tongYiClient;
     }
 
     @Override
-    public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete)
+    public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete, long requestId, String reservedMessageId)
     {
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
       String apiKey = null;
@@ -187,6 +236,9 @@ public class TongYiClient
           ? apiKey.substring(0, 8) + "..." + apiKey.substring(apiKey.length() - 4)
           : (apiKey != null ? "***" : "null");
       FileLogger.d(NETWORK_TAG, "[API Key] 接入点=\"" + (currentAccessPoint != null ? currentAccessPoint.getName() : "null") + "\", Key=\"" + apiKeyMasked + "\" (长度：" + (apiKey != null ? apiKey.length() : 0) + ")");
+      
+      // 🔗 记录请求信息
+      FileLogger.d(NETWORK_TAG, "🔗 [REQUEST_INFO] requestId=" + requestId + " | messageId=" + reservedMessageId);
 
       try
       {
@@ -316,15 +368,17 @@ public class TongYiClient
           @Override
           public void onFailure(Call call, IOException e)
           {
-            FileLogger.e(NETWORK_TAG, "🌐 [HTTP_FAILURE] 请求失败：" + e.getMessage() + " | 线程：" + Thread.currentThread().getName());
+            FileLogger.e(NETWORK_TAG, "🌐 [HTTP_FAILURE] 请求失败 (requestId=" + requestId + "): " + e.getMessage() + " | 线程：" + Thread.currentThread().getName());
             listener.onError(new AccessPointUnavailableException("Current access point is unavailable", e));
+            // 🔗 清理映射
+            tongYiClient.removeRequestIdMapping(requestId);
           }
 
           @Override
           public void onResponse(Call call, Response response) throws IOException
           {
             int statusCode = response.code();
-            FileLogger.d(NETWORK_TAG, "🌐 [HTTP_RESPONSE] HTTP Response Status: " + statusCode + " | 线程：" + Thread.currentThread().getName());
+            FileLogger.d(NETWORK_TAG, "🌐 [HTTP_RESPONSE] HTTP Response Status: " + statusCode + " (requestId=" + requestId + ") | 线程：" + Thread.currentThread().getName());
             
             if (!response.isSuccessful())
             {
@@ -340,25 +394,33 @@ public class TongYiClient
                 
                 // ✅ #4823 HTTP 400 → 上下文超长
                 if (statusCode == 400 && ContextLengthUtils.isContextLengthError(errorBody)) {
-                  FileLogger.w(NETWORK_TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点");
+                  FileLogger.w(NETWORK_TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点 (requestId=" + requestId + ")");
                   listener.onError(new ResponseException(response, errorBody));
+                  // 🔗 清理映射
+                  tongYiClient.removeRequestIdMapping(requestId);
                   return; // 只调用一次 onError()
                 }
                 
                 // ✅ #4824 HTTP 429 → 限流错误
                 if (statusCode == 429) {
-                  FileLogger.w(NETWORK_TAG, "⚠️ 检测到 HTTP 429 限流错误，不切换接入点");
+                  FileLogger.w(NETWORK_TAG, "⚠️ 检测到 HTTP 429 限流错误，不切换接入点 (requestId=" + requestId + ")");
                   listener.onError(new RateLimitException(response, errorBody));
+                  // 🔗 清理映射
+                  tongYiClient.removeRequestIdMapping(requestId);
                   return; // 只调用一次 onError()
                 }
                 
                 // ✅ 其他错误 (401/403/500/503) → 接入点不可用
-                FileLogger.d(NETWORK_TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换");
+                FileLogger.d(NETWORK_TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换 (requestId=" + requestId + ")");
                 listener.onError(new AccessPointUnavailableException("Error: " + errorBody));
+                // 🔗 清理映射
+                tongYiClient.removeRequestIdMapping(requestId);
                 return; // 只调用一次 onError()
               } catch (Exception e) {
                 FileLogger.e(NETWORK_TAG, "Failed to read error body: " + e.getMessage());
                 listener.onError(new AccessPointUnavailableException("Failed to read error body: " + e.getMessage()));
+                // 🔗 清理映射
+                tongYiClient.removeRequestIdMapping(requestId);
                 return; // 只调用一次 onError()
               }
             }
@@ -367,8 +429,8 @@ public class TongYiClient
               ResponseBody responseBody = response.body();
               if (responseBody != null)
               {
-                FileLogger.d(NETWORK_TAG, "🌐 [HTTP_STREAM_START] 开始处理 SSE 流式响应 | 线程：" + Thread.currentThread().getName());
-                processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete);
+                FileLogger.d(NETWORK_TAG, "🌐 [HTTP_STREAM_START] 开始处理 SSE 流式响应 (requestId=" + requestId + ") | 线程：" + Thread.currentThread().getName());
+                processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete, requestId, reservedMessageId);
               }
             }
           }
@@ -376,7 +438,7 @@ public class TongYiClient
       }
       catch (Exception e)
       {
-        FileLogger.e(NETWORK_TAG, "🌐 [HTTP_ERROR] 请求构建失败", e);
+        FileLogger.e(NETWORK_TAG, "🌐 [HTTP_ERROR] 请求构建失败 (requestId=" + requestId + ")", e);
         
         // === 🔒 #5029 新增：检测 Authorization header 编码错误 ===
         // 当出现 IllegalArgumentException 且错误信息包含 "Unexpected char" 或 "Authorization" 时
@@ -384,15 +446,19 @@ public class TongYiClient
         if (e instanceof IllegalArgumentException) {
           String errorMsg = e.getMessage();
           if (errorMsg != null && (errorMsg.contains("Unexpected char") || errorMsg.contains("Authorization"))) {
-            FileLogger.w(NETWORK_TAG, "⚠️ 检测到 Authorization header 编码错误，标记接入点不可用");
+            FileLogger.w(NETWORK_TAG, "⚠️ 检测到 Authorization header 编码错误，标记接入点不可用 (requestId=" + requestId + ")");
             accessPointManager.reportCurrentAccessPointUnavailable();
             listener.onError(new AccessPointUnavailableException("Invalid authorization header: " + errorMsg, e));
+            // 🔗 清理映射
+            tongYiClient.removeRequestIdMapping(requestId);
             return;
           }
         }
         
         e.printStackTrace();
         listener.onError(e);
+        // 🔗 清理映射
+        tongYiClient.removeRequestIdMapping(requestId);
       }
     }
   }
@@ -412,7 +478,8 @@ public class TongYiClient
            trimmedContent.contains("<TITLE");
   }
 
-  private static void processSSEStream(java.io.Reader reader, OnResponseListener listener, ModelAccessPointManager accessPointManager, Runnable onStreamComplete)
+  // 🔗 修改：添加 requestId 和 messageId 参数，用于日志记录
+  private static void processSSEStream(java.io.Reader reader, OnResponseListener listener, ModelAccessPointManager accessPointManager, Runnable onStreamComplete, long requestId, String reservedMessageId)
   {
     try (java.io.BufferedReader bufferedReader = new java.io.BufferedReader(reader))
     {
@@ -437,7 +504,7 @@ public class TongYiClient
           String preview = firstLineBuffer.length() > 500 ? firstLineBuffer.substring(0, 500) : firstLineBuffer.toString();
           if (isHtmlResponse(preview))
           {
-            FileLogger.e(TAG, "API returned HTML page");
+            FileLogger.e(TAG, "API returned HTML page (requestId=" + requestId + ")");
             accessPointManager.reportCurrentAccessPointUnavailable();
             listener.onError(new ResponseException(null, "API returned HTML page"));
             return;
@@ -465,12 +532,12 @@ public class TongYiClient
                       contentLineCount++;
                       allContentBuilder.append(content);
                     } else {
-                      FileLogger.d(TAG, "[SSE Content] delta.content is empty");
+                      FileLogger.d(TAG, "[SSE Content] delta.content is empty (requestId=" + requestId + ")");
                     }
                   }
                 }
               } catch (Exception e) {
-                FileLogger.e(TAG, "[SSE Parse Error] Failed to parse JSON: " + e.getMessage());
+                FileLogger.e(TAG, "[SSE Parse Error] Failed to parse JSON (requestId=" + requestId + "): " + e.getMessage());
               }
               
               listener.onResponse(dataPart);
@@ -478,7 +545,7 @@ public class TongYiClient
             else
             {
               isDone = true;
-              FileLogger.d(TAG, "SSE 流处理完成 [DONE]");
+              FileLogger.d(TAG, "SSE 流处理完成 [DONE] (requestId=" + requestId + ", messageId=" + reservedMessageId + ")");
               
               FileLogger.d(TAG, "[SSE Summary] 总行数：" + lineCount);
               FileLogger.d(TAG, "[SSE Summary] content 行数：" + contentLineCount);
@@ -486,9 +553,9 @@ public class TongYiClient
               
               String finalContent = allContentBuilder.toString();
               if (finalContent.isEmpty()) {
-                FileLogger.w(TAG, "[SSE Summary] ⚠️ 警告：模型返回空响应！");
+                FileLogger.w(TAG, "[SSE Summary] ⚠️ 警告：模型返回空响应！(requestId=" + requestId + ")");
               } else {
-                FileLogger.d(TAG, "[SSE Summary] ✓ 模型响应正常，长度：" + finalContent.length());
+                FileLogger.d(TAG, "[SSE Summary] ✓ 模型响应正常，长度：" + finalContent.length() + " (requestId=" + requestId + ")");
               }
             }
           }
@@ -498,12 +565,12 @@ public class TongYiClient
       if (isDone && onStreamComplete != null)
       {
         onStreamComplete.run();
-        FileLogger.d(TAG, "流式响应处理完成，回调已执行");
+        FileLogger.d(TAG, "流式响应处理完成，回调已执行 (requestId=" + requestId + ")");
       }
     }
     catch (IOException e)
     {
-      FileLogger.e(TAG, "SSE 流处理失败", e);
+      FileLogger.e(TAG, "SSE 流处理失败 (requestId=" + requestId + ")", e);
       accessPointManager.reportCurrentAccessPointUnavailable();
       listener.onError(new AccessPointUnavailableException("Stream failed", e));
     }
