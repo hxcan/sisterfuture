@@ -23,19 +23,17 @@ public class MessageItem {
         this.messageId = generateMessageId(); // 自动生成 ID
     }
 
-    // 🔗 新增构造函数，支持指定消息 ID（用于与上下文消息关联）
-    public MessageItem(String text, MessageType type, String messageId) {
-        this.text = text;
-        this.type = type;
-        this.messageId = messageId;
-    }
-
-    // 🔗 新增构造函数，支持图片和消息 ID
+    // 🔗 新增构造函数，支持图片和消息 ID（4 个参数，避免歧义）
     public MessageItem(String text, MessageType type, String imageUrl, String messageId) {
         this.text = text;
         this.type = type;
         this.imageUrl = imageUrl;
         this.messageId = messageId;
+    }
+
+    // 🔗 便捷方法：创建带指定 messageId 的消息（无图片）
+    public static MessageItem withMessageId(String text, MessageType type, String messageId) {
+        return new MessageItem(text, type, null, messageId);
     }
 
     public String getText() {
