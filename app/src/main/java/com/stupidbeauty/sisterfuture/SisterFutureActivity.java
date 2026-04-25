@@ -192,6 +192,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   // 🔍 #4997 请求 ID 追踪 - 过滤旧请求的错误回调
   private volatile long currentRequestId = 0;
   private volatile long lastSuccessRequestId = 0;
+  
+  // 🔗 #770844220905 消息 ID 关联：当前请求的预留消息 ID
+  private String currentReservedMessageId = null;
+  
   // === 内置 FTP 服务器相关成员变量 ===
   private static final int FTP_SERVER_PORT = 2123;  // 端口规划：BlindBox.her=2121, JoyMan=2122, SisterFuture=2123
   private BuiltinFtpServer builtinFtpServer = null;
@@ -804,6 +808,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     final long requestId = System.currentTimeMillis();
     currentRequestId = requestId;
     
+    // 🔗 #770844220905 生成预留消息 ID，用于 UI 与上下文关联
+    currentReservedMessageId = contextManager.reserveMessageId();
+    FileLogger.i(TAG, "🔗 [RESERVE_ID] 已生成预留消息 ID | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
+    
     SisterFutureService.updateNotificationStatus(this, "正在发送请求...");
 
     if (modelAccessPointManager.checkFailureThreshold()) {
@@ -989,8 +997,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
       
       // 📤 发送请求前记录
-      FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
+      FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务 | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
 
+      // 🔗 调用带 messageId 的新方法
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
         @Override
@@ -1093,7 +1102,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       },
       () ->
         {
-        }
+        },
+        currentReservedMessageId // 🔗 传入预留的消息 ID
       );
     }
     else
@@ -1342,6 +1352,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             contextManager.addRawMessage(assistantMessage);
             contextManager.increaseMaxRounds();
 
+            // 🔗 使用带 messageId 的 MessageItem 构造函数创建 UI 条目
             runOnUiThread(() ->
             {
               StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
@@ -1354,7 +1365,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 }
               }
 
-              messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
+              // 🔗 传入 currentReservedMessageId，建立 UI 与上下文的关联
+              MessageItem messageItem = new MessageItem(callText.toString(), MessageType.AI, currentReservedMessageId);
+              messageAdapter.addMessage(messageItem);
+              
+              FileLogger.i(TAG, "🔗 [UI_ADD] 已添加工具调用 UI 条目 | messageId=" + currentReservedMessageId);
+              
               scrollToBottom();
             });
 
