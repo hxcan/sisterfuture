@@ -21,6 +21,9 @@ import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.UUID;
 
 public class ContextManager
 {
@@ -34,6 +37,9 @@ public class ContextManager
   
   // ✅ 新增：内存中的历史列表（唯一真相源）
   private List<JSONObject> memoryHistory;
+  
+  // 🔗 新增：预留的消息 ID 集合（用于追踪尚未确认的消息）
+  private Set<String> reservedMessageIds = new HashSet<>();
 
   public ContextManager(Context context)
   {
@@ -204,6 +210,27 @@ public class ContextManager
   {
     addMessage("assistant", message);
   }
+  
+  // 🔗 新增：带 messageId 的 addAssistantMessage 重载
+  public void addAssistantMessage(String message, String messageId)
+  {
+    JSONObject msg = createMessage("assistant", message);
+    if (messageId != null && !messageId.isEmpty())
+    {
+      try
+      {
+        msg.put("id", messageId);
+        // 从预留集合中移除，标记为已确认
+        reservedMessageIds.remove(messageId);
+        FileLogger.d(TAG, "✅ [CONFIRM] 助手消息已确认 | id=" + messageId);
+      }
+      catch (JSONException e)
+      {
+        FileLogger.e(TAG, "❌ [CONFIRM] 添加 messageId 失败", e);
+      }
+    }
+    addRawMessage(msg);
+  }
 
   public void addRawMessage(JSONObject message)
   {
@@ -301,6 +328,7 @@ public class ContextManager
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
   }
 
+  
   /**
    * 🔧 #763065048722 新增：检查 JSON 语法完整性
    * 检测括号匹配、引号闭合等基本语法结构
@@ -436,6 +464,36 @@ public class ContextManager
     }
 
     return memoryHistory;
+  }
+  
+  // 🔗 新增：生成并预留一个消息 ID
+  public String reserveMessageId()
+  {
+    String messageId = generateMessageId();
+    reservedMessageIds.add(messageId);
+    FileLogger.d(TAG, "🔖 [RESERVE] 预留消息 ID | id=" + messageId + " | 当前预留数=" + reservedMessageIds.size());
+    return messageId;
+  }
+  
+  // 🔗 新增：丢弃未使用的预留 ID（当消息被丢弃时调用）
+  public void discardReservedMessageId(String messageId)
+  {
+    if (messageId != null && reservedMessageIds.remove(messageId))
+    {
+      FileLogger.d(TAG, "🗑️ [DISCARD] 丢弃预留 ID | id=" + messageId);
+    }
+  }
+  
+  // 🔗 新增：检查某个 ID 是否是预留中的 ID
+  public boolean isReservedMessageId(String messageId)
+  {
+    return reservedMessageIds.contains(messageId);
+  }
+  
+  // 🔗 生成唯一消息 ID（时间戳 + UUID）
+  private static String generateMessageId()
+  {
+    return "msg_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8);
   }
 
   private boolean isValidToolCallMessage(JSONObject message)
