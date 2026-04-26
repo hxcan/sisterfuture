@@ -113,12 +113,12 @@ public class SearchNearbyTool implements Tool {
 
                 Log.d(TAG, "开始搜索附近 - query=" + query + ", location=" + location + ", radius=" + radius);
 
-                // 使用基础 PoiSearchOption
-                PoiSearchOption searchOption = new PoiSearchOption()
-                    .keyword(query)
-                    .city("深圳")
-                    .pageNum(0)
-                    .pageCapacity(20);
+                // 使用 PoiSearchOption 进行城市内 POI 搜索
+                PoiSearchOption searchOption = new PoiSearchOption();
+                searchOption.keyword(query);
+                searchOption.city("深圳");
+                searchOption.pageNum(0);
+                searchOption.pageCapacity(20);
 
                 boolean success = poiSearch.searchInCity(searchOption);
 
