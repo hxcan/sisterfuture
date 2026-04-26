@@ -5,11 +5,7 @@ import android.util.Log;
 import com.baidu.mapapi.search.poi.*;
 import com.baidu.mapapi.model.LatLng;
 import com.baidu.mapapi.search.core.SearchResult;
-import com.baidu.mapapi.search.geocode.ReverseGeoCodeOption;
-import com.baidu.mapapi.search.geocode.OnGetGeoCoderResultListener;
 import com.baidu.mapapi.search.geocode.GeoCoder;
-import com.baidu.mapapi.search.geocode.ReverseGeoCodeResult;
-import com.baidu.mapapi.search.geocode.GeoCodeResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.List;
@@ -17,7 +13,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 搜索附近地址工具
@@ -132,8 +127,9 @@ public class SearchNearbyTool implements Tool {
                 String query = arguments.getString("query");
                 String location = arguments.optString("location", "location"); // 默认使用当前位置
                 int radius = arguments.optInt("radius", 1000); // 默认1000米
-                boolean includeOpeningHours = arguments.optBoolean("includeOpeningHours", false);
-                boolean includeRoute = arguments.optBoolean("includeRoute", false);
+                // 注意：includeOpeningHours 和 includeRoute 参数暂时未使用，预留给扩展功能
+                // boolean includeOpeningHours = arguments.optBoolean("includeOpeningHours", false);
+                // boolean includeRoute = arguments.optBoolean("includeRoute", false);
 
                 currentCallback = callback;
                 currentQuery = query;
