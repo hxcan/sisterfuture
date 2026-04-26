@@ -2,8 +2,10 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
-import com.baidu.mapapi.search.poi.*;
-import com.baidu.mapapi.model.LatLng;
+import com.baidu.mapapi.search.poi.PoiSearch;
+import com.baidu.mapapi.search.poi.PoiCitySearchOption;
+import com.baidu.mapapi.search.poi.PoiResult;
+import com.baidu.mapapi.search.poi.PoiInfo;
 import com.baidu.mapapi.search.core.SearchResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -27,30 +29,10 @@ public class SearchNearbyTool implements Tool {
         this.context = context;
         poiSearch = PoiSearch.newInstance();
         
-        poiSearch.setOnGetPoiSearchResultListener(new OnGetPoiSearchResultListener() {
+        poiSearch.setOnGetPoiSearchResultListener(new PoiSearch.OnGetPoiSearchResultListener() {
             @Override
             public void onGetPoiResult(PoiResult result) {
                 handlePoiResult(result);
-            }
-            
-            @Override
-            public void onGetSuggestionResult(SuggestionResult result) {
-                Log.d(TAG, "建议搜索结果：" + (result != null ? result.getAllSuggestions() : "null"));
-            }
-            
-            @Override
-            public void onGetPoiDetailResult(PoiDetailResult result) {
-                Log.d(TAG, "POI 详情结果：" + (result != null ? result.getName() : "null"));
-            }
-            
-            @Override
-            public void onGetPoiIndoorResult(PoiIndoorResult result) {
-                // 室内 POI 搜索结果
-            }
-            
-            @Override
-            public void onGetPoiDetailSearchResult(PoiDetailSearchResult result) {
-                // POI 详情搜索结果
             }
         });
     }
@@ -113,7 +95,7 @@ public class SearchNearbyTool implements Tool {
 
                 Log.d(TAG, "开始搜索附近 - query=" + query + ", location=" + location + ", radius=" + radius);
 
-                // 使用 PoiCitySearchOption 进行城市内 POI 搜索（百度地图 SDK 7.5.4）
+                // 使用 PoiCitySearchOption 进行城市内 POI 搜索
                 PoiCitySearchOption searchOption = new PoiCitySearchOption();
                 searchOption.keyword(query);
                 searchOption.city("深圳");
