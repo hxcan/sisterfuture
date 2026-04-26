@@ -9,6 +9,7 @@ import android.os.Build;
 import android.provider.ContactsContract;
 import android.util.Log;
 import androidx.annotation.NonNull;
+import android.app.Activity;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.json.JSONObject;
@@ -24,14 +25,14 @@ public class AddContactTool implements Tool {
 
     @Override
     public String getName() {
-        return "addContact";
+        return "add_contact";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "addContact");
+            functionDef.put("name", "add_contact");
             functionDef.put("description", "添加联系人到手机通讯录。需要在通讯录中创建新的联系人，包含姓名和电话号码。");
             
             JSONObject properties = new JSONObject();
@@ -76,6 +77,7 @@ public class AddContactTool implements Tool {
                 String name = arguments.getString("name");
                 String number = arguments.getString("number");
                 
+                // 检查权限
                 if (!hasWriteContactsPermission()) {
                     JSONObject result = new JSONObject();
                     result.put("status", "error");
@@ -84,6 +86,7 @@ public class AddContactTool implements Tool {
                     return;
                 }
                 
+                // 添加联系人
                 boolean success = addContact(name, number);
                 
                 JSONObject result = new JSONObject();
@@ -118,17 +121,20 @@ public class AddContactTool implements Tool {
         try {
             ContentResolver contentResolver = context.getContentResolver();
             
+            // 创建 RawContact
             ContentValues values = new ContentValues();
             values.put(ContactsContract.RawContacts.ACCOUNT_TYPE, "com.android.contacts");
             values.put(ContactsContract.RawContacts.ACCOUNT_NAME, "Phone");
             long rawContactId = contentResolver.insert(ContactsContract.RawContacts.CONTENT_URI, values).getLastPathSegment();
             
+            // 添加姓名
             ContentValues nameValues = new ContentValues();
             nameValues.put(ContactsContract.Data.RAW_CONTACT_ID, rawContactId);
             nameValues.put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE);
             nameValues.put(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name);
             contentResolver.insert(ContactsContract.Data.CONTENT_URI, nameValues);
             
+            // 添加电话
             ContentValues phoneValues = new ContentValues();
             phoneValues.put(ContactsContract.Data.RAW_CONTACT_ID, rawContactId);
             phoneValues.put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE);
