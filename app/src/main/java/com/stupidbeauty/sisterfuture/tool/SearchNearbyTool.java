@@ -157,14 +157,14 @@ public class SearchNearbyTool implements Tool {
                     .pageNum(0)
                     .pageCapacity(20);
 
-                // 执行搜索
+                // 执行搜索 - 修复 typo
                 boolean success = poiSearch.searchInCity(new PoiCitySearchOption()
                     .city("深圳") // 默认城市
-                    .searchBy榕tionOption(searchOption));
+                    .searchOption(searchOption));
 
                 if (!success) {
                     Log.e(TAG, "❌ [DEBUG] POI 搜索失败");
-                    sendError(callback, "搜索失败，���稍后重试");
+                    sendError(callback, "搜索失败，请稍后重试");
                     currentCallback = null;
                     currentQuery = null;
                 }
@@ -314,7 +314,7 @@ public class SearchNearbyTool implements Tool {
                     item.put("formatted_distance", formatDistance(poi.distance));
                 }
                 
-                // 营业时间（如有）
+                // ��业时间（如有）
                 if (poi.poiDetailInfo != null && poi.poiDetailInfo.getOpeningHours() != null) {
                     item.put("opening_hours", poi.poiDetailInfo.getOpeningHours());
                 }
