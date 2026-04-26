@@ -121,7 +121,8 @@ public class AddContactTool implements Tool {
             ContentValues values = new ContentValues();
             values.put(ContactsContract.RawContacts.ACCOUNT_TYPE, "com.android.contacts");
             values.put(ContactsContract.RawContacts.ACCOUNT_NAME, "Phone");
-            long rawContactId = contentResolver.insert(ContactsContract.RawContacts.CONTENT_URI, values).getLastPathSegment();
+            String rawContactIdStr = contentResolver.insert(ContactsContract.RawContacts.CONTENT_URI, values).getLastPathSegment();
+            long rawContactId = Long.parseLong(rawContactIdStr);
             
             ContentValues nameValues = new ContentValues();
             nameValues.put(ContactsContract.Data.RAW_CONTACT_ID, rawContactId);
