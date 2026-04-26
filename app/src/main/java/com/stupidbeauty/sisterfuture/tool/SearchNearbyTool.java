@@ -35,7 +35,6 @@ public class SearchNearbyTool implements Tool {
             
             @Override
             public void onGetSuggestionResult(SuggestionResult result) {
-                // 建议搜索结果
                 Log.d(TAG, "建议搜索结果：" + (result != null ? result.getAllSuggestions() : "null"));
             }
             
@@ -114,17 +113,14 @@ public class SearchNearbyTool implements Tool {
 
                 Log.d(TAG, "开始搜索附近 - query=" + query + ", location=" + location + ", radius=" + radius);
 
-                // 使用 PoiNearbySearchOption 进行附近 POI 搜索
-                // 默认搜索深圳中心点
-                LatLng centerLatLng = new LatLng(22.543096, 114.057865);
-                PoiNearbySearchOption searchOption = new PoiNearbySearchOption()
+                // 使用基础 PoiSearchOption
+                PoiSearchOption searchOption = new PoiSearchOption()
                     .keyword(query)
-                    .location(centerLatLng)
-                    .radius(radius)
+                    .city("深圳")
                     .pageNum(0)
                     .pageCapacity(20);
 
-                boolean success = poiSearch.searchNearby(searchOption);
+                boolean success = poiSearch.searchInCity(searchOption);
 
                 if (!success) {
                     Log.e(TAG, "POI 搜索失败");
