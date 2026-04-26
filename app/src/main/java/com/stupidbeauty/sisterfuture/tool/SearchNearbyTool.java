@@ -74,14 +74,14 @@ public class SearchNearbyTool implements Tool {
 
     @Override
     public String getName() {
-        return "search_nearby";
+        return "searchNearby";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "search_nearby");
+            functionDef.put("name", "searchNearby");
             functionDef.put("description", "搜索附近的商家地点（银行、医院、超市等），返回商家列表。可选返回营业时间和导航路线。");
 
             JSONObject parameters = new JSONObject();
@@ -98,10 +98,10 @@ public class SearchNearbyTool implements Tool {
             properties.put("radius", new JSONObject()
                 .put("type", "integer")
                 .put("description", "搜索半径（米），默认1000米"));
-            properties.put("include_opening_hours", new JSONObject()
+            properties.put("includeOpeningHours", new JSONObject()
                 .put("type", "boolean")
                 .put("description", "是否包含营业时间，默认false"));
-            properties.put("include_route", new JSONObject()
+            properties.put("includeRoute", new JSONObject()
                 .put("type", "boolean")
                 .put("description", "是否包含导航路线，默认false"));
 
@@ -132,8 +132,8 @@ public class SearchNearbyTool implements Tool {
                 String query = arguments.getString("query");
                 String location = arguments.optString("location", "location"); // 默认使用当前位置
                 int radius = arguments.optInt("radius", 1000); // 默认1000米
-                boolean includeOpeningHours = arguments.optBoolean("include_opening_hours", false);
-                boolean includeRoute = arguments.optBoolean("include_route", false);
+                boolean includeOpeningHours = arguments.optBoolean("includeOpeningHours", false);
+                boolean includeRoute = arguments.optBoolean("includeRoute", false);
 
                 currentCallback = callback;
                 currentQuery = query;
@@ -157,7 +157,7 @@ public class SearchNearbyTool implements Tool {
                     .pageNum(0)
                     .pageCapacity(20);
 
-                // 执行搜索 - 修复 typo
+                // 执行搜索
                 boolean success = poiSearch.searchInCity(new PoiCitySearchOption()
                     .city("深圳") // 默认城市
                     .searchOption(searchOption));
@@ -311,12 +311,12 @@ public class SearchNearbyTool implements Tool {
                 // 距离（如有）
                 if (poi.distance > 0) {
                     item.put("distance", poi.distance);
-                    item.put("formatted_distance", formatDistance(poi.distance));
+                    item.put("formattedDistance", formatDistance(poi.distance));
                 }
                 
-                // ��业时间（如有）
+                // 营业时间（如有）
                 if (poi.poiDetailInfo != null && poi.poiDetailInfo.getOpeningHours() != null) {
-                    item.put("opening_hours", poi.poiDetailInfo.getOpeningHours());
+                    item.put("openingHours", poi.poiDetailInfo.getOpeningHours());
                 }
                 
                 results.put(item);
@@ -363,6 +363,6 @@ public class SearchNearbyTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。可选返回营业时间和导航路线。参数：query(关键词), location(位置，默认当前位置), radius(搜索半径，默认1000米), include_opening_hours, include_route。";
+        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。可选返回营业时间和导航路线。参数：query(关键词), location(位置，默认当前位置), radius(搜索半径，默认1000米), includeOpeningHours, includeRoute。";
     }
 }
