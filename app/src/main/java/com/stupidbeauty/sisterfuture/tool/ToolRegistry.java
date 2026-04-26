@@ -71,6 +71,8 @@ public class ToolRegistry
 
     // === 系统工具 ===
     toolManager.registerTool(new GetContactListTool(context));
+    toolManager.registerTool(new AddContactTool(context));
+
     // === FTP 相关工具 ===
     toolManager.registerTool(new FtpFileRequestTool(context));
     toolManager.registerTool(new ListFtpDirectoryTool(context));
