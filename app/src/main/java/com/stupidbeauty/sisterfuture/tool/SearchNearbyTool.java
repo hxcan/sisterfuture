@@ -2,7 +2,6 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
-import androidx.annotation.NonNull;
 import com.baidu.mapapi.search.poi.*;
 import com.baidu.mapapi.model.LatLng;
 import com.baidu.mapapi.search.core.SearchResult;
@@ -11,8 +10,6 @@ import org.json.JSONObject;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 搜索附近地址工具
@@ -106,7 +103,7 @@ public class SearchNearbyTool implements Tool {
     }
 
     @Override
-    public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
+    public void executeAsync(JSONObject arguments, OnResultCallback callback) {
         executor.execute(() -> {
             try {
                 String query = arguments.getString("query");
