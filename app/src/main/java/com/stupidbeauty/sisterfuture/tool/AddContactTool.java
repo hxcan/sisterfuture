@@ -9,6 +9,7 @@ import android.os.Build;
 import android.provider.ContactsContract;
 import android.util.Log;
 import androidx.annotation.NonNull;
+import android.app.Activity;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.json.JSONObject;
@@ -76,14 +77,35 @@ public class AddContactTool implements Tool {
                 String name = arguments.getString("name");
                 String number = arguments.getString("number");
                 
+                // 检查权限
                 if (!hasWriteContactsPermission()) {
+                    // 返回提示信息并请求权限
                     JSONObject result = new JSONObject();
                     result.put("status", "error");
-                    result.put("message", "当前不具有写入联系人的权限，需要 WRITE_CONTACTS 权限。请在设置中授权后重试。");
+                    result.put("message", "当前不具有写入联系人的权限，需要您授权才能写入通讯录。请允许权限请求，之后再重试此操作。");
                     callback.onResult(result);
+                    
+                    // 在主线程发起权限请求
+                    ((Activity) context).runOnUiThread(() -> {
+                        Log.d(TAG, "尝试发起权限请求");
+                        if (context instanceof Activity) {
+                            Activity activity = (Activity) context;
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                Log.d(TAG, "准备调用 requestPermissions for WRITE_CONTACTS");
+                                activity.requestPermissions(
+                                    new String[]{Manifest.permission.WRITE_CONTACTS}, 
+                                    1002
+                                );
+                                Log.d(TAG, "已调用 requestPermissions");
+                            }
+                        } else {
+                            Log.e(TAG, "Context is not an Activity, cannot request permissions");
+                        }
+                    });
                     return;
                 }
                 
+                // 有权限时正常执行
                 boolean success = addContact(name, number);
                 
                 JSONObject result = new JSONObject();
@@ -146,6 +168,6 @@ public class AddContactTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "用于添加联系人到手机通讯录。需要提供联系人的姓名(name)和电话号码(number)。需要在 AndroidManifest 中声明 WRITE_CONTACTS 权限。";
+        return "用于添加联系人到手机通讯录。需要提供联系人的姓名(name)和电话号码(number)。当缺少权限时，会直接发起权限请求并提示用户授权后重试。";
     }
 }
