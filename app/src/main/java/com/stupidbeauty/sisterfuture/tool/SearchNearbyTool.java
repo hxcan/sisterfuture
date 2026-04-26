@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
+import androidx.annotation.NonNull;
 import com.baidu.mapapi.search.poi.*;
 import com.baidu.mapapi.model.LatLng;
 import com.baidu.mapapi.search.core.SearchResult;
@@ -105,22 +106,16 @@ public class SearchNearbyTool implements Tool {
     }
 
     @Override
-    public void executeAsync(JSONObject arguments, OnResultCallback callback) {
+    public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
             try {
                 String query = arguments.getString("query");
-                String location = arguments.optString("location", "location");
+                String location = arguments.optString("location", "");
                 int radius = arguments.optInt("radius", 1000);
 
                 currentCallback = callback;
 
                 Log.d(TAG, "开始搜索附近 - query=" + query + ", location=" + location + ", radius=" + radius);
-
-                LatLng centerLatLng = parseLocation(location, callback);
-                if (centerLatLng == null) {
-                    sendError(callback, "无法获取搜索中心位置");
-                    return;
-                }
 
                 // 使用 PoiCitySearchOption 进行城市内搜索
                 PoiCitySearchOption searchOption = new PoiCitySearchOption()
@@ -142,63 +137,6 @@ public class SearchNearbyTool implements Tool {
                 sendError(callback, e.getMessage());
             }
         });
-    }
-
-    private LatLng parseLocation(String location, OnResultCallback callback) {
-        try {
-            if (location == null || location.isEmpty() || "location".equals(location)) {
-                return getCurrentLocation(callback);
-            } else {
-                String[] parts = location.split(",");
-                if (parts.length >= 2) {
-                    return new LatLng(
-                        Double.parseDouble(parts[0].trim()),
-                        Double.parseDouble(parts[1].trim())
-                    );
-                } else {
-                    sendError(callback, "位置格式错误");
-                    return null;
-                }
-            }
-        } catch (Exception e) {
-            sendError(callback, "解析位置失败：" + e.getMessage());
-            return null;
-        }
-    }
-
-    private LatLng getCurrentLocation(OnResultCallback callback) {
-        final LatLng[] result = {null};
-        final CountDownLatch latch = new CountDownLatch(1);
-        
-        GetLocationTool locationTool = new GetLocationTool(context);
-        locationTool.executeAsync(new JSONObject(), new OnResultCallback() {
-            @Override
-            public void onResult(JSONObject r) {
-                try {
-                    if ("success".equals(r.getString("status"))) {
-                        JSONObject loc = r.getJSONObject("location");
-                        result[0] = new LatLng(loc.getDouble("latitude"), loc.getDouble("longitude"));
-                    }
-                } catch (Exception e) {}
-                latch.countDown();
-            }
-            
-            @Override
-            public void onError(Exception e) {
-                latch.countDown();
-            }
-        });
-
-        try {
-            latch.await(30, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        if (result[0] == null) {
-            sendError(callback, "无法获取当前位置");
-        }
-        return result[0];
     }
 
     private void handlePoiResult(PoiResult result) {
