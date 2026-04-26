@@ -113,8 +113,8 @@ public class SearchNearbyTool implements Tool {
 
                 Log.d(TAG, "开始搜索附近 - query=" + query + ", location=" + location + ", radius=" + radius);
 
-                // 使用 PoiSearchOption 进行城市内 POI 搜索
-                PoiSearchOption searchOption = new PoiSearchOption();
+                // 使用 PoiCitySearchOption 进行城市内 POI 搜索（百度地图 SDK 7.5.4）
+                PoiCitySearchOption searchOption = new PoiCitySearchOption();
                 searchOption.keyword(query);
                 searchOption.city("深圳");
                 searchOption.pageNum(0);
