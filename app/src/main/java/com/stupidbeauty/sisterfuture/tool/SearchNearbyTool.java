@@ -114,14 +114,17 @@ public class SearchNearbyTool implements Tool {
 
                 Log.d(TAG, "开始搜索附近 - query=" + query + ", location=" + location + ", radius=" + radius);
 
-                // 使用 PoiCitySearchOption 进行城市内 POI 搜索
-                PoiCitySearchOption searchOption = new PoiCitySearchOption()
+                // 使用 PoiNearbySearchOption 进行附近 POI 搜索
+                // 默认搜索深圳中心点
+                LatLng centerLatLng = new LatLng(22.543096, 114.057865);
+                PoiNearbySearchOption searchOption = new PoiNearbySearchOption()
                     .keyword(query)
-                    .city("深圳")
+                    .location(centerLatLng)
+                    .radius(radius)
                     .pageNum(0)
                     .pageCapacity(20);
 
-                boolean success = poiSearch.searchInCity(searchOption);
+                boolean success = poiSearch.searchNearby(searchOption);
 
                 if (!success) {
                     Log.e(TAG, "POI 搜索失败");
