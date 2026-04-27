@@ -132,12 +132,11 @@ public class SearchNearbyTool implements Tool {
                 }
 
                 String query = arguments.getString("query");
-                String location = arguments.optString("location", "");
                 int radius = arguments.optInt("radius", 1000);
 
                 currentCallback = callback;
 
-                Log.d(TAG, "开始搜索附近 - query=" + query + ", location=" + location + ", radius=" + radius);
+                Log.d(TAG, "开始搜索附近 - query=" + query + ", radius=" + radius);
 
                 // 使用 PoiCitySearchOption 进行城市内 POI 搜索
                 PoiCitySearchOption searchOption = new PoiCitySearchOption();
