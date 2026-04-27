@@ -36,8 +36,8 @@ public class SearchNearbyTool implements Tool {
         // 创建 PoiSearch 实例
         poiSearch = PoiSearch.newInstance();
         
-        // 使用独立的监听器类
-        poiSearch.setOnGetPoiSearchResultListener(new PoiSearchResultListener(this));
+        // 使用内部类作为监听器
+        poiSearch.setOnGetPoiSearchResultListener(new PoiSearchResultListener());
     }
 
     @Override
@@ -335,5 +335,27 @@ public class SearchNearbyTool implements Tool {
     @Override
     public String getDefaultSystemPromptEnhancement() {
         return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。参数：query(关键词), city(城市), result_count(结果数量，默认20), include_details(是否获取详情如营业时间，默认false)。如果启用 include_details，建议将 result_count 设置得小一些以免耗时太长。";
+    }
+
+    /**
+     * POI 搜索结果监听器内部类
+     */
+    private class PoiSearchResultListener implements com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener {
+        @Override
+        public void onGetPoiResult(PoiResult result) {
+            // 在主线程中处理结果
+            android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+            mainHandler.post(() -> handlePoiResult(result));
+        }
+
+        @Override
+        public void onGetPoiDetailResult(PoiDetailResult result) {
+            // 详情结果在 fetchPoiDetails 中通过匿名内部类处理，这里不需要处理
+        }
+
+        @Override
+        public void onGetPoiIndoorResult(com.baidu.mapapi.search.poi.PoiIndoorResult result) {
+            // 室内 POI 结果，忽略
+        }
     }
 }
