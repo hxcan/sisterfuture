@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.util.Log;
 import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener;
+import com.baidu.mapapi.search.poi.PoiDetailResult;
 import com.baidu.mapapi.search.poi.PoiDetailSearchResult;
 import com.baidu.mapapi.search.poi.PoiIndoorResult;
 import com.baidu.mapapi.search.poi.PoiResult;
@@ -24,9 +25,15 @@ public class PoiSearchResultListener implements OnGetPoiSearchResultListener {
     }
 
     @Override
-    public void onGetPoiDetailResult(PoiDetailSearchResult result) {
+    public void onGetPoiDetailResult(PoiDetailResult result) {
         // POI 详情检索结果回调，此处不需要处理
-        Log.d(TAG, "onGetPoiDetailResult called");
+        Log.d(TAG, "onGetPoiDetailResult(PoiDetailResult) called");
+    }
+
+    @Override
+    public void onGetPoiDetailResult(PoiDetailSearchResult result) {
+        // POI 详情检索结果回调（重载版本），此处不需要处理
+        Log.d(TAG, "onGetPoiDetailResult(PoiDetailSearchResult) called");
     }
 
     @Override
