@@ -11,7 +11,7 @@ import com.baidu.mapapi.search.poi.PoiResult;
 import com.baidu.mapapi.search.core.PoiInfo;
 import com.baidu.mapapi.search.core.SearchResult;
 import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener;
-import com.baidu.mapapi.search.poi.PoiDetailSearchResult;
+import com.baidu.mapapi.search.poi.PoiDetailResult;
 import com.baidu.mapapi.search.poi.PoiIndoorResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -56,7 +56,7 @@ public class SearchNearbyTool implements Tool {
             }
 
             @Override
-            public void onGetPoiDetailResult(PoiDetailSearchResult result) {
+            public void onGetPoiDetailResult(PoiDetailResult result) {
                 // POI 详情检索结果回调，此处不需要处理
                 Log.d(TAG, "onGetPoiDetailResult called");
             }
