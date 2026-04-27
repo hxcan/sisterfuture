@@ -33,22 +33,11 @@ public class SearchNearbyTool implements Tool {
         poiSearch = PoiSearch.newInstance();
         
         // 使用 OnGetPoiSearchResultListener 接口监听 POI 搜索结果
+        // 注意：只实现 onGetPoiResult 方法，其他方法使用默认空实现
         poiSearch.setOnGetPoiSearchResultListener(new OnGetPoiSearchResultListener() {
             @Override
             public void onGetPoiResult(PoiResult result) {
                 handlePoiResult(result);
-            }
-
-            @Override
-            public void onGetPoiDetailResult(com.baidu.mapapi.search.poi.PoiDetailResult result) {
-                // POI 详情检索结果回调，此处不需要处理
-                Log.d(TAG, "onGetPoiDetailResult called");
-            }
-
-            @Override
-            public void onGetPoiIndoorResult(com.baidu.mapapi.search.poi.PoiIndoorResult result) {
-                // 室内 POI 检索结果回调，此处不需要处理
-                Log.d(TAG, "onGetPoiIndoorResult called");
             }
         });
     }
