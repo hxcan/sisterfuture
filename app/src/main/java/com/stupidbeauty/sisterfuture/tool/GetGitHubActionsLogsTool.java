@@ -65,7 +65,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                     .put("description", "返回模式 summary|errors_only|full（可选，默认 summary）"))
                 .put("ignoreWarnings", new JSONObject()
                     .put("type", "boolean")
-                    .put("description", "是否忽略警告行（以 ! 开头的行）（可选，默认 false）"))
+                    .put("description", "是否忽略警告行（以 warning 开头的行）（可选，默认 false）"))
                 .put("token", new JSONObject()
                     .put("type", "string")
                     .put("description", "GitHub Token（可选，从工具备注读取）"))
@@ -146,7 +146,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                 // 获取详细日志（纯文本）
                 String logs = getJobLogs(client, token, owner, repo, jobId);
 
-                // 如果设置了忽略警告，则过滤以 ! 开头的行
+                // 如果设置了忽略警告，则过滤以 warning 开头的行
                 if (ignoreWarnings) {
                     logs = filterWarningLines(logs);
                 }
@@ -415,14 +415,15 @@ public class GetGitHubActionsLogsTool implements Tool {
     }
 
     /**
-     * 过滤警告行（以 ! 开头的行）
+     * 过滤警告行（以 warning 开头的行，不区分大小写）
      */
     private String filterWarningLines(String logs) {
         StringBuilder filtered = new StringBuilder();
         String[] lines = logs.split("\n");
 
         for (String line : lines) {
-            if (!line.trim().startsWith("!")) {
+            String trimmedLine = line.trim().toLowerCase();
+            if (!trimmedLine.startsWith("warning")) {
                 filtered.append(line).append("\n");
             }
         }
