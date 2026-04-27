@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
- * @version 3.0.1 (修复 JSONException 未处理问题)
+ * @version 3.0.2 (新增 ignoreWarnings 选项)
  */
 public class GetGitHubActionsLogsTool implements Tool {
     
@@ -63,6 +63,9 @@ public class GetGitHubActionsLogsTool implements Tool {
                 .put("mode", new JSONObject()
                     .put("type", "string")
                     .put("description", "返回模式 summary|errors_only|full（可选，默认 summary）"))
+                .put("ignoreWarnings", new JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否忽略警告行（以 ! 开头的行）（可选，默认 false）"))
                 .put("token", new JSONObject()
                     .put("type", "string")
                     .put("description", "GitHub Token（可选，从工具备注读取）"))
@@ -96,9 +99,10 @@ public class GetGitHubActionsLogsTool implements Tool {
                 long runId = arguments.getLong("runId");
                 Long jobId = arguments.has("jobId") && !arguments.isNull("jobId") ? arguments.getLong("jobId") : null;
                 String mode = arguments.optString("mode", "summary");
+                boolean ignoreWarnings = arguments.optBoolean("ignoreWarnings", false);
                 String token = arguments.optString("token", "").trim();
 
-                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode);
+                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings);
 
                 // 如果未提供 token，尝试从工具备注读取
                 if (token.isEmpty()) {
@@ -142,6 +146,11 @@ public class GetGitHubActionsLogsTool implements Tool {
                 // 获取详细日志（纯文本）
                 String logs = getJobLogs(client, token, owner, repo, jobId);
 
+                // 如果设置了忽略警告，则过滤以 ! 开头的行
+                if (ignoreWarnings) {
+                    logs = filterWarningLines(logs);
+                }
+
                 // 根据 mode 处理日志
                 String result;
                 if ("summary".equals(mode)) {
@@ -160,6 +169,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                 response.put("run_id", runId);
                 response.put("job_id", jobId);
                 response.put("mode", mode);
+                response.put("ignore_warnings", ignoreWarnings);
                 response.put("fetched_at", System.currentTimeMillis());
 
                 callback.onResult(response);
@@ -402,6 +412,22 @@ public class GetGitHubActionsLogsTool implements Tool {
         }
 
         return filtered.length() > 0 ? filtered.toString() : "✅ 未发现明显错误";
+    }
+
+    /**
+     * 过滤警告行（以 ! 开头的行）
+     */
+    private String filterWarningLines(String logs) {
+        StringBuilder filtered = new StringBuilder();
+        String[] lines = logs.split("\n");
+
+        for (String line : lines) {
+            if (!line.trim().startsWith("!")) {
+                filtered.append(line).append("\n");
+            }
+        }
+
+        return filtered.toString();
     }
 
     private JSONObject httpGetJson(OkHttpClient client, String token, String urlString) throws Exception {
