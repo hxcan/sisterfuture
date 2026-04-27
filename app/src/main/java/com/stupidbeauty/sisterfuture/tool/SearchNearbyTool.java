@@ -2,8 +2,6 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
-import com.baidu.mapapi.SDKInitializer;
-import com.baidu.mapapi.CoordType;
 import com.baidu.mapapi.search.poi.PoiSearch;
 import com.baidu.mapapi.search.poi.PoiCitySearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
@@ -21,7 +19,6 @@ import java.util.concurrent.Executors;
 /**
  * 搜索附近地址工具
  * 基于百度地图 SDK 的 POI 搜索功能
- * 参考 PlanRouteTool 和 GetLocationTool 的实现
  */
 public class SearchNearbyTool implements Tool {
     private static final String TAG = "SearchNearbyTool";
