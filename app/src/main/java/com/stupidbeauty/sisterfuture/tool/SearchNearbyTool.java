@@ -1,12 +1,15 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import com.baidu.mapapi.search.poi.PoiSearch;
 import com.baidu.mapapi.search.poi.PoiCitySearchOption;
 import com.baidu.mapapi.search.poi.PoiDetailSearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
 import com.baidu.mapapi.search.poi.PoiDetailResult;
+import com.baidu.mapapi.search.poi.PoiIndoorResult;
 import com.baidu.mapapi.search.core.PoiInfo;
 import com.baidu.mapapi.search.core.SearchResult;
 import org.json.JSONArray;
@@ -36,8 +39,8 @@ public class SearchNearbyTool implements Tool {
         // 创建 PoiSearch 实例
         poiSearch = PoiSearch.newInstance();
         
-        // 使用内部类作为监听器
-        poiSearch.setOnGetPoiSearchResultListener(new PoiSearchResultListener());
+        // 使用独立的监听器类
+        poiSearch.setOnGetPoiSearchResultListener(new PoiSearchResultListener(this));
     }
 
     @Override
@@ -187,7 +190,6 @@ public class SearchNearbyTool implements Tool {
         final int totalCount = poiList.size();
         
         for (int i = 0; i < totalCount; i++) {
-            final int index = i;
             final PoiInfo poi = poiList.get(i);
             
             // 为每个 POI 创建详情搜索选项
@@ -260,7 +262,12 @@ public class SearchNearbyTool implements Tool {
                 }
 
                 @Override
-                public void onGetPoiIndoorResult(com.baidu.mapapi.search.poi.PoiIndoorResult result) {
+                public void onGetPoiDetailResult(PoiDetailSearchResult result) {
+                    // 这个重载版本也不会被调用
+                }
+
+                @Override
+                public void onGetPoiIndoorResult(PoiIndoorResult result) {
                     // 室内 POI 结果，忽略
                 }
             });
@@ -335,27 +342,5 @@ public class SearchNearbyTool implements Tool {
     @Override
     public String getDefaultSystemPromptEnhancement() {
         return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。参数：query(关键词), city(城市), result_count(结果数量，默认20), include_details(是否获取详情如营业时间，默认false)。如果启用 include_details，建议将 result_count 设置得小一些以免耗时太长。";
-    }
-
-    /**
-     * POI 搜索结果监听器内部类
-     */
-    private class PoiSearchResultListener implements com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener {
-        @Override
-        public void onGetPoiResult(PoiResult result) {
-            // 在主线程中处理结果
-            android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-            mainHandler.post(() -> handlePoiResult(result));
-        }
-
-        @Override
-        public void onGetPoiDetailResult(PoiDetailResult result) {
-            // 详情结果在 fetchPoiDetails 中通过匿名内部类处理，这里不需要处理
-        }
-
-        @Override
-        public void onGetPoiIndoorResult(com.baidu.mapapi.search.poi.PoiIndoorResult result) {
-            // 室内 POI 结果，忽略
-        }
     }
 }
