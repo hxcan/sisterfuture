@@ -40,7 +40,7 @@ public class SearchNearbyTool implements Tool {
             }
 
             @Override
-            public void onGetPoiDetailResult(com.baidu.mapapi.search.poi.PoiDetailSearchResult result) {
+            public void onGetPoiDetailResult(com.baidu.mapapi.search.poi.PoiDetailResult result) {
                 // POI 详情检索结果回调，此处不需要处理
                 Log.d(TAG, "onGetPoiDetailResult called");
             }
