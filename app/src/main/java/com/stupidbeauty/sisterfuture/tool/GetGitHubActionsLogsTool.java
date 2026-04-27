@@ -65,7 +65,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                     .put("description", "返回模式 summary|errors_only|full（可选，默认 summary）"))
                 .put("ignoreWarnings", new JSONObject()
                     .put("type", "boolean")
-                    .put("description", "是否忽略警告行（以 warning 开头的行）（可选，默认 false）"))
+                    .put("description", "是否忽略警告行（以 warning 开头的行）（可选，默认 true，避免日志过长导致上下文溢出）"))
                 .put("token", new JSONObject()
                     .put("type", "string")
                     .put("description", "GitHub Token（可选，从工具备注读取）"))
@@ -99,7 +99,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                 long runId = arguments.getLong("runId");
                 Long jobId = arguments.has("jobId") && !arguments.isNull("jobId") ? arguments.getLong("jobId") : null;
                 String mode = arguments.optString("mode", "summary");
-                boolean ignoreWarnings = arguments.optBoolean("ignoreWarnings", false);
+                boolean ignoreWarnings = arguments.optBoolean("ignoreWarnings", true);
                 String token = arguments.optString("token", "").trim();
 
                 FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings);
