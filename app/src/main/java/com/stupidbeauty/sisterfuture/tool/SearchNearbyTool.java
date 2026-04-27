@@ -29,6 +29,7 @@ public class SearchNearbyTool implements Tool {
         this.context = context;
         poiSearch = PoiSearch.newInstance();
         
+        // 使用 PoiSearch.OnGetPoiSearchResultListener 内部接口
         poiSearch.setOnGetPoiSearchResultListener(new PoiSearch.OnGetPoiSearchResultListener() {
             @Override
             public void onGetPoiResult(PoiResult result) {
