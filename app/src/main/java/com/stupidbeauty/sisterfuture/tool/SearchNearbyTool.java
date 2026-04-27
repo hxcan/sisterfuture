@@ -2,16 +2,15 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
-import com.baidu.mapapi.BMapManager;
 import com.baidu.mapapi.SDKInitializer;
 import com.baidu.mapapi.CoordType;
 import com.baidu.mapapi.search.poi.PoiSearch;
 import com.baidu.mapapi.search.poi.PoiCitySearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
+import com.baidu.mapapi.search.poi.PoiDetailSearchResult;
 import com.baidu.mapapi.search.core.PoiInfo;
 import com.baidu.mapapi.search.core.SearchResult;
 import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener;
-import com.baidu.mapapi.search.poi.PoiDetailResult;
 import com.baidu.mapapi.search.poi.PoiIndoorResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -35,16 +34,6 @@ public class SearchNearbyTool implements Tool {
     public SearchNearbyTool(Context context) {
         this.context = context;
         
-        // 参考 GetLocationTool 的实现初始化百度地图 SDK
-        try {
-            SDKInitializer.setAgreePrivacy(context.getApplicationContext(), true);
-            SDKInitializer.setCoordType(CoordType.BD09LL);
-            SDKInitializer.initialize(context.getApplicationContext());
-            Log.d(TAG, "百度地图 SDK 初始化成功");
-        } catch (Exception e) {
-            Log.e(TAG, "百度地图 SDK 初始化失败", e);
-        }
-        
         // 创建 PoiSearch 实例
         poiSearch = PoiSearch.newInstance();
         
@@ -56,7 +45,7 @@ public class SearchNearbyTool implements Tool {
             }
 
             @Override
-            public void onGetPoiDetailResult(PoiDetailResult result) {
+            public void onGetPoiDetailResult(PoiDetailSearchResult result) {
                 // POI 详情检索结果回调，此处不需要处理
                 Log.d(TAG, "onGetPoiDetailResult called");
             }
@@ -92,9 +81,6 @@ public class SearchNearbyTool implements Tool {
             properties.put("city", new JSONObject()
                 .put("type", "string")
                 .put("description", "搜索城市（可选，默认深圳市）"));
-            properties.put("radius", new JSONObject()
-                .put("type", "integer")
-                .put("description", "搜索半径（米），默认1000米"));
 
             parameters.put("properties", properties);
             functionDef.put("parameters", parameters);
@@ -121,11 +107,10 @@ public class SearchNearbyTool implements Tool {
             try {
                 String query = arguments.getString("query");
                 String city = arguments.optString("city", "深圳市");
-                int radius = arguments.optInt("radius", 1000);
 
                 currentCallback = callback;
 
-                Log.d(TAG, "开始搜索附近 - query=" + query + ", city=" + city + ", radius=" + radius);
+                Log.d(TAG, "开始搜索附近 - query=" + query + ", city=" + city);
 
                 // 使用 PoiCitySearchOption 进行城市内 POI 搜索
                 PoiCitySearchOption searchOption = new PoiCitySearchOption();
@@ -217,6 +202,6 @@ public class SearchNearbyTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。参数：query(关键词), city(城市), radius(搜索半径)。";
+        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。参数：query(关键词), city(城市)。";
     }
 }
