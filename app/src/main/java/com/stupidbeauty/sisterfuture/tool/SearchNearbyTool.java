@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
+import com.baidu.mapapi.BMapManager;
 import com.baidu.mapapi.SDKInitializer;
 import com.baidu.mapapi.CoordType;
 import com.baidu.mapapi.search.poi.PoiSearch;
@@ -21,35 +22,27 @@ import java.util.concurrent.Executors;
 /**
  * 搜索附近地址工具
  * 基于百度地图 SDK 的 POI 搜索功能
+ * 参考 PlanRouteTool 和 GetLocationTool 的实现
  */
 public class SearchNearbyTool implements Tool {
     private static final String TAG = "SearchNearbyTool";
-    private static volatile boolean sdkInitialized = false;
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private PoiSearch poiSearch;
+    private final PoiSearch poiSearch;
     
     private OnResultCallback currentCallback;
 
     public SearchNearbyTool(Context context) {
         this.context = context;
         
-        // 只初始化一次 SDK（参考 PlanRouteTool 的实现方式）
-        if (!sdkInitialized) {
-            synchronized (SearchNearbyTool.class) {
-                if (!sdkInitialized) {
-                    try {
-                        // 参考 GetLocationTool 的实现初始化百度地图 SDK
-                        SDKInitializer.setAgreePrivacy(context.getApplicationContext(), true);
-                        SDKInitializer.setCoordType(CoordType.BD09LL);
-                        SDKInitializer.initialize(context.getApplicationContext());
-                        sdkInitialized = true;
-                        Log.d(TAG, "百度地图 SDK 初始化成功");
-                    } catch (Exception e) {
-                        Log.e(TAG, "百度地图 SDK 初始化失败", e);
-                    }
-                }
-            }
+        // 参考 GetLocationTool 的实现初始化百度地图 SDK
+        try {
+            SDKInitializer.setAgreePrivacy(context.getApplicationContext(), true);
+            SDKInitializer.setCoordType(CoordType.BD09LL);
+            SDKInitializer.initialize(context.getApplicationContext());
+            Log.d(TAG, "百度地图 SDK 初始化成功");
+        } catch (Exception e) {
+            Log.e(TAG, "百度地图 SDK 初始化失败", e);
         }
         
         // 创建 PoiSearch 实例
@@ -64,13 +57,11 @@ public class SearchNearbyTool implements Tool {
 
             @Override
             public void onGetPoiDetailResult(PoiDetailResult result) {
-                // POI 详情检索结果回调，此处不需要处理
                 Log.d(TAG, "onGetPoiDetailResult called");
             }
 
             @Override
             public void onGetPoiIndoorResult(PoiIndoorResult result) {
-                // 室内 POI 检索结果回调，此处不需要处理
                 Log.d(TAG, "onGetPoiIndoorResult called");
             }
         });
@@ -96,9 +87,9 @@ public class SearchNearbyTool implements Tool {
             properties.put("query", new JSONObject()
                 .put("type", "string")
                 .put("description", "搜索关键词，如\"银行\"、\"医院\"、\"超市\"等"));
-            properties.put("location", new JSONObject()
+            properties.put("city", new JSONObject()
                 .put("type", "string")
-                .put("description", "搜索中心位置（可选，默认当前地址）"));
+                .put("description", "搜索城市（可选，默认深圳市）"));
             properties.put("radius", new JSONObject()
                 .put("type", "integer")
                 .put("description", "搜索半径（米），默认1000米"));
@@ -126,22 +117,18 @@ public class SearchNearbyTool implements Tool {
     public void executeAsync(JSONObject arguments, OnResultCallback callback) {
         executor.execute(() -> {
             try {
-                if (poiSearch == null) {
-                    sendError(callback, "百度地图 SDK 未初始化成功，请检查权限和网络");
-                    return;
-                }
-
                 String query = arguments.getString("query");
+                String city = arguments.optString("city", "深圳市");
                 int radius = arguments.optInt("radius", 1000);
 
                 currentCallback = callback;
 
-                Log.d(TAG, "开始搜索附近 - query=" + query + ", radius=" + radius);
+                Log.d(TAG, "开始搜索附近 - query=" + query + ", city=" + city + ", radius=" + radius);
 
                 // 使用 PoiCitySearchOption 进行城市内 POI 搜索
                 PoiCitySearchOption searchOption = new PoiCitySearchOption();
                 searchOption.keyword(query);
-                searchOption.city("深圳");
+                searchOption.city(city);
                 searchOption.pageNum(0);
                 searchOption.pageCapacity(20);
 
@@ -228,6 +215,6 @@ public class SearchNearbyTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。参数：query(关键词), location(位置), radius(搜索半径)。";
+        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。参数：query(关键词), city(城市), radius(搜索半径)。";
     }
 }
