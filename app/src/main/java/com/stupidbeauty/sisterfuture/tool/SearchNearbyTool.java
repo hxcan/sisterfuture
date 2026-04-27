@@ -7,6 +7,7 @@ import com.baidu.mapapi.search.poi.PoiCitySearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
 import com.baidu.mapapi.search.core.PoiInfo;
 import com.baidu.mapapi.search.core.SearchResult;
+import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.List;
@@ -29,8 +30,8 @@ public class SearchNearbyTool implements Tool {
         this.context = context;
         poiSearch = PoiSearch.newInstance();
         
-        // 使用 PoiSearch.OnGetPoiSearchResultListener 内部接口
-        poiSearch.setOnGetPoiSearchResultListener(new PoiSearch.OnGetPoiSearchResultListener() {
+        // 使用 OnGetPoiSearchResultListener 接口监听 POI 搜索结果
+        poiSearch.setOnGetPoiSearchResultListener(new OnGetPoiSearchResultListener() {
             @Override
             public void onGetPoiResult(PoiResult result) {
                 handlePoiResult(result);
