@@ -40,15 +40,15 @@ public class SearchNearbyTool implements Tool {
             }
 
             @Override
-            public void onGetPoiDetailResult(Object result) {
+            public void onGetPoiDetailResult(com.baidu.mapapi.search.poi.PoiDetailResult result) {
                 // POI 详情检索结果回调，此处不需要处理
-                Log.d(TAG, "onGetPoiDetailResult called with: " + (result != null ? result.getClass().getName() : "null"));
+                Log.d(TAG, "onGetPoiDetailResult called");
             }
 
             @Override
-            public void onGetPoiIndoorResult(Object result) {
+            public void onGetPoiIndoorResult(com.baidu.mapapi.search.poi.PoiIndoorResult result) {
                 // 室内 POI 检索结果回调，此处不需要处理
-                Log.d(TAG, "onGetPoiIndoorResult called with: " + (result != null ? result.getClass().getName() : "null"));
+                Log.d(TAG, "onGetPoiIndoorResult called");
             }
         });
     }
