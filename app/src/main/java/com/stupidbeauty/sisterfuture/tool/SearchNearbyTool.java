@@ -5,11 +5,8 @@ import android.util.Log;
 import com.baidu.mapapi.search.poi.PoiSearch;
 import com.baidu.mapapi.search.poi.PoiCitySearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
-import com.baidu.mapapi.search.poi.PoiDetailResult;
-import com.baidu.mapapi.search.poi.PoiIndoorResult;
 import com.baidu.mapapi.search.core.PoiInfo;
 import com.baidu.mapapi.search.core.SearchResult;
-import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.List;
@@ -34,25 +31,8 @@ public class SearchNearbyTool implements Tool {
         // 创建 PoiSearch 实例
         poiSearch = PoiSearch.newInstance();
         
-        // 使用 OnGetPoiSearchResultListener 接口监听 POI 搜索结果
-        poiSearch.setOnGetPoiSearchResultListener(new OnGetPoiSearchResultListener() {
-            @Override
-            public void onGetPoiResult(PoiResult result) {
-                handlePoiResult(result);
-            }
-
-            @Override
-            public void onGetPoiDetailResult(PoiDetailResult result) {
-                // POI 详情检索结果回调，此处不需要处理
-                Log.d(TAG, "onGetPoiDetailResult called");
-            }
-
-            @Override
-            public void onGetPoiIndoorResult(PoiIndoorResult result) {
-                // 室内 POI 检索结果回调，此处不需要处理
-                Log.d(TAG, "onGetPoiIndoorResult called");
-            }
-        });
+        // 使用独立的监听器类
+        poiSearch.setOnGetPoiSearchResultListener(new PoiSearchResultListener(this));
     }
 
     @Override
@@ -131,7 +111,10 @@ public class SearchNearbyTool implements Tool {
         });
     }
 
-    private void handlePoiResult(PoiResult result) {
+    /**
+     * 处理 POI 搜索结果
+     */
+    void handlePoiResult(PoiResult result) {
         try {
             if (result == null || result.error != SearchResult.ERRORNO.NO_ERROR) {
                 sendError(currentCallback, "搜索失败：" + (result != null ? result.error : "未知错误"));
