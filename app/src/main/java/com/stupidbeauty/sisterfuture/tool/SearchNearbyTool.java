@@ -2,6 +2,8 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
+import com.baidu.mapapi.SDKInitializer;
+import com.baidu.mapapi.CoordType;
 import com.baidu.mapapi.search.poi.PoiSearch;
 import com.baidu.mapapi.search.poi.PoiCitySearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
@@ -24,33 +26,46 @@ public class SearchNearbyTool implements Tool {
     private static final String TAG = "SearchNearbyTool";
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final PoiSearch poiSearch;
+    private PoiSearch poiSearch;
     
     private OnResultCallback currentCallback;
 
     public SearchNearbyTool(Context context) {
         this.context = context;
-        poiSearch = PoiSearch.newInstance();
         
-        // 使用 OnGetPoiSearchResultListener 接口监听 POI 搜索结果
-        poiSearch.setOnGetPoiSearchResultListener(new OnGetPoiSearchResultListener() {
-            @Override
-            public void onGetPoiResult(PoiResult result) {
-                handlePoiResult(result);
-            }
+        // 初始化百度地图 SDK（参考 GetLocationTool 的实现）
+        try {
+            SDKInitializer.setAgreePrivacy(context.getApplicationContext(), true);
+            SDKInitializer.setCoordType(CoordType.BD09LL);
+            SDKInitializer.initialize(context.getApplicationContext());
+            Log.d(TAG, "百度地图 SDK 初始化成功");
+            
+            // 创建 PoiSearch 实例
+            poiSearch = PoiSearch.newInstance();
+            
+            // 使用 OnGetPoiSearchResultListener 接口监听 POI 搜索结果
+            poiSearch.setOnGetPoiSearchResultListener(new OnGetPoiSearchResultListener() {
+                @Override
+                public void onGetPoiResult(PoiResult result) {
+                    handlePoiResult(result);
+                }
 
-            @Override
-            public void onGetPoiDetailResult(PoiDetailResult result) {
-                // POI 详情检索结果回调，此处不需要处理
-                Log.d(TAG, "onGetPoiDetailResult called");
-            }
+                @Override
+                public void onGetPoiDetailResult(PoiDetailResult result) {
+                    // POI 详情检索结果回调，此处不需要处理
+                    Log.d(TAG, "onGetPoiDetailResult called");
+                }
 
-            @Override
-            public void onGetPoiIndoorResult(PoiIndoorResult result) {
-                // 室内 POI 检索结果回调，此处不需要处理
-                Log.d(TAG, "onGetPoiIndoorResult called");
-            }
-        });
+                @Override
+                public void onGetPoiIndoorResult(PoiIndoorResult result) {
+                    // 室内 POI 检索结果回调，此处不需要处理
+                    Log.d(TAG, "onGetPoiIndoorResult called");
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "百度地图 SDK 初始化失败", e);
+            poiSearch = null;
+        }
     }
 
     @Override
@@ -103,6 +118,11 @@ public class SearchNearbyTool implements Tool {
     public void executeAsync(JSONObject arguments, OnResultCallback callback) {
         executor.execute(() -> {
             try {
+                if (poiSearch == null) {
+                    sendError(callback, "百度地图 SDK 未初始化成功，请检查权限和网络");
+                    return;
+                }
+
                 String query = arguments.getString("query");
                 String location = arguments.optString("location", "");
                 int radius = arguments.optInt("radius", 1000);
