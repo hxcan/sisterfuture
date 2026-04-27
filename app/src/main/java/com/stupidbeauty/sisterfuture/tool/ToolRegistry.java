@@ -4,7 +4,6 @@ import com.stupidbeauty.sisterfuture.ContextManager;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
-import com.stupidbeauty.sisterfuture.tool.SearchNearbyTool;
 import com.stupidbeauty.sisterfuture.tools.ListPhoneDirectoryTool;
 import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
 import android.content.Context;
@@ -14,7 +13,7 @@ import android.content.Context;
  *
  * 重构自 SisterFutureActivity.initTools()
  * 关联任务：#4670
- */
+*/
 public class ToolRegistry {
     /**
      * 注册所有工具到 ToolManager
@@ -24,7 +23,7 @@ public class ToolRegistry {
      * @param modelAccessPointManager 接入点管理器（部分工具需要）
      * @param memoryManager 记忆管理器（部分工具需要）
      * @param context Android 上下文（部分工具需要）
-     */
+    */
     public static void registerAll(
         ToolManager toolManager,
         ContextManager contextManager,
