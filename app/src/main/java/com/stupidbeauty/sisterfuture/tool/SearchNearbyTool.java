@@ -5,11 +5,9 @@ import android.util.Log;
 import com.baidu.mapapi.search.poi.PoiSearch;
 import com.baidu.mapapi.search.poi.PoiCitySearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
-import com.baidu.mapapi.search.poi.PoiDetailSearchResult;
 import com.baidu.mapapi.search.core.PoiInfo;
 import com.baidu.mapapi.search.core.SearchResult;
 import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener;
-import com.baidu.mapapi.search.poi.PoiIndoorResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.List;
@@ -42,13 +40,13 @@ public class SearchNearbyTool implements Tool {
             }
 
             @Override
-            public void onGetPoiDetailResult(PoiDetailSearchResult result) {
+            public void onGetPoiDetailResult(com.baidu.mapapi.search.poi.PoiDetailSearchResult result) {
                 // POI 详情检索结果回调，此处不需要处理
                 Log.d(TAG, "onGetPoiDetailResult called");
             }
 
             @Override
-            public void onGetPoiIndoorResult(PoiIndoorResult result) {
+            public void onGetPoiIndoorResult(com.baidu.mapapi.search.poi.PoiIndoorResult result) {
                 // 室内 POI 检索结果回调，此处不需要处理
                 Log.d(TAG, "onGetPoiIndoorResult called");
             }
