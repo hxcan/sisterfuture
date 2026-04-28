@@ -18,11 +18,15 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.0 (新增 ignoreRunnerOps 参数，过滤 Runner 环境操作日志)
  * @version 3.0.4 (新增自动保存日志到手机功能，默认模式改为 error_only，工具名改为驼峰格式)
  * @version 3.0.3 (修复 ignoreWarnings 对 GitHub Actions 格式日志无效的问题)
  * @version 3.0.2 (新增 ignoreWarnings 选项)
@@ -34,6 +38,19 @@ public class GetGitHubActionsLogsTool implements Tool {
     
     // 日志保存目录
     private static final String LOG_SAVE_DIR = "/sdcard/Download/";
+    
+    // Runner 环境操作日志过滤正则表达式模式
+    private static final Pattern[] RUNNER_OP_PATTERNS = {
+        Pattern.compile("^Post job cleanup"),
+        Pattern.compile("^Cleaning up orphan processes"),
+        Pattern.compile("^Terminate orphan process"),
+        Pattern.compile("^[\\s]*\\[command\\]/usr/bin/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
+        Pattern.compile("^Temporarily overriding HOME"),
+        Pattern.compile("^Adding repository directory.*safe\\.directory"),
+        Pattern.compile("^\\[\\d{2};\\d{2}m.*\\[0m"),
+        Pattern.compile("^#{4}\\[group\\]Post job cleanup"),
+        Pattern.compile("^#{4}\\[endgroup\\]")
+    };
     
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -75,6 +92,9 @@ public class GetGitHubActionsLogsTool implements Tool {
                 .put("ignoreWarnings", new JSONObject()
                     .put("type", "boolean")
                     .put("description", "是否忽略警告行（以 warning 开头的行）（可选，默认 true，避免日志过长导致上下文溢出）"))
+                .put("ignoreRunnerOps", new JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否忽略 GitHub Actions Runner 的环境操作日志（如 Post job cleanup、git 版本查询等）（可选，默认 true）"))
                 .put("token", new JSONObject()
                     .put("type", "string")
                     .put("description", "GitHub Token（可选，从工具备注读取）"))
@@ -110,9 +130,11 @@ public class GetGitHubActionsLogsTool implements Tool {
                 // 默认模式改为 error_only
                 String mode = arguments.optString("mode", "errors_only");
                 boolean ignoreWarnings = arguments.optBoolean("ignoreWarnings", true);
+                // 新增：ignoreRunnerOps 参数，默认 true
+                boolean ignoreRunnerOps = arguments.optBoolean("ignoreRunnerOps", true);
                 String token = arguments.optString("token", "").trim();
 
-                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings);
+                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings + ", ignoreRunnerOps=" + ignoreRunnerOps);
 
                 // 如果未提供 token，尝试从工具备注读取
                 if (token.isEmpty()) {
@@ -156,6 +178,11 @@ public class GetGitHubActionsLogsTool implements Tool {
                 // 获取详细日志（纯文本）
                 String logs = getJobLogs(client, token, owner, repo, jobId);
 
+                // 如果设置了忽略 Runner 环境操作，则过滤
+                if (ignoreRunnerOps) {
+                    logs = filterRunnerOpLines(logs);
+                }
+
                 // 如果设置了忽略警告，则过滤以 warning 开头的行
                 if (ignoreWarnings) {
                     logs = filterWarningLines(logs);
@@ -185,6 +212,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                 response.put("job_id", jobId);
                 response.put("mode", mode);
                 response.put("ignore_warnings", ignoreWarnings);
+                response.put("ignore_runner_ops", ignoreRunnerOps);
                 response.put("fetched_at", System.currentTimeMillis());
                 response.put("saved_file", savedFilePath);
 
@@ -201,6 +229,38 @@ public class GetGitHubActionsLogsTool implements Tool {
                 } catch (Exception ignored) {}
             }
         });
+    }
+
+    /**
+     * 判断是否是 Runner 环境操作日志行
+     * @param line 日志行
+     * @return 是否是 Runner 环境操作日志
+     */
+    private boolean isRunnerOpLine(String line) {
+        for (Pattern p : RUNNER_OP_PATTERNS) {
+            if (p.matcher(line).find()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 过滤 Runner 环境操作日志行
+     * @param logs 原始日志
+     * @return 过滤后的日志
+     */
+    private String filterRunnerOpLines(String logs) {
+        StringBuilder filtered = new StringBuilder();
+        String[] lines = logs.split("\n");
+
+        for (String line : lines) {
+            if (!isRunnerOpLine(line)) {
+                filtered.append(line).append("\n");
+            }
+        }
+
+        return filtered.toString();
     }
 
     /**
