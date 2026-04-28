@@ -19,6 +19,7 @@ import java.util.concurrent.Executors;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.0.3 (修复 ignoreWarnings 对 GitHub Actions 格式日志无效的问题)
  * @version 3.0.2 (新增 ignoreWarnings 选项)
  */
 public class GetGitHubActionsLogsTool implements Tool {
@@ -416,6 +417,8 @@ public class GetGitHubActionsLogsTool implements Tool {
 
     /**
      * 过滤警告行（以 warning 开头的行，不区分大小写）
+     * 修复：GitHub Actions 日志以时间戳开头，WARNING 可能在时间戳后面
+     * 改为检查整行是否包含 "WARNING:" 或 "warning:" 模式
      */
     private String filterWarningLines(String logs) {
         StringBuilder filtered = new StringBuilder();
@@ -423,7 +426,9 @@ public class GetGitHubActionsLogsTool implements Tool {
 
         for (String line : lines) {
             String trimmedLine = line.trim().toLowerCase();
-            if (!trimmedLine.startsWith("warning")) {
+            // 使用 contains 而不是 startsWith，GitHub Actions 日志前面有时间戳
+            // 只检查是否包含 "warning:" 标记，忽略大小写
+            if (!trimmedLine.contains("warning:")) {
                 filtered.append(line).append("\n");
             }
         }
