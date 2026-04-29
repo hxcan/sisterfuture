@@ -257,7 +257,6 @@ public class TongYiClient
           FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Main Body JSON Parse Failed: " + e.getMessage());
         }
 
-
           apiKey = currentAccessPoint.getApiKey();
       }
       
