@@ -291,6 +291,41 @@ public class TongYiClient
           {
             FileLogger.d(NETWORK_TAG, "🔍 [VALIDATION] ✓ 所有 tool_calls 都有对应的 tool message");
           }
+        // === 🔒 #5033 新增：调试完整 tool_calls 结构 ===
+        FileLogger.d(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Checking messages for tool_calls...");
+        for (int i = 0; i < messages.length(); i++) {
+            try {
+                JSONObject msg = messages.getJSONObject(i);
+                if (msg.has("tool_calls")) {
+                    JSONArray toolCalls = msg.getJSONArray("tool_calls");
+                    FileLogger.d(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Message #" + i + " has " + toolCalls.length() + " tool_calls");
+                    for (int j = 0; j < toolCalls.length(); j++) {
+                        JSONObject tc = toolCalls.getJSONObject(j);
+                        String id = tc.optString("id", "unknown");
+                        String type = tc.optString("type", "unknown");
+                        JSONObject function = tc.optJSONObject("function");
+                        String funcName = function != null ? function.optString("name", "unknown") : "null";
+                        String args = function != null ? function.optString("arguments", "{}") : "{}";
+                        
+                        FileLogger.d(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Tool Call #" + j + ":");
+                        FileLogger.d(NETWORK_TAG, "  - id: " + id);
+                        FileLogger.d(NETWORK_TAG, "  - type: " + type);
+                        FileLogger.d(NETWORK_TAG, "  - function.name: " + funcName);
+                        FileLogger.d(NETWORK_TAG, "  - function.arguments: " + args);
+                        
+                        // 尝试验证 arguments
+                        try {
+                            new JSONObject(args);
+                            FileLogger.d(NETWORK_TAG, "  - arguments JSON Valid: true");
+                        } catch (Exception e) {
+                            FileLogger.e(NETWORK_TAG, "  - arguments JSON Invalid! Error: " + e.getMessage());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                FileLogger.e(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Error processing message #" + i, e);
+            }
+        }
         }
 
         JSONObject requestBody = new JSONObject();
