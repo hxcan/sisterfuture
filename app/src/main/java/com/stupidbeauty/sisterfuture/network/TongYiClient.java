@@ -227,6 +227,37 @@ public class TongYiClient
       String apiKey = null;
       
       if (currentAccessPoint != null) {
+        // === 🔒 #5032 新增：调试工具调用参数 JSON 格式 ===
+        try {
+          String bodyJsonStr = requestBody.toString();
+          JSONObject bodyObj = new JSONObject(bodyJsonStr);
+          if (bodyObj.has("messages")) {
+            JSONArray msgs = bodyObj.getJSONArray("messages");
+            for (int i = 0; i < msgs.length(); i++) {
+              JSONObject msg = msgs.getJSONObject(i);
+              if (msg.has("tool_calls")) {
+                JSONArray toolCalls = msg.getJSONArray("tool_calls");
+                for (int j = 0; j < toolCalls.length(); j++) {
+                  JSONObject tc = toolCalls.getJSONObject(j);
+                  String arguments = tc.optString("arguments", "{}");
+                  FileLogger.d(NETWORK_TAG, "🔍 [JSON_DEBUG] Tool Call Arguments Raw: " + arguments);
+                  // 尝试验证 arguments 是否是合法 JSON
+                  try {
+                    new JSONObject(arguments);
+                    FileLogger.d(NETWORK_TAG, "🔍 [JSON_DEBUG] Arguments JSON Valid: true");
+                  } catch (Exception e) {
+                    FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Arguments JSON Invalid! Error: " + e.getMessage());
+                    FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Failed Arguments Content: " + arguments);
+                  }
+                }
+              }
+            }
+          }
+        } catch (Exception e) {
+          FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Main Body JSON Parse Failed: " + e.getMessage());
+        }
+
+
           apiKey = currentAccessPoint.getApiKey();
       }
       
