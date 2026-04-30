@@ -73,6 +73,7 @@ public class ContextManager
       {
         memoryHistory.add(array.getJSONObject(i));
       }
+      FileLogger.d(TAG, "📥 [LOAD] 加载完成，共 " + memoryHistory.size() + " 条消息");
     } // try
     catch (Exception e)
     {
@@ -97,8 +98,11 @@ public class ContextManager
       return;
     }
     
+    FileLogger.d(TAG, "🧹 [CLEANUP] 开始清理，当前历史大小: " + memoryHistory.size());
+    
     int invalidCount = 0;
     int blankAssistantCount = 0;
+    List<Integer> invalidIndices = new ArrayList<>();
     
     try
     {
@@ -116,34 +120,45 @@ public class ContextManager
         if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
         {
           blankAssistantCount++;
+          FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " is blank assistant");
           continue;
         }
 
         if ((!(inDebugMessageIndexRange(i))) && (hasToolCalls))
         {
+          FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " skipped by inDebugMessageIndexRange");
           continue;
         }
         
         if (!isValidToolCallMessage(currentObject))
         {
           invalidCount++;
+          invalidIndices.add(i);
           FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，将在 normalize 中处理");
           FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " is invalid, invalidCount=" + invalidCount);
         }
       }
       
+      FileLogger.d(TAG, "🧹 [CLEANUP] 遍历完成 | 无效消息：" + invalidCount + " | 空白助手消息：" + blankAssistantCount);
+      if (!invalidIndices.isEmpty()) {
+          FileLogger.d(TAG, "🧹 [CLEANUP] 无效消息索引: " + invalidIndices.toString());
+      }
+      
       // ✅ 直接对完整的 memoryHistory 进行 normalize 处理
+      FileLogger.d(TAG, "🧹 [CLEANUP] 调用 normalizeToolCallMessages, 输入大小: " + memoryHistory.size());
       List<JSONObject> normalizedHistory = normalizeToolCallMessages(memoryHistory, false);
+      FileLogger.d(TAG, "🧹 [CLEANUP] normalizeToolCallMessages 返回, 输出大小: " + normalizedHistory.size());
       
       // ✅ 只有当 normalize 改变了历史时才保存
       if (invalidCount > 0 || blankAssistantCount > 0 || normalizedHistory.size() != memoryHistory.size())
       {
+        FileLogger.d(TAG, "🧹 [CLEANUP] 条件满足，准备保存历史. invalidCount=" + invalidCount + ", blankAssistantCount=" + blankAssistantCount + ", normalizedSize=" + normalizedHistory.size() + ", originalSize=" + memoryHistory.size());
         saveHistory(normalizedHistory);
         FileLogger.i(TAG, "🧹 [CLEANUP] 清理完成 | 无效消息：" + invalidCount + " | 空白助手消息：" + blankAssistantCount + " | 新历史：" + normalizedHistory.size() + " 条");
       }
       else
       {
-        FileLogger.d(TAG, "🧹 [CLEANUP] 无需清理，历史保持原样");
+        FileLogger.d(TAG, "🧹 [CLEANUP] 条件不满足，无需清理，历史保持原样");
       }
     }
     catch (Exception e)
@@ -588,6 +603,8 @@ public class ContextManager
     List<JSONObject> list = new ArrayList<>();
     int cleanedCount = 0;
 
+    FileLogger.d(TAG, "[NORMALIZE] 开始标准化, 输入大小: " + history.size() + ", strictMode: " + strictMode);
+
     try
     {
       JSONObject pendingToolCallsObject = null;
@@ -599,6 +616,8 @@ public class ContextManager
       {
         JSONObject currentObject =  history.get(i);
         String roleString = currentObject.getString("role");
+        
+        FileLogger.d(TAG, "[NORMALIZE] 处理消息 #" + i + ", role: " + roleString);
 
         if (roleString.equals("assistant"))
         {
@@ -606,6 +625,7 @@ public class ContextManager
           {
             pendingToolCallsObject = currentObject;
             matchedToolCallIds.clear();
+            FileLogger.d(TAG, "[NORMALIZE] 发现 assistant with tool_calls, 暂停添加");
 
             continue;
           }
@@ -626,6 +646,7 @@ public class ContextManager
               {
                 matched = true;
                 matchedToolCallIds.add(toolCallId);
+                FileLogger.d(TAG, "[NORMALIZE] Tool 消息 #" + i + " 匹配成功");
 
                 break;
               }
@@ -640,6 +661,7 @@ public class ContextManager
                 // ✅ 所有 tool 都匹配完成，按顺序添加
                 list.add(pendingToolCallsObject);  // 先添加 assistant
                 list.addAll(matchedToolMessages);  // 再添加所有 tool 消息
+                FileLogger.d(TAG, "[NORMALIZE] 所有 tool 匹配完成，添加 assistant 和 tool 消息");
                 pendingToolCallsObject = null;
                 matchedToolCallIds.clear();
                 matchedToolMessages.clear();  // 清空暂存列表
@@ -659,6 +681,7 @@ public class ContextManager
         }
 
         list.add(currentObject);
+        FileLogger.d(TAG, "[NORMALIZE] 直接添加消息 #" + i);
       }
       
       // 🔍 #759909257401 严厉模式：移除所有未匹配的 assistant+tool_calls 消息
@@ -761,6 +784,7 @@ public class ContextManager
   // ✅ 修改：同时更新内存和 SP，内存是唯一真相源
   private void saveHistory(List<JSONObject> history)
   {
+    FileLogger.d(TAG, "[SAVE] 准备保存历史, 大小: " + history.size());
     // 1. 更新内存（唯一真相源）
     memoryHistory = new ArrayList<>(history);
     
@@ -772,6 +796,7 @@ public class ContextManager
           .putString(KEY_HISTORY, historyArray.toString())
           .putInt("current_max_rounds", currentMaxRounds)
           .apply();  // apply() 异步没关系，因为读取的是内存
+      FileLogger.d(TAG, "[SAVE] 保存成功");
     }
     catch (Exception e)
     {
