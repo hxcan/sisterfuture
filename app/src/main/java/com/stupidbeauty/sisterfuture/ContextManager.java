@@ -260,81 +260,10 @@ public class ContextManager
             JSONObject function = toolCall.getJSONObject("function");
             if (function.has("arguments"))
             {
-              String argumentsStr = function.getString("arguments");
-              // 🔧 #774530570947 新增：严格检查 JSON 对象开头，拦截非法结构如 {5LiU..."path": ...}
-              String trimmedArgs = argumentsStr.trim();
-              if (trimmedArgs.startsWith("{"))
+                            // 🔧 #774530570947 重构：委托给 isValidToolCallMessage 进行验证
+              if (!isValidToolCallMessage(message))
               {
-                if (trimmedArgs.length() > 1)
-                {
-                  char secondChar = trimmedArgs.charAt(1);
-                  if (secondChar != '"' && secondChar != '}')
-                  {
-                    FileLogger.w(TAG, "[addRawMessage] Invalid: JSON object does not start with quoted key or empty object. Second char: " + secondChar);
-                    return;
-                  }
-                }
-              }
-
-
-            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== Start Validation (Load) ==========");
-            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments: " + argumentsStr);
-
-            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] ========== Start Validation ==========");
-            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Raw arguments: " + argumentsStr);
-              
-              // Check length first
-              if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: arguments too long (" + argumentsStr.length() + " > " + MAX_ARGUMENTS_STR_LENGTH + ")");
-                return;
-              }
-              
-              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Checking hasUnquotedStringValues...");
-              // General validation: detect any unquoted string identifiers in JSON
-              if (hasUnquotedStringValues(argumentsStr))
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains unquoted string values");
-                return;
-              }
-              
-              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Checking isJsonSyntaxComplete...");
-              // 🔧 #763065048722 新增：严格语法完整性检查
-              if (!isJsonSyntaxComplete(argumentsStr))
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: arguments syntax incomplete or malformed");
-                return;
-              }
-              
-              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Checking JSONTokener strict validation...");
-              // Strict JSON validation
-            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking JSONTokener strict validation...");
-              try
-              {
-                JSONTokener tokener = new JSONTokener(argumentsStr);
-                Object parsed = tokener.nextValue();
-                
-                FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] JSONTokener parsed successfully. Type: " + parsed.getClass().getSimpleName());
-                if (tokener.more())
-                {
-                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments has trailing content after JSON");
-                  return;
-                }
-                if (tokener.more())
-                {
-                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments has trailing content after JSON");
-                  return;
-                }
-                
-                if (!(parsed instanceof JSONObject))
-                {
-                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments is not a JSONObject");
-                  return;
-                }
-              }
-              catch (JSONException e)
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: invalid JSON in arguments - " + e.getMessage());
+                FileLogger.w(TAG, "[addRawMessage] Skip: invalid tool call message");
                 return;
               }
             }
