@@ -318,6 +318,7 @@ public class ContextManager
               }
               catch (JSONException e)
               {
+                              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] JSONTokener threw exception: " + e.getMessage());
                 FileLogger.w(TAG, "[addRawMessage] Skip: invalid JSON in arguments - " + e.getMessage());
                 return;
               }
