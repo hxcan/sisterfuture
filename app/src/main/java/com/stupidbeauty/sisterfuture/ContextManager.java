@@ -142,6 +142,12 @@ public class TongYiClient
               {
                 FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains invalid non-ASCII characters");
                 return;
+              // 🔧 #774530570947 新增：检查 arguments 中是否存在未加引号的 Key
+              if (hasUnquotedKeys(argumentsStr))
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains unquoted keys");
+                return;
+              }
               }
         
         FileLogger.d(TAG, "🔒 [QUEUE_DONE] 请求 #" + totalRequests + " (requestId=" + requestId + ") 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
@@ -241,12 +247,6 @@ public class TongYiClient
     private final TongYiClient tongYiClient; // 引用父类，用于访问映射表
 
     public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager, TongYiClient tongYiClient)
-    {
-      this.client = new OkHttpClient.Builder()
-        .connectTimeout(500, TimeUnit.MILLISECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(160, TimeUnit.SECONDS)
-        .build();
       this.accessPointManager = accessPointManager;
       this.toolManager = toolManager;
       this.tongYiClient = tongYiClient;
