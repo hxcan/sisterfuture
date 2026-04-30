@@ -264,6 +264,9 @@ public class ContextManager
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== Start Validation (Load) ==========");
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments: " + argumentsStr);
 
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== Start Validation (Load) ==========");
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments: " + argumentsStr);
+
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] ========== Start Validation ==========");
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Raw arguments: " + argumentsStr);
               
@@ -571,6 +574,7 @@ public class ContextManager
             }
             catch (JSONException e)
             {
+                            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] JSONTokener threw exception: " + e.getMessage());
               return false;
             }
           }
