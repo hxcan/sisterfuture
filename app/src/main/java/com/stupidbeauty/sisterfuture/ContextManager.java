@@ -261,6 +261,21 @@ public class ContextManager
             if (function.has("arguments"))
             {
               String argumentsStr = function.getString("arguments");
+              // 🔧 #774530570947 新增：严格检查 JSON 对象开头，拦截非法结构如 {5LiU..."path": ...}
+              String trimmedArgs = argumentsStr.trim();
+              if (trimmedArgs.startsWith("{"))
+              {
+                if (trimmedArgs.length() > 1)
+                {
+                  char secondChar = trimmedArgs.charAt(1);
+                  if (secondChar != '"' && secondChar != '}')
+                  {
+                    FileLogger.w(TAG, "[addRawMessage] Invalid: JSON object does not start with quoted key or empty object. Second char: " + secondChar);
+                    return;
+                  }
+                }
+              }
+
 
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== Start Validation (Load) ==========");
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments: " + argumentsStr);
