@@ -85,6 +85,7 @@ public class ContextManager
   {
     int rangeMaximal = 1890;
     int rangeMinimal= 0;
+              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== All Validations Passed (Load) ==========");
     return true;
   }
 
@@ -532,6 +533,9 @@ public class ContextManager
           if (function.has("arguments"))
           {
             String argumentsStr = function.getString("arguments");
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== Start Validation (Load) ==========");
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments: " + argumentsStr);
+
             
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking hasUnquotedStringValues...");
             // General validation: check for unquoted string values
@@ -554,6 +558,7 @@ public class ContextManager
               JSONTokener tokener = new JSONTokener(argumentsStr);
               Object parsed = tokener.nextValue();
               
+                FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] JSONTokener parsed successfully. Type: " + parsed.getClass().getSimpleName());
               if (tokener.more())
               {
                 return false;
