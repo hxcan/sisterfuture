@@ -280,6 +280,13 @@ public class ContextManager
               }
               
               FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Checking isJsonSyntaxComplete...");
+              // 🔧 #774530570947 新增：检查 key 是否包含在引号里
+              if (hasUnquotedKeys(argumentsStr))
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains unquoted keys");
+                return;
+              }
+              
               // 🔧 #763065048722 新增：严格语法完整性检查
               if (!isJsonSyntaxComplete(argumentsStr))
               {
@@ -427,6 +434,75 @@ public class ContextManager
    * Valid JSON values: "quoted", number, true, false, null, {, [, }
    * Invalid: unquoted identifiers like latest, abc, test_value
    */
+
+  /**
+   * 🔧 #774530570947 新增：检查 JSON 字符串中是否存在未包含在引号里的 key
+   * 直接原因：Minimax API 返回 invalid function arguments json string
+   * 示例错误输入：{5LiU5LiL..."path": "..."}
+   * 策略：查找所有 ':' 前面的内容，如果该部分不是以 '"' 结尾（即未被引号包围），则视为非法。
+   */
+  private boolean hasUnquotedKeys(String jsonStr)
+  {
+    if (jsonStr == null || jsonStr.trim().isEmpty())
+    {
+      return false;
+    }
+    
+    // 匹配模式：非引号字符序列后紧跟可选空格和冒号
+    // 排除合法模式："[^"]*"\s*:
+    // 我们寻找的是：[^"\s]\s*: 或者 ^\s*: (key 为空或只有空格)
+    // 简化正则：查找任何不在双引号内的、由字母/数字/中文/下划线组成的序列，且后面跟着冒号
+    
+    // 使用负向断言确保 key 前面没有引号
+    // Pattern: (?<!")([a-zA-Z0-9_一-龥]+)\s*:
+    // 但 Java Regex 不支持变长负向断言，所以采用简单策略：
+    // 遍历字符串，找到所有 ':'，然后向前查找，直到遇到 ',' 或 '{' 或 '"' 或 空白
+    // 如果找到的片段不以 '"' 结尾，且长度>0，则可能是未加引号的 key
+    
+    int len = jsonStr.length();
+    for (int i = 0; i < len; i++)
+    {
+      if (jsonStr.charAt(i) == ':')
+      {
+        // 向前查找 key 的起始位置
+        int j = i - 1;
+        // 跳过冒号前的空白
+        while (j >= 0 && Character.isWhitespace(jsonStr.charAt(j)))
+        {
+          j--;
+        }
+        
+        if (j < 0) continue;
+        
+        // 如果冒号前是引号，说明是合法的 "key": 模式
+        if (jsonStr.charAt(j) == '"')
+        {
+          continue;
+        }
+        
+        // 如果冒号前是逗号或左大括号，说明 key 缺失或格式错误，但也属于非法
+        if (jsonStr.charAt(j) == ',' || jsonStr.charAt(j) == '{')
+        {
+           FileLogger.d(TAG, "[hasUnquotedKeys] Found missing or malformed key at position " + i);
+           return true;
+        }
+        
+        // 否则，认为这是一个未加引号的 key
+        // 提取 key 内容用于日志
+        int start = j;
+        while (start > 0 && !Character.isWhitespace(jsonStr.charAt(start-1)) && jsonStr.charAt(start-1) != ',' && jsonStr.charAt(start-1) != '{')
+        {
+          start--;
+        }
+        String keyContent = jsonStr.substring(start, j+1);
+        FileLogger.d(TAG, "[hasUnquotedKeys] Found unquoted key: " + keyContent + " at position " + start);
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
   private boolean hasUnquotedStringValues(String jsonStr)
   {
     // Step 1: Remove all properly quoted strings (including escaped quotes)
