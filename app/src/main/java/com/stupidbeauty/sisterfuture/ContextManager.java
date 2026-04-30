@@ -1,420 +1,173 @@
-package com.stupidbeauty.sisterfuture;
+package com.stupidbeauty.sisterfuture.network;
 
 import com.stupidbeauty.codeposition.CodePosition;
 import java.io.FileDescriptor;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.json.JSONTokener;
-import java.io.IOException;
-import butterknife.OnClick;
-import com.iflytek.cloud.SpeechRecognizer;
-import android.content.Context;
-import android.content.SharedPreferences;
+import android.util.Log;
+import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.tool.Tool;
+import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
+
+import com.stupidbeauty.sisterfuture.bean.ToolCall;
+import com.stupidbeauty.sisterfuture.bean.Function;
+
+import com.stupidbeauty.sisterfuture.tool.ToolManager;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.io.IOException;
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.ArrayList;
 import java.util.List;
-import android.util.Log;
-import com.stupidbeauty.sisterfuture.utils.FileLogger;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
-import java.util.Set;
-import java.util.HashSet;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.UUID;
 
-public class ContextManager
+public class TongYiClient
 {
-  private static final String TAG = "ContextManager";
-  private static final String PREF_NAME = "context_manager";
-  private static final String KEY_HISTORY = "history";
-  private static final int INITIAL_MAX_ROUNDS = 5;
-  private SharedPreferences sharedPreferences;
-  private int currentMaxRounds = INITIAL_MAX_ROUNDS;
-  private int MAX_ARGUMENTS_STR_LENGTH = 226810;
-  
-  // ✅ 新增：内存中的历史列表（唯一真相源）
-  private List<JSONObject> memoryHistory;
-  
-  // 🔗 新增：预留的消息 ID 集合（用于追踪尚未确认的消息）
-  private Set<String> reservedMessageIds = new HashSet<>();
+  private static final String TAG = "TongYiClient";
+  private ModelAccessPointManager accessPointManager;
+  private NetworkRequester networkRequester;
+  private ToolManager toolManager;
 
-  public ContextManager(Context context)
+  // === 🔒 #5028 新增：串行请求队列 ===
+  private final LinkedBlockingQueue<Runnable> requestQueue = new LinkedBlockingQueue<>();
+  private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
+    Thread t = new Thread(r, "TongYiClient-Queue-Worker");
+    t.setDaemon(true);
+    return t;
+  });
+  
+  // 队列统计
+  private final AtomicInteger totalRequestsSubmitted = new AtomicInteger(0);
+  private final AtomicLong totalWaitTimeMs = new AtomicLong(0);
+  private final AtomicInteger queueSizeHighWaterMark = new AtomicInteger(0);
+  
+  // 🔗 新增：requestId ↔ messageId 映射表（用于追踪请求与消息的关联）
+  private final Map<Long, String> requestIdToMessageIdMap = new HashMap<>();
+  private final AtomicLong requestIdCounter = new AtomicLong(0);
+
+  public TongYiClient(ModelAccessPointManager accessPointManager, ToolManager toolManager)
   {
-    sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-    currentMaxRounds = sharedPreferences.getInt("current_max_rounds", INITIAL_MAX_ROUNDS);
+    this.accessPointManager = accessPointManager;
+    this.toolManager = toolManager;
+    this.networkRequester = new OkHttpNetworkRequester(this.accessPointManager, this.toolManager, this);
     
-    // ✅ 启动时从 SP 加载到内存
-    loadHistoryFromSharedPreferences();
-    
-    cleanupInvalidToolCallsOnStartup();
+    // === 🔒 #5028 启动队列处理器 ===
+    startQueueProcessor();
   }
-
-  // ✅ 新增：从 SP 加载历史到内存
-  private void loadHistoryFromSharedPreferences()
-  {
-    String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
-    
-    if (historyStr.isEmpty())
-    {
-      memoryHistory = new ArrayList<>();
-      FileLogger.d(TAG, "📥 [LOAD] 从 SharedPreferences 加载历史：空");
-      return;
-    }
-    
-    try
-    {
-      JSONArray array = new JSONArray(historyStr);
-      memoryHistory = new ArrayList<>();
+  
+  // === 🔒 #5028 队列处理器 ===
+  private void startQueueProcessor() {
+    executor.submit(() -> {
       
-      for (int i = 0; i < array.length(); i++)
-      {
-        memoryHistory.add(array.getJSONObject(i));
-      }
-    } // try
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [LOAD] 加载历史失败：" + e.getMessage(), e);
-      memoryHistory = new ArrayList<>();
-    }
-  }
-
-  private boolean inDebugMessageIndexRange(int i)
-  {
-    int rangeMaximal = 1890;
-    int rangeMinimal= 0;
-    return true;
-  }
-
-  private void cleanupInvalidToolCallsOnStartup()
-  {
-    if (memoryHistory == null || memoryHistory.isEmpty())
-    {
-      FileLogger.d(TAG, "🧹 [CLEANUP] 内存历史为空，跳过清理");
-      return;
-    }
-    
-    int invalidCount = 0;
-    int blankAssistantCount = 0;
-    
-    try
-    {
-      // 🔍 遍历原始 memoryHistory，仅统计无效消息数量，不修改列表
-      for (int i = 0; i < memoryHistory.size(); i++)
-      {
-        JSONObject currentObject = memoryHistory.get(i);
-        
-        String role = currentObject.optString("role", "");
-        String content = currentObject.optString("content", "");
-        boolean hasToolCalls = currentObject.has("tool_calls");
-        
-        if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
-        {
-          blankAssistantCount++;
-          continue;
-        }
-
-        if ((!(inDebugMessageIndexRange(i))) && (hasToolCalls))
-        {
-          continue;
-        }
-        
-        if (!isValidToolCallMessage(currentObject))
-        {
-          invalidCount++;
-          FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，将在 normalize 中处理");
+      while (!Thread.currentThread().isInterrupted()) {
+        try {
+          Runnable request = requestQueue.take(); // 阻塞等待下一个请求
+          request.run();
+        } catch (InterruptedException e) {
+          FileLogger.w(TAG, "🔒 [QUEUE_WORKER] 队列工作线程被中断，退出循环");
+          Thread.currentThread().interrupt();
+          break;
+        } catch (Exception e) {
+          FileLogger.e(TAG, "🔒 [QUEUE_ERROR] 队列执行异常", e);
+          // 继续处理下一个请求，不退出循环
         }
       }
       
-      // ✅ 直接对完整的 memoryHistory 进行 normalize 处理
-      List<JSONObject> normalizedHistory = normalizeToolCallMessages(memoryHistory, false);
-      
-      // ✅ 只有当 normalize 改变了历史时才保存
-      if (invalidCount > 0 || blankAssistantCount > 0 || normalizedHistory.size() != memoryHistory.size())
-      {
-        saveHistory(normalizedHistory);
-        FileLogger.i(TAG, "🧹 [CLEANUP] 清理完成 | 无效消息：" + invalidCount + " | 空白助手消息：" + blankAssistantCount + " | 新历史：" + normalizedHistory.size() + " 条");
-      }
-      else
-      {
-        FileLogger.d(TAG, "🧹 [CLEANUP] 无需清理，历史保持原样");
-      }
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "[Startup cleanup] Error: " + e.getMessage(), e);
-    }
+      FileLogger.w(TAG, "🔒 [QUEUE_WORKER] 队列工作线程已退出");
+    });
   }
 
-  private List<JSONObject> removeOldHistoryEntries(List<JSONObject> oldHistory)
+  // 🔗 新增：带 messageId 的请求方法
+  public void sendChatRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete, String reservedMessageId)
   {
-    List<JSONObject> history = oldHistory;
-
-    if (oldHistory.size() > currentMaxRounds *2)
-    {
-      history = new ArrayList<>(history.subList(history.size() - (currentMaxRounds * 2), history.size()));
-    }
-
-    try
-    {
-      String firstRole = history.get(0).getString("role");
-      if (firstRole.equals("tool"))
-      {
-        history = new ArrayList<>(history.subList(1, history.size()));
-      }
-    }
-    catch(JSONException e)
-    {
-      e.printStackTrace();
-    }
-
-    return history;
-  }
-  
-  public void addToolMessage(String toolCallId, String toolName, String content)
-  {
-    List<JSONObject> history = getHistory();
-
-    JSONObject toolMessage = new JSONObject();
-    try
-    {
-      toolMessage.put("role", "tool");
-      toolMessage.put("tool_call_id", toolCallId);
-      toolMessage.put("name", toolName);
-      toolMessage.put("content", content);
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "Failed to create tool message", e);
-      return;
-    }
-
-    history.add(toolMessage);
-    history = removeOldHistoryEntries(history);
-    history = normalizeToolCallMessages(history, false);
-    saveHistory(history);
-  }
-
-  public void addUserMessage(String message)
-  {
-    addMessage("user", message);
+    final long requestId = requestIdCounter.incrementAndGet();
+    final long submitTime = System.currentTimeMillis();
+    final int queueSizeBefore = requestQueue.size();
+    final int totalRequests = totalRequestsSubmitted.incrementAndGet();
     
-    List<JSONObject> history = getHistory();
-    history = normalizeToolCallMessages(history, false);
-    saveHistory(history);
-  }
-
-  public void addAssistantMessage(String message)
-  {
-    addMessage("assistant", message);
-  }
-  
-  // 🔗 新增：带 messageId 的 addAssistantMessage 重载
-  public void addAssistantMessage(String message, String messageId)
-  {
-    JSONObject msg = createMessage("assistant", message);
-    if (messageId != null && !messageId.isEmpty())
+    // 🔗 记录 requestId ↔ messageId 映射
+    if (reservedMessageId != null && !reservedMessageId.isEmpty())
     {
-      try
-      {
-        msg.put("id", messageId);
-        // 从预留集合中移除，标记为已确认
-        reservedMessageIds.remove(messageId);
-        FileLogger.d(TAG, "✅ [CONFIRM] 助手消息已确认 | id=" + messageId);
-      }
-      catch (JSONException e)
-      {
-        FileLogger.e(TAG, "❌ [CONFIRM] 添加 messageId 失败", e);
-      }
+      requestIdToMessageIdMap.put(requestId, reservedMessageId);
+      FileLogger.d(TAG, "🔗 [MAP_PUT] 请求 - 消息 ID 映射 | requestId=" + requestId + " | messageId=" + reservedMessageId);
     }
-    addRawMessage(msg);
-  }
-
-  public void addRawMessage(JSONObject message)
-  {
-    if (message == null)
-    {
-      return;
-    }
-
-    // Validate tool_calls arguments before adding to history
-    if (message.has("tool_calls"))
-    {
-      try
-      {
-        JSONArray toolCalls = message.getJSONArray("tool_calls");
-        if (toolCalls.length() == 0)
-        {
-          FileLogger.w(TAG, "[addRawMessage] Skip: empty tool_calls array");
-          return;
+    
+    // === 🔒 #5028 将请求提交到队列 ===
+    boolean queued = requestQueue.offer(() -> {
+      final long startTime = System.currentTimeMillis();
+      final long waitTime = startTime - submitTime;
+      final int queueSizeNow = requestQueue.size();
+      
+      totalWaitTimeMs.addAndGet(waitTime);
+      
+      // 更新高水位标记
+      int currentQueueSize = queueSizeBefore;
+      int oldHighWaterMark = queueSizeHighWaterMark.get();
+      while (currentQueueSize > oldHighWaterMark) {
+        if (queueSizeHighWaterMark.compareAndSet(oldHighWaterMark, currentQueueSize)) {
+          break;
         }
-
-        for (int i = 0; i < toolCalls.length(); i++)
-        {
-          JSONObject toolCall = toolCalls.getJSONObject(i);
-          if (toolCall.has("function"))
-          {
-            JSONObject function = toolCall.getJSONObject("function");
-            if (function.has("arguments"))
-            {
-              String argumentsStr = function.getString("arguments");
-              
-              // Check length first
-              if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
+        oldHighWaterMark = queueSizeHighWaterMark.get();
+        currentQueueSize = queueSizeBefore;
+      }
+      
+      FileLogger.d(TAG, "🔒 [QUEUE_EXEC] 请求 #" + totalRequests + " (requestId=" + requestId + ") 开始执行 | 等待时间：" + waitTime + "ms | 当前队列长度：" + queueSizeNow + " | 线程：" + Thread.currentThread().getName());
+      
+      try {
+        // 执行实际的网络请求，传入 requestId 和 messageId
+        networkRequester.sendRequest(messages, includeTools, listener, onStreamComplete, requestId, reservedMessageId);
+        
+        final long endTime = System.currentTimeMillis();
+        final long executionTime = endTime - startTime;
+              // 🔧 #774530570947 新增：检查 arguments 是否包含非法的非 ASCII 字符
+              if (hasInvalidNonAsciiChars(argumentsStr))
               {
-                FileLogger.w(TAG, "[addRawMessage] Skip: arguments too long (" + argumentsStr.length() + " > " + MAX_ARGUMENTS_STR_LENGTH + ")");
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains invalid non-ASCII characters");
                 return;
               }
-              
-              // General validation: detect any unquoted string identifiers in JSON
-              if (hasUnquotedStringValues(argumentsStr))
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains unquoted string values");
-                return;
-              }
-              
-              // 🔧 #763065048722 新增：严格语法完整性检查
-              if (!isJsonSyntaxComplete(argumentsStr))
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: arguments syntax incomplete or malformed");
-                return;
-              }
-              
-              // Strict JSON validation
-              try
-              {
-                JSONTokener tokener = new JSONTokener(argumentsStr);
-                Object parsed = tokener.nextValue();
-                
-                if (tokener.more())
-                {
-                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments has trailing content after JSON");
-                  return;
-                }
-                
-                if (!(parsed instanceof JSONObject))
-                {
-                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments is not a JSONObject");
-                  return;
-                }
-              }
-              catch (JSONException e)
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: invalid JSON in arguments - " + e.getMessage());
-                return;
-              }
-            }
-          }
-        }
-      }
-      catch (JSONException e)
-      {
-        FileLogger.e(TAG, "[addRawMessage] Error checking tool_calls: " + e.getMessage(), e);
-        return;
-      }
-    }
-
-    List<JSONObject> historyBefore = getHistory();
-
-    List<JSONObject> history = getHistory();
-    
-    history.add(message);
-    FileLogger.i(TAG, "[addRawMessage] Message added: " + historyBefore.size() + " -> " + history.size());
-    
-    history = removeOldHistoryEntries(history);
-    saveHistory(history);
-    FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
-  }
-
-  
-  /**
-   * 🔧 #763065048722 新增：检查 JSON 语法完整性
-   * 检测括号匹配、引号闭合等基本语法结构
-   */
-  private boolean isJsonSyntaxComplete(String jsonStr)
-  {
-    if (jsonStr == null || jsonStr.trim().isEmpty())
-    {
-      return false;
-    }
-    
-    // 1. 检查括号匹配
-    int braceCount = 0;
-    int bracketCount = 0;
-    boolean inString = false;
-    boolean escaped = false;
-    
-    for (int i = 0; i < jsonStr.length(); i++)
-    {
-      char c = jsonStr.charAt(i);
-      
-      if (escaped)
-      {
-        escaped = false;
-        continue;
-      }
-      
-      if (c == '\\' && inString)
-      {
-        escaped = true;
-        continue;
-      }
-      
-      if (c == '"' && !escaped)
-      {
-        inString = !inString;
-        continue;
-      }
-      
-      if (!inString)
-      {
-        if (c == '{') braceCount++;
-        else if (c == '}') braceCount--;
-        else if (c == '[') bracketCount++;
-        else if (c == ']') bracketCount--;
         
-        // 如果括号计数为负，说明闭合符号多于开启符号
-        if (braceCount < 0 || bracketCount < 0)
-        {
-          FileLogger.d(TAG, "[isJsonSyntaxComplete] Mismatched brackets at position " + i);
-          return false;
+        FileLogger.d(TAG, "🔒 [QUEUE_DONE] 请求 #" + totalRequests + " (requestId=" + requestId + ") 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
+        
+        // 每 10 个请求输出一次统计
+        if (totalRequests % 10 == 0) {
+          long avgWaitTime = totalWaitTimeMs.get() / totalRequests;
+          int highWaterMark = queueSizeHighWaterMark.get();
+          FileLogger.i(TAG, "🔒 [QUEUE_STATS] 队列统计 | 总请求数：" + totalRequests + " | 平均等待时间：" + avgWaitTime + "ms | 队列最大长度：" + highWaterMark);
         }
+      } catch (Exception e) {
+        FileLogger.e(TAG, "🔒 [QUEUE_ERROR] 请求 #" + totalRequests + " (requestId=" + requestId + ") 执行失败", e);
+        throw e;
       }
-    }
+    });
     
-    // 检查是否所有括号都闭合
-    if (braceCount != 0 || bracketCount != 0)
-    {
-      FileLogger.d(TAG, "[isJsonSyntaxComplete] Unclosed brackets: brace=" + braceCount + ", bracket=" + bracketCount);
-      return false;
+    if (!queued) {
+      FileLogger.e(TAG, "🔒 [QUEUE_REJECTED] 请求 #" + totalRequests + " (requestId=" + requestId + ") 被队列拒绝（队列已满）");
+      listener.onError(new IllegalStateException("请求队列已满，无法接受新请求"));
     }
-    
-    // 检查是否在字符串中间结束
-    if (inString)
-    {
-      FileLogger.d(TAG, "[isJsonSyntaxComplete] Unclosed string");
-      return false;
-    }
-    
-    // 2. 检查是否以合理的字符开始和结束
-    String trimmed = jsonStr.trim();
-    if (!trimmed.startsWith("{") || !trimmed.endsWith("}"))
-    {
-      FileLogger.d(TAG, "[isJsonSyntaxComplete] Does not start with { or end with }");
-      return false;
-    }
-    
-    return true;
   }
-
-  /**
-   * General validation: check if JSON string contains unquoted string values.
-   * Strategy: Remove all quoted strings, then look for alphabetic identifiers after colons.
-   * Valid JSON values: "quoted", number, true, false, null, {, [, }
-   * Invalid: unquoted identifiers like latest, abc, test_value
-   */
+  
+  // ✅ 保留旧方法，兼容现有调用（默认 messageId 为 null）
+  public void sendChatRequest(JSONArray messages, boolean includeTools , OnResponseListener listener, Runnable onStreamComplete)
+  {
+    sendChatRequest(messages, includeTools, listener, onStreamComplete, null);
   private boolean hasUnquotedStringValues(String jsonStr)
   {
     // Step 1: Remove all properly quoted strings (including escaped quotes)
@@ -441,380 +194,582 @@ public class ContextManager
     
     return false;
   }
-
-  private void addMessage(String role, String content)
-  {
-    JSONObject message = createMessage(role, content);
-    addRawMessage(message);
-  }
-
-  public JSONArray getMessagesArray()
-  {
-    List<JSONObject> history = getHistory();
-    return new JSONArray(history);
-  }
-
-  // ✅ 修改：直接返回内存中的历史列表（唯一真相源）
-  public List<JSONObject> getHistory()
-  {
-    if (memoryHistory == null)
-    {
-      FileLogger.w(TAG, "⚠️ [GET] 内存历史未初始化，重新加载");
-      loadHistoryFromSharedPreferences();
-    }
-
-    return memoryHistory;
   }
   
-  // 🔗 新增：生成并预留一个消息 ID
-  public String reserveMessageId()
+  // 🔗 新增：根据 requestId 获取对应的 messageId
+  public String getMessageIdByRequestId(long requestId)
   {
-    String messageId = generateMessageId();
-    reservedMessageIds.add(messageId);
-    FileLogger.d(TAG, "🔖 [RESERVE] 预留消息 ID | id=" + messageId + " | 当前预留数=" + reservedMessageIds.size());
+    String messageId = requestIdToMessageIdMap.get(requestId);
+    if (messageId != null)
+    {
+      FileLogger.d(TAG, "🔍 [MAP_GET] 找到 messageId | requestId=" + requestId + " | messageId=" + messageId);
+    }
+    else
+    {
+      FileLogger.w(TAG, "⚠️ [MAP_GET] 未找到 messageId | requestId=" + requestId);
+    }
     return messageId;
   }
   
-  // 🔗 新增：丢弃未使用的预留 ID（当消息被丢弃时调用）
-  public void discardReservedMessageId(String messageId)
+  // 🔗 新增：清除已完成的 requestId 映射（防止内存泄漏）
+  public void removeRequestIdMapping(long requestId)
   {
-    if (messageId != null && reservedMessageIds.remove(messageId))
+    String removedId = requestIdToMessageIdMap.remove(requestId);
+    if (removedId != null)
     {
-      FileLogger.d(TAG, "🗑️ [DISCARD] 丢弃预留 ID | id=" + messageId);
+      FileLogger.d(TAG, "🗑️ [MAP_REMOVE] 已清除映射 | requestId=" + requestId + " | messageId=" + removedId);
     }
   }
-  
-  // 🔗 新增：检查某个 ID 是否是预留中的 ID
-  public boolean isReservedMessageId(String messageId)
+
+  public interface OnResponseListener
   {
-    return reservedMessageIds.contains(messageId);
-  }
-  
-  // 🔗 生成唯一消息 ID（时间戳 + UUID）
-  private static String generateMessageId()
-  {
-    return "msg_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8);
+    void onResponse(String response);
+    void onError(Exception error);
   }
 
-  private boolean isValidToolCallMessage(JSONObject message)
+  interface NetworkRequester
   {
-    try
+    void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete, long requestId, String reservedMessageId);
+  }
+
+  private static class OkHttpNetworkRequester implements NetworkRequester
+  {
+    private static final String NETWORK_TAG = "TongYiClient.Network";
+    private final OkHttpClient client;
+    private final ModelAccessPointManager accessPointManager;
+    private final ToolManager toolManager;
+    private final TongYiClient tongYiClient; // 引用父类，用于访问映射表
+
+    public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager, TongYiClient tongYiClient)
     {
-      if (!message.has("tool_calls"))
-      {
-        return true;
-      }
-
-      JSONArray toolCalls = message.getJSONArray("tool_calls");
-
-      for (int i = 0; i < toolCalls.length(); i++)
-      {
-        JSONObject toolCall = toolCalls.getJSONObject(i);
-        if (toolCall.has("function"))
-        {
-          JSONObject function = toolCall.getJSONObject("function");
-          if (function.has("arguments"))
-          {
-            String argumentsStr = function.getString("arguments");
-            
-            // General validation: check for unquoted string values
-            if (hasUnquotedStringValues(argumentsStr))
-            {
-              FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: unquoted string values");
-              return false;
-            }
-            
-            // 🔧 #763065048722 新增：严格语法完整性检查
-            if (!isJsonSyntaxComplete(argumentsStr))
-            {
-              FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: syntax incomplete");
-              return false;
-            }
-            
-            try
-            {
-              JSONTokener tokener = new JSONTokener(argumentsStr);
-              Object parsed = tokener.nextValue();
-              
-              if (tokener.more())
-              {
-                return false;
-              }
-              
-              if (!(parsed instanceof JSONObject))
-              {
-                return false;
-              }
-              
-              if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
-              {
-                return false;
-              }
-            }
-            catch (JSONException e)
-            {
-              return false;
-            }
-          }
-        }
-      }
-      return true;
+      this.client = new OkHttpClient.Builder()
+        .connectTimeout(500, TimeUnit.MILLISECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(160, TimeUnit.SECONDS)
+        .build();
+      this.accessPointManager = accessPointManager;
+      this.toolManager = toolManager;
+      this.tongYiClient = tongYiClient;
     }
-    catch (JSONException e)
+
+    @Override
+  // 🔧 #774530570947 新增：检查 arguments 是否包含非法的非 ASCII 字符（如 Base64 中文）
+  private boolean hasInvalidNonAsciiChars(String jsonStr)
+  {
+    if (jsonStr == null || jsonStr.isEmpty())
     {
       return false;
     }
-  }
-
-  /**
-   * 标准化工具调用消息，配对 assistant+tool_calls 与对应的 tool 回复
-   * 
-   * @param oldHistory 原始历史记录
-   * @return 标准化后的历史记录
-   */
-  public List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory)
-  {
-    return normalizeToolCallMessages(oldHistory, false);
-  }
-
-  /**
-   * 标准化工具调用消息，支持严厉模式
-   * 
-   * @param oldHistory 原始历史记录
-   * @param strictMode 严厉模式：true=移除所有未匹配的 assistant+tool_calls；false=保留等待后续回复
-   * @return 标准化后的历史记录
-   */
-  public List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory, boolean strictMode)
-  {
-    List<JSONObject> history = oldHistory;
-    List<JSONObject> list = new ArrayList<>();
-    int cleanedCount = 0;
-
-    try
+    
+    // 检查是否包含非 ASCII 字符（除了常见的 Unicode 转义序列 \uXXXX）
+    for (int i = 0; i < jsonStr.length(); i++)
     {
-      JSONObject pendingToolCallsObject = null;
-      List<String> matchedToolCallIds = new ArrayList<>();
-      // ✅ 新增：暂存匹配的 tool 消息
-      List<JSONObject> matchedToolMessages = new ArrayList<>();
-
-      for (int i = 0; i < history.size(); i++)
+      char c = jsonStr.charAt(i);
+      if (c < 32 || c > 126)
       {
-        JSONObject currentObject =  history.get(i);
-        String roleString = currentObject.getString("role");
-
-        if (roleString.equals("assistant"))
+        if (c == '\\' && i + 5 < jsonStr.length() && 
+            jsonStr.charAt(i+1) == 'u' &&
+            isHexDigit(jsonStr.charAt(i+2)) &&
+            isHexDigit(jsonStr.charAt(i+3)) &&
+            isHexDigit(jsonStr.charAt(i+4)) &&
+            isHexDigit(jsonStr.charAt(i+5)))
         {
-          if (currentObject.has("tool_calls"))
-          {
-            pendingToolCallsObject = currentObject;
-            matchedToolCallIds.clear();
-
-            continue;
-          }
+          i += 5;
+          continue;
         }
-        else if (roleString.equals("tool"))
-        {
-          String answeringtoolCAllId = currentObject.optString("tool_call_id", "none");
+        FileLogger.d(TAG, "[hasInvalidNonAsciiChars] Found invalid non-ASCII char at position " + i + ": " + (int)c);
+        return true;
+      }
+    }
+    return false;
+  }
+  
+  private boolean isHexDigit(char c)
+  {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+  }
+    public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete, long requestId, String reservedMessageId)
+    {
+      ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
+      String apiKey = null;
+      
+      if (currentAccessPoint != null) {
+          apiKey = currentAccessPoint.getApiKey();
+      }
+      
+      String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
           
-          if (pendingToolCallsObject!=null)
-          {
-            JSONArray toolCallsArray = pendingToolCallsObject.getJSONArray("tool_calls");
-            boolean matched = false;
-            for (int tc = 0; tc < toolCallsArray.length(); tc++)
-            {
-              JSONObject toolCall = toolCallsArray.getJSONObject(tc);
-              String toolCallId = toolCall.optString("id", "");
-              if (toolCallId.equals(answeringtoolCAllId) && !matchedToolCallIds.contains(toolCallId))
-              {
-                matched = true;
-                matchedToolCallIds.add(toolCallId);
+      String apiKeyMasked = (apiKey != null && apiKey.length() > 12) 
+          ? apiKey.substring(0, 8) + "..." + apiKey.substring(apiKey.length() - 4)
+          : (apiKey != null ? "***" : "null");
+      FileLogger.d(NETWORK_TAG, "[API Key] 接入点=\"" + (currentAccessPoint != null ? currentAccessPoint.getName() : "null") + "\", Key=\"" + apiKeyMasked + "\" (长度：" + (apiKey != null ? apiKey.length() : 0) + ")");
+      
+      // 🔗 记录请求信息
+      FileLogger.d(NETWORK_TAG, "🔗 [REQUEST_INFO] requestId=" + requestId + " | messageId=" + reservedMessageId);
 
-                break;
+      try
+      {
+        // 🔍 #5031 检查：如果有 assistant 的 tool_calls，检查是否有对应的 tool message
+        boolean hasAssistantToolCalls = false;
+        List<String> toolCallIdsWithoutResponse = new ArrayList<>();
+        for (int i = 0; i < messages.length(); i++)
+        {
+          try
+          {
+            JSONObject msg = messages.getJSONObject(i);
+            String role = msg.optString("role", "");
+            if ("assistant".equals(role) && msg.has("tool_calls"))
+            {
+              hasAssistantToolCalls = true;
+              JSONArray toolCalls = msg.getJSONArray("tool_calls");
+              for (int j = 0; j < toolCalls.length(); j++)
+              {
+                String tcId = toolCalls.getJSONObject(j).optString("id", "unknown");
+                // 检查是否有对应的 tool message
+                boolean hasResponse = false;
+                for (int k = 0; k < messages.length(); k++)
+                {
+                  JSONObject otherMsg = messages.getJSONObject(k);
+                  if ("tool".equals(otherMsg.optString("role", "")) && tcId.equals(otherMsg.optString("tool_call_id", "")))
+                  {
+                    hasResponse = true;
+                    break;
+                  }
+                }
+                if (!hasResponse)
+                {
+                  toolCallIdsWithoutResponse.add(tcId);
+                }
               }
             }
-            if (matched)
+          }
+          catch (Exception e)
+          {
+            // ignore
+          }
+        }
+        if (hasAssistantToolCalls)
+        {
+          if (!toolCallIdsWithoutResponse.isEmpty())
+          {
+            FileLogger.w(NETWORK_TAG, "🔍 [VALIDATION] ⚠️ 检测到 tool_calls 缺少对应的 tool message！缺失的 IDs：" + toolCallIdsWithoutResponse);
+          }
+          else
+          {
+            FileLogger.d(NETWORK_TAG, "🔍 [VALIDATION] ✓ 所有 tool_calls 都有对应的 tool message");
+          }
+        // === 🔒 #5033 新增：调试完整 tool_calls 结构 ===
+        FileLogger.d(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Checking messages for tool_calls...");
+        for (int i = 0; i < messages.length(); i++) {
+            try {
+                JSONObject msg = messages.getJSONObject(i);
+                if (msg.has("tool_calls")) {
+                    JSONArray toolCalls = msg.getJSONArray("tool_calls");
+                    FileLogger.d(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Message #" + i + " has " + toolCalls.length() + " tool_calls");
+                    for (int j = 0; j < toolCalls.length(); j++) {
+                        JSONObject tc = toolCalls.getJSONObject(j);
+                        String id = tc.optString("id", "unknown");
+                        String type = tc.optString("type", "unknown");
+                        JSONObject function = tc.optJSONObject("function");
+                        String funcName = function != null ? function.optString("name", "unknown") : "null";
+                        String args = function != null ? function.optString("arguments", "{}") : "{}";
+                        
+                        FileLogger.d(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Tool Call #" + j + ":");
+                        FileLogger.d(NETWORK_TAG, "  - id: " + id);
+                        FileLogger.d(NETWORK_TAG, "  - type: " + type);
+                        FileLogger.d(NETWORK_TAG, "  - function.name: " + funcName);
+                        FileLogger.d(NETWORK_TAG, "  - function.arguments: " + args);
+                        
+                        // 尝试验证 arguments
+                        try {
+                            new JSONObject(args);
+                            FileLogger.d(NETWORK_TAG, "  - arguments JSON Valid: true");
+                        } catch (Exception e) {
+                            FileLogger.e(NETWORK_TAG, "  - arguments JSON Invalid! Error: " + e.getMessage());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                FileLogger.e(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Error processing message #" + i, e);
+            }
+        }
+        }
+
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("model", accessPointManager.getCurrentModelName());
+        requestBody.put("messages", messages);
+        requestBody.put("stream", true);
+        requestBody.put("enable_thinking", false);
+        
+        // === 🔒 #新功能：为所有模型添加 Minimax 思考控制参数 ===
+        // 即使不是 Minimax 模型也加上这些参数，让 API 自行判断是否支持
+        JSONObject thinkingParams = new JSONObject();
+        thinkingParams.put("type", "disabled");
+        thinkingParams.put("budget_tokens", 100);
+        requestBody.put("thinking", thinkingParams);
+        
+        JSONObject reasoningParams = new JSONObject();
+        reasoningParams.put("split", true);
+        requestBody.put("reasoning_split", reasoningParams.opt("split"));
+        
+        FileLogger.d(NETWORK_TAG, "🌐 [Minimax] 已添加 Minimax 思考控制参数：reasoning_split=true, thinking.budget_tokens=100");
+
+        if (includeTools)
+        {
+            JSONArray toolsArray = new JSONArray();
+            for (Tool tool : toolManager.getRegisteredTools())
             {
-              // ✅ 暂存匹配的 tool 消息
-              matchedToolMessages.add(currentObject);
-              
-              if (matchedToolCallIds.size() == pendingToolCallsObject.getJSONArray("tool_calls").length())
+              if (tool.shouldInclude())
               {
-                // ✅ 所有 tool 都匹配完成，按顺序添加
-                list.add(pendingToolCallsObject);  // 先添加 assistant
-                list.addAll(matchedToolMessages);  // 再添加所有 tool 消息
-                pendingToolCallsObject = null;
-                matchedToolCallIds.clear();
-                matchedToolMessages.clear();  // 清空暂存列表
+                JSONObject toolDef = tool.getDefinition();
+                if (toolDef != null && !toolDef.toString().isEmpty())
+                {
+                  toolsArray.put(toolDef);
+                }
+              }
+            }
+
+            if (toolsArray.length() > 0)
+            {
+              requestBody.put("tools", toolsArray);
+              requestBody.put("tool_choice", "auto");
+            }
+        }
+
+        RequestBody body = RequestBody.create
+        (
+          MediaType.parse("application/json; charset=utf-8"),
+          requestBody.toString()
+        );
+
+        String baseUrl = accessPointManager.getCurrentBaseUrl();
+        String endpoint = accessPointManager.getCurrentChatEndpoint();
+        String fullUrl = baseUrl + endpoint;
+        
+        FileLogger.d(NETWORK_TAG, "URL: " + fullUrl);
+        FileLogger.d(NETWORK_TAG, "Body length: " + requestBody.toString().length());
+        
+        String bodyPreview = requestBody.toString().length() > 200 
+            ? requestBody.toString().substring(0, 200) + "..." 
+            : requestBody.toString();
+        FileLogger.d(NETWORK_TAG, "Body preview: " + bodyPreview);
+
+        if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
+            FileLogger.w(NETWORK_TAG, "⚠️ Double slash in URL!");
+        }
+
+        Request request = new Request.Builder()
+          .url(fullUrl)
+          .addHeader("Authorization", "Bearer " + effectiveApiKey)
+          .addHeader("Content-Type", "application/json")
+          .post(body)
+          .build();
+        // === 🔒 #5032 新增：调试工具调用参数 JSON 格式 ===
+        try {
+          String bodyJsonStr = requestBody.toString();
+          JSONObject bodyObj = new JSONObject(bodyJsonStr);
+          if (bodyObj.has("messages")) {
+            JSONArray msgs = bodyObj.getJSONArray("messages");
+            for (int i = 0; i < msgs.length(); i++) {
+              JSONObject msg = msgs.getJSONObject(i);
+              if (msg.has("tool_calls")) {
+                JSONArray toolCalls = msg.getJSONArray("tool_calls");
+                for (int j = 0; j < toolCalls.length(); j++) {
+                  JSONObject tc = toolCalls.getJSONObject(j);
+                  String arguments = tc.optString("arguments", "{}");
+                  FileLogger.d(NETWORK_TAG, "🔍 [JSON_DEBUG] Tool Call Arguments Raw: " + arguments);
+                  // 尝试验证 arguments 是否是合法 JSON
+                  try {
+                    new JSONObject(arguments);
+                    FileLogger.d(NETWORK_TAG, "🔍 [JSON_DEBUG] Arguments JSON Valid: true");
+                  } catch (Exception e) {
+                    FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Arguments JSON Invalid! Error: " + e.getMessage());
+                    FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Failed Arguments Content: " + arguments);
+                  }
+                }
+              }
+            }
+          }
+        } catch (Exception e) {
+          FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Main Body JSON Parse Failed: " + e.getMessage());
+        }
+
+        client.newCall(request).enqueue(new Callback()
+        {
+          @Override
+          public void onFailure(Call call, IOException e)
+          {
+            FileLogger.e(NETWORK_TAG, "🌐 [HTTP_FAILURE] 请求失败 (requestId=" + requestId + "): " + e.getMessage() + " | 线程：" + Thread.currentThread().getName());
+            listener.onError(new AccessPointUnavailableException("Current access point is unavailable", e));
+            // 🔗 清理映射
+            tongYiClient.removeRequestIdMapping(requestId);
+          }
+
+          @Override
+          public void onResponse(Call call, Response response) throws IOException
+          {
+            int statusCode = response.code();
+            FileLogger.d(NETWORK_TAG, "🌐 [HTTP_RESPONSE] HTTP Response Status: " + statusCode + " (requestId=" + requestId + ") | 线程：" + Thread.currentThread().getName());
+            
+            if (!response.isSuccessful())
+            {
+              String errorBody = "";
+              try {
+                errorBody = response.body().string();
+                FileLogger.e(NETWORK_TAG, "HTTP " + statusCode + " Error Body: " + errorBody);
+                
+                String errorPreview = errorBody.length() > 2000 
+                    ? errorBody.substring(0, 2000) + "..." 
+                    : errorBody;
+                FileLogger.e(NETWORK_TAG, "Error Body Preview: " + errorPreview);
+                
+                // ✅ #4823 HTTP 400 → 上下文超长
+                if (statusCode == 400 && ContextLengthUtils.isContextLengthError(errorBody)) {
+                  FileLogger.w(NETWORK_TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点 (requestId=" + requestId + ")");
+                  listener.onError(new ResponseException(response, errorBody));
+                  // 🔗 清理映射
+                  tongYiClient.removeRequestIdMapping(requestId);
+                  return; // 只调用一次 onError()
+                }
+                
+                // ✅ #4824 HTTP 429 → 限流错误
+                if (statusCode == 429) {
+                  FileLogger.w(NETWORK_TAG, "⚠️ 检测到 HTTP 429 限流错误，不切换接入点 (requestId=" + requestId + ")");
+                  listener.onError(new RateLimitException(response, errorBody));
+                  // 🔗 清理映射
+                  tongYiClient.removeRequestIdMapping(requestId);
+                  return; // 只调用一次 onError()
+                }
+                
+                // ✅ 其他错误 (401/403/500/503) → 接入点不可用
+                FileLogger.d(NETWORK_TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换 (requestId=" + requestId + ")");
+                listener.onError(new AccessPointUnavailableException("Error: " + errorBody));
+                // 🔗 清理映射
+                tongYiClient.removeRequestIdMapping(requestId);
+                return; // 只调用一次 onError()
+              } catch (Exception e) {
+                FileLogger.e(NETWORK_TAG, "Failed to read error body: " + e.getMessage());
+                listener.onError(new AccessPointUnavailableException("Failed to read error body: " + e.getMessage()));
+                // 🔗 清理映射
+                tongYiClient.removeRequestIdMapping(requestId);
+                return; // 只调用一次 onError()
               }
             }
             else
             {
-              FileLogger.w(TAG, "[normalizeToolCallMessages] Tool message tool_call_id=" + answeringtoolCAllId + " did NOT match any pending tool_call!");
+              ResponseBody responseBody = response.body();
+              if (responseBody != null)
+              {
+                FileLogger.d(NETWORK_TAG, "🌐 [HTTP_STREAM_START] 开始处理 SSE 流式响应 (requestId=" + requestId + ") | 线程：" + Thread.currentThread().getName());
+                processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete, requestId, reservedMessageId);
+              }
             }
-            continue;
           }
-          else
-          {
-            FileLogger.w(TAG, "[normalizeToolCallMessages] Tool message tool_call_id=" + answeringtoolCAllId + " found but pendingToolCallsObject is null, skipping!");
-            continue;
+        });
+      }
+      catch (Exception e)
+      {
+        FileLogger.e(NETWORK_TAG, "🌐 [HTTP_ERROR] 请求构建失败 (requestId=" + requestId + ")", e);
+        
+        // === 🔒 #5029 新增：检测 Authorization header 编码错误 ===
+        // 当出现 IllegalArgumentException 且错误信息包含 "Unexpected char" 或 "Authorization" 时
+        // 视为凭证损坏，触发接入点切换
+        if (e instanceof IllegalArgumentException) {
+          String errorMsg = e.getMessage();
+          if (errorMsg != null && (errorMsg.contains("Unexpected char") || errorMsg.contains("Authorization"))) {
+            FileLogger.w(NETWORK_TAG, "⚠️ 检测到 Authorization header 编码错误，标记接入点不可用 (requestId=" + requestId + ")");
+            accessPointManager.reportCurrentAccessPointUnavailable();
+            listener.onError(new AccessPointUnavailableException("Invalid authorization header: " + errorMsg, e));
+            // 🔗 清理映射
+            tongYiClient.removeRequestIdMapping(requestId);
+            return;
           }
         }
-
-        list.add(currentObject);
-      }
-      
-      // 🔍 #759909257401 严厉模式：移除所有未匹配的 assistant+tool_calls 消息
-      if (strictMode && pendingToolCallsObject != null)
-      {
-        cleanedCount = removePendingAssistantMessages(list, pendingToolCallsObject);
-        FileLogger.i(TAG, "🔄 [TIMELINE_BRANCH] 创建新时间线，清理悬而未决的工具调用消息");
-        FileLogger.i(TAG, "🗑️ [CLEANED] 共清理 " + cleanedCount + " 条未完成的工具调用消息");
-        FileLogger.i(TAG, "📝 [INFO] 当前历史长度：" + list.size());
         
-        // ✅ 严厉模式下需要显式保存清理后的历史
-        saveHistory(list);
+        e.printStackTrace();
+        listener.onError(e);
+        // 🔗 清理映射
+        tongYiClient.removeRequestIdMapping(requestId);
       }
-      else if (pendingToolCallsObject != null)
-      {
-        list.add(pendingToolCallsObject);
-        FileLogger.w(TAG, "[normalizeToolCallMessages] Pending assistant with tool_calls added at end, but some tool messages may be missing");
-      }
-      
-      // 🔍 新增：记录输出历史的统计信息（精简版）
-      int userMessageCount = 0;
-      int preservedMultimodalCount = 0;
-      for (int i = 0; i < list.size(); i++)
-      {
-        JSONObject msg = list.get(i);
-        String role = msg.optString("role", "unknown");
-        Object contentObj = msg.opt("content");
-        
-        if ("user".equals(role))
-        {
-          userMessageCount++;
-          if (contentObj instanceof JSONArray)
-          {
-            preservedMultimodalCount++;
-          }
-        }
-      }
-      
-      FileLogger.i(TAG, "📊 [SUMMARY] 输入 " + oldHistory.size() + " 条 -> 输出 " + list.size() + " 条，清理 " + cleanedCount + " 条");
-      FileLogger.i(TAG, "📊 [SUMMARY] 用户消息：" + userMessageCount + " 条，其中多模态消息：" + preservedMultimodalCount + " 条");
     }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [ERROR] normalizeToolCallMessages 异常：" + e.getMessage(), e);
-      e.printStackTrace();
-    }
-    
-    return list;
   }
 
-  /**
-   * 移除未完成的 assistant+tool_calls 消息（严厉模式专用）
-   * 
-   * @param list 当前历史列表
-   * @param pendingObject 待移除的未完成消息
-   * @return 移除的消息数量
-   */
-  private int removePendingAssistantMessages(List<JSONObject> list, JSONObject pendingObject)
+  private static boolean isHtmlResponse(String content)
   {
-    int removedCount = 0;
-    
-    try
+    if (content == null || content.isEmpty())
     {
-      JSONArray toolCalls = pendingObject.optJSONArray("tool_calls");
-      if (toolCalls != null)
+      return false;
+    }
+    
+    String trimmedContent = content.trim();
+    return trimmedContent.startsWith("<!DOCTYPE html") ||
+           trimmedContent.startsWith("<html") ||
+           trimmedContent.startsWith("<HTML") ||
+           trimmedContent.contains("<title") ||
+           trimmedContent.contains("<TITLE");
+  }
+
+  // 🔗 修改：添加 requestId 和 messageId 参数，用于日志记录
+  private static void processSSEStream(java.io.Reader reader, OnResponseListener listener, ModelAccessPointManager accessPointManager, Runnable onStreamComplete, long requestId, String reservedMessageId)
+  {
+    try (java.io.BufferedReader bufferedReader = new java.io.BufferedReader(reader))
+    {
+      String line;
+      boolean isDone = false;
+      boolean htmlChecked = false;
+      StringBuilder firstLineBuffer = new StringBuilder();
+      
+      int lineCount = 0;
+      int contentLineCount = 0;
+      StringBuilder allContentBuilder = new StringBuilder();
+
+      while ((line = bufferedReader.readLine()) != null)
       {
-        for (int i = 0; i < toolCalls.length(); i++)
+        lineCount++;
+        
+        if (!htmlChecked)
         {
-          JSONObject toolCall = toolCalls.getJSONObject(i);
-          String callId = toolCall.optString("id", "unknown");
-          JSONObject func = toolCall.optJSONObject("function");
-          String toolName = func != null ? func.optString("name", "unknown") : "unknown";
+          htmlChecked = true;
+          firstLineBuffer.append(line);
           
-          FileLogger.w(TAG, "🗑️ [CLEANED] 移除未完成的 tool_call: " + callId + " (" + toolName + ")");
-          removedCount++;
+          String preview = firstLineBuffer.length() > 500 ? firstLineBuffer.substring(0, 500) : firstLineBuffer.toString();
+          if (isHtmlResponse(preview))
+          {
+            FileLogger.e(TAG, "API returned HTML page (requestId=" + requestId + ")");
+            accessPointManager.reportCurrentAccessPointUnavailable();
+            listener.onError(new ResponseException(null, "API returned HTML page"));
+            return;
+          }
+        }
+
+        if (line.startsWith("data:"))
+        {
+          String dataPart = line.substring(5).trim();
+          
+
+          if (!dataPart.isEmpty())
+          {
+            if (!dataPart.equals("[DONE]"))
+            {
+              try {
+                JSONObject json = new JSONObject(dataPart);
+                if (json.has("choices") && json.getJSONArray("choices").length() > 0) {
+                  JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
+                  if (choice.has("delta")) {
+                    JSONObject delta = choice.getJSONObject("delta");
+                    String content = delta.optString("content", "");
+                    
+                    if (!content.isEmpty()) {
+                      contentLineCount++;
+                      allContentBuilder.append(content);
+                    } else {
+                      FileLogger.d(TAG, "[SSE Content] delta.content is empty (requestId=" + requestId + ")");
+                    }
+                  }
+                }
+              } catch (Exception e) {
+                FileLogger.e(TAG, "[SSE Parse Error] Failed to parse JSON (requestId=" + requestId + "): " + e.getMessage());
+              }
+              
+              listener.onResponse(dataPart);
+            }
+            else
+            {
+              isDone = true;
+              FileLogger.d(TAG, "SSE 流处理完成 [DONE] (requestId=" + requestId + ", messageId=" + reservedMessageId + ")");
+              
+              FileLogger.d(TAG, "[SSE Summary] 总行数：" + lineCount);
+              FileLogger.d(TAG, "[SSE Summary] content 行数：" + contentLineCount);
+              FileLogger.d(TAG, "[SSE Summary] 总 content 长度：" + allContentBuilder.length());
+              
+              String finalContent = allContentBuilder.toString();
+              if (finalContent.isEmpty()) {
+                FileLogger.w(TAG, "[SSE Summary] ⚠️ 警告：模型返回空响应！(requestId=" + requestId + ")");
+              } else {
+                FileLogger.d(TAG, "[SSE Summary] ✓ 模型响应正常，长度：" + finalContent.length() + " (requestId=" + requestId + ")");
+              }
+            }
+          }
         }
       }
-      
-      // 不将 pendingObject 添加到 list 中，相当于移除了这条消息
-      FileLogger.d(TAG, "[removePendingAssistantMessages] Removed " + removedCount + " pending tool_calls");
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "[removePendingAssistantMessages] Error: " + e.getMessage(), e);
-    }
-    
-    return removedCount;
-  }
 
-  public void replaceHistory(List<JSONObject> newHistory)
-  {
-    if (newHistory.size() > currentMaxRounds * 2)
-    {
-      newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
+      if (isDone && onStreamComplete != null)
+      {
+        onStreamComplete.run();
+        FileLogger.d(TAG, "流式响应处理完成，回调已执行 (requestId=" + requestId + ")");
+      }
     }
-    
-    saveHistory(newHistory);
-  }
-
-  // ✅ 修改：同时更新内存和 SP，内存是唯一真相源
-  private void saveHistory(List<JSONObject> history)
-  {
-    // 1. 更新内存（唯一真相源）
-    memoryHistory = new ArrayList<>(history);
-    
-    // 2. 异步保存到 SP（持久化）
-    try
+    catch (IOException e)
     {
-      JSONArray historyArray = new JSONArray(history);
-      sharedPreferences.edit()
-          .putString(KEY_HISTORY, historyArray.toString())
-          .putInt("current_max_rounds", currentMaxRounds)
-          .apply();  // apply() 异步没关系，因为读取的是内存
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [SAVE] 保存历史失败：" + e.getMessage(), e);
+      FileLogger.e(TAG, "SSE 流处理失败 (requestId=" + requestId + ")", e);
+      accessPointManager.reportCurrentAccessPointUnavailable();
+      listener.onError(new AccessPointUnavailableException("Stream failed", e));
     }
   }
 
-  private JSONObject createMessage(String role, String content)
+  public static class AccessPointUnavailableException extends Exception
   {
-    JSONObject msg = new JSONObject();
-    try
+    public AccessPointUnavailableException(String message)
     {
-      msg.put("role", role);
-      msg.put("content", content);
+      super(message);
     }
-    catch (Exception e)
-    {
-      e.printStackTrace();
-    }
-    return msg;
-  }
 
-  public void increaseMaxRounds()
-  {
-    if (currentMaxRounds < Integer.MAX_VALUE)
+    public AccessPointUnavailableException(String message, Throwable cause)
     {
-      currentMaxRounds++;
-      saveHistory(getHistory());
+      super(message, cause);
     }
   }
 
-  public void decreaseMaxRounds()
+  public static class RateLimitException extends Exception
   {
-    List<JSONObject> history = getHistory();
-    int idealMaxRounds = history.size() /2 -1 ;
+    private final Response response;
+    private final String customMessage;
 
-    if (idealMaxRounds > INITIAL_MAX_ROUNDS)
+    public RateLimitException(Response response, String customMessage)
     {
-      currentMaxRounds = idealMaxRounds;
-      history = removeOldHistoryEntries(history);
-      saveHistory(history);
+      super("HTTP " + response.code() + " - Rate Limit");
+      this.response = response;
+      this.customMessage = customMessage;
+    }
+
+    public Response getResponse()
+    {
+      return response;
+    }
+
+    public String getCustomMessage()
+    {
+      return customMessage;
+    }
+  }
+
+  public static class ResponseException extends Exception
+  {
+    private final Response response;
+    private final String customMessage;
+
+    public ResponseException(Response response)
+    {
+      super("HTTP " + response.code());
+      this.response = response;
+      this.customMessage = null;
+    }
+
+    public ResponseException(Response response, String customMessage)
+    {
+      super("HTTP " + response.code() + " - " + customMessage);
+      this.response = response;
+      this.customMessage = customMessage;
+    }
+
+    public Response getResponse()
+    {
+      return response;
+    }
+
+    public String getCustomMessage()
+    {
+      return customMessage;
     }
   }
 }
