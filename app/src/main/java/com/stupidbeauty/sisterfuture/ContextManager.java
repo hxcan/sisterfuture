@@ -581,6 +581,18 @@ public class ContextManager
           }
         }
       }
+            // 🔧 #774530570947 新增：使用 Gson 进行额外验证（仅用于调试，不作为判定依据）
+            try
+            {
+              com.google.gson.Gson gson = new com.google.gson.Gson();
+              java.util.Map<String, Object> gsonParsed = gson.fromJson(argumentsStr, java.util.Map.class);
+              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Gson parsed successfully. Keys: " + gsonParsed.keySet());
+            }
+            catch (Exception e)
+            {
+              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Gson threw exception: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            }
+
       return true;
     }
     catch (JSONException e)
