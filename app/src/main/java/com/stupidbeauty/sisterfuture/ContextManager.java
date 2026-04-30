@@ -102,11 +102,11 @@ public class ContextManager
     
     int invalidCount = 0;
     int blankAssistantCount = 0;
-    List<Integer> invalidIndices = new ArrayList<>();
+    List<JSONObject> validHistory = new ArrayList<>();
     
     try
     {
-      // 🔍 遍历原始 memoryHistory，仅统计无效消息数量，不修改列表
+      // 🔍 遍历原始 memoryHistory，过滤掉无效消息
       for (int i = 0; i < memoryHistory.size(); i++)
       {
         JSONObject currentObject = memoryHistory.get(i);
@@ -120,36 +120,38 @@ public class ContextManager
         if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
         {
           blankAssistantCount++;
-          FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " is blank assistant");
+          FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " is blank assistant, skipping");
           continue;
         }
 
         if ((!(inDebugMessageIndexRange(i))) && (hasToolCalls))
         {
           FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " skipped by inDebugMessageIndexRange");
+          validHistory.add(currentObject);
           continue;
         }
         
         if (!isValidToolCallMessage(currentObject))
         {
           invalidCount++;
-          invalidIndices.add(i);
-          FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，将在 normalize 中处理");
+          FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，已过滤");
           FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " is invalid, invalidCount=" + invalidCount);
+          // 不添加到 validHistory，实现过滤
+        }
+        else
+        {
+          validHistory.add(currentObject);
         }
       }
       
-      FileLogger.d(TAG, "🧹 [CLEANUP] 遍历完成 | 无效消息：" + invalidCount + " | 空白助手消息：" + blankAssistantCount);
-      if (!invalidIndices.isEmpty()) {
-          FileLogger.d(TAG, "🧹 [CLEANUP] 无效消息索引: " + invalidIndices.toString());
-      }
+      FileLogger.d(TAG, "🧹 [CLEANUP] 遍历完成 | 无效消息：" + invalidCount + " | 空白助手消息：" + blankAssistantCount + " | 有效消息：" + validHistory.size());
       
-      // ✅ 直接对完整的 memoryHistory 进行 normalize 处理
-      FileLogger.d(TAG, "🧹 [CLEANUP] 调用 normalizeToolCallMessages, 输入大小: " + memoryHistory.size());
-      List<JSONObject> normalizedHistory = normalizeToolCallMessages(memoryHistory, false);
+      // ✅ 对过滤后的有效历史进行 normalize 处理
+      FileLogger.d(TAG, "🧹 [CLEANUP] 调用 normalizeToolCallMessages, 输入大小: " + validHistory.size());
+      List<JSONObject> normalizedHistory = normalizeToolCallMessages(validHistory, false);
       FileLogger.d(TAG, "🧹 [CLEANUP] normalizeToolCallMessages 返回, 输出大小: " + normalizedHistory.size());
       
-      // ✅ 只有当 normalize 改变了历史时才保存
+      // ✅ 只有当有变化时才保存
       if (invalidCount > 0 || blankAssistantCount > 0 || normalizedHistory.size() != memoryHistory.size())
       {
         FileLogger.d(TAG, "🧹 [CLEANUP] 条件满足，准备保存历史. invalidCount=" + invalidCount + ", blankAssistantCount=" + blankAssistantCount + ", normalizedSize=" + normalizedHistory.size() + ", originalSize=" + memoryHistory.size());
