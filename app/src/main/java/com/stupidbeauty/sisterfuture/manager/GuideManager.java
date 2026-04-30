@@ -58,30 +58,35 @@ public class GuideManager {
      * @param input 用户输入内容
      * @return true 如果是有效的 API Key
      */
-    public boolean isValidApiKey(String input) {
-        if (input == null || input.isEmpty()) {
-            return false;
-        }
-        
-        int length = input.length();
-        
-        // 长度校验：20-64 字符
-        if (length < 20 || length > 64) {
-            return false;
-        }
-        
-        // 百炼标准密钥：sk- 开头
-        if (input.startsWith("sk-")) {
-            return true;
-        }
-        
-        // Code Plan 密钥：cp_/plan_/sf_ 等前缀
-        if (input.startsWith("cp_") || input.startsWith("plan_") || input.startsWith("sf_")) {
-            return true;
-        }
-        
-        // 🔥 MiniMax 密钥：任意格式，只要长度符合即可
+    public boolean isValidApiKey(String input) 
+    {
+      if (input == null || input.isEmpty()) 
+      {
+        return false;
+      }
+      
+      int length = input.length();
+      
+      // 长度校验：20-64 字符
+      if (length < 20 || length > 164) 
+      {
+        return false;
+      }
+      
+      // 百炼标准密钥：sk- 开头
+      if (input.startsWith("sk-")) 
+      {
         return true;
+      }
+        
+      // Code Plan 密钥：cp_/plan_/sf_ 等前缀
+      if (input.startsWith("cp_") || input.startsWith("plan_") || input.startsWith("sf_")) 
+      {
+        return true;
+      }
+      
+      // 🔥 MiniMax 密钥：任意格式，只要长度符合即可
+      return true;
     }
 
     /**
