@@ -260,6 +260,9 @@ public class ContextManager
             if (function.has("arguments"))
             {
               String argumentsStr = function.getString("arguments");
+
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] ========== Start Validation ==========");
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Raw arguments: " + argumentsStr);
               
               // Check length first
               if (argumentsStr.length() > MAX_ARGUMENTS_STR_LENGTH)
@@ -268,6 +271,7 @@ public class ContextManager
                 return;
               }
               
+              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Checking hasUnquotedStringValues...");
               // General validation: detect any unquoted string identifiers in JSON
               if (hasUnquotedStringValues(argumentsStr))
               {
@@ -275,6 +279,7 @@ public class ContextManager
                 return;
               }
               
+              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Checking isJsonSyntaxComplete...");
               // 🔧 #763065048722 新增：严格语法完整性检查
               if (!isJsonSyntaxComplete(argumentsStr))
               {
@@ -282,12 +287,19 @@ public class ContextManager
                 return;
               }
               
+              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Checking JSONTokener strict validation...");
               // Strict JSON validation
               try
               {
                 JSONTokener tokener = new JSONTokener(argumentsStr);
                 Object parsed = tokener.nextValue();
                 
+                FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] JSONTokener parsed successfully. Type: " + parsed.getClass().getSimpleName());
+                if (tokener.more())
+                {
+                  FileLogger.w(TAG, "[addRawMessage] Skip: arguments has trailing content after JSON");
+                  return;
+                }
                 if (tokener.more())
                 {
                   FileLogger.w(TAG, "[addRawMessage] Skip: arguments has trailing content after JSON");
