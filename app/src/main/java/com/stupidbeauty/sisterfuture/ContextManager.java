@@ -137,29 +137,17 @@ public class TongYiClient
         
         final long endTime = System.currentTimeMillis();
         final long executionTime = endTime - startTime;
-              // 🔧 #774530570947 新增：检查 arguments 是否包含非法的非 ASCII 字符
-              if (hasInvalidNonAsciiChars(argumentsStr))
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains invalid non-ASCII characters");
-                return;
-              // 🔧 #774530570947 新增：检查 arguments 是否包含非法的非 ASCII 字符
-              if (hasInvalidNonAsciiChars(argumentsStr))
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains invalid non-ASCII characters");
-                return;
-              }
-              // 🔧 #774530570947 新增：检查 arguments 中是否存在未加引号的 Key
-              if (hasUnquotedKeys(argumentsStr))
-              {
-                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains unquoted keys");
-                return;
-              }
-              }
         
         FileLogger.d(TAG, "🔒 [QUEUE_DONE] 请求 #" + totalRequests + " (requestId=" + requestId + ") 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
         
         // 每 10 个请求输出一次统计
         if (totalRequests % 10 == 0) {
+              // 🔧 #774530570947 新增：检查 arguments 是否包含非法的非 ASCII 字符
+              if (hasInvalidNonAsciiChars(argumentsStr))
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains invalid non-ASCII characters");
+                return;
+              }
           long avgWaitTime = totalWaitTimeMs.get() / totalRequests;
           int highWaterMark = queueSizeHighWaterMark.get();
           FileLogger.i(TAG, "🔒 [QUEUE_STATS] 队列统计 | 总请求数：" + totalRequests + " | 平均等待时间：" + avgWaitTime + "ms | 队列最大长度：" + highWaterMark);
@@ -178,6 +166,18 @@ public class TongYiClient
   
   // ✅ 保留旧方法，兼容现有调用（默认 messageId 为 null）
   public void sendChatRequest(JSONArray messages, boolean includeTools , OnResponseListener listener, Runnable onStreamComplete)
+  {
+    sendChatRequest(messages, includeTools, listener, onStreamComplete, null);
+  }
+  
+  // 🔗 新增：根据 requestId 获取对应的 messageId
+  public String getMessageIdByRequestId(long requestId)
+  {
+    String messageId = requestIdToMessageIdMap.get(requestId);
+    if (messageId != null)
+    {
+      FileLogger.d(TAG, "🔍 [MAP_GET] 找到 messageId | requestId=" + requestId + " | messageId=" + messageId);
+    }
   /**
    * 🔧 #774530570947 新增：检查 arguments 是否包含非法的非 ASCII 字符（如 Base64 中文）
    * Minimax API 要求 arguments 必须是合法的 JSON 字符串
@@ -222,44 +222,6 @@ public class TongYiClient
   {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
   }
-  {
-    sendChatRequest(messages, includeTools, listener, onStreamComplete, null);
-  private boolean hasUnquotedStringValues(String jsonStr)
-  {
-    // Step 1: Remove all properly quoted strings (including escaped quotes)
-    String withoutQuotedStrings = jsonStr.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", "\"\"");
-    
-    // Step 2: Look for pattern: : followed by whitespace and an identifier
-    // Identifiers start with letter/underscore, followed by alphanumeric/underscore
-    Pattern pattern = Pattern.compile(":\\s*([a-zA-Z_][a-zA-Z0-9_]*)");
-    Matcher matcher = pattern.matcher(withoutQuotedStrings);
-    
-    while (matcher.find())
-    {
-      String identifier = matcher.group(1);
-      
-      // Step 3: Check if it's NOT a valid JSON keyword
-      if (!identifier.equals("true") && 
-          !identifier.equals("false") && 
-          !identifier.equals("null"))
-      {
-        FileLogger.d(TAG, "[hasUnquotedStringValues] Found unquoted identifier: " + identifier);
-        return true;
-      }
-    }
-    
-    return false;
-  }
-  }
-  
-  // 🔗 新增：根据 requestId 获取对应的 messageId
-  public String getMessageIdByRequestId(long requestId)
-  {
-    String messageId = requestIdToMessageIdMap.get(requestId);
-    if (messageId != null)
-    {
-      FileLogger.d(TAG, "🔍 [MAP_GET] 找到 messageId | requestId=" + requestId + " | messageId=" + messageId);
-    }
     else
     {
       FileLogger.w(TAG, "⚠️ [MAP_GET] 未找到 messageId | requestId=" + requestId);
@@ -297,47 +259,18 @@ public class TongYiClient
     private final TongYiClient tongYiClient; // 引用父类，用于访问映射表
 
     public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager, TongYiClient tongYiClient)
+    {
+      this.client = new OkHttpClient.Builder()
+        .connectTimeout(500, TimeUnit.MILLISECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(160, TimeUnit.SECONDS)
+        .build();
       this.accessPointManager = accessPointManager;
       this.toolManager = toolManager;
       this.tongYiClient = tongYiClient;
     }
 
     @Override
-  // 🔧 #774530570947 新增：检查 arguments 是否包含非法的非 ASCII 字符（如 Base64 中文）
-  private boolean hasInvalidNonAsciiChars(String jsonStr)
-  {
-    if (jsonStr == null || jsonStr.isEmpty())
-    {
-      return false;
-    }
-    
-    // 检查是否包含非 ASCII 字符（除了常见的 Unicode 转义序列 \uXXXX）
-    for (int i = 0; i < jsonStr.length(); i++)
-    {
-      char c = jsonStr.charAt(i);
-      if (c < 32 || c > 126)
-      {
-        if (c == '\\' && i + 5 < jsonStr.length() && 
-            jsonStr.charAt(i+1) == 'u' &&
-            isHexDigit(jsonStr.charAt(i+2)) &&
-            isHexDigit(jsonStr.charAt(i+3)) &&
-            isHexDigit(jsonStr.charAt(i+4)) &&
-            isHexDigit(jsonStr.charAt(i+5)))
-        {
-          i += 5;
-          continue;
-        }
-        FileLogger.d(TAG, "[hasInvalidNonAsciiChars] Found invalid non-ASCII char at position " + i + ": " + (int)c);
-        return true;
-      }
-    }
-    return false;
-  }
-  
-  private boolean isHexDigit(char c)
-  {
-    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-  }
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete, long requestId, String reservedMessageId)
     {
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
