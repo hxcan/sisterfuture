@@ -276,6 +276,14 @@ public class ContextManager
               }
               
               // 🔧 #763065048722 新增：严格语法完整性检查
+              // 🔧 #774530570947 新增：检查 arguments 是否包含非法的非 ASCII 字符（如 Base64 中文）
+              // Minimax API 要求 arguments 必须是合法的 JSON 字符串
+              if (hasInvalidNonAsciiChars(argumentsStr))
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains invalid non-ASCII characters");
+                return;
+              }
+
               if (!isJsonSyntaxComplete(argumentsStr))
               {
                 FileLogger.w(TAG, "[addRawMessage] Skip: arguments syntax incomplete or malformed");
@@ -416,6 +424,51 @@ public class ContextManager
    * Invalid: unquoted identifiers like latest, abc, test_value
    */
   private boolean hasUnquotedStringValues(String jsonStr)
+
+  /**
+   * 🔧 #774530570947 新增：检查 arguments 是否包含非法的非 ASCII 字符（如 Base64 中文）
+   * Minimax API 要求 arguments 必须是合法的 JSON 字符串
+   */
+  private boolean hasInvalidNonAsciiChars(String jsonStr)
+  {
+    if (jsonStr == null || jsonStr.trim().isEmpty())
+    {
+      return false;
+    }
+    
+    // 检查是否包含非 ASCII 字符（除了常见的 Unicode 转义序列 \uXXXX）
+    // 如果包含原始的非 ASCII 字符（如中文、Base64 中文等），则视为无效
+    for (int i = 0; i < jsonStr.length(); i++)
+    {
+      char c = jsonStr.charAt(i);
+      // 允许 ASCII printable characters (32-126) 和 常见的 JSON 控制字符
+      if (c < 32 || c > 126)
+      {
+        // 检查是否是合法的 Unicode 转义序列的一部分
+        if (c == '\\' && i + 5 < jsonStr.length() && 
+            jsonStr.charAt(i+1) == 'u' &&
+            isHexDigit(jsonStr.charAt(i+2)) &&
+            isHexDigit(jsonStr.charAt(i+3)) &&
+            isHexDigit(jsonStr.charAt(i+4)) &&
+            isHexDigit(jsonStr.charAt(i+5)))
+        {
+          i += 5; // 跳过整个 \uXXXX 序列
+          continue;
+        }
+        
+        // 发现非法的非 ASCII 字符
+        FileLogger.d(TAG, "[hasInvalidNonAsciiChars] Found invalid non-ASCII char at position " + i + ": " + (int)c);
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  private boolean isHexDigit(char c)
+  {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+  }
   {
     // Step 1: Remove all properly quoted strings (including escaped quotes)
     String withoutQuotedStrings = jsonStr.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", "\"\"");
