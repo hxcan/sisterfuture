@@ -264,6 +264,9 @@ public class ContextManager
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== Start Validation (Load) ==========");
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments: " + argumentsStr);
 
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== Start Validation (Load) ==========");
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments: " + argumentsStr);
+
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] ========== Start Validation ==========");
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Raw arguments: " + argumentsStr);
               
@@ -292,6 +295,7 @@ public class ContextManager
               
               FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION] Checking JSONTokener strict validation...");
               // Strict JSON validation
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking JSONTokener strict validation...");
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking JSONTokener strict validation...");
               try
               {
@@ -534,6 +538,7 @@ public class ContextManager
             String argumentsStr = function.getString("arguments");
             
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking hasUnquotedStringValues...");
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking hasUnquotedStringValues...");
             // General validation: check for unquoted string values
             if (hasUnquotedStringValues(argumentsStr))
             {
@@ -541,6 +546,7 @@ public class ContextManager
               return false;
             }
             
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking isJsonSyntaxComplete...");
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking isJsonSyntaxComplete...");
             // 🔧 #763065048722 新增：严格语法完整性检查
             if (!isJsonSyntaxComplete(argumentsStr))
