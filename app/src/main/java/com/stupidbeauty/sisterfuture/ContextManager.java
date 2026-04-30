@@ -275,6 +275,13 @@ public class ContextManager
                 return;
               }
               
+              // 🔧 #774530570947 新增：检查 key 是否包含在引号里
+              if (hasUnquotedKeys(argumentsStr))
+              {
+                FileLogger.w(TAG, "[addRawMessage] Skip: arguments contains unquoted keys");
+                return;
+              }
+              
               // 🔧 #763065048722 新增：严格语法完整性检查
               if (!isJsonSyntaxComplete(argumentsStr))
               {
@@ -415,6 +422,58 @@ public class ContextManager
    * Valid JSON values: "quoted", number, true, false, null, {, [, }
    * Invalid: unquoted identifiers like latest, abc, test_value
    */
+
+  /**
+   * 🔧 #774530570947 新增：检查 JSON 字符串中是否存在未包含在引号里的 key
+   * 直接原因：Minimax API 返回 invalid function arguments json string
+   * 示例错误输入：{5LiU5LiL..."path": "..."}
+   */
+  private boolean hasUnquotedKeys(String jsonStr)
+  {
+    if (jsonStr == null || jsonStr.trim().isEmpty())
+    {
+      return false;
+    }
+    
+    // 移除所有合法的 "key": 模式，剩下的如果还有类似 key: 的模式，则视为非法
+    // 合法模式：冒号前是引号包围的字符串
+    // 非法模式：冒号前是非引号字符（如 Base64 字符串、原始中文等）
+    
+    // 策略：查找所有 ':' 前面的内容，检查是否是合法的 JSON key (即被引号包围)
+    // 简单策略：如果存在非空白字符紧跟着 ':'，且该字符不是 '"'，则可能存在问题
+    // 更精确策略：使用正则匹配非法的 key 模式
+    
+    // 匹配非法模式：非引号字符序列后紧跟 ':'
+    // 排除合法模式："[^"]*"\s*:
+    // 我们寻找的是：[^"\s]\s*: 或者 ^\s*: (key 为空或只有空格)
+    
+    // 简化：检查是否存在非引号开头的 key
+    // 如果字符串中包含类似 {abc: 或 ,abc: 的模式，其中 abc 不被引号包围，则返回 true
+    
+    Pattern illegalKeyPattern = Pattern.compile("(?<!\\")([a-zA-Z0-9_一-龥]+)\s*:");
+    Matcher matcher = illegalKeyPattern.matcher(jsonStr);
+    
+    while (matcher.find())
+    {
+      String key = matcher.group(1);
+      // 检查这个 key 是否真的没有被引号包围
+      // 查看 key 前面的字符
+      int start = matcher.start(1);
+      if (start > 0 && jsonStr.charAt(start - 1) == '"')
+      {
+        continue; // 这是合法的 "key": 模式
+      }
+      
+      // 检查 key 后面是否有引号闭合 (针对 "key": 但前面漏了引号的情况，这很少见)
+      // 主要检查前面
+      
+      FileLogger.d(TAG, "[hasUnquotedKeys] Found unquoted key: " + key + " at position " + start);
+      return true;
+    }
+    
+    return false;
+  }
+
   private boolean hasUnquotedStringValues(String jsonStr)
   {
     // Step 1: Remove all properly quoted strings (including escaped quotes)
