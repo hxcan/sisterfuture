@@ -535,6 +535,7 @@ public class ContextManager
             String argumentsStr = function.getString("arguments");
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== Start Validation (Load) ==========");
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments: " + argumentsStr);
+            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments length: " + argumentsStr.length());
 
             
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking hasUnquotedStringValues...");
