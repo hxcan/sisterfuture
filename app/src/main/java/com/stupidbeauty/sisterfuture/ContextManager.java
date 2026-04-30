@@ -111,6 +111,8 @@ public class ContextManager
         String content = currentObject.optString("content", "");
         boolean hasToolCalls = currentObject.has("tool_calls");
         
+        FileLogger.d(TAG, "[CLEANUP_LOOP] Processing message #" + i + ", role=" + role + ", hasToolCalls=" + hasToolCalls);
+
         if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
         {
           blankAssistantCount++;
@@ -126,6 +128,7 @@ public class ContextManager
         {
           invalidCount++;
           FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，将在 normalize 中处理");
+          FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " is invalid, invalidCount=" + invalidCount);
         }
       }
       
@@ -289,6 +292,7 @@ public class ContextManager
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
   }
 
+  
   
   /**
    * 🔧 #763065048722 新增：检查 JSON 语法完整性
