@@ -99,10 +99,11 @@ public class ContextManager
     
     int invalidCount = 0;
     int blankAssistantCount = 0;
+    List<JSONObject> validHistory = new ArrayList<>();
     
     try
     {
-      // 🔍 遍历原始 memoryHistory，仅统计无效消息数量，不修改列表
+      // 🔍 遍历原始 memoryHistory，过滤无效消息
       for (int i = 0; i < memoryHistory.size(); i++)
       {
         JSONObject currentObject = memoryHistory.get(i);
@@ -127,15 +128,20 @@ public class ContextManager
         if (!isValidToolCallMessage(currentObject))
         {
           invalidCount++;
-          FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，将在 normalize 中处理");
+          FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，已过滤");
           FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " is invalid, invalidCount=" + invalidCount);
+          // 无效消息不加入 validHistory
+          continue;
         }
+        
+        // 有效消息加入 validHistory
+        validHistory.add(currentObject);
       }
       
-      // ✅ 直接对完整的 memoryHistory 进行 normalize 处理
-      List<JSONObject> normalizedHistory = normalizeToolCallMessages(memoryHistory, false);
+      // ✅ 对过滤后的 validHistory 进行 normalize 处理
+      List<JSONObject> normalizedHistory = normalizeToolCallMessages(validHistory, false);
       
-      // ✅ 只有当 normalize 改变了历史时才保存
+      // ✅ 只有当有变化时才保存
       if (invalidCount > 0 || blankAssistantCount > 0 || normalizedHistory.size() != memoryHistory.size())
       {
         saveHistory(normalizedHistory);
