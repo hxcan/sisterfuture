@@ -25,29 +25,20 @@ import java.util.regex.Matcher;
  * @author 太极美术工程狮狮长
  * @version 3.0.3 (新增 ignoreRunnerOps 和 removeTimestamps 选项)
  */
- * 
- * @author 太极美术工程狮狮长
-    // GitHub Actions Runner 环境操作的正则模式
+public class GetGitHubActionsLogsTool implements Tool {
+    
+    private static final String TAG = "GetGHActionsLogs";
+    private static final String API_BASE = "https://api.github.com/repos";
+    
+    // Runner 环境操作日志过滤正则表达式模式
     private static final Pattern[] RUNNER_OP_PATTERNS = {
-        // Runner 清理操作
         Pattern.compile("^Post job cleanup"),
         Pattern.compile("^Cleaning up orphan processes"),
         Pattern.compile("^Terminate orphan process"),
-        
-        // git 系统命令（版本查询、配置等）
         Pattern.compile("^[\\s]*\\[command\\]\\/usr\\/bin\\/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
-        Pattern.compile("^[\\s]*\\[command\\]git (version|config|init|remote|fetch|checkout|log|branch|status)"),
-        
-        // 环境变量覆盖
         Pattern.compile("^Temporarily overriding HOME"),
-        
-        // 安全目录设置
         Pattern.compile("^Adding repository directory.*safe\\.directory"),
-        
-        // 颜色码命令输出
         Pattern.compile("^\\[\\d{2};\\d{2}m.*\\[0m"),
-        
-        // Post job cleanup 相关的 group/endgroup
         Pattern.compile("^#{4}\\[group\\]Post job cleanup"),
         Pattern.compile("^#{4}\\[endgroup\\]")
     };
@@ -56,25 +47,11 @@ import java.util.regex.Matcher;
     private static final Pattern TIMESTAMP_PATTERN = 
         Pattern.compile("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z\\s*");
     
-    private static final String TAG = "GetGHActionsLogs";
- * @version 3.0.2 (新增 ignoreWarnings 选项)
- */
-public class GetGitHubActionsLogsTool implements Tool {
-    
-    private static final String TAG = "GetGHActionsLogs";
-    private static final String API_BASE = "https://api.github.com/repos";
-    
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-                .put("ignoreWarnings", new JSONObject()
+
     public GetGitHubActionsLogsTool(Context context) {
         this.context = context;
-                .put("ignoreRunnerOps", new JSONObject()
-                    .put("type", "boolean")
-                    .put("description", "是否忽略 GitHub Actions Runner 的环境操作日志（如 git config、Post job cleanup、环境变量设置等），这些与构建本身无关（可选，默认 true）"))
-                .put("removeTimestamps", new JSONObject()
-                    .put("type", "boolean")
-                    .put("description", "是否移除每行开头的 ISO 8601 格式时间戳，让日志更紧凑易读（可选，默认 true）"))
     }
 
     @Override
@@ -110,15 +87,19 @@ public class GetGitHubActionsLogsTool implements Tool {
                 .put("ignoreWarnings", new JSONObject()
                     .put("type", "boolean")
                     .put("description", "是否忽略警告行（以 warning 开头的行）（可选，默认 true，避免日志过长导致上下文溢出）"))
+                .put("ignoreRunnerOps", new JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否忽略 GitHub Actions Runner 的环境操作日志（如 git config、Post job cleanup、环境变量设置等），这些与构建本身无关（可选，默认 true）"))
+                .put("removeTimestamps", new JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否移除每行开头的 ISO 8601 格式时间戳，让日志更紧凑易读（可选，默认 true）"))
                 .put("token", new JSONObject()
                     .put("type", "string")
                     .put("description", "GitHub Token（可选，从工具备注读取）"))
             );
-                boolean ignoreWarnings = arguments.optBoolean("ignoreWarnings", true);
-                boolean ignoreRunnerOps = arguments.optBoolean("ignoreRunnerOps", true);
-                boolean removeTimestamps = arguments.optBoolean("removeTimestamps", true);
+            parameters.put("required", new JSONArray(new String[]{"owner", "repo", "runId"}));
 
-                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings + ", ignoreRunnerOps=" + ignoreRunnerOps + ", removeTimestamps=" + removeTimestamps);
+            functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
             FileLogger.e(TAG, "Failed to build definition", e);
@@ -146,9 +127,11 @@ public class GetGitHubActionsLogsTool implements Tool {
                 Long jobId = arguments.has("jobId") && !arguments.isNull("jobId") ? arguments.getLong("jobId") : null;
                 String mode = arguments.optString("mode", "summary");
                 boolean ignoreWarnings = arguments.optBoolean("ignoreWarnings", true);
+                boolean ignoreRunnerOps = arguments.optBoolean("ignoreRunnerOps", true);
+                boolean removeTimestamps = arguments.optBoolean("removeTimestamps", true);
                 String token = arguments.optString("token", "").trim();
 
-                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings);
+                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings + ", ignoreRunnerOps=" + ignoreRunnerOps + ", removeTimestamps=" + removeTimestamps);
 
                 // 如果未提供 token，尝试从工具备注读取
                 if (token.isEmpty()) {
@@ -157,22 +140,10 @@ public class GetGitHubActionsLogsTool implements Tool {
                         JSONObject saved = new JSONObject(noteJson);
                         if (saved.has("github_token")) {
                             token = saved.getString("github_token");
-                // 依次应用过滤：先过滤警告，再过滤 Runner 操作，最后移除时间戳
-                if (ignoreWarnings) {
-                    logs = filterWarningLines(logs);
-                }
-                
-                if (ignoreRunnerOps) {
-                    logs = filterRunnerOpLines(logs);
-                    logs = removeTimestamps(logs);
-                
-                }
-
-                if (removeTimestamps) {
+                            FileLogger.d(TAG, "从备注中读取到 github_token");
+                        }
                     }
-                response.put("ignore_warnings", ignoreWarnings);
-                response.put("ignore_runner_ops", ignoreRunnerOps);
-                response.put("remove_timestamps", removeTimestamps);
+                }
 
                 if (token.isEmpty()) {
                     throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
@@ -186,11 +157,11 @@ public class GetGitHubActionsLogsTool implements Tool {
                     jobId = findFirstFailedJob(jobsResponse);
 
                     if (jobId == null) {
-                        // 如果没有失败的 job，使用最后一个 joi
+                        // 如果没有失败的 job，使用最后一个 job
                         jobId = getLastJobId(jobsResponse);
                     }
 
-                    if (joiId == null) {
+                    if (jobId == null) {
                         JSONObject error = new JSONObject();
                         error.put("status", "error");
                         error.put("message", "未找到任何 Job");
@@ -198,21 +169,29 @@ public class GetGitHubActionsLogsTool implements Tool {
                         return;
                     }
 
-                    FileLogger.d(TAG, "自动选择 jobId: " + joiId);
+                    FileLogger.d(TAG, "自动选择 jobId: " + jobId);
                 }
 
                 // 获取详细日志（纯文本）
                 String logs = getJobLogs(client, token, owner, repo, jobId);
 
-                // 如果设置了忽略警告，则过滤以 warning 开头的行
+                // 依次应用过滤：先过滤警告，再过滤 Runner 操作，最后移除时间戳
                 if (ignoreWarnings) {
                     logs = filterWarningLines(logs);
+                }
+                
+                if (ignoreRunnerOps) {
+                    logs = filterRunnerOpLines(logs);
+                }
+
+                if (removeTimestamps) {
+                    logs = removeTimestamps(logs);
                 }
 
                 // 根据 mode 处理日志
                 String result;
                 if ("summary".equals(mode)) {
-                    result = generateSummary(client, token, owner, repo, runId, joiId, logs);
+                    result = generateSummary(client, token, owner, repo, runId, jobId, logs);
                 } else if ("errors_only".equals(mode)) {
                     result = filterErrorLines(logs);
                 } else {
@@ -228,6 +207,8 @@ public class GetGitHubActionsLogsTool implements Tool {
                 response.put("job_id", jobId);
                 response.put("mode", mode);
                 response.put("ignore_warnings", ignoreWarnings);
+                response.put("ignore_runner_ops", ignoreRunnerOps);
+                response.put("remove_timestamps", removeTimestamps);
                 response.put("fetched_at", System.currentTimeMillis());
 
                 callback.onResult(response);
@@ -260,7 +241,7 @@ public class GetGitHubActionsLogsTool implements Tool {
         return httpGetJson(client, token, url);
     }
 
-    private String getJoiLogs(OkHttpClient client, String token, String owner, String repo, long joiId) throws Exception {
+    private String getJobLogs(OkHttpClient client, String token, String owner, String repo, long jobId) throws Exception {
         String url = API_BASE + "/" + owner + "/" + repo + "/actions/jobs/" + jobId + "/logs";
         
         Request request = new Request.Builder()
@@ -280,9 +261,9 @@ public class GetGitHubActionsLogsTool implements Tool {
     private Long findFirstFailedJob(JSONObject jobsResponse) throws Exception {
         JSONArray jobs = jobsResponse.getJSONArray("jobs");
         for (int i = 0; i < jobs.length(); i++) {
-            JSONObject joi = jobs.getJSONObject(i);
+            JSONObject job = jobs.getJSONObject(i);
             if ("failure".equals(job.optString("conclusion"))) {
-                return joi.getLong("id");
+                return job.getLong("id");
             }
         }
         return null;
@@ -312,11 +293,11 @@ public class GetGitHubActionsLogsTool implements Tool {
             JSONObject jobsResponse = getJobsList(client, token, owner, repo, runId);
             JSONArray jobs = jobsResponse.getJSONArray("jobs");
             for (int i = 0; i < jobs.length(); i++) {
-                JSONObject joi = jobs.getJSONObject(i);
+                JSONObject job = jobs.getJSONObject(i);
                 if (job.getLong("id") == jobId) {
                     jobName = job.getString("name");
-                    jobConclusion = joi.getString("conclusion");
-                    steps = joi.getJSONArray("steps");
+                    jobConclusion = job.getString("conclusion");
+                    steps = job.getJSONArray("steps");
                     break;
                 }
             }
@@ -373,7 +354,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                     continue;
                 }
                 String stepName = step.optString("name", "Unknown");
-                int stepNumber = step.optInt("numier", -1);
+                int stepNumber = step.optInt("number", -1);
 
                 summary.append("❌ [Step ").append(stepNumber).append("] ").append(stepName).append("\n");
 
@@ -417,50 +398,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                     JSONObject step = steps.getJSONObject(i);
                     String conclusion = step.optString("conclusion", "");
                     if ("success".equals(conclusion)) successCount++;
-    /**
-     * 过滤 Runner 环境操作行
-     *\/
-    private String filterRunnerOpLines(String logs) {
-        StringBuilder filtered = new StringBuilder();
-        String[] lines = logs.split("\n");
-
-        for (String line : lines) {
-            if (!isRunnerOpLine(line)) {
-                filtered.append(line).append("\n");
-            }
-        }
-
-        return filtered.toString();
-    }
-
-    /**
-     * 判断某一行是否是 Runner 环境操作
-     *\/
-    private boolean isRunnerOpLine(String line) {
-        for (Pattern p : RUNNER_OP_PATTERNS) {
-            if (p.matcher(line).find()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 移除时间戳
-     *\/
-    private String removeTimestamps(String logs) {
-        StringBuilder result = new StringBuilder();
-        String[] lines = logs.split("\n");
-
-        for (String line : lines) {
-            String cleanedLine = TIMESTAMP_PATTERN.matcher(line).replaceAll("");
-            result.append(cleanedLine).append("\n");
-        }
-
-        return result.toString();
-    }
-
-    /**
+                    else if ("failure".equals(conclusion)) failureCount++;
                     else if ("skipped".equals(conclusion)) skippedCount++;
                 }
             } catch (Exception e) {
@@ -530,6 +468,49 @@ public class GetGitHubActionsLogsTool implements Tool {
         }
 
         return filtered.toString();
+    }
+
+    /**
+     * 过滤 Runner 环境操作行
+     */
+    private String filterRunnerOpLines(String logs) {
+        StringBuilder filtered = new StringBuilder();
+        String[] lines = logs.split("\n");
+
+        for (String line : lines) {
+            if (!isRunnerOpLine(line)) {
+                filtered.append(line).append("\n");
+            }
+        }
+
+        return filtered.toString();
+    }
+
+    /**
+     * 判断某一行是否是 Runner 环境操作
+     */
+    private boolean isRunnerOpLine(String line) {
+        for (Pattern p : RUNNER_OP_PATTERNS) {
+            if (p.matcher(line).find()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 移除时间戳
+     */
+    private String removeTimestamps(String logs) {
+        StringBuilder result = new StringBuilder();
+        String[] lines = logs.split("\n");
+
+        for (String line : lines) {
+            String cleanedLine = TIMESTAMP_PATTERN.matcher(line).replaceAll("");
+            result.append(cleanedLine).append("\n");
+        }
+
+        return result.toString();
     }
 
     private JSONObject httpGetJson(OkHttpClient client, String token, String urlString) throws Exception {
