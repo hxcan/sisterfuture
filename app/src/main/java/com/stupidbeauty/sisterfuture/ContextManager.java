@@ -73,7 +73,7 @@ public class ContextManager
       {
         memoryHistory.add(array.getJSONObject(i));
       }
-    } // try
+    }// try
     catch (Exception e)
     {
       FileLogger.e(TAG, "❌ [LOAD] 加载历史失败：" + e.getMessage(), e);
@@ -85,7 +85,6 @@ public class ContextManager
   {
     int rangeMaximal = 1890;
     int rangeMinimal= 0;
-              FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== All Validations Passed (Load) ==========");
     return true;
   }
 
@@ -113,7 +112,6 @@ public class ContextManager
         boolean hasToolCalls = currentObject.has("tool_calls");
         
         FileLogger.d(TAG, "[CLEANUP_LOOP] Processing message #" + i + ", role=" + role + ", hasToolCalls=" + hasToolCalls);
-
         if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
         {
           blankAssistantCount++;
@@ -186,7 +184,6 @@ public class ContextManager
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
     List<JSONObject> history = getHistory();
-
     JSONObject toolMessage = new JSONObject();
     try
     {
@@ -287,22 +284,20 @@ public class ContextManager
     }
 
     List<JSONObject> historyBefore = getHistory();
-
     List<JSONObject> history = getHistory();
-    
+
     history.add(message);
     FileLogger.i(TAG, "[addRawMessage] Message added: " + historyBefore.size() + " -> " + history.size());
-    
+
     history = removeOldHistoryEntries(history);
     saveHistory(history);
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
   }
-
   
   
   /**
    * 🔧 #763065048722 新增：检查 JSON 语法完整性
-   * 检测括号匹配、引号闭合等基本语法结构
+   * 检测括号匹配，引号闭合等基本语法结构
    */
   private boolean isJsonSyntaxComplete(String jsonStr)
   {
@@ -445,7 +440,7 @@ public class ContextManager
     FileLogger.d(TAG, "🔖 [RESERVE] 预留消息 ID | id=" + messageId + " | 当前预留数=" + reservedMessageIds.size());
     return messageId;
   }
-  
+ 
   // 🔗 新增：丢弃未使用的预留 ID（当消息被丢弃时调用）
   public void discardReservedMessageId(String messageId)
   {
@@ -477,7 +472,6 @@ public class ContextManager
       }
 
       JSONArray toolCalls = message.getJSONArray("tool_calls");
-
       for (int i = 0; i < toolCalls.length(); i++)
       {
         JSONObject toolCall = toolCalls.getJSONObject(i);
@@ -502,8 +496,6 @@ public class ContextManager
               }
             }
 
-            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] ========== Start Validation (Load) ==========");
-            FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments: " + argumentsStr);
             // 🔧 #774530570947 新增：使用 Gson 进行额外验证（仅用于调试，不作为判定依据）
             try
             {
@@ -517,7 +509,6 @@ public class ContextManager
             }
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Raw arguments length: " + argumentsStr.length());
 
-            
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking hasUnquotedStringValues...");
             // General validation: check for unquoted string values
             if (hasUnquotedStringValues(argumentsStr))
@@ -525,7 +516,7 @@ public class ContextManager
               FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: unquoted string values");
               return false;
             }
-            
+
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking isJsonSyntaxComplete...");
             // 🔧 #763065048722 新增：严格语法完整性检查
             if (!isJsonSyntaxComplete(argumentsStr))
@@ -533,7 +524,7 @@ public class ContextManager
               FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: syntax incomplete");
               return false;
             }
-            
+
             try
             {
               JSONTokener tokener = new JSONTokener(argumentsStr);
@@ -600,7 +591,6 @@ public class ContextManager
       List<String> matchedToolCallIds = new ArrayList<>();
       // ✅ 新增：暂存匹配的 tool 消息
       List<JSONObject> matchedToolMessages = new ArrayList<>();
-
       for (int i = 0; i < history.size(); i++)
       {
         JSONObject currentObject =  history.get(i);
@@ -725,7 +715,7 @@ public class ContextManager
   private int removePendingAssistantMessages(List<JSONObject> list, JSONObject pendingObject)
   {
     int removedCount = 0;
-    
+
     try
     {
       JSONArray toolCalls = pendingObject.optJSONArray("tool_calls");
@@ -738,7 +728,7 @@ public class ContextManager
           JSONObject func = toolCall.optJSONObject("function");
           String toolName = func != null ? func.optString("name", "unknown") : "unknown";
           
-          FileLogger.w(TAG, "🗑️ [CLEANED] 移除未完成的 tool_call: " + callId + " (" + toolName + ")");
+          FileLogger.w(TAG, "🗑️ [CLEANED] 移除未完成的 tool_call: " + callId + " (\"" + toolName + "\")");
           removedCount++;
         }
       }
@@ -750,7 +740,7 @@ public class ContextManager
     {
       FileLogger.e(TAG, "[removePendingAssistantMessages] Error: " + e.getMessage(), e);
     }
-    
+
     return removedCount;
   }
 
@@ -760,7 +750,7 @@ public class ContextManager
     {
       newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
     }
-    
+
     saveHistory(newHistory);
   }
 
@@ -769,7 +759,7 @@ public class ContextManager
   {
     // 1. 更新内存（唯一真相源）
     memoryHistory = new ArrayList<>(history);
-    
+
     // 2. 异步保存到 SP（持久化）
     try
     {
@@ -777,7 +767,7 @@ public class ContextManager
       sharedPreferences.edit()
           .putString(KEY_HISTORY, historyArray.toString())
           .putInt("current_max_rounds", currentMaxRounds)
-          .apply();  // apply() 异步没关系，因为读取的是内存
+          .apply();  // apply()异步没关系，因为读取的是内存
     }
     catch (Exception e)
     {

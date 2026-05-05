@@ -225,14 +225,14 @@ public class TongYiClient
     {
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
       String apiKey = null;
-      
+
       if (currentAccessPoint != null) {
           apiKey = currentAccessPoint.getApiKey();
       }
-      
+
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
-          
-      String apiKeyMasked = (apiKey != null && apiKey.length() > 12) 
+
+      String apiKeyMasked = (apiKey != null && apiKey.length() > 12)
           ? apiKey.substring(0, 8) + "..." + apiKey.substring(apiKey.length() - 4)
           : (apiKey != null ? "***" : "null");
       FileLogger.d(NETWORK_TAG, "[API Key] 接入点=\"" + (currentAccessPoint != null ? currentAccessPoint.getName() : "null") + "\", Key=\"" + apiKeyMasked + "\" (长度：" + (apiKey != null ? apiKey.length() : 0) + ")");
@@ -291,41 +291,6 @@ public class TongYiClient
           {
             FileLogger.d(NETWORK_TAG, "🔍 [VALIDATION] ✓ 所有 tool_calls 都有对应的 tool message");
           }
-        // === 🔒 #5033 新增：调试完整 tool_calls 结构 ===
-        FileLogger.d(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Checking messages for tool_calls...");
-        for (int i = 0; i < messages.length(); i++) {
-            try {
-                JSONObject msg = messages.getJSONObject(i);
-                if (msg.has("tool_calls")) {
-                    JSONArray toolCalls = msg.getJSONArray("tool_calls");
-                    FileLogger.d(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Message #" + i + " has " + toolCalls.length() + " tool_calls");
-                    for (int j = 0; j < toolCalls.length(); j++) {
-                        JSONObject tc = toolCalls.getJSONObject(j);
-                        String id = tc.optString("id", "unknown");
-                        String type = tc.optString("type", "unknown");
-                        JSONObject function = tc.optJSONObject("function");
-                        String funcName = function != null ? function.optString("name", "unknown") : "null";
-                        String args = function != null ? function.optString("arguments", "{}") : "{}";
-                        
-                        FileLogger.d(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Tool Call #" + j + ":");
-                        FileLogger.d(NETWORK_TAG, "  - id: " + id);
-                        FileLogger.d(NETWORK_TAG, "  - type: " + type);
-                        FileLogger.d(NETWORK_TAG, "  - function.name: " + funcName);
-                        FileLogger.d(NETWORK_TAG, "  - function.arguments: " + args);
-                        
-                        // 尝试验证 arguments
-                        try {
-                            new JSONObject(args);
-                            FileLogger.d(NETWORK_TAG, "  - arguments JSON Valid: true");
-                        } catch (Exception e) {
-                            FileLogger.e(NETWORK_TAG, "  - arguments JSON Invalid! Error: " + e.getMessage());
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                FileLogger.e(NETWORK_TAG, "🔍 [TOOL_CALLS_DEBUG] Error processing message #" + i, e);
-            }
-        }
         }
 
         JSONObject requestBody = new JSONObject();
@@ -397,35 +362,6 @@ public class TongYiClient
           .addHeader("Content-Type", "application/json")
           .post(body)
           .build();
-        // === 🔒 #5032 新增：调试工具调用参数 JSON 格式 ===
-        try {
-          String bodyJsonStr = requestBody.toString();
-          JSONObject bodyObj = new JSONObject(bodyJsonStr);
-          if (bodyObj.has("messages")) {
-            JSONArray msgs = bodyObj.getJSONArray("messages");
-            for (int i = 0; i < msgs.length(); i++) {
-              JSONObject msg = msgs.getJSONObject(i);
-              if (msg.has("tool_calls")) {
-                JSONArray toolCalls = msg.getJSONArray("tool_calls");
-                for (int j = 0; j < toolCalls.length(); j++) {
-                  JSONObject tc = toolCalls.getJSONObject(j);
-                  String arguments = tc.optString("arguments", "{}");
-                  FileLogger.d(NETWORK_TAG, "🔍 [JSON_DEBUG] Tool Call Arguments Raw: " + arguments);
-                  // 尝试验证 arguments 是否是合法 JSON
-                  try {
-                    new JSONObject(arguments);
-                    FileLogger.d(NETWORK_TAG, "🔍 [JSON_DEBUG] Arguments JSON Valid: true");
-                  } catch (Exception e) {
-                    FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Arguments JSON Invalid! Error: " + e.getMessage());
-                    FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Failed Arguments Content: " + arguments);
-                  }
-                }
-              }
-            }
-          }
-        } catch (Exception e) {
-          FileLogger.e(NETWORK_TAG, "🔍 [JSON_DEBUG] Main Body JSON Parse Failed: " + e.getMessage());
-        }
 
         client.newCall(request).enqueue(new Callback()
         {
