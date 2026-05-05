@@ -56,10 +56,10 @@ public class GetGitHubActionsLogsTool implements Tool {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     ];
-    
+
     // 最多记录被过滤内容的行数，避免日志过长
     private static final int MAX_FILTERED_LOG_LINES = 10;
-    
+
     private final Context context;
     @Override
     public String getName() {
