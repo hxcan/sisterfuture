@@ -55,12 +55,13 @@ public class GetGitHubActionsLogsTool implements Tool {
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    ];
+    };
 
     // 最多记录被过滤内容的行数，避免日志过长
     private static final int MAX_FILTERED_LOG_LINES = 10;
 
     private final Context context;
+
     @Override
     public String getName() {
         return "getGithubActionsLogs";
@@ -235,8 +236,6 @@ public class GetGitHubActionsLogsTool implements Tool {
 
     /**
      * 判断是否是 Runner 环境操作日志行
-     * @param line 日志行
-     * @return 是否是 Runner 环境操作日志
     private String filterRunnerOpLines(String logs) {
         StringBuilder filtered = new StringBuilder();
         StringBuilder filteredOutContent = new StringBuilder();
@@ -267,6 +266,34 @@ public class GetGitHubActionsLogsTool implements Tool {
 
         return filtered.toString();
     }
+        return false;
+    }
+
+    /**
+     * 过滤 Runner 环境操作日志行
+     * @param logs 原始日志
+     * @return 过滤后的日志
+     */
+    private String filterRunnerOpLines(String logs) {
+        StringBuilder filtered = new StringBuilder();
+        String[] lines = logs.split("\n");
+
+        for (String line : lines) {
+            if (!isRunnerOpLine(line)) {
+                filtered.append(line).append("\n");
+            }
+        }
+
+        return filtered.toString();
+    }
+
+    /**
+     * 将日志内容保存到手机存储
+     * @param content 日志内容
+     * @param owner 仓库所有者
+     * @param repo 仓库名称
+     * @param runId Run ID
+     * @return 保存的文件路径
      */
     private String saveToPhone(String content, String owner, String repo, long runId) {
         try {
