@@ -13,29 +13,38 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
-import java.util.regex.Matcher;
-
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
- * @version 3.0.3 (新增 ignoreRunnerOps 和 removeTimestamps 选项)
+ * @version 3.1.0 (新增 ignoreRunnerOps 参数，过滤 Runner 环境操作日志)
+ * @version 3.0.4 (新增自动保存日志到手机功能，默认模式改为 error_only，工具名改为驼峰格式)
+ * @version 3.0.3 (修复 ignoreWarnings 对 GitHub Actions 格式日志无效的问题)
+ * @version 3.0.2 (新增 ignoreWarnings 选项)
  */
 public class GetGitHubActionsLogsTool implements Tool {
     
     private static final String TAG = "GetGHActionsLogs";
     private static final String API_BASE = "https://api.github.com/repos";
     
+    // 日志保存目录
+    private static final String LOG_SAVE_DIR = "/sdcard/Download/";
+    
     // Runner 环境操作日志过滤正则表达式模式
     private static final Pattern[] RUNNER_OP_PATTERNS = {
         Pattern.compile("^Post job cleanup"),
         Pattern.compile("^Cleaning up orphan processes"),
         Pattern.compile("^Terminate orphan process"),
-        Pattern.compile("^[\\s]*\\[command\\]\\/usr\\/bin\\/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
+        Pattern.compile("^[\\s]*\\[command\\]/usr/bin/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
         Pattern.compile("^Temporarily overriding HOME"),
         Pattern.compile("^Adding repository directory.*safe\\.directory"),
         Pattern.compile("^\\[\\d{2};\\d{2}m.*\\[0m"),
@@ -43,28 +52,29 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("^#{4}\\[endgroup\\]")
     };
     
-    // 时间戳正则模式
-    private static final Pattern TIMESTAMP_PATTERN = 
-        Pattern.compile("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z\\s*");
-    
+    private final Context context;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    // 最多记录被过滤内容的行数，避免日志过长
+    private static final int MAX_FILTERED_LOG_LINES = 10;
+
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public GetGitHubActionsLogsTool(Context context) {
         this.context = context;
     }
-
     @Override
     public String getName() {
-        return "get_github_actions_logs";
+        return "getGithubActionsLogs";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "get_github_actions_logs");
-            functionDef.put("description", "获取 GitHub Actions 运行记录的详细日志。支持智能摘要和错误过滤，适用于任何类型的 GitHub 仓库。");
+            functionDef.put("name", "getGithubActionsLogs");
+            functionDef.put("description", "获取 GitHub Actions 运行记录的详细日志。支持智能摘要和错误过滤，适用于任何类型的 GitHub 仓库。日志会自动保存到手机存储。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -83,16 +93,13 @@ public class GetGitHubActionsLogsTool implements Tool {
                     .put("description", "Job ID（可选，不填则自动选择第一个失败的 job）"))
                 .put("mode", new JSONObject()
                     .put("type", "string")
-                    .put("description", "返回模式 summary|errors_only|full（可选，默认 summary）"))
+                    .put("description", "返回模式 summary|errors_only|full（可选，默认 errors_only）"))
                 .put("ignoreWarnings", new JSONObject()
                     .put("type", "boolean")
                     .put("description", "是否忽略警告行（以 warning 开头的行）（可选，默认 true，避免日志过长导致上下文溢出）"))
                 .put("ignoreRunnerOps", new JSONObject()
                     .put("type", "boolean")
-                    .put("description", "是否忽略 GitHub Actions Runner 的环境操作日志（如 git config、Post job cleanup、环境变量设置等），这些与构建本身无关（可选，默认 true）"))
-                .put("removeTimestamps", new JSONObject()
-                    .put("type", "boolean")
-                    .put("description", "是否移除每行开头的 ISO 8601 格式时间戳，让日志更紧凑易读（可选，默认 true）"))
+                    .put("description", "是否忽略 GitHub Actions Runner 的环境操作日志（如 Post job cleanup、git 版本查询等）（可选，默认 true）"))
                 .put("token", new JSONObject()
                     .put("type", "string")
                     .put("description", "GitHub Token（可选，从工具备注读取）"))
@@ -125,13 +132,14 @@ public class GetGitHubActionsLogsTool implements Tool {
                 String repo = arguments.getString("repo");
                 long runId = arguments.getLong("runId");
                 Long jobId = arguments.has("jobId") && !arguments.isNull("jobId") ? arguments.getLong("jobId") : null;
-                String mode = arguments.optString("mode", "summary");
+                // 默认模式改为 error_only
+                String mode = arguments.optString("mode", "errors_only");
                 boolean ignoreWarnings = arguments.optBoolean("ignoreWarnings", true);
+                // 新增：ignoreRunnerOps 参数，默认 true
                 boolean ignoreRunnerOps = arguments.optBoolean("ignoreRunnerOps", true);
-                boolean removeTimestamps = arguments.optBoolean("removeTimestamps", true);
                 String token = arguments.optString("token", "").trim();
 
-                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings + ", ignoreRunnerOps=" + ignoreRunnerOps + ", removeTimestamps=" + removeTimestamps);
+                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings + ", ignoreRunnerOps=" + ignoreRunnerOps);
 
                 // 如果未提供 token，尝试从工具备注读取
                 if (token.isEmpty()) {
@@ -175,17 +183,14 @@ public class GetGitHubActionsLogsTool implements Tool {
                 // 获取详细日志（纯文本）
                 String logs = getJobLogs(client, token, owner, repo, jobId);
 
-                // 依次应用过滤：先过滤警告，再过滤 Runner 操作，最后移除时间戳
-                if (ignoreWarnings) {
-                    logs = filterWarningLines(logs);
-                }
-                
+                // 如果设置了忽略 Runner 环境操作，则过滤
                 if (ignoreRunnerOps) {
                     logs = filterRunnerOpLines(logs);
                 }
 
-                if (removeTimestamps) {
-                    logs = removeTimestamps(logs);
+                // 如果设置了忽略警告，则过滤以 warning 开头的行
+                if (ignoreWarnings) {
+                    logs = filterWarningLines(logs);
                 }
 
                 // 根据 mode 处理日志
@@ -199,17 +204,22 @@ public class GetGitHubActionsLogsTool implements Tool {
                     result = logs;
                 }
 
+                // 自动保存到手机
+                String savedFilePath = saveToPhone(result, owner, repo, runId);
+                
+                FileLogger.d(TAG, "日志已保存到: " + savedFilePath);
+
                 JSONObject response = new JSONObject();
                 response.put("status", "success");
-                response.put("message", "日志获取成功！");
+                response.put("message", "日志获取成功！已自动保存到: " + savedFilePath);
                 response.put("content", result);
                 response.put("run_id", runId);
                 response.put("job_id", jobId);
                 response.put("mode", mode);
                 response.put("ignore_warnings", ignoreWarnings);
                 response.put("ignore_runner_ops", ignoreRunnerOps);
-                response.put("remove_timestamps", removeTimestamps);
                 response.put("fetched_at", System.currentTimeMillis());
+                response.put("saved_file", savedFilePath);
 
                 callback.onResult(response);
 
@@ -224,6 +234,89 @@ public class GetGitHubActionsLogsTool implements Tool {
                 } catch (Exception ignored) {}
             }
         });
+    }
+
+    /**
+     * 判断是否是 Runner 环境操作日志行
+     * @param line 日志行
+     * @return 是否是 Runner 环境操作日志
+     */
+    private boolean isRunnerOpLine(String line) {
+    private String filterRunnerOpLines(String logs) {
+        StringBuilder filtered = new StringBuilder();
+        StringBuilder filteredOutContent = new StringBuilder();
+        String[] lines = logs.split("\n");
+        int totalLines = lines.length;
+        int filteredOutCount = 0;
+
+        for (String line : lines) {
+            if (!isRunnerOpLine(line)) {
+                filtered.append(line).append("\n");
+            } else {
+                filteredOutCount++;
+                // 只记录前几行被过滤的内容，避免日志过长
+                if (filteredOutCount <= MAX_FILTERED_LOG_LINES) {
+                    filteredOutContent.append(line).append("\n");
+                }
+            }
+        }
+
+        // 记录调试日志
+        FileLogger.d(TAG, "过滤 Runner 操作日志: 总行数=" + totalLines + ", 过滤行数=" + filteredOutCount);
+        if (filteredOutCount > 0) {
+            String contentPreview = filteredOutCount > MAX_FILTERED_LOG_LINES 
+                ? filteredOutContent.toString() + "...(还有 " + (filteredOutCount - MAX_FILTERED_LOG_LINES) + " 行未显示)"
+                : filteredOutContent.toString();
+            FileLogger.d(TAG, "被过滤的 Runner 操作日志内容(最多显示" + MAX_FILTERED_LOG_LINES + "行):\n" + contentPreview);
+        }
+
+        return filtered.toString();
+    }
+        String[] lines = logs.split("\n");
+
+        for (String line : lines) {
+            if (!isRunnerOpLine(line)) {
+                filtered.append(line).append("\n");
+            }
+        }
+
+        return filtered.toString();
+    }
+
+    /**
+     * 将日志内容保存到手机存储
+     * @param content 日志内容
+     * @param owner 仓库所有者
+     * @param repo 仓库名称
+     * @param runId Run ID
+     * @return 保存的文件路径
+     */
+    private String saveToPhone(String content, String owner, String repo, long runId) {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault());
+            String timestamp = sdf.format(new Date());
+            String fileName = String.format("getGithubActionsLogs_%s_%s_%s_%d.txt", 
+                owner, repo, timestamp, runId);
+            // 清理文件名中的非法字符
+            fileName = fileName.replace("/", "_").replace("\\", "_");
+            
+            File saveDir = new File(LOG_SAVE_DIR);
+            if (!saveDir.exists()) {
+                saveDir.mkdirs();
+            }
+            
+            File saveFile = new File(saveDir, fileName);
+            FileWriter writer = new FileWriter(saveFile);
+            writer.write(content);
+            writer.flush();
+            writer.close();
+            
+            FileLogger.i(TAG, "日志已保存到: " + saveFile.getAbsolutePath());
+            return saveFile.getAbsolutePath();
+        } catch (Exception e) {
+            FileLogger.e(TAG, "保存日志失败", e);
+            return "保存失败: " + e.getMessage();
+        }
     }
 
     /**
@@ -455,6 +548,8 @@ public class GetGitHubActionsLogsTool implements Tool {
 
     /**
      * 过滤警告行（以 warning 开头的行，不区分大小写）
+     * 修复：GitHub Actions 日志以时间戳开头，WARNING 可能在时间戳后面
+     * 改为检查整行是否包含 "WARNING:" 或 "warning:" 模式
      */
     private String filterWarningLines(String logs) {
         StringBuilder filtered = new StringBuilder();
@@ -462,55 +557,14 @@ public class GetGitHubActionsLogsTool implements Tool {
 
         for (String line : lines) {
             String trimmedLine = line.trim().toLowerCase();
-            if (!trimmedLine.startsWith("warning")) {
+            // 使用 contains 而不是 startsWith，GitHub Actions 日志前面有时间戳
+            // 只检查是否包含 "warning:" 标记，忽略大小写
+            if (!trimmedLine.contains("warning:")) {
                 filtered.append(line).append("\n");
             }
         }
 
         return filtered.toString();
-    }
-
-    /**
-     * 过滤 Runner 环境操作行
-     */
-    private String filterRunnerOpLines(String logs) {
-        StringBuilder filtered = new StringBuilder();
-        String[] lines = logs.split("\n");
-
-        for (String line : lines) {
-            if (!isRunnerOpLine(line)) {
-                filtered.append(line).append("\n");
-            }
-        }
-
-        return filtered.toString();
-    }
-
-    /**
-     * 判断某一行是否是 Runner 环境操作
-     */
-    private boolean isRunnerOpLine(String line) {
-        for (Pattern p : RUNNER_OP_PATTERNS) {
-            if (p.matcher(line).find()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 移除时间戳
-     */
-    private String removeTimestamps(String logs) {
-        StringBuilder result = new StringBuilder();
-        String[] lines = logs.split("\n");
-
-        for (String line : lines) {
-            String cleanedLine = TIMESTAMP_PATTERN.matcher(line).replaceAll("");
-            result.append(cleanedLine).append("\n");
-        }
-
-        return result.toString();
     }
 
     private JSONObject httpGetJson(OkHttpClient client, String token, String urlString) throws Exception {
