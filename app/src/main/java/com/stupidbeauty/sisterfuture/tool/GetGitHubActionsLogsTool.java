@@ -60,10 +60,6 @@ public class GetGitHubActionsLogsTool implements Tool {
 
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-
-    public GetGitHubActionsLogsTool(Context context) {
-        this.context = context;
-    }
     @Override
     public String getName() {
         return "getGithubActionsLogs";
@@ -242,6 +238,10 @@ public class GetGitHubActionsLogsTool implements Tool {
      * @return 是否是 Runner 环境操作日志
      */
     private boolean isRunnerOpLine(String line) {
+        for (Pattern p : RUNNER_OP_PATTERNS) {
+            if (p.matcher(line).find()) {
+                return true;
+            }
     private String filterRunnerOpLines(String logs) {
         StringBuilder filtered = new StringBuilder();
         StringBuilder filteredOutContent = new StringBuilder();
@@ -272,10 +272,6 @@ public class GetGitHubActionsLogsTool implements Tool {
 
         return filtered.toString();
     }
-        String[] lines = logs.split("\n");
-
-        for (String line : lines) {
-            if (!isRunnerOpLine(line)) {
                 filtered.append(line).append("\n");
             }
         }
