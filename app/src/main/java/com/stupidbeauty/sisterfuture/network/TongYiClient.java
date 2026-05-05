@@ -224,14 +224,15 @@ public class TongYiClient
     public void sendRequest(JSONArray messages, boolean includeTools, OnResponseListener listener, Runnable onStreamComplete, long requestId, String reservedMessageId)
     {
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
-      
+      String apiKey = null;
+
       if (currentAccessPoint != null) {
           apiKey = currentAccessPoint.getApiKey();
       }
-      
+
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
-          
-      String apiKeyMasked = (apiKey != null && apiKey.length() > 12) 
+
+      String apiKeyMasked = (apiKey != null && apiKey.length() > 12)
           ? apiKey.substring(0, 8) + "..." + apiKey.substring(apiKey.length() - 4)
           : (apiKey != null ? "***" : "null");
       FileLogger.d(NETWORK_TAG, "[API Key] 接入点=\"" + (currentAccessPoint != null ? currentAccessPoint.getName() : "null") + "\", Key=\"" + apiKeyMasked + "\" (长度：" + (apiKey != null ? apiKey.length() : 0) + ")");
