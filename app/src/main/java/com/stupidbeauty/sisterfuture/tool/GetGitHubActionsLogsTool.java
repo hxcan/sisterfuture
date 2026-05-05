@@ -55,12 +55,9 @@ public class GetGitHubActionsLogsTool implements Tool {
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    };
-
-    // 最多记录被过滤内容的行数，避免日志过长
-    private static final int MAX_FILTERED_LOG_LINES = 10;
-
-    private final Context context;
+    public GetGitHubActionsLogsTool(Context context) {
+        this.context = context;
+    }
 
     @Override
     public String getName() {
@@ -236,6 +233,12 @@ public class GetGitHubActionsLogsTool implements Tool {
 
     /**
      * 判断是否是 Runner 环境操作日志行
+     * @param line 日志行
+     * @return 是否是 Runner 环境操作日志
+     */
+    // 最多记录被过滤内容的行数，避免日志过长
+    private static final int MAX_FILTERED_LOG_LINES = 10;
+
     private String filterRunnerOpLines(String logs) {
         StringBuilder filtered = new StringBuilder();
         StringBuilder filteredOutContent = new StringBuilder();
@@ -266,9 +269,6 @@ public class GetGitHubActionsLogsTool implements Tool {
 
         return filtered.toString();
     }
-        return false;
-    }
-
     /**
      * 过滤 Runner 环境操作日志行
      * @param logs 原始日志
