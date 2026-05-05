@@ -26,6 +26,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.1 (修复 ignoreRunnerOps 正则表达式，移除行首匹配符号^，因为实际日志行首是时间戳)
  * @version 3.1.0 (新增 ignoreRunnerOps 参数，过滤 Runner 环境操作日志)
  * @version 3.0.4 (新增自动保存日志到手机功能，默认模式改为 error_only，工具名改为驼峰格式)
  * @version 3.0.3 (修复 ignoreWarnings 对 GitHub Actions 格式日志无效的问题)
@@ -39,17 +40,31 @@ public class GetGitHubActionsLogsTool implements Tool {
     // 日志保存目录
     private static final String LOG_SAVE_DIR = "/sdcard/Download/";
     
-    // Runner 环境操作日志过滤正则表达式模式
+    // Runner 环境操作日志过滤正则表达式模式（注意：日志行首是时间戳，不是这些内容，所以不使用^开头）
     private static final Pattern[] RUNNER_OP_PATTERNS = {
-        Pattern.compile("^Post job cleanup"),
-        Pattern.compile("^Cleaning up orphan processes"),
-        Pattern.compile("^Terminate orphan process"),
-        Pattern.compile("^\\[\\s*\\]\\[command\\]/usr/bin/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
-        Pattern.compile("^Temporarily overriding HOME"),
-        Pattern.compile("^Adding repository directory.*safe\\.directory"),
-        Pattern.compile("^\\[[\\d;]+m.*\\[0m"),
-        Pattern.compile("^#{4}\\[group\\]Post job cleanup"),
-        Pattern.compile("^#{4}\\[endgroup\\]")
+        // 匹配 "Post job cleanup" 或类似内容（行中任何位置出现）
+        Pattern.compile("Post job cleanup"),
+        Pattern.compile("Cleaning up orphan processes"),
+        Pattern.compile("Terminate orphan process"),
+        // Git 命令（行中任何位置出现）
+        Pattern.compile("\\[command\\]/usr/bin/git "),
+        Pattern.compile("Temporarily overriding HOME"),
+        Pattern.compile("Adding repository directory.*safe\\.directory"),
+        // GitHub Actions 颜色代码
+        Pattern.compile("\\[[0-9;]+m\\[0m"),
+        // Git 版本输出行
+        Pattern.compile("git version [0-9]"),
+        // git config/safe.directory 等操作
+        Pattern.compile("git config.*safe\\.directory"),
+        // git init/remote/fetch/checkout/log/branch/status
+        Pattern.compile("git (init|remote|fetch|checkout|log|branch|status)"),
+        // 清理相关的 orphan process
+        Pattern.compile("orphan"),
+        // Node.js deprecation warning
+        Pattern.compile("Node\\.js 20 actions are deprecated"),
+        // Post job cleanup group/endgroup
+        Pattern.compile("#\\[group\\]Post job cleanup"),
+        Pattern.compile("#\\[endgroup\\]")
     };
     
     private final Context context;
