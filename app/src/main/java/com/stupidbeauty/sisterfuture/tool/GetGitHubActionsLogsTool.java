@@ -44,10 +44,10 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("^Post job cleanup"),
         Pattern.compile("^Cleaning up orphan processes"),
         Pattern.compile("^Terminate orphan process"),
-        Pattern.compile("^[\\s]*\\[command\\]/usr/bin/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
+        Pattern.compile("^\\[\\s\\]\\[command\\]/usr/bin/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
         Pattern.compile("^Temporarily overriding HOME"),
         Pattern.compile("^Adding repository directory.*safe\\.directory"),
-        Pattern.compile("^\\[\\d{2};\\d{2}m.*\\[0m"),
+        Pattern.compile("^\\[[\\d;]+m.*\\[0m"),
         Pattern.compile("^#{4}\\[group\\]Post job cleanup"),
         Pattern.compile("^#{4}\\[endgroup\\]")
     };
@@ -236,39 +236,15 @@ public class GetGitHubActionsLogsTool implements Tool {
      * @param line 日志行
      * @return 是否是 Runner 环境操作日志
      */
-    // 最多记录被过滤内容的行数，避免日志过长
-    private static final int MAX_FILTERED_LOG_LINES = 10;
-
-    private String filterRunnerOpLines(String logs) {
-        StringBuilder filtered = new StringBuilder();
-        StringBuilder filteredOutContent = new StringBuilder();
-        String[] lines = logs.split("\n");
-        int totalLines = lines.length;
-        int filteredOutCount = 0;
-
-        for (String line : lines) {
-            if (!isRunnerOpLine(line)) {
-                filtered.append(line).append("\n");
-            } else {
-                filteredOutCount++;
-                // 只记录前几行被过滤的内容，避免日志过长
-                if (filteredOutCount <= MAX_FILTERED_LOG_LINES) {
-                    filteredOutContent.append(line).append("\n");
-                }
+    private boolean isRunnerOpLine(String line) {
+        for (Pattern p : RUNNER_OP_PATTERNS) {
+            if (p.matcher(line).find()) {
+                return true;
             }
         }
-
-        // 记录调试日志
-        FileLogger.d(TAG, "过滤 Runner 操作日志: 总行数=" + totalLines + ", 过滤行数=" + filteredOutCount);
-        if (filteredOutCount > 0) {
-            String contentPreview = filteredOutCount > MAX_FILTERED_LOG_LINES 
-                ? filteredOutContent.toString() + "...(还有 " + (filteredOutCount - MAX_FILTERED_LOG_LINES) + " 行未显示)"
-                : filteredOutContent.toString();
-            FileLogger.d(TAG, "被过滤的 Runner 操作日志内容(最多显示" + MAX_FILTERED_LOG_LINES + "行):\n" + contentPreview);
-        }
-
-        return filtered.toString();
+        return false;
     }
+
     /**
      * 过滤 Runner 环境操作日志行
      * @param logs 原始日志
