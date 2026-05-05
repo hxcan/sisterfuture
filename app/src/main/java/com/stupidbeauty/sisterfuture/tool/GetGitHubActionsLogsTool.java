@@ -44,10 +44,10 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("^Post job cleanup"),
         Pattern.compile("^Cleaning up orphan processes"),
         Pattern.compile("^Terminate orphan process"),
-        Pattern.compile("^[\\s]*\\[command\\]/usr/bin/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
+        Pattern.compile("^\\[\\s*\\]\\[command\\]/usr/bin/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
         Pattern.compile("^Temporarily overriding HOME"),
         Pattern.compile("^Adding repository directory.*safe\\.directory"),
-        Pattern.compile("^\\[\\d{2};\\d{2}m.*\\[0m"),
+        Pattern.compile("^\\[[\\d;]+m.*\\[0m"),
         Pattern.compile("^#{4}\\[group\\]Post job cleanup"),
         Pattern.compile("^#{4}\\[endgroup\\]")
     };
@@ -253,12 +253,23 @@ public class GetGitHubActionsLogsTool implements Tool {
     private String filterRunnerOpLines(String logs) {
         StringBuilder filtered = new StringBuilder();
         String[] lines = logs.split("\n");
+        
+        // 统计信息
+        int totalLines = lines.length;
+        int filteredOutCount = 0;
+        int keptCount = 0;
 
         for (String line : lines) {
             if (!isRunnerOpLine(line)) {
                 filtered.append(line).append("\n");
+                keptCount++;
+            } else {
+                filteredOutCount++;
             }
         }
+        
+        // 记录调试日志
+        FileLogger.d(TAG, "过滤 Runner 操作日志: 总行数=" + totalLines + ", 保留行数=" + keptCount + ", 过滤行数=" + filteredOutCount);
 
         return filtered.toString();
     }
