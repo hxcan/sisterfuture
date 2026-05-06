@@ -27,6 +27,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.8 (增强 ignoreRunnerOps 过滤规则，新增 Artifact 上传成功消息过滤)
  * @version 3.1.7 (增强 ignoreRunnerOps 过滤规则，新增 GITHUB_TOKEN Permissions 日志过滤)
  * @version 3.1.6 (增强 ignoreRunnerOps 过滤规则，新增 Worker ID 日志过滤)
  * @version 3.1.5 (增强 ignoreRunnerOps 过滤规则，新增 safe directory 配置日志过滤)
@@ -81,6 +82,9 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("SecurityEvents: write"),
         Pattern.compile("Statuses: write"),
         Pattern.compile("VulnerabilityAlerts: read"),
+        // 匹配 Artifact 上传成功消息
+        Pattern.compile("Artifact .* successfully finalized"),
+        Pattern.compile("Artifact .* has been successfully uploaded"),
         // GitHub Actions 颜色代码
         Pattern.compile("\\[[0-9;]+m\\[0m"),
         // Git 版本输出行
