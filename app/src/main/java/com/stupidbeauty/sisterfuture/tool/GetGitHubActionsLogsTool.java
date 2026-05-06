@@ -27,6 +27,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.3 (修正 ignoreRunnerOps 过滤规则，移除误伤的构建命令日志，仅保留纯粹的 Runner 环境清理操作)
  * @version 3.1.2 (增强 ignoreRunnerOps 过滤规则，新增更多 Runner 环境操作和构建命令的过滤)
  * @version 3.1.1 (修复 ignoreRunnerOps 正则表达式，移除行首匹配符号^，因为实际日志行首是时间戳)
  * @version 3.1.0 (新增 ignoreRunnerOps 参数，过滤 Runner 环境操作日志)
@@ -43,12 +44,13 @@ public class GetGitHubActionsLogsTool implements Tool {
     private static final String LOG_SAVE_DIR = "/sdcard/Download/";
     
     // Runner 环境操作日志过滤正则表达式模式（注意：日志行首是时间戳，不是这些内容，所以不使用^开头）
+    // 仅过滤纯粹的 Runner 环境清理和维护操作，不过滤构建过程中的必要命令
     private static final Pattern[] RUNNER_OP_PATTERNS = {
         // 匹配 "Post job cleanup" 或类似内容（行中任何位置出现）
         Pattern.compile("Post job cleanup"),
         Pattern.compile("Cleaning up orphan processes"),
         Pattern.compile("Terminate orphan process"),
-        // Git 命令（行中任何位置出现）
+        // Git 命令（行中任何位置出现）- 仅过滤通用的 git 命令前缀，具体子命令由下面单独处理
         Pattern.compile("\\[command\\]/usr/bin/git "),
         Pattern.compile("Temporarily overriding HOME"),
         Pattern.compile("Adding repository directory.*safe\\.directory"),
@@ -58,193 +60,13 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("git version [0-9]"),
         // git config/safe.directory 等操作
         Pattern.compile("git config.*safe\\.directory"),
-        // git init/remote/fetch/checkout/log/branch/status
-        Pattern.compile("git (init|remote|fetch|checkout|log|branch|status)"),
         // 清理相关的 orphan process
         Pattern.compile("orphan"),
         // Node.js deprecation warning
         Pattern.compile("Node\\.js 20 actions are deprecated"),
         // Post job cleanup group/endgroup
         Pattern.compile("#\\[group\\]Post job cleanup"),
-        Pattern.compile("#\\[endgroup\\]"),
-        // tar 命令（缓存恢复时）
-        Pattern.compile("\\[command\\]/usr/bin/tar "),
-        // cp 命令
-        Pattern.compile("\\[command\\]/usr/bin/cp "),
-        // apksigner 命令
-        Pattern.compile("\\[command\\]/usr/local/lib/android/sdk/build-tools/[0-9.]+/apksigner "),
-        // zipalign 命令
-        Pattern.compile("\\[command\\]/usr/local/lib/android/sdk/build-tools/[0-9.]+/zipalign "),
-        // sdkmanager 命令
-        Pattern.compile("\\[command\\].*sdkmanager "),
-        // gradlew 命令
-        Pattern.compile("\\[command\\].*gradlew "),
-        // chmod 命令
-        Pattern.compile("\\[command\\].*chmod "),
-        // export 命令
-        Pattern.compile("\\[command\\].*export "),
-        // yes 命令
-        Pattern.compile("\\[command\\].*yes "),
-        // echo 命令
-        Pattern.compile("\\[command\\].*echo "),
-        // ls 命令
-        Pattern.compile("\\[command\\].*ls "),
-        // find 命令
-        Pattern.compile("\\[command\\].*find "),
-        // Setting up auth
-        Pattern.compile("Setting up auth"),
-        // Disabling automatic garbage collection
-        Pattern.compile("Disabling automatic garbage collection"),
-        // Initializing the repository
-        Pattern.compile("Initializing the repository"),
-        // Checking out the ref
-        Pattern.compile("Checking out the ref"),
-        // Determining the checkout info
-        Pattern.compile("Determining the checkout info"),
-        // Fetching the repository
-        Pattern.compile("Fetching the repository"),
-        // Syncing repository
-        Pattern.compile("Syncing repository"),
-        // Getting Git version info
-        Pattern.compile("Getting Git version info"),
-        // Prepare workflow directory
-        Pattern.compile("Prepare workflow directory"),
-        // Prepare all required actions
-        Pattern.compile("Prepare all required actions"),
-        // Getting action download info
-        Pattern.compile("Getting action download info"),
-        // Download action repository
-        Pattern.compile("Download action repository"),
-        // Complete job name
-        Pattern.compile("Complete job name"),
-        // Runner Image Provisioner
-        Pattern.compile("Runner Image Provisioner"),
-        // Operating System
-        Pattern.compile("Operating System"),
-        // Runner Image
-        Pattern.compile("Runner Image"),
-        // GITHUB_TOKEN Permissions
-        Pattern.compile("GITHUB_TOKEN Permissions"),
-        // Secret source
-        Pattern.compile("Secret source"),
-        // Installed distributions
-        Pattern.compile("Installed distributions"),
-        // Resolved Java
-        Pattern.compile("Resolved Java"),
-        // Setting Java
-        Pattern.compile("Setting Java"),
-        // Creating toolchains.xml
-        Pattern.compile("Creating toolchains.xml"),
-        // Writing to
-        Pattern.compile("Writing to"),
-        // Java configuration
-        Pattern.compile("Java configuration"),
-        // Creating settings.xml
-        Pattern.compile("Creating settings.xml"),
-        // Cache hit for
-        Pattern.compile("Cache hit for"),
-        // Received
-        Pattern.compile("Received"),
-        // Cache Size
-        Pattern.compile("Cache Size"),
-        // Cache restored successfully
-        Pattern.compile("Cache restored successfully"),
-        // Cache restored from key
-        Pattern.compile("Cache restored from key"),
-        // Starting a Gradle Daemon
-        Pattern.compile("Starting a Gradle Daemon"),
-        // Configuration on demand
-        Pattern.compile("Configuration on demand"),
-        // Welcome to Gradle
-        Pattern.compile("Welcome to Gradle"),
-        // Here are the highlights
-        Pattern.compile("Here are the highlights"),
-        // For more details see
-        Pattern.compile("For more details see"),
-        // To honour the JVM settings
-        Pattern.compile("To honour the JVM settings"),
-        // Daemon will be stopped
-        Pattern.compile("Daemon will be stopped"),
-        // It will be removed in version
-        Pattern.compile("It will be removed in version"),
-        // Using it has no effect
-        Pattern.compile("Using it has no effect"),
-        // Android SDK Build Tools
-        Pattern.compile("Android SDK Build Tools"),
-        // To suppress this warning
-        Pattern.compile("To suppress this warning"),
-        // Checking the license
-        Pattern.compile("Checking the license"),
-        // License for package
-        Pattern.compile("License for package"),
-        // Preparing
-        Pattern.compile("Preparing"),
-        // ready
-        Pattern.compile("ready"),
-        // Installing
-        Pattern.compile("Installing"),
-        // complete
-        Pattern.compile("complete"),
-        // finished
-        Pattern.compile("finished"),
-        // Unable to strip the following libraries
-        Pattern.compile("Unable to strip the following libraries"),
-        // packaging them as they are
-        Pattern.compile("packaging them as they are"),
-        // Wrote HTML report
-        Pattern.compile("Wrote HTML report"),
-        // With the provided path
-        Pattern.compile("With the provided path"),
-        // Artifact name is valid
-        Pattern.compile("Artifact name is valid"),
-        // Root directory input is valid
-        Pattern.compile("Root directory input is valid"),
-        // Beginning upload
-        Pattern.compile("Beginning upload"),
-        // Uploaded bytes
-        Pattern.compile("Uploaded bytes"),
-        // Finished uploading
-        Pattern.compile("Finished uploading"),
-        // SHA256 digest
-        Pattern.compile("SHA256 digest"),
-        // Finalizing artifact upload
-        Pattern.compile("Finalizing artifact upload"),
-        // Artifact .* successfully finalized
-        Pattern.compile("Artifact .* successfully finalized"),
-        // Artifact .* has been successfully uploaded
-        Pattern.compile("Artifact .* has been successfully uploaded"),
-        // Artifact download URL
-        Pattern.compile("Artifact download URL"),
-        // Releases signed
-        Pattern.compile("Releases signed"),
-        // Verification succesful
-        Pattern.compile("Verification succesful"),
-        // The `set-output` command is deprecated
-        Pattern.compile("The `set-output` command is deprecated"),
-        // Please upgrade to using Environment Files
-        Pattern.compile("Please upgrade to using Environment Files"),
-        // For more information see
-        Pattern.compile("For more information see"),
-        // Node.js 20 actions are deprecated
-        Pattern.compile("Node.js 20 actions are deprecated"),
-        // Actions will be forced to run with Node.js 24
-        Pattern.compile("Actions will be forced to run with Node.js 24"),
-        // Node.js 20 will be removed
-        Pattern.compile("Node.js 20 will be removed"),
-        // Please check if updated versions
-        Pattern.compile("Please check if updated versions"),
-        // To opt into Node.js 24 now
-        Pattern.compile("To opt into Node.js 24 now"),
-        // set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24
-        Pattern.compile("set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24"),
-        // Once Node.js 24 becomes the default
-        Pattern.compile("Once Node.js 24 becomes the default"),
-        // you can temporarily opt out
-        Pattern.compile("you can temporarily opt out"),
-        // setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION
-        Pattern.compile("setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION"),
-        // deprecation-of-node-20-on-github-actions-runners
-        Pattern.compile("deprecation-of-node-20-on-github-actions-runners")
+        Pattern.compile("#\\[endgroup\\]")
     };
     
     private final Context context;
