@@ -22,10 +22,19 @@ import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.9 (增强 ignoreRunnerOps 过滤规则，新增 actions/upload-artifact 步骤日志过滤)
+ * @version 3.1.8 (增强 ignoreRunnerOps 过滤规则，新增 Artifact 上传成功消息过滤)
+ * @version 3.1.7 (增强 ignoreRunnerOps 过滤规则，新增 GITHUB_TOKEN Permissions 日志过滤)
+ * @version 3.1.6 (增强 ignoreRunnerOps 过滤规则，新增 Worker ID 日志过滤)
+ * @version 3.1.5 (增强 ignoreRunnerOps 过滤规则，新增 safe directory 配置日志过滤)
+ * @version 3.1.4 (再次修正 ignoreRunnerOps 过滤规则，保留必要的 Git 操作过滤，移除所有构建命令过滤)
+ * @version 3.1.3 (修正 ignoreRunnerOps 过滤规则，移除误伤的构建命令日志，仅保留纯粹的 Runner 环境清理操作)
+ * @version 3.1.2 (增强 ignoreRunnerOps 过滤规则，新增更多 Runner 环境操作和构建命令的过滤)
  * @version 3.1.1 (修复 ignoreRunnerOps 正则表达式，移除行首匹配符号^，因为实际日志行首是时间戳)
  * @version 3.1.0 (新增 ignoreRunnerOps 参数，过滤 Runner 环境操作日志)
  * @version 3.0.4 (新增自动保存日志到手机功能，默认模式改为 error_only，工具名改为驼峰格式)
@@ -41,22 +50,63 @@ public class GetGitHubActionsLogsTool implements Tool {
     private static final String LOG_SAVE_DIR = "/sdcard/Download/";
     
     // Runner 环境操作日志过滤正则表达式模式（注意：日志行首是时间戳，不是这些内容，所以不使用^开头）
+    // 仅过滤纯粹的 Runner 环境清理和维护操作，不过滤构建过程中的必要命令
     private static final Pattern[] RUNNER_OP_PATTERNS = {
         // 匹配 "Post job cleanup" 或类似内容（行中任何位置出现）
         Pattern.compile("Post job cleanup"),
         Pattern.compile("Cleaning up orphan processes"),
         Pattern.compile("Terminate orphan process"),
-        // Git 命令（行中任何位置出现）
+        // Git 命令（行中任何位置出现）- 仅过滤通用的 git 命令前缀，具体子命令由下面单独处理
         Pattern.compile("\\[command\\]/usr/bin/git "),
         Pattern.compile("Temporarily overriding HOME"),
         Pattern.compile("Adding repository directory.*safe\\.directory"),
+        // 匹配 "Adding repository directory to the temporary git global config as a safe directory"
+        Pattern.compile("Adding repository directory to the temporary git global config as a safe directory"),
+        // 匹配 "Worker ID: {...}"
+        Pattern.compile("Worker ID:"),
+        // 匹配 GITHUB_TOKEN Permissions 及其子项
+        Pattern.compile("GITHUB_TOKEN Permissions"),
+        Pattern.compile("Actions: write"),
+        Pattern.compile("ArtifactMetadata: write"),
+        Pattern.compile("Attestations: write"),
+        Pattern.compile("Checks: write"),
+        Pattern.compile("Contents: write"),
+        Pattern.compile("Deployments: write"),
+        Pattern.compile("Discussions: write"),
+        Pattern.compile("Issues: write"),
+        Pattern.compile("Metadata: read"),
+        Pattern.compile("Models: read"),
+        Pattern.compile("Packages: write"),
+        Pattern.compile("Pages: write"),
+        Pattern.compile("PullRequests: write"),
+        Pattern.compile("RepositoryProjects: write"),
+        Pattern.compile("SecurityEvents: write"),
+        Pattern.compile("Statuses: write"),
+        Pattern.compile("VulnerabilityAlerts: read"),
+        // 匹配 Artifact 上传成功消息
+        Pattern.compile("Artifact .* successfully finalized"),
+        Pattern.compile("Artifact .* has been successfully uploaded"),
+        // 匹配 actions/upload-artifact 步骤及其参数
+        Pattern.compile("##\\[group\\]Run actions/upload-artifact@v4"),
+        Pattern.compile("with:"),
+        Pattern.compile("name: sisterfuture-debug"),
+        Pattern.compile("path: app/build/outputs/apk/debug/\\*\\.apk"),
+        Pattern.compile("if-no-files-found: warn"),
+        Pattern.compile("compression-level: 6"),
+        Pattern.compile("overwrite: false"),
+        Pattern.compile("include-hidden-files: false"),
+        Pattern.compile("env:"),
+        Pattern.compile("JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17\\.0\\.18-8/x64"),
+        Pattern.compile("JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17\\.0\\.18-8/x64"),
+        Pattern.compile("SIGNED_RELEASE_FILE: app/build/outputs/apk/release/sisterfuture-release-v2026\\.4\\.19-1093-20260505-191144-signed\\.apk"),
+        Pattern.compile("##\\[endgroup\\]"),
         // GitHub Actions 颜色代码
         Pattern.compile("\\[[0-9;]+m\\[0m"),
         // Git 版本输出行
         Pattern.compile("git version [0-9]"),
         // git config/safe.directory 等操作
         Pattern.compile("git config.*safe\\.directory"),
-        // git init/remote/fetch/checkout/log/branch/status
+        // git init/remote/fetch/checkout/log/branch/status (Runner 初始化操作)
         Pattern.compile("git (init|remote|fetch|checkout|log|branch|status)"),
         // 清理相关的 orphan process
         Pattern.compile("orphan"),
@@ -246,6 +296,7 @@ public class GetGitHubActionsLogsTool implements Tool {
         });
     }
 
+    
     /**
      * 判断是否是 Runner 环境操作日志行
      * @param line 日志行

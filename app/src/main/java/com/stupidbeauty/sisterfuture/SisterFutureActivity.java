@@ -842,7 +842,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // 🌌 #759909257401 平行宇宙时间线理论：发送请求前清理悬而未决的工具调用
 
-      
+
       // 获取当前历史并应用严厉模式清理
       List<JSONObject> history = contextManager.getHistory();
       List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
@@ -983,8 +983,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
       
-      // 📤 发送请求前记录
-      FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
+      // Deleted: FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
 
       // 🔗 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();

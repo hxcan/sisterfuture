@@ -152,6 +152,7 @@ public class CreateGitHubCommitTool implements Tool
     return true;
   }
 
+  
   /**
     * 兼容 API 24+ 的文件读取方法
     */
@@ -609,6 +610,7 @@ public class CreateGitHubCommitTool implements Tool
     );
   }
 
+  
   /**
     * v18 修复：从内向外创建嵌套目录树，正确保留每一级的现有内容
     */
@@ -683,7 +685,7 @@ public class CreateGitHubCommitTool implements Tool
         for (int j = 0; j < existingEntries.length(); j++)
         {
           JSONObject entry = existingEntries.getJSONObject(j);
-          FileLogger.d(TAG, "[NestedTree v18]   现有条目 [" + j + "]: " + entry.getString("path") + " (" + entry.getString("type") + ")");
+          // Deleted: FileLogger.d(TAG, "[NestedTree v18]   现有条目 [" + j + "]: " + entry.getString("path") + " (" + entry.getString("type") + ")");
         }
                 
         boolean found = false;
