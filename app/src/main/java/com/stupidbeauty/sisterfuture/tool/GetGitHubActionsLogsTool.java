@@ -27,6 +27,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.9 (增强 ignoreRunnerOps 过滤规则，新增 actions/upload-artifact 步骤日志过滤)
  * @version 3.1.8 (增强 ignoreRunnerOps 过滤规则，新增 Artifact 上传成功消息过滤)
  * @version 3.1.7 (增强 ignoreRunnerOps 过滤规则，新增 GITHUB_TOKEN Permissions 日志过滤)
  * @version 3.1.6 (增强 ignoreRunnerOps 过滤规则，新增 Worker ID 日志过滤)
@@ -85,6 +86,20 @@ public class GetGitHubActionsLogsTool implements Tool {
         // 匹配 Artifact 上传成功消息
         Pattern.compile("Artifact .* successfully finalized"),
         Pattern.compile("Artifact .* has been successfully uploaded"),
+        // 匹配 actions/upload-artifact 步骤及其参数
+        Pattern.compile("##\\[group\\]Run actions/upload-artifact@v4"),
+        Pattern.compile("with:"),
+        Pattern.compile("name: sisterfuture-debug"),
+        Pattern.compile("path: app/build/outputs/apk/debug/\\*\\.apk"),
+        Pattern.compile("if-no-files-found: warn"),
+        Pattern.compile("compression-level: 6"),
+        Pattern.compile("overwrite: false"),
+        Pattern.compile("include-hidden-files: false"),
+        Pattern.compile("env:"),
+        Pattern.compile("JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17\\.0\\.18-8/x64"),
+        Pattern.compile("JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17\\.0\\.18-8/x64"),
+        Pattern.compile("SIGNED_RELEASE_FILE: app/build/outputs/apk/release/sisterfuture-release-v2026\\.4\\.19-1093-20260505-191144-signed\\.apk"),
+        Pattern.compile("##\\[endgroup\\]"),
         // GitHub Actions 颜色代码
         Pattern.compile("\\[[0-9;]+m\\[0m"),
         // Git 版本输出行
