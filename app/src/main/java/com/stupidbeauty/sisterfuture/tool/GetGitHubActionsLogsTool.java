@@ -27,6 +27,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.4 (再次修正 ignoreRunnerOps 过滤规则，保留必要的 Git 操作过滤，移除所有构建命令过滤)
  * @version 3.1.3 (修正 ignoreRunnerOps 过滤规则，移除误伤的构建命令日志，仅保留纯粹的 Runner 环境清理操作)
  * @version 3.1.2 (增强 ignoreRunnerOps 过滤规则，新增更多 Runner 环境操作和构建命令的过滤)
  * @version 3.1.1 (修复 ignoreRunnerOps 正则表达式，移除行首匹配符号^，因为实际日志行首是时间戳)
@@ -60,6 +61,8 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("git version [0-9]"),
         // git config/safe.directory 等操作
         Pattern.compile("git config.*safe\\.directory"),
+        // git init/remote/fetch/checkout/log/branch/status (Runner 初始化操作)
+        Pattern.compile("git (init|remote|fetch|checkout|log|branch|status)"),
         // 清理相关的 orphan process
         Pattern.compile("orphan"),
         // Node.js deprecation warning
