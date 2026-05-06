@@ -111,7 +111,6 @@ public class ContextManager
         String content = currentObject.optString("content", "");
         boolean hasToolCalls = currentObject.has("tool_calls");
         
-        FileLogger.d(TAG, "[CLEANUP_LOOP] Processing message #" + i + ", role=" + role + ", hasToolCalls=" + hasToolCalls);
         if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
         {
           blankAssistantCount++;
@@ -293,6 +292,7 @@ public class ContextManager
     saveHistory(history);
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
   }
+  
   
   
   /**
