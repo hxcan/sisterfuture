@@ -27,6 +27,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.7 (增强 ignoreRunnerOps 过滤规则，新增 GITHUB_TOKEN Permissions 日志过滤)
  * @version 3.1.6 (增强 ignoreRunnerOps 过滤规则，新增 Worker ID 日志过滤)
  * @version 3.1.5 (增强 ignoreRunnerOps 过滤规则，新增 safe directory 配置日志过滤)
  * @version 3.1.4 (再次修正 ignoreRunnerOps 过滤规则，保留必要的 Git 操作过滤，移除所有构建命令过滤)
@@ -61,6 +62,25 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("Adding repository directory to the temporary git global config as a safe directory"),
         // 匹配 "Worker ID: {...}"
         Pattern.compile("Worker ID:"),
+        // 匹配 GITHUB_TOKEN Permissions 及其子项
+        Pattern.compile("GITHUB_TOKEN Permissions"),
+        Pattern.compile("Actions: write"),
+        Pattern.compile("ArtifactMetadata: write"),
+        Pattern.compile("Attestations: write"),
+        Pattern.compile("Checks: write"),
+        Pattern.compile("Contents: write"),
+        Pattern.compile("Deployments: write"),
+        Pattern.compile("Discussions: write"),
+        Pattern.compile("Issues: write"),
+        Pattern.compile("Metadata: read"),
+        Pattern.compile("Models: read"),
+        Pattern.compile("Packages: write"),
+        Pattern.compile("Pages: write"),
+        Pattern.compile("PullRequests: write"),
+        Pattern.compile("RepositoryProjects: write"),
+        Pattern.compile("SecurityEvents: write"),
+        Pattern.compile("Statuses: write"),
+        Pattern.compile("VulnerabilityAlerts: read"),
         // GitHub Actions 颜色代码
         Pattern.compile("\\[[0-9;]+m\\[0m"),
         // Git 版本输出行
