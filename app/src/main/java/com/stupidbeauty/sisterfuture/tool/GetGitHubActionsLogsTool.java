@@ -27,6 +27,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.5 (增强 ignoreRunnerOps 过滤规则，新增 safe directory 配置日志过滤)
  * @version 3.1.4 (再次修正 ignoreRunnerOps 过滤规则，保留必要的 Git 操作过滤，移除所有构建命令过滤)
  * @version 3.1.3 (修正 ignoreRunnerOps 过滤规则，移除误伤的构建命令日志，仅保留纯粹的 Runner 环境清理操作)
  * @version 3.1.2 (增强 ignoreRunnerOps 过滤规则，新增更多 Runner 环境操作和构建命令的过滤)
@@ -55,6 +56,8 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("\\[command\\]/usr/bin/git "),
         Pattern.compile("Temporarily overriding HOME"),
         Pattern.compile("Adding repository directory.*safe\\.directory"),
+        // 匹配 "Adding repository directory to the temporary git global config as a safe directory"
+        Pattern.compile("Adding repository directory to the temporary git global config as a safe directory"),
         // GitHub Actions 颜色代码
         Pattern.compile("\\[[0-9;]+m\\[0m"),
         // Git 版本输出行
