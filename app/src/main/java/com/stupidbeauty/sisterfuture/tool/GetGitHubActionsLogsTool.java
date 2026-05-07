@@ -27,6 +27,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.12 (增强 ignoreRunnerOps 过滤规则，新增 Git checkout 后续提示日志过滤)
  * @version 3.1.11 (增强 ignoreRunnerOps 过滤规则，新增 Git checkout 提示日志过滤)
  * @version 3.1.10 (增强 ignoreRunnerOps 过滤规则，新增 Git 初始化提示日志过滤)
  * @version 3.1.9 (增强 ignoreRunnerOps 过滤规则，新增 actions/upload-artifact 步骤日志过滤)
@@ -116,6 +117,9 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("##\\[group\\]Checking out the ref"),
         Pattern.compile("Note: switching to 'refs/remotes/pull/"),
         Pattern.compile("You are in 'detached HEAD' state"),
+        // 匹配 Git checkout 后续提示 (If you want to create a new branch...)
+        Pattern.compile("If you want to create a new branch to retain commits"),
+        Pattern.compile("do so \\(now or later\\) by using -c with the switch command"),
         // GitHub Actions 颜色代码
         Pattern.compile("\\[[0-9;]+m\\[0m"),
         // Git 版本输出行
