@@ -27,6 +27,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.10 (增强 ignoreRunnerOps 过滤规则，新增 Git 初始化提示日志过滤)
  * @version 3.1.9 (增强 ignoreRunnerOps 过滤规则，新增 actions/upload-artifact 步骤日志过滤)
  * @version 3.1.8 (增强 ignoreRunnerOps 过滤规则，新增 Artifact 上传成功消息过滤)
  * @version 3.1.7 (增强 ignoreRunnerOps 过滤规则，新增 GITHUB_TOKEN Permissions 日志过滤)
@@ -100,6 +101,16 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17\\.0\\.18-8/x64"),
         Pattern.compile("SIGNED_RELEASE_FILE: app/build/outputs/apk/release/sisterfuture-release-v2026\\.4\\.19-1093-20260505-191144-signed\\.apk"),
         Pattern.compile("##\\[endgroup\\]"),
+        // 匹配 Git 初始化提示 (Initializing the repository, hint:, Initialized empty Git repository)
+        Pattern.compile("##\\[group\\]Initializing the repository"),
+        Pattern.compile("hint: Using 'master' as the name for the initial branch"),
+        Pattern.compile("hint: will change to \"main\" in Git 3.0"),
+        Pattern.compile("hint: to use in all of your new repositories"),
+        Pattern.compile("hint: call:"),
+        Pattern.compile("hint:\\s+git config --global init.defaultBranch <name>"),
+        Pattern.compile("hint: Names commonly chosen instead of 'master'"),
+        Pattern.compile("hint: Disable this message with \"git config set advice.defaultBranchName false\""),
+        Pattern.compile("Initialized empty Git repository in"),
         // GitHub Actions 颜色代码
         Pattern.compile("\\[[0-9;]+m\\[0m"),
         // Git 版本输出行
