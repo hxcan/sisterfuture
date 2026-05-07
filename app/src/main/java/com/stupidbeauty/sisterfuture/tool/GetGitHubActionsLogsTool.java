@@ -27,6 +27,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.1.11 (增强 ignoreRunnerOps 过滤规则，新增 Git checkout 提示日志过滤)
  * @version 3.1.10 (增强 ignoreRunnerOps 过滤规则，新增 Git 初始化提示日志过滤)
  * @version 3.1.9 (增强 ignoreRunnerOps 过滤规则，新增 actions/upload-artifact 步骤日志过滤)
  * @version 3.1.8 (增强 ignoreRunnerOps 过滤规则，新增 Artifact 上传成功消息过滤)
@@ -111,6 +112,10 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("hint: Names commonly chosen instead of 'master'"),
         Pattern.compile("hint: Disable this message with \"git config set advice.defaultBranchName false\""),
         Pattern.compile("Initialized empty Git repository in"),
+        // 匹配 Git checkout 提示 (Checking out the ref, Note: switching to, You are in 'detached HEAD' state)
+        Pattern.compile("##\\[group\\]Checking out the ref"),
+        Pattern.compile("Note: switching to 'refs/remotes/pull/"),
+        Pattern.compile("You are in 'detached HEAD' state"),
         // GitHub Actions 颜色代码
         Pattern.compile("\\[[0-9;]+m\\[0m"),
         // Git 版本输出行
