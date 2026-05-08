@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
  * GitHub Actions 日志过滤器 - 智能上下文提取版
  * 
  * @author 太极美术工程狮狮长
+ * @version 2.2.0 (修复：重叠错误块应该合并，而不是跳过)
  * @version 2.1.0 (修复：filterErrorLines 现在调用 extractErrorBlocksWithContext 提取带上下文的错误块)
  * @version 2.0.0 (重构：增加智能上下文提取逻辑，基于实际项目失败日志优化关键词)
  * @version 1.0.0 (初始版本，从 GetGitHubActionsLogsTool 抽取)
@@ -116,7 +117,7 @@ public class GitHubLogFilter {
     /**
      * 智能提取错误块（带上下文）
      * 扫描整个日志，找出所有错误行，并为每个错误行提取前后 N 行作为上下文。
-     * 自动合并重叠的错误块。
+     * 自动合并重叠的错误块，确保不会丢失任何错误信息。
      *
      * @param logs 原始日志
      * @return 所有错误块的列表（每个块是一个字符串）
@@ -130,33 +131,49 @@ public class GitHubLogFilter {
         String[] lines = logs.split("\n");
         int totalLines = lines.length;
         
-        // 记录已处理的行范围，避免重复
-        int lastEndIndex = -1;
+        // 记录当前块的范围（用于合并重叠块）
+        int currentBlockStart = -1;
+        int currentBlockEnd = -1;
         
         for (int i = 0; i < totalLines; i++) {
             if (isErrorLine(lines[i])) {
-                // 计算当前错误块的起始和结束索引
+                // 计算当前错误的起始和结束索引
                 int startIndex = Math.max(0, i - PRE_WINDOW);
                 int endIndex = Math.min(totalLines - 1, i + POST_WINDOW);
                 
-                // 检查是否与上一个块重叠
-                if (startIndex <= lastEndIndex) {
-                    // 重叠，跳过当前块
-                    continue;
+                if (currentBlockStart == -1) {
+                    // 第一个错误块
+                    currentBlockStart = startIndex;
+                    currentBlockEnd = endIndex;
+                } else if (startIndex <= currentBlockEnd + 1) {
+                    // 与当前块重叠或相邻，合并
+                    currentBlockEnd = Math.max(currentBlockEnd, endIndex);
+                } else {
+                    // 不重叠，保存当前块并开始新块
+                    blocks.add(extractBlock(lines, currentBlockStart, currentBlockEnd));
+                    currentBlockStart = startIndex;
+                    currentBlockEnd = endIndex;
                 }
-                
-                // 提取块内容
-                StringBuilder block = new StringBuilder();
-                for (int j = startIndex; j <= endIndex; j++) {
-                    block.append(lines[j]).append("\n");
-                }
-                
-                blocks.add(block.toString());
-                lastEndIndex = endIndex;
             }
+        }
+        
+        // 保存最后一个块
+        if (currentBlockStart != -1) {
+            blocks.add(extractBlock(lines, currentBlockStart, currentBlockEnd));
         }
 
         return blocks;
+    }
+    
+    /**
+     * 从行数组中提取指定范围的块
+     */
+    private String extractBlock(String[] lines, int startIndex, int endIndex) {
+        StringBuilder block = new StringBuilder();
+        for (int j = startIndex; j <= endIndex; j++) {
+            block.append(lines[j]).append("\n");
+        }
+        return block.toString();
     }
 
     /**
@@ -251,6 +268,7 @@ public class GitHubLogFilter {
     /**
      * 过滤只返回错误行及其上下文（修复版）
      * 使用 extractErrorBlocksWithContext 提取错误块，每个错误块包含错误行及其前后上下文。
+     * 自动合并重叠的错误块，确保不会丢失任何错误信息。
      * 
      * @param logs 原始日志
      * @return 过滤后的日志（包含所有错误块及其上下文）
@@ -266,7 +284,7 @@ public class GitHubLogFilter {
         for (int i = 0; i < blocks.size(); i++) {
             if (i > 0) {
                 // 块之间添加分隔符
-                result.append("\n--- 错误块 ").append(i).append(" ---\n\n");
+                result.append("\n--- 错误块 ").append(i + 1).append(" ---\n");
             }
             result.append(blocks.get(i));
         }
