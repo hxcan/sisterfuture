@@ -2,7 +2,8 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
-import android.util.Log;
+import com.stupidbeauty.sisterfuture.tool.log.GitHubLogFilter;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import androidx.annotation.NonNull;
 import okhttp3.*;
@@ -39,7 +40,9 @@ import java.util.List;
  * @version 3.1.3 (修正 ignoreRunnerOps 过滤规则，移除误伤的构建命令日志，仅保留纯粹的 Runner 环境清理操作)
  * @version 3.1.2 (增强 ignoreRunnerOps 过滤规则，新增更多 Runner 环境操作和构建命令的过滤)
  * @version 3.1.1 (修复 ignoreRunnerOps 正则表达式，移除行首匹配符号^，因为实际日志行首是时间戳)
- * @version 3.1.0 (新增 ignoreRunnerOps 参数，过滤 Runner 环境操作日志)
+    private final Context context;
+    private final GitHubLogFilter logFilter = new GitHubLogFilter();
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
  * @version 3.0.4 (新增自动保存日志到手机功能，默认模式改为 error_only，工具名改为驼峰格式)
  * @version 3.0.3 (修复 ignoreWarnings 对 GitHub Actions 格式日志无效的问题)
  * @version 3.0.2 (新增 ignoreWarnings 选项)
@@ -129,7 +132,15 @@ public class GetGitHubActionsLogsTool implements Tool {
         // git init/remote/fetch/checkout/log/branch/status (Runner 初始化操作)
         Pattern.compile("git (init|remote|fetch|checkout|log|branch|status)"),
         // 清理相关的 orphan process
-        Pattern.compile("orphan"),
+                // 如果设置了忽略 Runner 环境操作，则过滤
+                if (ignoreRunnerOps) {
+                    logs = logFilter.filterRunnerOpLines(logs);
+                }
+
+                // 如果设置了忽略警告，则过滤以 warning 开头的行
+                if (ignoreWarnings) {
+                    logs = logFilter.filterWarningLines(logs);
+                }
         // Node.js deprecation warning
         Pattern.compile("Node\\.js 20 actions are deprecated"),
         // Post job cleanup group/endgroup
@@ -137,7 +148,8 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("#\\[endgroup\\]")
     };
     
-    private final Context context;
+                } else if ("errors_only".equals(mode)) {
+                    result = logFilter.filterErrorLines(logs);
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public GetGitHubActionsLogsTool(Context context) {
@@ -150,23 +162,6 @@ public class GetGitHubActionsLogsTool implements Tool {
     }
 
     @Override
-    public JSONObject getDefinition() {
-        try {
-            JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "getGithubActionsLogs");
-            functionDef.put("description", "获取 GitHub Actions 运行记录的详细日志。支持智能摘要和错误过滤，适用于任何类型的 GitHub 仓库。日志会自动保存到手机存储。");
-
-            JSONObject parameters = new JSONObject();
-            parameters.put("type", "object");
-            parameters.put("properties", new JSONObject()
-                .put("owner", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "仓库所有者（必需）"))
-                .put("repo", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "仓库名称（必需）"))
-                .put("runId", new JSONObject()
-                    .put("type", "integer")
                     .put("description", "Workflow Run ID（必需）"))
                 .put("jobId", new JSONObject()
                     .put("type", "integer")
@@ -185,24 +180,6 @@ public class GetGitHubActionsLogsTool implements Tool {
                     .put("description", "GitHub Token（可选，从工具备注读取）"))
             );
             parameters.put("required", new JSONArray(new String[]{"owner", "repo", "runId"}));
-
-            functionDef.put("parameters", parameters);
-            return new JSONObject().put("type", "function").put("function", functionDef);
-        } catch (Exception e) {
-            FileLogger.e(TAG, "Failed to build definition", e);
-            return new JSONObject();
-        }
-    }
-
-    @Override
-    public boolean shouldInclude() {
-        return true;
-    }
-
-    @Override
-    public boolean isAsync() {
-        return true;
-    }
 
     @Override
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
@@ -320,36 +297,6 @@ public class GetGitHubActionsLogsTool implements Tool {
     /**
      * 判断是否是 Runner 环境操作日志行
      * @param line 日志行
-     * @return 是否是 Runner 环境操作日志
-     */
-    private boolean isRunnerOpLine(String line) {
-        for (Pattern p : RUNNER_OP_PATTERNS) {
-            if (p.matcher(line).find()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 过滤 Runner 环境操作日志行
-     * @param logs 原始日志
-     * @return 过滤后的日志
-     */
-    private String filterRunnerOpLines(String logs) {
-        StringBuilder filtered = new StringBuilder();
-        String[] lines = logs.split("\n");
-        
-        // 统计信息
-        int totalLines = lines.length;
-        int filteredOutCount = 0;
-        int keptCount = 0;
-
-        for (String line : lines) {
-            if (!isRunnerOpLine(line)) {
-                filtered.append(line).append("\n");
-                keptCount++;
-            } else {
                 filteredOutCount++;
             }
         }
@@ -382,34 +329,6 @@ public class GetGitHubActionsLogsTool implements Tool {
                 saveDir.mkdirs();
             }
             
-            File saveFile = new File(saveDir, fileName);
-            FileWriter writer = new FileWriter(saveFile);
-            writer.write(content);
-            writer.flush();
-            writer.close();
-            
-            FileLogger.i(TAG, "日志已保存到: " + saveFile.getAbsolutePath());
-            return saveFile.getAbsolutePath();
-        } catch (Exception e) {
-            FileLogger.e(TAG, "保存日志失败", e);
-            return "保存失败: " + e.getMessage();
-        }
-    }
-
-    /**
-     * 从工具备注读取默认 token
-     */
-    @Override
-    public String getNote(Context context) {
-        // TODO: 实现从 ToolManager 读取备注的逻辑
-        // 这里暂时返回空字符串
-        return "";
-    }
-
-    private JSONObject getJobsList(OkHttpClient client, String token, String owner, String repo, long runId) throws Exception {
-        String url = API_BASE + "/" + owner + "/" + repo + "/actions/runs/" + runId + "/jobs";
-        return httpGetJson(client, token, url);
-    }
 
     private String getJobLogs(OkHttpClient client, String token, String owner, String repo, long jobId) throws Exception {
         String url = API_BASE + "/" + owner + "/" + repo + "/actions/jobs/" + jobId + "/logs";
