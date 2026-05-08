@@ -2,7 +2,7 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
-import android.util.Log;
+import com.stupidbeauty.sisterfuture.tool.log.GitHubLogFilter;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import androidx.annotation.NonNull;
 import okhttp3.*;
@@ -22,11 +22,11 @@ import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.List;
 
-
 /**
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.2.0 (重构：使用 GitHubLogFilter 独立类处理日志过滤)
  * @version 3.1.12 (增强 ignoreRunnerOps 过滤规则，新增 Git checkout 后续提示日志过滤)
  * @version 3.1.11 (增强 ignoreRunnerOps 过滤规则，新增 Git checkout 提示日志过滤)
  * @version 3.1.10 (增强 ignoreRunnerOps 过滤规则，新增 Git 初始化提示日志过滤)
@@ -52,92 +52,8 @@ public class GetGitHubActionsLogsTool implements Tool {
     // 日志保存目录
     private static final String LOG_SAVE_DIR = "/sdcard/Download/";
     
-    // Runner 环境操作日志过滤正则表达式模式（注意：日志行首是时间戳，不是这些内容，所以不使用^开头）
-    // 仅过滤纯粹的 Runner 环境清理和维护操作，不过滤构建过程中的必要命令
-    private static final Pattern[] RUNNER_OP_PATTERNS = {
-        // 匹配 "Post job cleanup" 或类似内容（行中任何位置出现）
-        Pattern.compile("Post job cleanup"),
-        Pattern.compile("Cleaning up orphan processes"),
-        Pattern.compile("Terminate orphan process"),
-        // Git 命令（行中任何位置出现）- 仅过滤通用的 git 命令前缀，具体子命令由下面单独处理
-        Pattern.compile("\\[command\\]/usr/bin/git "),
-        Pattern.compile("Temporarily overriding HOME"),
-        Pattern.compile("Adding repository directory.*safe\\.directory"),
-        // 匹配 "Adding repository directory to the temporary git global config as a safe directory"
-        Pattern.compile("Adding repository directory to the temporary git global config as a safe directory"),
-        // 匹配 "Worker ID: {...}"
-        Pattern.compile("Worker ID:"),
-        // 匹配 GITHUB_TOKEN Permissions 及其子项
-        Pattern.compile("GITHUB_TOKEN Permissions"),
-        Pattern.compile("Actions: write"),
-        Pattern.compile("ArtifactMetadata: write"),
-        Pattern.compile("Attestations: write"),
-        Pattern.compile("Checks: write"),
-        Pattern.compile("Contents: write"),
-        Pattern.compile("Deployments: write"),
-        Pattern.compile("Discussions: write"),
-        Pattern.compile("Issues: write"),
-        Pattern.compile("Metadata: read"),
-        Pattern.compile("Models: read"),
-        Pattern.compile("Packages: write"),
-        Pattern.compile("Pages: write"),
-        Pattern.compile("PullRequests: write"),
-        Pattern.compile("RepositoryProjects: write"),
-        Pattern.compile("SecurityEvents: write"),
-        Pattern.compile("Statuses: write"),
-        Pattern.compile("VulnerabilityAlerts: read"),
-        // 匹配 Artifact 上传成功消息
-        Pattern.compile("Artifact .* successfully finalized"),
-        Pattern.compile("Artifact .* has been successfully uploaded"),
-        // 匹配 actions/upload-artifact 步骤及其参数
-        Pattern.compile("##\\[group\\]Run actions/upload-artifact@v4"),
-        Pattern.compile("with:"),
-        Pattern.compile("name: sisterfuture-debug"),
-        Pattern.compile("path: app/build/outputs/apk/debug/\\*\\.apk"),
-        Pattern.compile("if-no-files-found: warn"),
-        Pattern.compile("compression-level: 6"),
-        Pattern.compile("overwrite: false"),
-        Pattern.compile("include-hidden-files: false"),
-        Pattern.compile("env:"),
-        Pattern.compile("JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17\\.0\\.18-8/x64"),
-        Pattern.compile("JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17\\.0\\.18-8/x64"),
-        Pattern.compile("SIGNED_RELEASE_FILE: app/build/outputs/apk/release/sisterfuture-release-v2026\\.4\\.19-1093-20260505-191144-signed\\.apk"),
-        Pattern.compile("##\\[endgroup\\]"),
-        // 匹配 Git 初始化提示 (Initializing the repository, hint:, Initialized empty Git repository)
-        Pattern.compile("##\\[group\\]Initializing the repository"),
-        Pattern.compile("hint: Using 'master' as the name for the initial branch"),
-        Pattern.compile("hint: will change to \"main\" in Git 3.0"),
-        Pattern.compile("hint: to use in all of your new repositories"),
-        Pattern.compile("hint: call:"),
-        Pattern.compile("hint:\\s+git config --global init.defaultBranch <name>"),
-        Pattern.compile("hint: Names commonly chosen instead of 'master'"),
-        Pattern.compile("hint: Disable this message with \"git config set advice.defaultBranchName false\""),
-        Pattern.compile("Initialized empty Git repository in"),
-        // 匹配 Git checkout 提示 (Checking out the ref, Note: switching to, You are in 'detached HEAD' state)
-        Pattern.compile("##\\[group\\]Checking out the ref"),
-        Pattern.compile("Note: switching to 'refs/remotes/pull/"),
-        Pattern.compile("You are in 'detached HEAD' state"),
-        // 匹配 Git checkout 后续提示 (If you want to create a new branch...)
-        Pattern.compile("If you want to create a new branch to retain commits"),
-        Pattern.compile("do so \\(now or later\\) by using -c with the switch command"),
-        // GitHub Actions 颜色代码
-        Pattern.compile("\\[[0-9;]+m\\[0m"),
-        // Git 版本输出行
-        Pattern.compile("git version [0-9]"),
-        // git config/safe.directory 等操作
-        Pattern.compile("git config.*safe\\.directory"),
-        // git init/remote/fetch/checkout/log/branch/status (Runner 初始化操作)
-        Pattern.compile("git (init|remote|fetch|checkout|log|branch|status)"),
-        // 清理相关的 orphan process
-        Pattern.compile("orphan"),
-        // Node.js deprecation warning
-        Pattern.compile("Node\\.js 20 actions are deprecated"),
-        // Post job cleanup group/endgroup
-        Pattern.compile("#\\[group\\]Post job cleanup"),
-        Pattern.compile("#\\[endgroup\\]")
-    };
-    
     private final Context context;
+    private final GitHubLogFilter logFilter = new GitHubLogFilter();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public GetGitHubActionsLogsTool(Context context) {
@@ -265,12 +181,12 @@ public class GetGitHubActionsLogsTool implements Tool {
 
                 // 如果设置了忽略 Runner 环境操作，则过滤
                 if (ignoreRunnerOps) {
-                    logs = filterRunnerOpLines(logs);
+                    logs = logFilter.filterRunnerOpLines(logs);
                 }
 
                 // 如果设置了忽略警告，则过滤以 warning 开头的行
                 if (ignoreWarnings) {
-                    logs = filterWarningLines(logs);
+                    logs = logFilter.filterWarningLines(logs);
                 }
 
                 // 根据 mode 处理日志
@@ -278,7 +194,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                 if ("summary".equals(mode)) {
                     result = generateSummary(client, token, owner, repo, runId, jobId, logs);
                 } else if ("errors_only".equals(mode)) {
-                    result = filterErrorLines(logs);
+                    result = logFilter.filterErrorLines(logs);
                 } else {
                     // full mode
                     result = logs;
@@ -314,50 +230,6 @@ public class GetGitHubActionsLogsTool implements Tool {
                 } catch (Exception ignored) {}
             }
         });
-    }
-
-    
-    /**
-     * 判断是否是 Runner 环境操作日志行
-     * @param line 日志行
-     * @return 是否是 Runner 环境操作日志
-     */
-    private boolean isRunnerOpLine(String line) {
-        for (Pattern p : RUNNER_OP_PATTERNS) {
-            if (p.matcher(line).find()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 过滤 Runner 环境操作日志行
-     * @param logs 原始日志
-     * @return 过滤后的日志
-     */
-    private String filterRunnerOpLines(String logs) {
-        StringBuilder filtered = new StringBuilder();
-        String[] lines = logs.split("\n");
-        
-        // 统计信息
-        int totalLines = lines.length;
-        int filteredOutCount = 0;
-        int keptCount = 0;
-
-        for (String line : lines) {
-            if (!isRunnerOpLine(line)) {
-                filtered.append(line).append("\n");
-                keptCount++;
-            } else {
-                filteredOutCount++;
-            }
-        }
-        
-        // 记录调试日志
-        FileLogger.d(TAG, "过滤 Runner 操作日志: 总行数=" + totalLines + ", 保留行数=" + keptCount + ", 过滤行数=" + filteredOutCount);
-
-        return filtered.toString();
     }
 
     /**
@@ -529,7 +401,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                 summary.append("❌ [Step ").append(stepNumber).append("] ").append(stepName).append("\n");
 
                 // 从日志中提取该步骤的错误信息（只展示原始日志）
-                String errorMessage = extractErrorMessageForStep(logs, stepName);
+                String errorMessage = logFilter.extractErrorMessageForStep(logs, stepName);
                 if (errorMessage != null && !errorMessage.isEmpty()) {
                     summary.append("   错误日志：\n");
                     // 格式化错误日志，每行前加缩进
@@ -579,69 +451,6 @@ public class GetGitHubActionsLogsTool implements Tool {
         }
 
         return summary.toString();
-    }
-
-    /**
-     * 从日志中提取错误信息
-     */
-    private String extractErrorMessageForStep(String logs, String stepName) {
-        String[] lines = logs.split("\n");
-        StringBuilder errors = new StringBuilder();
-        boolean inErrorSection = false;
-
-        for (String line : lines) {
-            if (line.contains("##[error]")) {
-                inErrorSection = true;
-                errors.append(line.substring(line.indexOf("##[error]"))).append("\n");
-            } else if (inErrorSection) {
-                // 继续收集错误相关的行，直到遇到新的 section
-                if (line.startsWith("20") && line.contains("Z ")) {
-                    // 可能是新的时间戳行，停止收集
-                    break;
-                }
-                errors.append(line).append("\n");
-            }
-        }
-
-        return errors.length() > 0 ? errors.toString().trim() : null;
-    }
-
-    /**
-     * 过滤只返回错误行
-     */
-    private String filterErrorLines(String logs) {
-        StringBuilder filtered = new StringBuilder();
-        String[] lines = logs.split("\n");
-
-        for (String line : lines) {
-            if (line.contains("##[error]") || line.contains("ERROR") || 
-                line.contains("failed") || line.contains("exception")) {
-                filtered.append(line).append("\n");
-            }
-        }
-
-        return filtered.length() > 0 ? filtered.toString() : "✅ 未发现明显错误";
-    }
-
-    /**
-     * 过滤警告行（以 warning 开头的行，不区分大小写）
-     * 修复：GitHub Actions 日志以时间戳开头，WARNING 可能在时间戳后面
-     * 改为检查整行是否包含 "WARNING:" 或 "warning:" 模式
-     */
-    private String filterWarningLines(String logs) {
-        StringBuilder filtered = new StringBuilder();
-        String[] lines = logs.split("\n");
-
-        for (String line : lines) {
-            String trimmedLine = line.trim().toLowerCase();
-            // 使用 contains 而不是 startsWith，GitHub Actions 日志前面有时间戳
-            // 只检查是否包含 "warning:" 标记，忽略大小写
-            if (!trimmedLine.contains("warning:")) {
-                filtered.append(line).append("\n");
-            }
-        }
-
-        return filtered.toString();
     }
 
     private JSONObject httpGetJson(OkHttpClient client, String token, String urlString) throws Exception {
