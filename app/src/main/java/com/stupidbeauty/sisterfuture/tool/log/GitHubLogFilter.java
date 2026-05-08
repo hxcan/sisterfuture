@@ -7,8 +7,9 @@ import java.util.regex.Pattern;
 
 /**
  * GitHub Actions 日志过滤器 - 智能上下文提取版
- *
+ * 
  * @author 太极美术工程狮狮长
+ * @version 2.1.0 (修复：filterErrorLines 现在调用 extractErrorBlocksWithContext 提取带上下文的错误块)
  * @version 2.0.0 (重构：增加智能上下文提取逻辑，基于实际项目失败日志优化关键词)
  * @version 1.0.0 (初始版本，从 GetGitHubActionsLogsTool 抽取)
  */
@@ -31,7 +32,7 @@ public class GitHubLogFilter {
         "panic",               // Go 崩溃
         "fatal",               // 严重错误
         "Traceback",           // Python 堆栈
-        "exit code",           // Shell 非零退出
+        "exit code",            // Shell 非零退出
         "cannot find symbol",  // 编译/链接错误
         "failed to resolve",   // 依赖解析失败
         "unresolved reference",// Kotlin/Java 引用错误
@@ -47,12 +48,12 @@ public class GitHubLogFilter {
         "null pointer",        // 空指针
         "assertion failed"     // 断言失败
     };
-
+    
     /**
      * 预编译的正则表达式（用于快速匹配关键词）
      */
     private static final Pattern ERROR_PATTERN = buildErrorPattern();
-
+    
     /**
      * 上下文窗口大小配置
      */
@@ -60,7 +61,6 @@ public class GitHubLogFilter {
     private static final int POST_WINDOW = 10; // 错误行后抓取行数
 
     // ==================== 静态初始化 ====================
-
     private static Pattern buildErrorPattern() {
         StringBuilder sb = new StringBuilder();
         sb.append("(");
@@ -73,7 +73,6 @@ public class GitHubLogFilter {
     }
 
     // ==================== Runner 操作过滤（保留原有逻辑） ====================
-
     // Runner 环境操作日志过滤正则表达式模式
     private static final Pattern[] RUNNER_OP_PATTERNS = {
         Pattern.compile("^Post job cleanup"),
@@ -82,7 +81,7 @@ public class GitHubLogFilter {
         Pattern.compile("^[\\s]*\\[command\\]\\/usr\\/bin\\/git (version|config|init|remote|fetch|checkout|log|branch|status)"),
         Pattern.compile("^Temporarily overriding HOME"),
         Pattern.compile("^Adding repository directory.*safe\\.directory"),
-        Pattern.compile("^\\[\\d{2};\\d{2}m.*\\[0m"),
+        Pattern.compile("^\\[[\\d;]+m"),
         Pattern.compile("^#{4}\\[group\\]Post job cleanup"),
         Pattern.compile("^#{4}\\[endgroup\\]")
     };
@@ -102,7 +101,6 @@ public class GitHubLogFilter {
     }
 
     // ==================== 公共方法 ====================
-
     /**
      * 判断某行是否为错误行
      * @param line 日志行
@@ -134,19 +132,19 @@ public class GitHubLogFilter {
         
         // 记录已处理的行范围，避免重复
         int lastEndIndex = -1;
-
+        
         for (int i = 0; i < totalLines; i++) {
             if (isErrorLine(lines[i])) {
                 // 计算当前错误块的起始和结束索引
                 int startIndex = Math.max(0, i - PRE_WINDOW);
                 int endIndex = Math.min(totalLines - 1, i + POST_WINDOW);
-
+                
                 // 检查是否与上一个块重叠
                 if (startIndex <= lastEndIndex) {
                     // 重叠，跳过当前块
                     continue;
                 }
-
+                
                 // 提取块内容
                 StringBuilder block = new StringBuilder();
                 for (int j = startIndex; j <= endIndex; j++) {
@@ -184,7 +182,7 @@ public class GitHubLogFilter {
         // 简单的启发式：查找步骤开始标记，然后在该范围内搜索错误
         String[] lines = logs.split("\n");
         int stepStart = -1;
-
+        
         // 查找步骤开始（例如：##[group]Run steps/name or ##[command]steps/name）
         for (int i = 0; i < lines.length; i++) {
             if (lines[i].contains("##[group]") && lines[i].contains(stepName)) {
@@ -197,12 +195,12 @@ public class GitHubLogFilter {
                 break;
             }
         }
-
+        
         if (stepStart == -1) {
             // 如果找不到明确步骤标记，尝试在整篇日志中搜索包含步骤名的错误
             return extractFirstErrorBlockWithContext(logs);
         }
-
+        
         // 截取该步骤的日志范围
         StringBuilder stepLogs = new StringBuilder();
         for (int i = stepStart; i < lines.length; i++) {
@@ -212,12 +210,11 @@ public class GitHubLogFilter {
             }
             stepLogs.append(lines[i]).append("\n");
         }
-
+        
         return extractFirstErrorBlockWithContext(stepLogs.toString());
     }
 
     // ==================== 原有兼容方法（保持向后兼容） ====================
-
     /**
      * 过滤 Runner 环境操作日志行
      * @param logs 原始日志
@@ -252,24 +249,33 @@ public class GitHubLogFilter {
     }
 
     /**
-     * 过滤只返回错误行（旧版简单逻辑，保留以兼容旧调用）
+     * 过滤只返回错误行及其上下文（修复版）
+     * 使用 extractErrorBlocksWithContext 提取错误块，每个错误块包含错误行及其前后上下文。
+     * 
      * @param logs 原始日志
-     * @return 过滤后的日志
+     * @return 过滤后的日志（包含所有错误块及其上下文）
      */
     public String filterErrorLines(String logs) {
-        StringBuilder filtered = new StringBuilder();
-        String[] lines = logs.split("\n");
-        for (String line : lines) {
-            if (line.contains("##[error]") || line.contains("ERROR") || 
-                line.contains("failed") || line.contains("exception")) {
-                filtered.append(line).append("\n");
-            }
+        List<String> blocks = extractErrorBlocksWithContext(logs);
+        if (blocks.isEmpty()) {
+            return "✅ 未发现明显错误";
         }
-        return filtered.length() > 0 ? filtered.toString() : "✅ 未发现明显错误";
+        
+        // 将所有错误块合并为一个字符串
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < blocks.size(); i++) {
+            if (i > 0) {
+                // 块之间添加分隔符
+                result.append("\n--- 错误块 ").append(i).append(" ---\n\n");
+            }
+            result.append(blocks.get(i));
+        }
+        
+        return result.toString();
     }
 
     /**
-     * 从日志中提取错误信息（旧版简单逻辑，保留以兼容旧调用）
+     * 从日志中提取错误信息
      * @param logs 原始日志
      * @param stepName 步骤名称
      * @return 错误信息
