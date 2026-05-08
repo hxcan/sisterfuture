@@ -3,7 +3,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import com.stupidbeauty.sisterfuture.tool.log.GitHubLogFilter;
-import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import androidx.annotation.NonNull;
 import okhttp3.*;
@@ -140,7 +140,8 @@ public class GetGitHubActionsLogsTool implements Tool {
                 // 如果设置了忽略警告，则过滤以 warning 开头的行
                 if (ignoreWarnings) {
                     logs = logFilter.filterWarningLines(logs);
-                }
+                } else if ("errors_only".equals(mode)) {
+                    result = logFilter.filterErrorLines(logs);
         // Node.js deprecation warning
         Pattern.compile("Node\\.js 20 actions are deprecated"),
         // Post job cleanup group/endgroup
@@ -148,8 +149,7 @@ public class GetGitHubActionsLogsTool implements Tool {
         Pattern.compile("#\\[endgroup\\]")
     };
     
-                } else if ("errors_only".equals(mode)) {
-                    result = logFilter.filterErrorLines(logs);
+    private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public GetGitHubActionsLogsTool(Context context) {
@@ -355,7 +355,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                 return job.getLong("id");
             }
         }
-        return null;
+                String errorMessage = logFilter.extractErrorMessageForStep(logs, stepName);
     }
 
     private Long getLastJobId(JSONObject jobsResponse) throws Exception {
