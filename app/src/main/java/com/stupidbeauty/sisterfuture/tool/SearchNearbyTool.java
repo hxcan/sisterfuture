@@ -1,17 +1,26 @@
 package com.stupidbeauty.sisterfuture.tool;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.location.Location;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import androidx.core.app.ActivityCompat;
 import com.baidu.mapapi.search.poi.PoiSearch;
-import com.baidu.mapapi.search.poi.PoiCitySearchOption;
+import com.baidu.mapapi.search.poi.PoiNearbySearchOption;
 import com.baidu.mapapi.search.poi.PoiDetailSearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
 import com.baidu.mapapi.search.poi.PoiDetailResult;
 import com.baidu.mapapi.search.poi.PoiIndoorResult;
 import com.baidu.mapapi.search.core.PoiInfo;
 import com.baidu.mapapi.search.core.SearchResult;
+import com.baidu.mapapi.model.LatLng;
+import com.baidu.location.BDLocation;
+import com.baidu.location.BDAbstractLocationListener;
+import com.baidu.location.LocationClient;
+import com.baidu.location.LocationClientOption;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.List;
@@ -25,10 +34,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 搜索附近地址工具
  * 基于百度地图 SDK 的 POI 搜索功能
+ * 支持基于 GPS 位置的附近搜索
  */
 public class SearchNearbyTool implements Tool {
     private static final String TAG = "SearchNearbyTool";
     private static final long DETAIL_TIMEOUT_MS = 5000; // 详情获取超时 5 秒
+    private static final int DEFAULT_RADIUS_METERS = 1000; // 默认搜索半径 1000 米
     
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -45,6 +56,11 @@ public class SearchNearbyTool implements Tool {
     private CountDownLatch detailLatch;
     private AtomicBoolean isTimedOut = new AtomicBoolean(false);
     private int totalDetailRequests = 0;
+    
+    // 位置相关
+    private LocationClient locationClient;
+    private BDLocation currentLocation;
+    private CountDownLatch locationLatch;
 
     public SearchNearbyTool(Context context) {
         this.context = context;
@@ -67,7 +83,7 @@ public class SearchNearbyTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "searchNearby");
-            functionDef.put("description", "搜索附近的商家地点（银行、医院、超市等），返回商家列表。如果启用 include_details，会获取每个地点的详细信息（如营业时间），但会增加耗时，建议同时减小 result_count。");
+            functionDef.put("description", "搜索附近的商家地点（银行、医院、超市等），返回商家列表。基于 GPS 位置搜索，支持自定义中心点和搜索半径。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -77,9 +93,15 @@ public class SearchNearbyTool implements Tool {
             properties.put("query", new JSONObject()
                 .put("type", "string")
                 .put("description", "搜索关键词，如\"银行\"、\"医院\"、\"超市\"等"));
-            properties.put("city", new JSONObject()
-                .put("type", "string")
-                .put("description", "搜索城市（可选，默认深圳市）"));
+            properties.put("latitude", new JSONObject()
+                .put("type", "number")
+                .put("description", "搜索中心点纬度（可选，不填则自动获取 GPS 位置）"));
+            properties.put("longitude", new JSONObject()
+                .put("type", "number")
+                .put("description", "搜索中心点经度（可选，不填则自动获取 GPS 位置）"));
+            properties.put("radius", new JSONObject()
+                .put("type", "integer")
+                .put("description", "搜索半径，单位米（可选，默认 1000，最大 5000）"));
             properties.put("result_count", new JSONObject()
                 .put("type", "integer")
                 .put("description", "返回结果数量（可选，默认 20，最大 20）"));
@@ -111,11 +133,15 @@ public class SearchNearbyTool implements Tool {
         executor.execute(() -> {
             try {
                 String query = arguments.getString("query");
-                String city = arguments.optString("city", "深圳市");
+                Double latitude = arguments.has("latitude") && !arguments.isNull("latitude") ? arguments.getDouble("latitude") : null;
+                Double longitude = arguments.has("longitude") && !arguments.isNull("longitude") ? arguments.getDouble("longitude") : null;
+                int radius = arguments.optInt("radius", DEFAULT_RADIUS_METERS);
                 int resultCount = arguments.optInt("result_count", 20);
                 includeDetails = arguments.optBoolean("include_details", false);
                 
-                // 限制 result_count 最大为 20
+                // 限制参数范围
+                if (radius > 5000) radius = 5000;
+                if (radius < 100) radius = 100;
                 if (resultCount > 20) resultCount = 20;
                 if (resultCount < 1) resultCount = 1;
 
@@ -125,16 +151,32 @@ public class SearchNearbyTool implements Tool {
                 completedCount = 0;
                 isTimedOut.set(false);
 
-                Log.d(TAG, "开始搜索附近 - query=" + query + ", city=" + city + ", resultCount=" + resultCount + ", includeDetails=" + includeDetails);
+                Log.d(TAG, "开始搜索附近 - query=" + query + ", lat=" + latitude + ", lng=" + longitude + ", radius=" + radius + ", resultCount=" + resultCount + ", includeDetails=" + includeDetails);
 
-                // 使用 PoiCitySearchOption 进行城市内 POI 搜索
-                PoiCitySearchOption searchOption = new PoiCitySearchOption();
+                // 如果没有提供位置，先获取 GPS 位置
+                if (latitude == null || longitude == null) {
+                    BDLocation location = getCurrentLocation();
+                    if (location == null) {
+                        sendError(callback, "无法获取当前位置，请检查定位权限");
+                        currentCallback = null;
+                        return;
+                    }
+                    latitude = location.getLatitude();
+                    longitude = location.getLongitude();
+                    currentLocation = location;
+                    Log.d(TAG, "自动获取 GPS 位置: " + latitude + ", " + longitude);
+                }
+
+                // 使用 PoiNearbySearchOption 进行附近搜索
+                LatLng center = new LatLng(latitude, longitude);
+                PoiNearbySearchOption searchOption = new PoiNearbySearchOption();
                 searchOption.keyword(query);
-                searchOption.city(city);
+                searchOption.location(center);
+                searchOption.radius(radius);
                 searchOption.pageNum(0);
                 searchOption.pageCapacity(resultCount);
 
-                boolean success = poiSearch.searchInCity(searchOption);
+                boolean success = poiSearch.searchNearby(searchOption);
 
                 if (!success) {
                     Log.e(TAG, "POI 搜索失败");
@@ -147,6 +189,48 @@ public class SearchNearbyTool implements Tool {
                 sendError(callback, e.getMessage());
             }
         });
+    }
+    
+    /**
+     * 获取当前 GPS 位置
+     */
+    private BDLocation getCurrentLocation() {
+        try {
+            locationLatch = new CountDownLatch(1);
+            
+            locationClient = new LocationClient(context);
+            LocationClientOption option = new LocationClientOption();
+            option.setIsNeedAddress(true);
+            option.setLocationMode(LocationClientOption.LocationMode.Hight_Accuracy);
+            option.setCoorType("bd09ll"); // 百度坐标
+            option.setScanSpan(1000); // 1秒定位一次
+            locationClient.setLocOption(option);
+            
+            locationClient.registerLocationListener(new BDAbstractLocationListener() {
+                @Override
+                public void onReceiveLocation(BDLocation location) {
+                    if (location != null && location.getLocType() == BDLocation.TypeGpsLocation) {
+                        currentLocation = location;
+                    }
+                    locationLatch.countDown();
+                }
+            });
+            
+            locationClient.start();
+            
+            // 等待最多 10 秒获取位置
+            boolean gotLocation = locationLatch.await(10, TimeUnit.SECONDS);
+            locationClient.stop();
+            
+            if (gotLocation && currentLocation != null) {
+                return currentLocation;
+            }
+            
+            return null;
+        } catch (Exception e) {
+            Log.e(TAG, "获取位置失败", e);
+            return null;
+        }
     }
 
     /**
@@ -398,6 +482,6 @@ public class SearchNearbyTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。参数：query(关键词), city(城市), result_count(结果数量，默认 20), include_details(是否获取详情如营业时间，默认 false)。如果启用 include_details，建议将 result_count 设置得小一些以免耗时太长。";
+        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。基于 GPS 位置搜索。参数：query(关键词), latitude(纬度，可选), longitude(经度，可选), radius(搜索半径，默认1000米), result_count(结果数量，默认 20), include_details(是否获取详情，默认 false)。如果不提供 latitude 和 longitude，将自动获取 GPS 位置。";
     }
 }
