@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
  * GitHub Actions 日志过滤器 - 智能上下文提取版
  * 
  * @author 太极美术工程狮狮长
+ * @version 2.3.0 (新增：removeTimestamps 方法，移除 ISO 8601 格式时间戳)
  * @version 2.2.0 (修复：重叠错误块应该合并，而不是跳过)
  * @version 2.1.0 (修复：filterErrorLines 现在调用 extractErrorBlocksWithContext 提取带上下文的错误块)
  * @version 2.0.0 (重构：增加智能上下文提取逻辑，基于实际项目失败日志优化关键词)
@@ -86,6 +87,10 @@ public class GitHubLogFilter {
         Pattern.compile("^#{4}\\[group\\]Post job cleanup"),
         Pattern.compile("^#{4}\\[endgroup\\]")
     };
+    
+    // 时间戳正则模式（匹配 ISO 8601 格式时间戳）
+    private static final Pattern TIMESTAMP_PATTERN = 
+        Pattern.compile("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z\\s*");
 
     /**
      * 判断是否是 Runner 环境操作日志行
@@ -263,6 +268,31 @@ public class GitHubLogFilter {
             }
         }
         return filtered.toString();
+    }
+    
+    /**
+     * 移除 ISO 8601 格式的时间戳
+     * 时间戳格式：2024-01-01T12:00:00.000Z
+     * 匹配每行开头的这种时间戳并移除，让日志更紧凑易读
+     * 
+     * @param logs 原始日志
+     * @return 移除时间戳后的日志
+     */
+    public String removeTimestamps(String logs) {
+        if (logs == null || logs.isEmpty()) {
+            return logs;
+        }
+        
+        StringBuilder result = new StringBuilder();
+        String[] lines = logs.split("\n");
+        
+        for (String line : lines) {
+            // 使用正则移除每行开头的时间戳
+            String cleanedLine = TIMESTAMP_PATTERN.matcher(line).replaceAll("");
+            result.append(cleanedLine).append("\n");
+        }
+        
+        return result.toString();
     }
 
     /**
