@@ -30,6 +30,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 搜索附近地址工具
@@ -107,7 +109,7 @@ public class SearchNearbyTool implements Tool {
                 .put("description", "返回结果数量（可选，默认 20，最大 20）"));
             properties.put("include_details", new JSONObject()
                 .put("type", "boolean")
-                .put("description", "是否获取详细信息（如营业时间），默认 false。如果启用，建议将 result_count 设置得小一些以免耗时太长"));
+                .put("description", "是否获取详细信息（如电话、地址、标签、营业时间），默认 false。如果启用，建议将 result_count 设置得小一些以免耗时太长"));
 
             parameters.put("properties", properties);
             functionDef.put("parameters", parameters);
@@ -362,13 +364,28 @@ public class SearchNearbyTool implements Tool {
                 item.put("longitude", poi.location.longitude);
             }
             
-            // 添加详情信息（只保留可用的字段）
+            // 添加详情信息
             if (result != null) {
+                // 电话
                 if (result.telephone != null && !result.telephone.isEmpty()) {
                     item.put("telephone", result.telephone);
                 }
+                // 评论数
                 if (result.commentNum > 0) {
                     item.put("comment_count", result.commentNum);
+                }
+                // 标签（可能包含营业时间）
+                if (result.tag != null && !result.tag.isEmpty()) {
+                    item.put("tag", result.tag);
+                    // 尝试从 tag 中提取营业时间
+                    String businessHours = extractBusinessHours(result.tag);
+                    if (businessHours != null && !businessHours.isEmpty()) {
+                        item.put("business_hours", businessHours);
+                    }
+                }
+                // 详细地址
+                if (result.address != null && !result.address.isEmpty()) {
+                    item.put("detail_address", result.address);
                 }
             }
             
@@ -408,6 +425,46 @@ public class SearchNearbyTool implements Tool {
                 finishWithDetails(detailedResults);
             }
         }
+    }
+    
+    /**
+     * 从 tag 中提取营业时间
+     * tag 格式可能包含 "营业时间" 相关信息
+     */
+    private String extractBusinessHours(String tag) {
+        if (tag == null || tag.isEmpty()) {
+            return null;
+        }
+        
+        // 尝试匹配常见的营业时间格式
+        // 如：周一至周五 09:00-18:00、周六 09:00-17:00
+        String[] patterns = {
+            "(营业时间[:：]?\\s*[^,，;；]+)",  // 营业时间：xxx
+            "([周日月火水木金土]+[^,，;；]{0,50})",  // 周一至周五 xxx
+            "(\\d{1,2}:\\d{2}[-~]\\d{1,2}:\\d{2}[^,，;；]{0,30})"  // 09:00-18:00
+        };
+        
+        StringBuilder hours = new StringBuilder();
+        
+        for (String pattern : patterns) {
+            try {
+                Pattern p = Pattern.compile(pattern);
+                Matcher m = p.matcher(tag);
+                if (m.find()) {
+                    String found = m.group(0);
+                    if (!hours.toString().contains(found)) {
+                        if (hours.length() > 0) {
+                            hours.append("; ");
+                        }
+                        hours.append(found);
+                    }
+                }
+            } catch (Exception e) {
+                // 忽略正则错误
+            }
+        }
+        
+        return hours.length() > 0 ? hours.toString() : null;
     }
 
     /**
@@ -482,6 +539,6 @@ public class SearchNearbyTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。基于 GPS 位置搜索。参数：query(关键词), latitude(纬度，可选), longitude(经度，可选), radius(搜索半径，默认1000米), result_count(结果数量，默认 20), include_details(是否获取详情，默认 false)。如果不提供 latitude 和 longitude，将自动获取 GPS 位置。";
+        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。基于 GPS 位置搜索。参数：query(关键词), latitude(纬度，可选), longitude(经度，可选), radius(搜索半径，默认1000米), result_count(结果数量，默认 20), include_details(是否获取详情，默认 false)。如果不提供 latitude 和 longitude，将自动获取 GPS 位置。返回详情时包含：地址、电话、标签(tag)、营业时间(business_hours)。";
     }
 }
