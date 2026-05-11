@@ -225,16 +225,17 @@ public class TongYiClient
     {
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
       String apiKey = null;
-
+      
       if (currentAccessPoint != null) {
           apiKey = currentAccessPoint.getApiKey();
       }
-
+      
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
-
-      String apiKeyMasked = (apiKey != null && apiKey.length() > 12)
+          
+      String apiKeyMasked = (apiKey != null && apiKey.length() > 12) 
           ? apiKey.substring(0, 8) + "..." + apiKey.substring(apiKey.length() - 4)
           : (apiKey != null ? "***" : "null");
+      FileLogger.d(NETWORK_TAG, "[API Key] 接入点=\"" + (currentAccessPoint != null ? currentAccessPoint.getName() : "null") + "\", Key=\"" + apiKeyMasked + "\" (长度：" + (apiKey != null ? apiKey.length() : 0) + ")");
       FileLogger.d(NETWORK_TAG, "[API Key] 接入点=\"" + (currentAccessPoint != null ? currentAccessPoint.getName() : "null") + "\", Key=\"" + apiKeyMasked + "\" (长度：" + (apiKey != null ? apiKey.length() : 0) + ")");
       
       // 🔗 记录请求信息
@@ -299,8 +300,16 @@ public class TongYiClient
         requestBody.put("stream", true);
         requestBody.put("enable_thinking", false);
         
-        // === 🔒 #新功能：为所有模型添加 Minimax 思考控制参数 ===
-        // 即使不是 Minimax 模型也加上这些参数，让 API 自行判断是否支持
+                    JSONObject delta = choice.getJSONObject("delta");
+                    
+                    // 🔍 新增：打印 delta 中 tool_calls 的完整原始数据
+                    if (delta.has("tool_calls")) {
+                        JSONArray toolCallsInDelta = delta.getJSONArray("tool_calls");
+                        String tcJson = toolCallsInDelta.toString();
+                        FileLogger.d(TAG, "[SSE_TOOL_CALLS] delta.tool_calls: " + (tcJson.length() > 500 ? tcJson.substring(0, 500) + "..." : tcJson));
+                    }
+                    
+                    String content = delta.optString("content", "");
         JSONObject thinkingParams = new JSONObject();
         thinkingParams.put("type", "disabled");
         thinkingParams.put("budget_tokens", 100);
