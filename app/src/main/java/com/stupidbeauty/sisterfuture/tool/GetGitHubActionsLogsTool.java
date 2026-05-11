@@ -26,6 +26,7 @@ import java.util.List;
  * GitHub Actions 日志获取工具
  * 
  * @author 太极美术工程狮狮长
+ * @version 3.2.1 (新增：removeTimestamps 参数，移除 ISO 8601 格式时间戳)
  * @version 3.2.0 (重构：使用 GitHubLogFilter 独立类处理日志过滤)
  * @version 3.1.12 (增强 ignoreRunnerOps 过滤规则，新增 Git checkout 后续提示日志过滤)
  * @version 3.1.11 (增强 ignoreRunnerOps 过滤规则，新增 Git checkout 提示日志过滤)
@@ -34,7 +35,7 @@ import java.util.List;
  * @version 3.1.8 (增强 ignoreRunnerOps 过滤规则，新增 Artifact 上传成功消息过滤)
  * @version 3.1.7 (增强 ignoreRunnerOps 过滤规则，新增 GITHUB_TOKEN Permissions 日志过滤)
  * @version 3.1.6 (增强 ignoreRunnerOps 过滤规则，新增 Worker ID 日志过滤)
- * @version 3.1.5 (增强 ignoreRunnerOps 过滤规则，新增 safe directory 配置日志过滤)
+ * @version 3.1.5 (新增 safe directory 配置日志过滤)
  * @version 3.1.4 (再次修正 ignoreRunnerOps 过滤规则，保留必要的 Git 操作过滤，移除所有构建命令过滤)
  * @version 3.1.3 (修正 ignoreRunnerOps 过滤规则，移除误伤的构建命令日志，仅保留纯粹的 Runner 环境清理操作)
  * @version 3.1.2 (增强 ignoreRunnerOps 过滤规则，新增更多 Runner 环境操作和构建命令的过滤)
@@ -96,6 +97,9 @@ public class GetGitHubActionsLogsTool implements Tool {
                 .put("ignoreRunnerOps", new JSONObject()
                     .put("type", "boolean")
                     .put("description", "是否忽略 GitHub Actions Runner 的环境操作日志（如 Post job cleanup、git 版本查询等）（可选，默认 true）"))
+                .put("removeTimestamps", new JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否移除每行开头的 ISO 8601 格式时间戳，让日志更紧凑易读（可选，默认 true）"))
                 .put("token", new JSONObject()
                     .put("type", "string")
                     .put("description", "GitHub Token（可选，从工具备注读取）"))
@@ -133,9 +137,11 @@ public class GetGitHubActionsLogsTool implements Tool {
                 boolean ignoreWarnings = arguments.optBoolean("ignoreWarnings", true);
                 // 新增：ignoreRunnerOps 参数，默认 true
                 boolean ignoreRunnerOps = arguments.optBoolean("ignoreRunnerOps", true);
+                // 新增：removeTimestamps 参数，默认 true
+                boolean removeTimestamps = arguments.optBoolean("removeTimestamps", true);
                 String token = arguments.optString("token", "").trim();
 
-                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings + ", ignoreRunnerOps=" + ignoreRunnerOps);
+                FileLogger.d(TAG, "获取日志：owner=" + owner + ", repo=" + repo + ", runId=" + runId + ", jobId=" + jobId + ", mode=" + mode + ", ignoreWarnings=" + ignoreWarnings + ", ignoreRunnerOps=" + ignoreRunnerOps + ", removeTimestamps=" + removeTimestamps);
 
                 // 如果未提供 token，尝试从工具备注读取
                 if (token.isEmpty()) {
@@ -188,6 +194,11 @@ public class GetGitHubActionsLogsTool implements Tool {
                 if (ignoreWarnings) {
                     logs = logFilter.filterWarningLines(logs);
                 }
+                
+                // 如果设置了移除时间戳，则移除 ISO 8601 格式时间戳
+                if (removeTimestamps) {
+                    logs = logFilter.removeTimestamps(logs);
+                }
 
                 // 根据 mode 处理日志
                 String result;
@@ -214,6 +225,7 @@ public class GetGitHubActionsLogsTool implements Tool {
                 response.put("mode", mode);
                 response.put("ignore_warnings", ignoreWarnings);
                 response.put("ignore_runner_ops", ignoreRunnerOps);
+                response.put("remove_timestamps", removeTimestamps);
                 response.put("fetched_at", System.currentTimeMillis());
                 response.put("saved_file", savedFilePath);
 
