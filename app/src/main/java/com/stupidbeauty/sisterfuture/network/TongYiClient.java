@@ -300,16 +300,6 @@ public class TongYiClient
         requestBody.put("stream", true);
         requestBody.put("enable_thinking", false);
         
-                    JSONObject delta = choice.getJSONObject("delta");
-                    
-                    // 🔍 新增：打印 delta 中 tool_calls 的完整原始数据
-                    if (delta.has("tool_calls")) {
-                        JSONArray toolCallsInDelta = delta.getJSONArray("tool_calls");
-                        String tcJson = toolCallsInDelta.toString();
-                        FileLogger.d(TAG, "[SSE_TOOL_CALLS] delta.tool_calls: " + (tcJson.length() > 500 ? tcJson.substring(0, 500) + "..." : tcJson));
-                    }
-                    
-                    String content = delta.optString("content", "");
         JSONObject thinkingParams = new JSONObject();
         thinkingParams.put("type", "disabled");
         thinkingParams.put("budget_tokens", 100);
@@ -535,6 +525,14 @@ public class TongYiClient
                   JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
                   if (choice.has("delta")) {
                     JSONObject delta = choice.getJSONObject("delta");
+                    
+                    // 🔍 新增：打印 delta 中 tool_calls 的完整原始数据
+                    if (delta.has("tool_calls")) {
+                        JSONArray toolCallsInDelta = delta.getJSONArray("tool_calls");
+                        String tcJson = toolCallsInDelta.toString();
+                        FileLogger.d(TAG, "[SSE_TOOL_CALLS] delta.tool_calls: " + (tcJson.length() > 500 ? tcJson.substring(0, 500) + "..." : tcJson));
+                    }
+                    
                     String content = delta.optString("content", "");
                     
                     if (!content.isEmpty()) {
