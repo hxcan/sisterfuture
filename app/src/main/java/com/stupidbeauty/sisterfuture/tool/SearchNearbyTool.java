@@ -15,8 +15,12 @@ import com.baidu.mapapi.search.core.SearchResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 搜索附近地址工具
@@ -24,6 +28,8 @@ import java.util.concurrent.Executors;
  */
 public class SearchNearbyTool implements Tool {
     private static final String TAG = "SearchNearbyTool";
+    private static final long DETAIL_TIMEOUT_MS = 5000; // 详情获取超时 5 秒
+    
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final PoiSearch poiSearch;
@@ -35,6 +41,9 @@ public class SearchNearbyTool implements Tool {
     private JSONArray detailedResults;
     private List<PoiInfo> currentPoiList;
     private int completedCount = 0;
+    private CountDownLatch detailLatch;
+    private AtomicBoolean isTimedOut = new AtomicBoolean(false);
+    private int totalDetailRequests = 0;
 
     public SearchNearbyTool(Context context) {
         this.context = context;
@@ -112,6 +121,7 @@ public class SearchNearbyTool implements Tool {
                 detailSuccessCount = 0;
                 detailFailCount = 0;
                 completedCount = 0;
+                isTimedOut.set(false);
 
                 Log.d(TAG, "开始搜索附近 - query=" + query + ", city=" + city + ", resultCount=" + resultCount + ", includeDetails=" + includeDetails);
 
@@ -176,6 +186,15 @@ public class SearchNearbyTool implements Tool {
             Log.d(TAG, "开始获取 POI 详情，数量：" + poiList.size());
             currentPoiList = poiList;
             detailedResults = new JSONArray();
+            totalDetailRequests = poiList.size();
+            completedCount = 0;
+            
+            // 创建倒计时闩锁，用于等待所有详情请求完成或超时
+            detailLatch = new CountDownLatch(poiList.size());
+            
+            // 启动超时检测线程
+            startDetailTimeoutWatcher();
+            
             fetchPoiDetails(poiList);
 
         } catch (Exception e) {
@@ -185,10 +204,43 @@ public class SearchNearbyTool implements Tool {
     }
 
     /**
+     * 启动详情获取超时检测
+     */
+    private void startDetailTimeoutWatcher() {
+        Thread timeoutThread = new Thread(() -> {
+            try {
+                // 等待所有详情请求完成，或超时
+                boolean completed = detailLatch.await(DETAIL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                
+                if (!completed && !isTimedOut.get()) {
+                    // 超时了，但还没有全部完成
+                    isTimedOut.set(true);
+                    Log.w(TAG, "详情获取超时，未完成的请求数：" + (totalDetailRequests - completedCount));
+                    
+                    // 在主线程中完成
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        finishWithDetails(detailedResults);
+                    });
+                }
+            } catch (InterruptedException e) {
+                Log.e(TAG, "超时检测线程被中断", e);
+                Thread.currentThread().interrupt();
+            }
+        });
+        timeoutThread.setDaemon(true);
+        timeoutThread.start();
+    }
+
+    /**
      * 异步获取 POI 详情
      */
     private void fetchPoiDetails(List<PoiInfo> poiList) {
         for (int i = 0; i < poiList.size(); i++) {
+            if (isTimedOut.get()) {
+                Log.w(TAG, "已超时，跳过剩余详情请求");
+                break;
+            }
+            
             PoiInfo poi = poiList.get(i);
             
             // 为每个 POI 创建详情搜索选项
@@ -204,6 +256,12 @@ public class SearchNearbyTool implements Tool {
      * 处理 POI 详情结果（由 PoiSearchResultListener 调用）
      */
     void handlePoiDetailResult(PoiInfo poi, PoiDetailResult result) {
+        // 如果已经超时，跳过处理
+        if (isTimedOut.get()) {
+            Log.d(TAG, "已超时，跳过详情处理: " + poi.name);
+            return;
+        }
+        
         try {
             JSONObject item = new JSONObject();
             item.put("name", poi.name != null ? poi.name : "");
@@ -225,7 +283,9 @@ public class SearchNearbyTool implements Tool {
                 }
             }
             
-            detailedResults.put(item);
+            synchronized (detailedResults) {
+                detailedResults.put(item);
+            }
             detailSuccessCount++;
             
         } catch (Exception e) {
@@ -240,15 +300,22 @@ public class SearchNearbyTool implements Tool {
                     item.put("latitude", poi.location.latitude);
                     item.put("longitude", poi.location.longitude);
                 }
-                detailedResults.put(item);
+                synchronized (detailedResults) {
+                    detailedResults.put(item);
+                }
             } catch (Exception ex) {
                 Log.e(TAG, "添加基础信息失败", ex);
             }
             detailFailCount++;
         } finally {
             completedCount++;
+            // 标记一个详情请求完成
+            if (detailLatch != null) {
+                detailLatch.countDown();
+            }
+            
             // 所有请求完成后，返回结果
-            if (completedCount >= currentPoiList.size()) {
+            if (completedCount >= totalDetailRequests) {
                 finishWithDetails(detailedResults);
             }
         }
@@ -261,10 +328,15 @@ public class SearchNearbyTool implements Tool {
         try {
             JSONObject response = new JSONObject();
             response.put("status", "success");
+            
+            String timeoutNote = isTimedOut.get() ? " (部分详情获取超时)" : "";
             response.put("message", "找到 " + detailedResults.length() + " 个附近地点" + 
-                (includeDetails ? " (已获取详情：成功" + detailSuccessCount + ", 失败" + detailFailCount + ")" : ""));
+                (includeDetails ? " (已获取详情：成功" + detailSuccessCount + ", 失败" + detailFailCount + ")" + timeoutNote : ""));
             response.put("count", detailedResults.length());
             response.put("results", detailedResults);
+            response.put("detail_success_count", detailSuccessCount);
+            response.put("detail_fail_count", detailFailCount);
+            response.put("is_timed_out", isTimedOut.get());
             
             if (currentCallback != null) {
                 currentCallback.onResult(response);
