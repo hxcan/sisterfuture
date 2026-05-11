@@ -6,7 +6,7 @@ import com.baidu.mapapi.search.poi.PoiDetailResult;
 import com.baidu.mapapi.search.poi.PoiDetailSearchResult;
 import com.baidu.mapapi.search.poi.PoiIndoorResult;
 import com.baidu.mapapi.search.poi.PoiResult;
-import com.baidu.mapapi.search.poi.PoiInfo;
+import com.baidu.mapapi.search.core.PoiInfo;
 
 /**
  * POI 搜索结果监听器
