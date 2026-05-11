@@ -33,6 +33,7 @@ public class SearchNearbyTool implements Tool {
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final PoiSearch poiSearch;
+    private final PoiSearchResultListener listener;
     
     private OnResultCallback currentCallback;
     private boolean includeDetails = false;
@@ -52,7 +53,8 @@ public class SearchNearbyTool implements Tool {
         poiSearch = PoiSearch.newInstance();
         
         // 使用独立的监听器类
-        poiSearch.setOnGetPoiSearchResultListener(new PoiSearchResultListener(this));
+        listener = new PoiSearchResultListener(this);
+        poiSearch.setOnGetPoiSearchResultListener(listener);
     }
 
     @Override
@@ -246,6 +248,9 @@ public class SearchNearbyTool implements Tool {
             // 为每个 POI 创建详情搜索选项
             PoiDetailSearchOption detailOption = new PoiDetailSearchOption();
             detailOption.poiUid(poi.uid);
+            
+            // 在调用 searchPoiDetail 之前，设置当前正在获取详情的 POI 信息
+            listener.setPendingPoiInfo(poi);
             
             // 异步获取详情（单参数版本）
             poiSearch.searchPoiDetail(detailOption);
