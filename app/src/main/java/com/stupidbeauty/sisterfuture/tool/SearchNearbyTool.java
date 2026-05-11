@@ -32,6 +32,9 @@ public class SearchNearbyTool implements Tool {
     private boolean includeDetails = false;
     private int detailSuccessCount = 0;
     private int detailFailCount = 0;
+    private JSONArray detailedResults;
+    private List<PoiInfo> currentPoiList;
+    private int completedCount = 0;
 
     public SearchNearbyTool(Context context) {
         this.context = context;
@@ -68,10 +71,10 @@ public class SearchNearbyTool implements Tool {
                 .put("description", "搜索城市（可选，默认深圳市）"));
             properties.put("result_count", new JSONObject()
                 .put("type", "integer")
-                .put("description", "返回结果数量（可选，默认20，最大20）"));
+                .put("description", "返回结果数量（可选，默认 20，最大 20）"));
             properties.put("include_details", new JSONObject()
                 .put("type", "boolean")
-                .put("description", "是否获取详细信息（如营业时间），默认false。如果启用，建议将 result_count 设置得小一些以免耗时太长"));
+                .put("description", "是否获取详细信息（如营业时间），默认 false。如果启用，建议将 result_count 设置得小一些以免耗时太长"));
 
             parameters.put("properties", properties);
             functionDef.put("parameters", parameters);
@@ -108,6 +111,7 @@ public class SearchNearbyTool implements Tool {
                 currentCallback = callback;
                 detailSuccessCount = 0;
                 detailFailCount = 0;
+                completedCount = 0;
 
                 Log.d(TAG, "开始搜索附近 - query=" + query + ", city=" + city + ", resultCount=" + resultCount + ", includeDetails=" + includeDetails);
 
@@ -169,7 +173,9 @@ public class SearchNearbyTool implements Tool {
             }
 
             // 需要获取详情，异步请求每个 POI 的详细信息
-            Log.d(TAG, "开始获取 POI 详情，数量: " + poiList.size());
+            Log.d(TAG, "开始获取 POI 详情，数量：" + poiList.size());
+            currentPoiList = poiList;
+            detailedResults = new JSONArray();
             fetchPoiDetails(poiList);
 
         } catch (Exception e) {
@@ -182,95 +188,69 @@ public class SearchNearbyTool implements Tool {
      * 异步获取 POI 详情
      */
     private void fetchPoiDetails(List<PoiInfo> poiList) {
-        // 用于存储详情结果的数组
-        JSONArray detailedResults = new JSONArray();
-        
-        // 创建一个计数器来跟踪完成的请求
-        final int[] completedCount = {0};
-        final int totalCount = poiList.size();
-        
-        for (int i = 0; i < totalCount; i++) {
-            final PoiInfo poi = poiList.get(i);
+        for (int i = 0; i < poiList.size(); i++) {
+            PoiInfo poi = poiList.get(i);
             
             // 为每个 POI 创建详情搜索选项
             PoiDetailSearchOption detailOption = new PoiDetailSearchOption();
             detailOption.poiUid(poi.uid);
             
-            // 异步获取详情
-            poiSearch.searchPoiDetail(detailOption, new com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener() {
-                @Override
-                public void onGetPoiResult(PoiResult result) {
-                    // 这个回调不会被调用，因为我们使用的是 searchPoiDetail 的重载方法
-                }
+            // 异步获取详情（单参数版本）
+            poiSearch.searchPoiDetail(detailOption);
+        }
+    }
 
-                @Override
-                public void onGetPoiDetailResult(PoiDetailResult result) {
-                    try {
-                        JSONObject item = new JSONObject();
-                        item.put("name", poi.name != null ? poi.name : "");
-                        item.put("address", poi.address != null ? poi.address : "");
-                        item.put("uid", poi.uid != null ? poi.uid : "");
-                        
-                        if (poi.location != null) {
-                            item.put("latitude", poi.location.latitude);
-                            item.put("longitude", poi.location.longitude);
-                        }
-                        
-                        // 添加详情信息
-                        if (result != null) {
-                            if (result.businessHours != null && !result.businessHours.isEmpty()) {
-                                item.put("business_hours", result.businessHours);
-                            }
-                            if (result.telephone != null && !result.telephone.isEmpty()) {
-                                item.put("telephone", result.telephone);
-                            }
-                            if (result.rating > 0) {
-                                item.put("rating", result.rating);
-                            }
-                            if (result.commentNum > 0) {
-                                item.put("comment_count", result.commentNum);
-                            }
-                        }
-                        
-                        detailedResults.put(item);
-                        detailSuccessCount++;
-                        
-                    } catch (Exception e) {
-                        Log.e(TAG, "处理详情失败 for POI: " + poi.name, e);
-                        // 即使详情获取失败，也添加基础信息
-                        try {
-                            JSONObject item = new JSONObject();
-                            item.put("name", poi.name != null ? poi.name : "");
-                            item.put("address", poi.address != null ? poi.address : "");
-                            item.put("uid", poi.uid != null ? poi.uid : "");
-                            if (poi.location != null) {
-                                item.put("latitude", poi.location.latitude);
-                                item.put("longitude", poi.location.longitude);
-                            }
-                            detailedResults.put(item);
-                        } catch (Exception ex) {
-                            Log.e(TAG, "添加基础信息失败", ex);
-                        }
-                        detailFailCount++;
-                    } finally {
-                        completedCount[0]++;
-                        // 所有请求完成后，返回结果
-                        if (completedCount[0] == totalCount) {
-                            finishWithDetails(detailedResults);
-                        }
-                    }
+    /**
+     * 处理 POI 详情结果（由 PoiSearchResultListener 调用）
+     */
+    void handlePoiDetailResult(PoiInfo poi, PoiDetailResult result) {
+        try {
+            JSONObject item = new JSONObject();
+            item.put("name", poi.name != null ? poi.name : "");
+            item.put("address", poi.address != null ? poi.address : "");
+            item.put("uid", poi.uid != null ? poi.uid : "");
+            
+            if (poi.location != null) {
+                item.put("latitude", poi.location.latitude);
+                item.put("longitude", poi.location.longitude);
+            }
+            
+            // 添加详情信息（只保留可用的字段）
+            if (result != null) {
+                if (result.telephone != null && !result.telephone.isEmpty()) {
+                    item.put("telephone", result.telephone);
                 }
-
-                @Override
-                public void onGetPoiDetailResult(PoiDetailSearchResult result) {
-                    // 这个重载版本也不会被调用
+                if (result.commentNum > 0) {
+                    item.put("comment_count", result.commentNum);
                 }
-
-                @Override
-                public void onGetPoiIndoorResult(PoiIndoorResult result) {
-                    // 室内 POI 结果，忽略
+            }
+            
+            detailedResults.put(item);
+            detailSuccessCount++;
+            
+        } catch (Exception e) {
+            Log.e(TAG, "处理详情失败 for POI: " + poi.name, e);
+            // 即使详情获取失败，也添加基础信息
+            try {
+                JSONObject item = new JSONObject();
+                item.put("name", poi.name != null ? poi.name : "");
+                item.put("address", poi.address != null ? poi.address : "");
+                item.put("uid", poi.uid != null ? poi.uid : "");
+                if (poi.location != null) {
+                    item.put("latitude", poi.location.latitude);
+                    item.put("longitude", poi.location.longitude);
                 }
-            });
+                detailedResults.put(item);
+            } catch (Exception ex) {
+                Log.e(TAG, "添加基础信息失败", ex);
+            }
+            detailFailCount++;
+        } finally {
+            completedCount++;
+            // 所有请求完成后，返回结果
+            if (completedCount >= currentPoiList.size()) {
+                finishWithDetails(detailedResults);
+            }
         }
     }
 
@@ -282,7 +262,7 @@ public class SearchNearbyTool implements Tool {
             JSONObject response = new JSONObject();
             response.put("status", "success");
             response.put("message", "找到 " + detailedResults.length() + " 个附近地点" + 
-                (includeDetails ? " (已获取详情: 成功" + detailSuccessCount + ", 失败" + detailFailCount + ")" : ""));
+                (includeDetails ? " (已获取详情：成功" + detailSuccessCount + ", 失败" + detailFailCount + ")" : ""));
             response.put("count", detailedResults.length());
             response.put("results", detailedResults);
             
@@ -341,6 +321,6 @@ public class SearchNearbyTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。参数：query(关键词), city(城市), result_count(结果数量，默认20), include_details(是否获取详情如营业时间，默认false)。如果启用 include_details，建议将 result_count 设置得小一些以免耗时太长。";
+        return "搜索附近的商家地点（银行、医院、超市等），返回商家列表。参数：query(关键词), city(城市), result_count(结果数量，默认 20), include_details(是否获取详情如营业时间，默认 false)。如果启用 include_details，建议将 result_count 设置得小一些以免耗时太长。";
     }
 }
