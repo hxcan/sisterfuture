@@ -5,37 +5,35 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.content.Context;
-import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import android.content.Context;
-import org.apache.commons.net.ftp.FTP;
-import org.apache.commons.net.ftp.FTP;
-import org.apache.commons.net.ftp.FTPClient;
-import org.json.JSONObject;
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import org.json.JSONArray;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import java.util.ArrayList;
-import java.util.Arrays;
-import android.content.Context;
 import android.util.Log;
 import androidx.annotation.NonNull;
+import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.Base64;
+import org.json.JSONArray;
 
 /**
- * FTP文件写入工具 - 调试版
- * 用于修改电脑上的文件内容
+ * FTP文件写入工具增强版
+ * 用于向FTP服务器写入文件内容
+ *
+ * 增强功能:
+ * - 支持从手机本机读取文件上传到 FTP 服务器
+ * - 支持二进制文件上传（APK、图片、视频等）
+ * - 适用于将安装包上传到手机 FTP 服务器进行安装
+ * 
+ * 典型使用场景：
+ * - 将未来姐姐最新安装包上传到小米手机的太极 FTP 服务器
+ * - 使得手机端能够安装到最新版
  */
 public class FtpFileWriteTool implements Tool {
     private static final String TAG = "FtpFileWriteTool";
+    private static final long MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MiB
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -45,15 +43,15 @@ public class FtpFileWriteTool implements Tool {
 
     @Override
     public String getName() {
-        return "ftp_file_write";
+        return "ftpFileWrite";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "ftp_file_write");
-            functionDef.put("description", "向FTP服务器写入文件内容。支持文本文件写入。");
+            functionDef.put("name", "ftpFileWrite");
+            functionDef.put("description", "向FTP服务器写入文件内容。支持文本文件写入和从手机本机读取文件上传（支持 APK、图片、视频等二进制文件）。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -63,12 +61,20 @@ public class FtpFileWriteTool implements Tool {
                     .put("description", "FTP文件URL，格式：ftp://username:password@host:port/path"))
                 .put("content", new JSONObject()
                     .put("type", "string")
-                    .put("description", "要写入的文件内容"))
+                    .put("description", "要写入的文件内容（当 read_from_phone=false 时使用）"))
+                .put("read_from_phone", new JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否从手机读取文件内容（默认 false）。为 true 时忽略 content 参数，从 phone_path 读取文件"))
+                .put("phone_path", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "手机上的文件路径（当 read_from_phone=true 时使用）。支持文本和二进制文件，最大 200 MiB"))
             );
-            parameters.put("required", new JSONArray(new String[]{"url", "content"}));
+            parameters.put("required", new JSONArray(new String[]{"url"}));
 
             functionDef.put("parameters", parameters);
+
             return new JSONObject().put("type", "function").put("function", functionDef);
+
         } catch (Exception e) {
             Log.e(TAG, "Failed to build definition", e);
             return new JSONObject();
@@ -91,9 +97,28 @@ public class FtpFileWriteTool implements Tool {
             FTPClient ftpClient = new FTPClient();
             try {
                 String url = arguments.getString("url").trim();
-                String content = arguments.getString("content");
                 if (url.isEmpty()) {
                     throw new IllegalArgumentException("URL不能为空");
+                }
+
+                // 新增参数：从手机读取
+                boolean readFromPhone = arguments.optBoolean("read_from_phone", false);
+                String phonePath = arguments.optString("phone_path", "");
+
+                byte[] fileContent;
+                String content = "";
+
+                if (readFromPhone) {
+                    // 从手机读取文件
+                    if (phonePath.isEmpty()) {
+                        throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path");
+                    }
+                    fileContent = readFileFromPhone(phonePath);
+                    Log.d(TAG, "从手机读取文件: " + phonePath + ", 大小: " + fileContent.length + " bytes");
+                } else {
+                    // 使用 content 参数
+                    content = arguments.getString("content");
+                    fileContent = content.getBytes(StandardCharsets.UTF_8);
                 }
 
                 String username = "ftpuser";
@@ -114,6 +139,7 @@ public class FtpFileWriteTool implements Tool {
                         }
                         addr = addr.substring(atIdx + 1);
                     }
+
                     int slashIdx = addr.indexOf('/');
                     if (slashIdx != -1) {
                         String hostPort = addr.substring(0, slashIdx);
@@ -140,9 +166,10 @@ public class FtpFileWriteTool implements Tool {
                 }
 
                 ftpClient.enterLocalPassiveMode();
-                ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
+                // 始终使用二进制模式，支持所有文件类型（包括 APK）
+                ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
-                ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
+                ByteArrayInputStream inputStream = new ByteArrayInputStream(fileContent);
                 boolean success = ftpClient.storeFile(path, inputStream);
 
                 if (!success) {
@@ -153,11 +180,17 @@ public class FtpFileWriteTool implements Tool {
                 result.put("status", "success");
                 result.put("path", path);
                 result.put("host", host);
-                result.put("size", content.length());
+                result.put("size", fileContent.length);
+                result.put("size_mib", String.format("%.2f", fileContent.length / (1024.0 * 1024.0)));
+                result.put("read_from_phone", readFromPhone);
+                if (readFromPhone) {
+                    result.put("phone_path", phonePath);
+                }
                 result.put("processed_at", System.currentTimeMillis());
                 // ✅ 已移除敏感字段: sister_future_note
 
                 callback.onResult(result);
+
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
                 try {
@@ -166,6 +199,7 @@ public class FtpFileWriteTool implements Tool {
                     error.put("message", e.getMessage());
                     error.put("type", e.getClass().getSimpleName());
                     callback.onResult(error);
+
                 } catch (Exception ignored) {}
             } finally {
                 try {
@@ -176,6 +210,38 @@ public class FtpFileWriteTool implements Tool {
                 } catch (Exception ignored) {}
             }
         });
+    }
+
+    /**
+     * 从手机读取文件内容
+     * 支持文本和二进制文件（APK、图片、视频等）
+     * 
+     * @param phonePath 手机上的文件路径
+     * @return 文件内容的字节数组
+     */
+    private byte[] readFileFromPhone(String phonePath) throws IOException {
+        File file = new File(phonePath);
+        if (!file.exists()) {
+            throw new IOException("手机文件不存在: " + phonePath);
+        }
+        if (!file.canRead()) {
+            throw new IOException("无法读取手机文件，请检查权限: " + phonePath);
+        }
+
+        long fileSize = file.length();
+        if (fileSize > MAX_FILE_SIZE) {
+            throw new IOException("文件太大，超过 200 MiB 限制: " + phonePath);
+        }
+
+        try (FileInputStream fis = new FileInputStream(file);
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = fis.read(buffer)) != -1) {
+                baos.write(buffer, 0, bytesRead);
+            }
+            return baos.toByteArray();
+        }
     }
 
     @Override
