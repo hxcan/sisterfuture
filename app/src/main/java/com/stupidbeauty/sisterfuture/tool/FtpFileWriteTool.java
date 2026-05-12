@@ -23,12 +23,17 @@ import org.json.JSONArray;
  * 用于向FTP服务器写入文件内容
  *
  * 增强功能:
- * - 支持从手机本机读取文件 (read_from_phone, phone_path)
- * - 支持二进制文件上传 (通过 Base64 编码读取手机文件)
- * - 自动检测文件类型并选择合适的传输模式
+ * - 支持从手机本机读取文件上传到 FTP 服务器
+ * - 支持二进制文件上传（APK、图片、视频等）
+ * - 适用于将安装包上传到手机 FTP 服务器进行安装
+ * 
+ * 典型使用场景：
+ * - 将未来姐姐最新安装包上传到小米手机的太极 FTP 服务器
+ * - 使得手机端能够安装到最新版
  */
 public class FtpFileWriteTool implements Tool {
     private static final String TAG = "FtpFileWriteTool";
+    private static final long MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MiB
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -46,7 +51,7 @@ public class FtpFileWriteTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "ftp_file_write");
-            functionDef.put("description", "向FTP服务器写入文件内容。支持文本文件写入和从手机本机读取二进制文件上传。");
+            functionDef.put("description", "向FTP服务器写入文件内容。支持文本文件写入和从手机本机读取文件上传（支持 APK、图片、视频等二进制文件）。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -62,7 +67,7 @@ public class FtpFileWriteTool implements Tool {
                     .put("description", "是否从手机读取文件内容（默认 false）。为 true 时忽略 content 参数，从 phone_path 读取文件"))
                 .put("phone_path", new JSONObject()
                     .put("type", "string")
-                    .put("description", "手机上的文件路径（当 read_from_phone=true 时使用）。支持文本和二进制文件"))
+                    .put("description", "手机上的文件路径（当 read_from_phone=true 时使用）。支持文本和二进制文件，最大 200 MiB"))
             );
             parameters.put("required", new JSONArray(new String[]{"url"}));
 
@@ -161,7 +166,7 @@ public class FtpFileWriteTool implements Tool {
                 }
 
                 ftpClient.enterLocalPassiveMode();
-                // 始终使用二进制模式，支持所有文件类型
+                // 始终使用二进制模式，支持所有文件类型（包括 APK）
                 ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
                 ByteArrayInputStream inputStream = new ByteArrayInputStream(fileContent);
@@ -176,6 +181,7 @@ public class FtpFileWriteTool implements Tool {
                 result.put("path", path);
                 result.put("host", host);
                 result.put("size", fileContent.length);
+                result.put("size_mib", String.format("%.2f", fileContent.length / (1024.0 * 1024.0)));
                 result.put("read_from_phone", readFromPhone);
                 if (readFromPhone) {
                     result.put("phone_path", phonePath);
@@ -208,7 +214,10 @@ public class FtpFileWriteTool implements Tool {
 
     /**
      * 从手机读取文件内容
-     * 支持文本和二进制文件
+     * 支持文本和二进制文件（APK、图片、视频等）
+     * 
+     * @param phonePath 手机上的文件路径
+     * @return 文件内容的字节数组
      */
     private byte[] readFileFromPhone(String phonePath) throws IOException {
         File file = new File(phonePath);
@@ -220,8 +229,8 @@ public class FtpFileWriteTool implements Tool {
         }
 
         long fileSize = file.length();
-        if (fileSize > 100 * 1024 * 1024) { // 100MB 限制
-            throw new IOException("文件太大，超过 100MB 限制: " + phonePath);
+        if (fileSize > MAX_FILE_SIZE) {
+            throw new IOException("文件太大，超过 200 MiB 限制: " + phonePath);
         }
 
         try (FileInputStream fis = new FileInputStream(file);
@@ -237,6 +246,6 @@ public class FtpFileWriteTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求写入文件时才调用此工具。支持从手机本机读取文件上传（使用 read_from_phone=true 和 phone_path 参数），支持文本和二进制文件。需要完整的FTP URL包含用户名密码。";
+        return "必须在用户明确要求写入文件时才调用此工具。支持从手机本机读取文件上传（使用 read_from_phone=true 和 phone_path 参数），支持文本和二进制文件（APK、图片、视频等），最大 200 MiB。需要完整的FTP URL包含用户名密码。";
     }
 }
