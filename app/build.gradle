@@ -85,8 +85,8 @@ android
     }
   }
 
-    versionCode 1094
-    versionName "2026.5.11"
+  buildTypes 
+  {
     release 
     {
       minifyEnabled false
@@ -103,8 +103,8 @@ android
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
     targetSdkVersion 28
-    versionCode 1093
-    versionName "2026.4.19"
+    versionCode 1094
+    versionName "2026.5.11"
     multiDexEnabled true
     
     // 配置支持的 SO 库架构 - 仅保留手机端需要的架构
