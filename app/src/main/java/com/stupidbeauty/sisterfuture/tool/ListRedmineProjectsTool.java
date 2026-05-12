@@ -95,7 +95,7 @@ public class ListRedmineProjectsTool implements Tool {
                     .put("description", "每页数量，官方默认 30，本工具安全范围 5-50"))
                 .put("offset", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "偏移量，默认 0，用于分页"))
+                    .put("description", "偏移量，默认 0，用于分页"));
             );
             parameters.put("required", new JSONArray(new String[]{"redmine_url", "username", "password"}));
 
