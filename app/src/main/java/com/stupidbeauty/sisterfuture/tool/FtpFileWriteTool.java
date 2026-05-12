@@ -43,14 +43,14 @@ public class FtpFileWriteTool implements Tool {
 
     @Override
     public String getName() {
-        return "ftp_file_write";
+        return "ftpFileWrite";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "ftp_file_write");
+            functionDef.put("name", "ftpFileWrite");
             functionDef.put("description", "向FTP服务器写入文件内容。支持文本文件写入和从手机本机读取文件上传（支持 APK、图片、视频等二进制文件）。");
 
             JSONObject parameters = new JSONObject();
@@ -246,6 +246,6 @@ public class FtpFileWriteTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求写入文件时才调用此工具。支持从手机本机读取文件上传（使用 read_from_phone=true 和 phone_path 参数），支持文本和二进制文件（APK、图片、视频等），最大 200 MiB。需要完整的FTP URL包含用户名密码。";
+        return "必须在用户明确要求写入文件时才调用此工具。只支持文本文件写入。需要完整的FTP URL包含用户名密码。";
     }
 }
