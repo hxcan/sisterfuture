@@ -76,7 +76,7 @@ public class ListRedmineProjectsTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "listRedmineProjects");
-            functionDef.put("description", "列出 Redmine 中所有可用的项目列表。使用 \/projects.json 接口，严格遵循官方 API 规范 (https:\/\/www.redmine.org\/projects\/redmine\/wiki\/Rest_Projects)，支持分页和总数量统计。如果 JoyMan API 连接超时，则重新启动应用程序使其前台运行。");
+            functionDef.put("description", "列出 Redmine 中所有可用的项目列表。使用 /projects.json 接口，严格遵循官方 API 规范 (https://www.redmine.org/projects/redmine/wiki/Rest_Projects)，支持分页和总数量统计。如果 JoyMan API 连接超时，则重新启动应用程序使其前台运行。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -485,6 +485,6 @@ public class ListRedmineProjectsTool implements Tool {
     // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求列出 Redmine 所有项目时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。\n\n已严格遵循 Redmine 官方 API 规范 (https:\/\/www.redmine.org\/projects\/redmine\/wiki\/Rest_Projects)，自动分页获取全部项目。\n注意：\/projects.json 不支持 status 参数（仅\/issues.json 支持）!\n\n重要：如果 JoyMan API 连接超时，则重新启动应用程序使其前台运行。";
+        return "必须在用户明确要求列出 Redmine 所有项目时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。\n\n已严格遵循 Redmine 官方 API 规范 (https://www.redmine.org/projects/redmine/wiki/Rest_Projects)，自动分页获取全部项目。\n注意：/projects.json 不支持 status 参数（仅 /issues.json 支持）!\n\n重要：如果 JoyMan API 连接超时，则重新启动应用程序使其前台运行。";
     }
 }
