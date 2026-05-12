@@ -19,8 +19,8 @@ dependencies
   implementation 'androidx.multidex:multidex:2.0.1'
   implementation 'io.noties.markwon:core:4.6.1'
   implementation 'com.jcraft:jsch:0.1.55'
-  implementation 'io.noties.markwon:ext-strikethrough:4.2.1'
-  implementation 'io.noties.markwon:ext-tables:4.2.1'
+  implementation 'io.noties.markwon:ext-strikethrough:4.6.1'
+  implementation 'io.noties.markwon:ext-tables:4.6.1'
   implementation 'com.belerweb:pinyin4j:2.5.1'
   implementation 'androidx.annotation:annotation:1.5.0'
   implementation 'androidx.appcompat:appcompat:1.6.1' // Or the latest version
@@ -39,7 +39,7 @@ dependencies
   annotationProcessor 'io.objectbox:objectbox-processor:5.1.0'
   implementation 'commons-net:commons-net:3.8.0'
   
-  // #3084 百度地图 SDK 依赖（降级到 7.5.4，与旅行盲盒一致）
+  // #3088 百度地图 SDK 依赖（降级到 7.5.4，与旅行盲盒一致）
   // 地图组件
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Map:7.5.4'
   // 检索组件（含反向地理编码）
@@ -47,7 +47,7 @@ dependencies
   // 定位工具组件
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Util:7.5.4'
   // 全量定位组件
-  implementation 'com.baidu.lbsyun:BaiduMapSDK_Location_All:5.3.7'
+  implementation 'com.baidu.lbsyun:BaiduMapSDK_Location_All:9.3.7'
   
   // #4834 添加 Timber 日志库（用于日志输出到外置存储）
   implementation 'com.jakewharton.timber:timber:5.0.1'
@@ -57,7 +57,7 @@ dependencies
   implementation 'com.github.hxcan:builtinftp:2026.3.31'
   
   // 🆕 Android Crash Detector - Global exception handler with crash logging to external storage
-  implementation 'com.github.hxcan:android-crash-detector:2026.4.4'
+  implementation 'com.github.hxcan:android-crash-detector:2026.4.8'
 }
 
 android 
@@ -85,8 +85,8 @@ android
     }
   }
 
-  buildTypes 
-  {
+    versionCode 1094
+    versionName "2026.5.11"
     release 
     {
       minifyEnabled false
@@ -102,9 +102,9 @@ android
   {
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
-    targetSdkVersion 24
-    versionCode 1094
-    versionName "2026.1.11"
+    targetSdkVersion 28
+    versionCode 1093
+    versionName "2026.4.19"
     multiDexEnabled true
     
     // 配置支持的 SO 库架构 - 仅保留手机端需要的架构
@@ -134,7 +134,7 @@ android
     }
 }
 
-// # https://stackoverflow.com/questions/65340359/lomboks-access-to-jdk-compilers-internal-packages-incompatible-with-java-16
+// # https://stackoverflow.com/questions/65380359/lomboks-access-to-jdk-compilers-internal-packages-incompatible-with-java-16
 
 // # enable internal JDK API access at runtime
 tasks.withType(JavaCompile).configureEach {
