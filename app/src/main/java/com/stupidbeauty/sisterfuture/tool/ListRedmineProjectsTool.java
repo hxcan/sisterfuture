@@ -426,7 +426,12 @@ public class ListRedmineProjectsTool implements Tool {
                     }
                     error.put("stack_trace", stackTraceStr.toString());
                     
+                    // 【错误处理增强】添加智能引导提示
+                    String smartSuggestion = "\n\n💡 建议操作：\n" +
+                        "1. 请先调用 `get_tool_remark(\"listRedmineProjects\")` 检查是否已有保存的访问参数\n" +
+                        "2. 如果备注中没有参数，请向用户索要正确的 Redmine URL、用户名和密码\n" +
                         "3. 获取参数后，使用 `set_tool_remark` 将其写入工具备注，或 `write_memory` 保存到长期记忆";
+                    
                     error.put("suggestion", smartSuggestion + "\n\n原始建议：请检查：\n1. Redmine URL 是否正确\n2. 用户名和密码是否有效\n3. 网络连接是否正常\n4. 若仍失败，请将此错误报告发给开发者进行进一步诊断\n\nDebug Info:\n- Official Redmine API does not support 'status' parameter for /projects.json!\n- Using official default limit=30\n- Auto-pagination enabled if total_count > limit");
                     
                     callback.onResult(error);
@@ -480,6 +485,6 @@ public class ListRedmineProjectsTool implements Tool {
     // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求列出 Redmine 所有项目时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。\n\n已严格遵循 Redmine 官方 API 规范 (https://www.redmine.org/projects/redmine/wiki/Rest_Projects)，自动分页获取全部项目。\n注意：/projects.json 不支持 status 参数（仅/issues.json 支持）!";
-        return "必须在用户明确要求列出 Redmine 所有项目时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。\n\n已严格遵循 Redmine 官方 API 规范 (https:\/\/www.redmine.org\/projects\/redmine\/wiki\/Rest_Projects)，自动分页获取全部项目。\n注意：\/projects.json 不支持 status 参数（仅\/issues.json 支持）!\n\n重要：如果 JoyMan API 连接超时，则重新启动应用程序使其前台运行。");
+        return "必须在用户明确要求列出 Redmine 所有项目时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。\n\n已严格遵循 Redmine 官方 API 规范 (https:\/\/www.redmine.org\/projects\/redmine\/wiki\/Rest_Projects)，自动分页获取全部项目。\n注意：\/projects.json 不支持 status 参数（仅\/issues.json 支持）!\n\n重要：如果 JoyMan API 连接超时，则重新启动应用程序使其前台运行。";
+    }
 }
