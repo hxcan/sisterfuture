@@ -83,7 +83,7 @@ public class ListRedmineProjectsTool implements Tool {
             parameters.put("properties", new JSONObject()
                 .put("redmine_url", new JSONObject()
                     .put("type", "string")
-                    .put("description", "Redmine 实例的完整 URL，例如 https://your-redmine.com"));
+                    .put("description", "Redmine 实例的完整 URL，例如 https://your-redmine.com");
                 .put("username", new JSONObject()
                     .put("type", "string")
                     .put("description", "登录用户名"))
