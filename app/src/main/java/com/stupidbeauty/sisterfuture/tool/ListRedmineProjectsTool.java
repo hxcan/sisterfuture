@@ -76,7 +76,7 @@ public class ListRedmineProjectsTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "listRedmineProjects");
-            functionDef.put("description", "列出 Redmine 中所有可用的项目列表。使用 /projects.json 接口，严格遵循官方 API 规范 (https://www.redmine.org/projects/redmine/wiki/Rest_Projects)，支持分页和总数量统计。如果 JoyMan API 连接超时，则重新启动应用程序使其前台运行。");
+            functionDef.put("description", "列出 Redmine 中所有可用的项目列表。使用 /projects.json 接口，严格遵循官方 API 规范 (https://www.redmine.org/projects/redmine/wiki/Rest_Projects)，支持分页和总数量统计。支持 localhost joyman api。如果 JoyMan API 连接超时，则重新启动应用程序使其前台运行。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
