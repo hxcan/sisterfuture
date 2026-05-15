@@ -187,7 +187,7 @@ public class GetGitHubFileTool implements Tool
                         // 针对 404 错误，引导 LLM 检查参数
                         if (response.code() == 404)
                         {
-                            error.put("sister_future_note", "️ 404 错误可能原因：\n" +
+                            error.put("sister_future_note", "⚠️ 404 错误可能原因：\n" +
                                 "1. 文件路径 (path) 不正确 - 请确认文件确实存在于仓库中\n" +
                                 "2. 分支 (branch) 错误 - 当前仓库默认分支是 master，不是 main\n" +
                                 "3. owner/repo 错误 - 请确认仓库所有者和服务名称正确\n" +
@@ -299,7 +299,52 @@ public class GetGitHubFileTool implements Tool
             catch (Exception e)
             {
                 Log.e(TAG, "执行出错", e);
-                // 🔥 修复：调用 onError 而不是 onResult，让 ToolManager 处理智能引导
+                
+                // 🔥 增强修复：识别参数缺失异常，生成友好提示
+                if (e instanceof IllegalArgumentException || e instanceof org.json.JSONException)
+                {
+                    try
+                    {
+                        String errorMsg = e.getMessage();
+                        String missingParam = "";
+                        
+                        // 提取缺失的参数名
+                        if (errorMsg != null && errorMsg.contains("Missing required parameter: "))
+                        {
+                            missingParam = errorMsg.substring("Missing required parameter: ".length()).trim();
+                        }
+                        else if (errorMsg != null && errorMsg.contains("No value for "))
+                        {
+                            missingParam = errorMsg.substring("No value for ".length()).trim();
+                        }
+                        
+                        // 生成友好提示
+                        StringBuilder friendlyMsg = new StringBuilder();
+                        friendlyMsg.append("💡 提示：缺少必需参数 '").append(missingParam.isEmpty() ? "未知参数" : missingParam).append("'，请提供该参数的值。\n\n");
+                        
+                        // 尝试从历史记录中获取候选值（如果 ToolManager 支持）
+                        // 注意：这里工具本身无法直接访问历史记录，需要依赖 ToolManager 的 handleParameterError 方法
+                        friendlyMsg.append("请检查您的调用参数，确保提供了所有必需参数。");
+                        
+                        JSONObject error = new JSONObject();
+                        error.put("status", "error");
+                        error.put("message", friendlyMsg.toString());
+                        error.put("type", e.getClass().getSimpleName());
+                        if (!missingParam.isEmpty())
+                        {
+                            error.put("missing_parameter", missingParam);
+                        }
+                        
+                        callback.onResult(error);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.e(TAG, "生成友好提示失败", ex);
+                    }
+                }
+                
+                // 对于其他异常，调用 onError 让 ToolManager 处理
                 callback.onError(e);
             }
         });
