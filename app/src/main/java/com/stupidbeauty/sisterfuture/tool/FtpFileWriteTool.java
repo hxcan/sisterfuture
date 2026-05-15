@@ -19,8 +19,8 @@ import java.util.Base64;
 import org.json.JSONArray;
 
 /**
- * FTP文件写入工具增强版
- * 用于向FTP服务器写入文件内容
+ * FTP 文件写入工具增强版
+ * 用于向 FTP 服务器写入文件内容
  *
  * 增强功能:
  * - 支持从手机本机读取文件上传到 FTP 服务器
@@ -51,14 +51,14 @@ public class FtpFileWriteTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "ftpFileWrite");
-            functionDef.put("description", "向FTP服务器写入文件内容。支持文本文件写入和从手机本机读取文件上传（支持 APK、图片、视频等二进制文件）。");
+            functionDef.put("description", "向 FTP 服务器写入文件内容。支持文本文件写入和从手机本机读取文件上传（支持 APK、图片、视频等二进制文件）。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()
                 .put("url", new JSONObject()
                     .put("type", "string")
-                    .put("description", "FTP文件URL，格式：ftp://username:password@host:port/path"))
+                    .put("description", "FTP 文件 URL，格式：ftp://username:password@host:port/path"))
                 .put("content", new JSONObject()
                     .put("type", "string")
                     .put("description", "要写入的文件内容（当 read_from_phone=false 时使用）"))
@@ -98,7 +98,7 @@ public class FtpFileWriteTool implements Tool {
             try {
                 String url = arguments.getString("url").trim();
                 if (url.isEmpty()) {
-                    throw new IllegalArgumentException("URL不能为空");
+                    throw new IllegalArgumentException("URL 不能为空");
                 }
 
                 // 新增参数：从手机读取
@@ -114,7 +114,7 @@ public class FtpFileWriteTool implements Tool {
                         throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path");
                     }
                     fileContent = readFileFromPhone(phonePath);
-                    Log.d(TAG, "从手机读取文件: " + phonePath + ", 大小: " + fileContent.length + " bytes");
+                    Log.d(TAG, "从手机读取文件：" + phonePath + ", 大小：" + fileContent.length + " bytes");
                 } else {
                     // 使用 content 参数
                     content = arguments.getString("content");
@@ -158,11 +158,11 @@ public class FtpFileWriteTool implements Tool {
 
                 ftpClient.connect(host, port);
                 if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
-                    throw new IOException("连接失败: " + ftpClient.getReplyString());
+                    throw new IOException("连接失败：" + ftpClient.getReplyString());
                 }
 
                 if (!ftpClient.login(username, password)) {
-                    throw new IOException("登录失败: " + ftpClient.getReplyString());
+                    throw new IOException("登录失败：" + ftpClient.getReplyString());
                 }
 
                 ftpClient.enterLocalPassiveMode();
@@ -173,7 +173,7 @@ public class FtpFileWriteTool implements Tool {
                 boolean success = ftpClient.storeFile(path, inputStream);
 
                 if (!success) {
-                    throw new IOException("文件写入失败: " + ftpClient.getReplyString());
+                    throw new IOException("文件写入失败：" + ftpClient.getReplyString());
                 }
 
                 JSONObject result = new JSONObject();
@@ -187,20 +187,14 @@ public class FtpFileWriteTool implements Tool {
                     result.put("phone_path", phonePath);
                 }
                 result.put("processed_at", System.currentTimeMillis());
-                // ✅ 已移除敏感字段: sister_future_note
+                // ✅ 已移除敏感字段：sister_future_note
 
                 callback.onResult(result);
 
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    callback.onResult(error);
-
-                } catch (Exception ignored) {}
+                // ✅ 修复：调用 onError 而不是 onResult，让 ToolManager 处理智能引导
+                callback.onError(e);
             } finally {
                 try {
                     if (ftpClient.isConnected()) {
@@ -222,15 +216,15 @@ public class FtpFileWriteTool implements Tool {
     private byte[] readFileFromPhone(String phonePath) throws IOException {
         File file = new File(phonePath);
         if (!file.exists()) {
-            throw new IOException("手机文件不存在: " + phonePath);
+            throw new IOException("手机文件不存在：" + phonePath);
         }
         if (!file.canRead()) {
-            throw new IOException("无法读取手机文件，请检查权限: " + phonePath);
+            throw new IOException("无法读取手机文件，请检查权限：" + phonePath);
         }
 
         long fileSize = file.length();
         if (fileSize > MAX_FILE_SIZE) {
-            throw new IOException("文件太大，超过 200 MiB 限制: " + phonePath);
+            throw new IOException("文件太大，超过 200 MiB 限制：" + phonePath);
         }
 
         try (FileInputStream fis = new FileInputStream(file);
@@ -246,6 +240,6 @@ public class FtpFileWriteTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求写入文件时才调用此工具。只支持文本文件写入。需要完整的FTP URL包含用户名密码。";
+        return "必须在用户明确要求写入文件时才调用此工具。只支持文本文件写入。需要完整的 FTP URL 包含用户名密码。";
     }
 }
