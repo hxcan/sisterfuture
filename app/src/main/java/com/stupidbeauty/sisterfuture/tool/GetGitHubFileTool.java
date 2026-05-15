@@ -129,10 +129,18 @@ public class GetGitHubFileTool implements Tool
                     String noteJson = getNote(context);
                     if (!noteJson.isEmpty())
                     {
-                        JSONObject saved = new JSONObject(noteJson);
-                        if (saved.has("github_token"))
+                        try
                         {
-                            token = saved.getString("github_token");
+                            JSONObject saved = new JSONObject(noteJson);
+                            if (saved.has("github_token"))
+                            {
+                                token = saved.getString("github_token");
+                            }
+                        }
+                        catch (Exception ignored)
+                        {
+                            // 备注解析失败，忽略并继续，后续会抛出标准参数缺失错误
+                            Log.w(TAG, "Failed to parse tool remark for token, ignoring.");
                         }
                     }
                 }
@@ -291,7 +299,7 @@ public class GetGitHubFileTool implements Tool
             catch (Exception e)
             {
                 Log.e(TAG, "执行出错", e);
-                // 🔥 修复：调用 onError 而不是 onResult，让 ToolManager 处理智能引导
+                // ✅ 方案 A：完全交给 ToolManager 处理智能引导
                 callback.onError(e);
             }
         });
