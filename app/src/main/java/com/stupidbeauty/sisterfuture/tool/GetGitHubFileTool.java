@@ -129,10 +129,18 @@ public class GetGitHubFileTool implements Tool
                     String noteJson = getNote(context);
                     if (!noteJson.isEmpty())
                     {
-                        JSONObject saved = new JSONObject(noteJson);
-                        if (saved.has("github_token"))
+                        try
                         {
-                            token = saved.getString("github_token");
+                            JSONObject saved = new JSONObject(noteJson);
+                            if (saved.has("github_token"))
+                            {
+                                token = saved.getString("github_token");
+                            }
+                        }
+                        catch (Exception ignored)
+                        {
+                            // 备注解析失败，忽略并继续，后续会抛出标准参数缺失错误
+                            Log.w(TAG, "Failed to parse tool remark for token, ignoring.");
                         }
                     }
                 }
@@ -179,7 +187,7 @@ public class GetGitHubFileTool implements Tool
                         // 针对 404 错误，引导 LLM 检查参数
                         if (response.code() == 404)
                         {
-                            error.put("sister_future_note", "⚠️ 404 错误可能原因：\n" +
+                            error.put("sister_future_note", "️ 404 错误可能原因：\n" +
                                 "1. 文件路径 (path) 不正确 - 请确认文件确实存在于仓库中\n" +
                                 "2. 分支 (branch) 错误 - 当前仓库默认分支是 master，不是 main\n" +
                                 "3. owner/repo 错误 - 请确认仓库所有者和服务名称正确\n" +
