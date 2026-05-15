@@ -62,6 +62,7 @@ public class GetRedmineTaskInfoTool implements Tool
       parameters.put("required", new JSONArray(new String[]{"task_id"}));
 
       functionDef.put("parameters", parameters);
+
       return new JSONObject().put("type", "function").put("function", functionDef);
     }
     catch (Exception e)
@@ -71,99 +72,116 @@ public class GetRedmineTaskInfoTool implements Tool
     }
   }
 
-    @Override
-    public boolean shouldInclude() {
-        return true;
-    }
+  @Override
+  public boolean shouldInclude()
+  {
+    return true;
+  }
 
-    @Override
-    public boolean isAsync() {
-        return true;
-    }
+  @Override
+  public boolean isAsync()
+  {
+    return true;
+  }
 
-    @Override
-    public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
-        executor.execute(() -> {
-            try {
-                // 1. 获取参数
-                long taskId = arguments.getLong("task_id");
-                String redmineUrl = arguments.optString("redmine_url", "").trim();
-                String username = arguments.optString("username", "").trim();
-                String password = arguments.optString("password", "").trim();
+  @Override
+  public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback)
+  {
+    executor.execute(() ->
+    {
+      try
+      {
+        // 1. 获取参数
+        long taskId = arguments.getLong("task_id");
+        String redmineUrl = arguments.optString("redmine_url", "").trim();
+        String username = arguments.optString("username", "").trim();
+        String password = arguments.optString("password", "").trim();
 
-                // 2. 尝试从备注恢复默认值
-                if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty()) {
-                    String noteJson = getNote(context);
-                    if (!noteJson.isEmpty()) {
-                        JSONObject saved = new JSONObject(noteJson);
-                        if (redmineUrl.isEmpty() && saved.has("redmine_url"))
-                            redmineUrl = saved.getString("redmine_url");
-                        if (username.isEmpty() && saved.has("username"))
-                            username = saved.getString("username");
-                        if (password.isEmpty() && saved.has("password"))
-                            password = saved.getString("password");
-                    }
-                }
-
-                // 3. 验证必要参数
-                if (redmineUrl.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 redmine_url 参数，且未在备注中配置");
-                }
-                if (username.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 username 参数，且未在备注中配置");
-                }
-                if (password.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 password 参数，且未在备注中配置");
-                }
-
-                // 4. 构建请求
-                OkHttpClient client = new OkHttpClient();
-                // 在 URL 构建处升级为多重包含：
-                HttpUrl url = HttpUrl.parse(redmineUrl + "/issues/" + taskId + ".json")
-                    .newBuilder()
-                    .addQueryParameter("include", "journals,relations,attachments,children,watchers,time_entries") // 五重数据维度全解锁
-                    .build();
-
-                Request request = new Request.Builder()
-                    .url(url)
-                    .header("Authorization", Credentials.basic(username, password))
-                    .build();
-
-                Response response = client.newCall(request).execute();
-
-                if (!response.isSuccessful()) {
-                    throw new IOException("请求失败：" + response.code() + " " + response.message());
-                }
-
-                ResponseBody body = response.body();
-                if (body == null) {
-                    throw new IOException("返回体为空");
-                }
-
-                String resultStr = body.string();
-                JSONObject result = new JSONObject();
-                result.put("task_info", new JSONObject(resultStr)); // 包装为标准响应
-                result.put("status", "success");
-                result.put("fetched_at", System.currentTimeMillis());
-
-                callback.onResult(result);
-
-            } catch (Exception e) {
-                Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    callback.onResult(error); // 使用 onResult 而非 onError，确保 JSON 返回
-                } catch (Exception ignored) {}
+        // 2. 尝试从备注恢复默认值
+        if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty())
+        {
+          String noteJson = getNote(context);
+          if (!noteJson.isEmpty())
+          {
+            try
+            {
+              JSONObject saved = new JSONObject(noteJson);
+              if (redmineUrl.isEmpty() && saved.has("redmine_url"))
+                redmineUrl = saved.getString("redmine_url");
+              if (username.isEmpty() && saved.has("username"))
+                username = saved.getString("username");
+              if (password.isEmpty() && saved.has("password"))
+                password = saved.getString("password");
             }
-        });
-    }
+            catch (Exception ignored)
+            {
+              // 备注解析失败，忽略并继续
+              Log.w(TAG, "Failed to parse tool remark, ignoring.");
+            }
+          }
+        }
 
-    // --- 工具备注支持 ---
-    @Override
-    public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求获取 Redmine 任务信息时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。";
-    }
+        // 3. 验证必要参数 - 使用标准化错误消息格式
+        if (redmineUrl.isEmpty())
+        {
+          throw new IllegalArgumentException("Missing required parameter: redmine_url");
+        }
+        if (username.isEmpty())
+        {
+          throw new IllegalArgumentException("Missing required parameter: username");
+        }
+        if (password.isEmpty())
+        {
+          throw new IllegalArgumentException("Missing required parameter: password");
+        }
+
+        // 4. 构建请求
+        OkHttpClient client = new OkHttpClient();
+        // 在 URL 构建处升级为多重包含：
+        HttpUrl url = HttpUrl.parse(redmineUrl + "/issues/" + taskId + ".json")
+          .newBuilder()
+          .addQueryParameter("include", "journals,relations,attachments,children,watchers,time_entries") // 五重数据维度全解锁
+          .build();
+
+        Request request = new Request.Builder()
+          .url(url)
+          .header("Authorization", Credentials.basic(username, password))
+          .build();
+
+        Response response = client.newCall(request).execute();
+
+        if (!response.isSuccessful())
+        {
+          throw new IOException("请求失败：" + response.code() + " " + response.message());
+        }
+
+        ResponseBody body = response.body();
+        if (body == null)
+        {
+          throw new IOException("返回体为空");
+        }
+
+        String resultStr = body.string();
+        JSONObject result = new JSONObject();
+        result.put("task_info", new JSONObject(resultStr)); // 包装为标准响应
+        result.put("status", "success");
+        result.put("fetched_at", System.currentTimeMillis());
+
+        callback.onResult(result);
+      }
+      catch (Exception e)
+      {
+        Log.e(TAG, "执行出错", e);
+        // ✅ 修复：调用 onError 而不是 onResult，让 ToolManager 处理智能引导
+        callback.onError(e);
+      }
+    });
+  }
+
+  // --- 工具备注支持 ---
+  @Override
+  public String getDefaultSystemPromptEnhancement()
+  {
+    return "必须在用户明确要求获取 Redmine 任务信息时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。";
+  }
 }
