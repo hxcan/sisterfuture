@@ -21,14 +21,14 @@ public class SearchRedmineTasksTool implements Tool {
 
     @Override
     public String getName() {
-        return "search_redmine_tasks";
+        return "searchRedmineTasks";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "search_redmine_tasks");
+            functionDef.put("name", "searchRedmineTasks");
             functionDef.put("description", "根据关键词、状态、项目等条件搜索Redmine任务，支持分页和排序");
 
             JSONObject parameters = new JSONObject();
@@ -101,25 +101,29 @@ public class SearchRedmineTasksTool implements Tool {
                 if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty()) {
                     String noteJson = getNote(context);
                     if (!noteJson.isEmpty()) {
-                        JSONObject saved = new JSONObject(noteJson);
-                        if (redmineUrl.isEmpty() && saved.has("redmine_url"))
-                            redmineUrl = saved.getString("redmine_url");
-                        if (username.isEmpty() && saved.has("username"))
-                            username = saved.getString("username");
-                        if (password.isEmpty() && saved.has("password"))
-                            password = saved.getString("password");
+                        try {
+                            JSONObject saved = new JSONObject(noteJson);
+                            if (redmineUrl.isEmpty() && saved.has("redmine_url"))
+                                redmineUrl = saved.getString("redmine_url");
+                            if (username.isEmpty() && saved.has("username"))
+                                username = saved.getString("username");
+                            if (password.isEmpty() && saved.has("password"))
+                                password = saved.getString("password");
+                        } catch (Exception ignored) {
+                            Log.w(TAG, "Failed to parse tool remark, ignoring.");
+                        }
                     }
                 }
 
                 // 3. 验证必要参数
                 if (redmineUrl.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 redmine_url 参数，且未在备注中配置");
+                    throw new IllegalArgumentException("Missing required parameter: redmine_url");
                 }
                 if (username.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 username 参数，且未在备注中配置");
+                    throw new IllegalArgumentException("Missing required parameter: username");
                 }
                 if (password.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 password 参数，且未在备注中配置");
+                    throw new IllegalArgumentException("Missing required parameter: password");
                 }
 
                 // 4. 构建请求
@@ -161,19 +165,13 @@ public class SearchRedmineTasksTool implements Tool {
                 result.put("tasks", new JSONObject(resultStr));
                 result.put("status", "success");
                 result.put("searched_at", System.currentTimeMillis());
-                // 已完全删除该行，不再保留注释
 
                 callback.onResult(result);
 
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    callback.onResult(error);
-                } catch (Exception ignored) {}
+                // ✅ 修复：调用 onError 而不是 onResult，让 ToolManager 处理智能引导
+                callback.onError(e);
             }
         });
     }
