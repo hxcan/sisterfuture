@@ -171,9 +171,13 @@ public class GetRedmineTaskInfoTool implements Tool
       }
       catch (Exception e)
       {
-        Log.e(TAG, "执行出错", e);
+        // 🔍 [TOOL_ERROR_DEBUG] 记录工具执行失败的详细信息
+        Log.e(TAG, "🔧 [TOOL_EXEC_ERROR] 工具执行出错 | name=getRedmineTaskInfo | errorType=" + e.getClass().getSimpleName() + " | errorMsg=" + e.getMessage(), e);
+        
         // ✅ 修复：调用 onError 而不是 onResult，让 ToolManager 处理智能引导
+        Log.e(TAG, "🔧 [TOOL_CALLBACK_ERROR] 准备调用 callback.onError(...)");
         callback.onError(e);
+        Log.e(TAG, "🔧 [TOOL_CALLBACK_DONE] callback.onError 已调用");
       }
     });
   }
