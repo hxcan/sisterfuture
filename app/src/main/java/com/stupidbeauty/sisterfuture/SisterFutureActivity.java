@@ -1300,17 +1300,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                       postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
                     }
                   }
-                  public void onError(Exception e)
-                  {
-                    // 🔍 添加日志：异步工具失败回调
-                    FileLogger.e(TAG, "❌ [TOOL_ASYNC_ERROR] 异步工具失败 | id=" + toolCallId + " | name=" + toolName + " | error=" + e.getMessage());
-                    
-                    synchronized (pendingResults)
-                    {
-                      FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发，pendingResults 大小：" + pendingResults.size() + " / total=" + toolCallsArray.length());
-                      postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
-                    }
-                  }
                 });
               }
               else
