@@ -1318,25 +1318,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                       }
                     }
                   }
-                        wrapper.put("id", toolCallId);
-                        wrapper.put("name", toolName);
-                        wrapper.put("result", errorResult);
-                        pendingResults.put(toolCallId, wrapper);
-                        
-                        FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发 | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
-                        
-                        if (pendingResults.size() == toolCallsArray.length())
-                        {
-                          FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成（含错误），准备调用 postProcessToolResults");
-                          postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
-                        }
-                      }
-                      catch (Exception ex)
-                      {
-                        FileLogger.e(TAG, "❌ [TOOL_ERROR_WRAPPER_FAIL] 封装错误结果失败", ex);
-                      }
-                    }
-                  }
                 });
               }
               else
