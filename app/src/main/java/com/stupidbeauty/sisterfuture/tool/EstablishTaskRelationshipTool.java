@@ -18,7 +18,7 @@ import java.nio.charset.StandardCharsets;
  * 专注于通过 Redmine 的`/relations.json` API 端点创建'阻塞/被阻塞'关系。
  */
 public class EstablishTaskRelationshipTool implements Tool {
-    private static final String TAG = "EstabTaskRel"; // 修复：缩短 TAG 长度以满足 Lint 要求
+    private static final String TAG = "EstabTaskRel";
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -29,7 +29,7 @@ public class EstablishTaskRelationshipTool implements Tool {
 
     @Override
     public String getName() {
-        return "establish_task_relationship";
+        return "establishTaskRelationship";
     }
 
 
@@ -37,8 +37,8 @@ public class EstablishTaskRelationshipTool implements Tool {
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "establish_task_relationship");
-            functionDef.put("description", "在两个或多个 Redmine 任务之间建立阻塞关系，如任务 A 阻塞了任务 B。\n注意：此工具仅管理阻塞关系，不支持父子关系。\n使用`create_redmine_task`工具来创建具有父子关系的任务。");
+            functionDef.put("name", "establishTaskRelationship");
+            functionDef.put("description", "在两个或多个 Redmine 任务之间建立阻塞关系，如任务 A 阻塞了任务 B。\n注意：此工具仅管理阻塞关系，不支持父子关系。\n使用 `createRedmineTask` 工具来创建具有父子关系的任务。");
 
 
             JSONObject parameters = new JSONObject();
@@ -108,37 +108,22 @@ public class EstablishTaskRelationshipTool implements Tool {
                 String password = arguments.optString("password", "").trim();
 
 
-                // 2. 尝试从 update_redmine_issue 工具的备注恢复凭证
-                if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty()) {
-                    String noteJson = getNote(context, "update_redmine_issue");
-                    if (!noteJson.isEmpty()) {
-                        JSONObject saved = new JSONObject(noteJson);
-                        if (redmineUrl.isEmpty() && saved.has("redmine_url"))
-                            redmineUrl = saved.getString("redmine_url");
-                        if (username.isEmpty() && saved.has("username"))
-                            username = saved.getString("username");
-                        if (password.isEmpty() && saved.has("password"))
-                            password = saved.getString("password");
-                    }
-                }
-
-
-                // 3. 验证必要参数
+                // 2. 验证必要参数
                 if (taskId <= 0) {
                     throw new IllegalArgumentException("task_id 必须大于 0");
                 }
                 if (redmineUrl.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 redmine_url 参数，且无法从工具备注中恢复");
+                    throw new IllegalArgumentException("缺少 redmine_url 参数");
                 }
                 if (username.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 username 参数，且无法从工具备注中恢复");
+                    throw new IllegalArgumentException("缺少 username 参数");
                 }
                 if (password.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 password 参数，且无法从工具备注中恢复");
+                    throw new IllegalArgumentException("缺少 password 参数");
                 }
 
 
-                // 4. 构建请求体，直接调用 /issues/:issue_id/relations.json API 来创建关系
+                // 3. 构建请求体，直接调用 /issues/:issue_id/relations.json API 来创建关系
                 // 使用基本的 HttpURLConnection 实现 HTTP 请求
                 
                 // 创建被阻塞关系 (blocked_by_ids)
@@ -194,13 +179,8 @@ public class EstablishTaskRelationshipTool implements Tool {
 
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    callback.onResult(error);
-                } catch (Exception ignored) {}
+                // ✅ 修复：直接调用 onError，让 ToolManager 的 handleParameterError 统一处理
+                callback.onError(e);
             }
         });
     }
@@ -233,10 +213,9 @@ public class EstablishTaskRelationshipTool implements Tool {
     }
 
 
-    // 模拟从其他工具获取备注的方法
-    private String getNote(Context context, String toolName) {
-        // 此处应有实际逻辑从应用存储中读取指定工具的备注
-        // 为简化，返回空字符串
-        return "";
+    @Override
+    public String getDefaultSystemPromptEnhancement()
+    {
+        return "必须在用户明确要求建立 Redmine 任务之间的阻塞关系时才调用此工具。需要提供 redmine_url, username, password 等认证参数。注意：此工具仅管理阻塞关系，不支持父子关系。";
     }
 }
