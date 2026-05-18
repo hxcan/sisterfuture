@@ -212,66 +212,13 @@ public class CreateRedmineTaskTool implements Tool
               result.put("status", "success");
               result.put("created_task", new JSONObject(resultStr).getJSONObject("issue"));
               result.put("created_at", System.currentTimeMillis());
-              
-              // ✅ 新增：记录参数历史（成功调用后）
-              ToolParameterHistory history = new ToolParameterHistory();
-              if (history != null) {
-                  // 记录非敏感参数
-                  JSONObject paramsToRecord = new JSONObject();
-                  paramsToRecord.put("project_id", projectId);
-                  paramsToRecord.put("subject", subject);
-                  paramsToRecord.put("redmine_url", redmineUrl);
-                  paramsToRecord.put("username", username);
-                  // 不记录 password（敏感参数）
-                  history.recordSuccess("createRedmineTask", paramsToRecord);
-              }
-              
               callback.onResult(result);
           }
           catch (Exception e)
           {
               Log.e(TAG, "执行出错", e);
-              try
-              {
-                  JSONObject error = new JSONObject();
-                  error.put("status", "error");
-                  
-                  String errorMessage = e.getMessage();
-                  StringBuilder guidance = new StringBuilder();
-                  
-                  boolean isParamError = false;
-                  if (errorMessage != null) {
-                      String lowerMsg = errorMessage.toLowerCase();
-                      if (lowerMsg.contains("缺少") || 
-                          lowerMsg.contains("no value for") || 
-                          lowerMsg.contains("required") || 
-                          lowerMsg.contains("must be") ||
-                          lowerMsg.contains("empty") ||
-                          lowerMsg.contains("invalid type") ||
-                          lowerMsg.contains("argument")) {
-                          isParamError = true;
-                      }
-                  }
-                  
-                  if (isParamError) {
-                      guidance.append("\n\n💡 参数完整性要求：\n");
-                      guidance.append("在调用 createRedmineTask 工具时，必须仔细检查所有必需参数和可选参数的传递：\n");
-                      guidance.append("- **必需参数**：project_id, subject\n");
-                      guidance.append("- **认证参数**：redmine_url, username, password（建议从工具备注读取）\n");
-                      guidance.append("- **可选参数**：description, priority, tracker_id, parent_issue_id\n\n");
-                      guidance.append("💡 示例正确调用格式：\n");
-                      guidance.append("```\n{\n  \"redmine_url\": \"https://your-redmine.com\",\n  \"username\": \"your_username\",\n  \"password\": \"your_password\",\n  \"project_id\": 750160066086,\n  \"subject\": \"任务标题\",\n  \"description\": \"任务描述\",\n  \"priority\": \"Normal\",\n  \"tracker_id\": 2,\n  \"parent_issue_id\": 456\n}\n```\n\n**重要提醒**：每次调用前务必完整传递所有可获取的参数！\n");
-                      
-                      errorMessage += "\n" + guidance.toString();
-                  } else {
-                      errorMessage = errorMessage != null ? errorMessage : "未知错误";
-                  }
-                  
-                  error.put("message", errorMessage);
-                  error.put("type", e.getClass().getSimpleName());
-                  callback.onResult(error);
-              }
-              catch (Exception ignored) {}
+              // ✅ 修复：直接调用 onError，让 ToolManager 的 handleParameterError 统一处理
+              callback.onError(e);
           }
       });
   }
