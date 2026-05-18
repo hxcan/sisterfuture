@@ -18,7 +18,7 @@ import java.nio.charset.StandardCharsets;
  * 专注于通过 Redmine 的`/relations.json` API 端点创建'阻塞/被阻塞'关系。
  */
 public class EstablishTaskRelationshipTool implements Tool {
-    private static final String TAG = "EstabTaskRel"; // 修复：缩短 TAG 长度以满足 Lint 要求
+    private static final String TAG = "EstabTaskRel";
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -194,13 +194,8 @@ public class EstablishTaskRelationshipTool implements Tool {
 
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                try {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    callback.onResult(error);
-                } catch (Exception ignored) {}
+                // ✅ 修复：直接调用 onError，让 ToolManager 的 handleParameterError 统一处理
+                callback.onError(e);
             }
         });
     }
@@ -233,10 +228,9 @@ public class EstablishTaskRelationshipTool implements Tool {
     }
 
 
-    // 模拟从其他工具获取备注的方法
-    private String getNote(Context context, String toolName) {
-        // 此处应有实际逻辑从应用存储中读取指定工具的备注
-        // 为简化，返回空字符串
-        return "";
+    @Override
+    public String getDefaultSystemPromptEnhancement()
+    {
+        return "必须在用户明确要求建立 Redmine 任务之间的阻塞关系时才调用此工具。注意：此工具仅管理阻塞关系，不支持父子关系。使用 create_redmine_task 工具来创建具有父子关系的任务。";
     }
 }
