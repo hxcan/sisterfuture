@@ -341,19 +341,4 @@ public class UpdateRedmineIssueTool implements Tool
     {
         return "必须在用户明确要求更新 Redmine 任务信息时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持更新任务的多个属性，包括添加评论（notes）、修改父子关系（parent_issue_id）和任务依赖关系。";
     }
-    
-    // 获取工具备注
-    @Override
-    public String getNote(Context context)
-    {
-        try
-        {
-            android.content.SharedPreferences prefs = context.getSharedPreferences("tool_config", Context.MODE_PRIVATE);
-            return prefs.getString("updateRedmineIssue", "");
-        }
-        catch (Exception e)
-        {
-            return "";
-        }
-    }
 }
