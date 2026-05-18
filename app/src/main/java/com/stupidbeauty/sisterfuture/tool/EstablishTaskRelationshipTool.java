@@ -29,7 +29,7 @@ public class EstablishTaskRelationshipTool implements Tool {
 
     @Override
     public String getName() {
-        return "establish_task_relationship";
+        return "establishTaskRelationship";
     }
 
 
@@ -37,8 +37,8 @@ public class EstablishTaskRelationshipTool implements Tool {
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "establish_task_relationship");
-            functionDef.put("description", "在两个或多个 Redmine 任务之间建立阻塞关系，如任务 A 阻塞了任务 B。\n注意：此工具仅管理阻塞关系，不支持父子关系。\n使用`create_redmine_task`工具来创建具有父子关系的任务。");
+            functionDef.put("name", "establishTaskRelationship");
+            functionDef.put("description", "在两个或多个 Redmine 任务之间建立阻塞关系，如任务 A 阻塞了任务 B。\n注意：此工具仅管理阻塞关系，不支持父子关系。\n使用 `createRedmineTask` 工具来创建具有父子关系的任务。");
 
 
             JSONObject parameters = new JSONObject();
@@ -231,6 +231,6 @@ public class EstablishTaskRelationshipTool implements Tool {
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求建立 Redmine 任务之间的阻塞关系时才调用此工具。注意：此工具仅管理阻塞关系，不支持父子关系。使用 create_redmine_task 工具来创建具有父子关系的任务。";
+        return "必须在用户明确要求建立 Redmine 任务之间的阻塞关系时才调用此工具。注意：此工具仅管理阻塞关系，不支持父子关系。使用 createRedmineTask 工具来创建具有父子关系的任务。";
     }
 }
