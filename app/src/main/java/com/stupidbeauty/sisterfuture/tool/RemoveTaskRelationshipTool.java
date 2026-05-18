@@ -40,8 +40,8 @@ public class RemoveTaskRelationshipTool implements Tool {
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             JSONObject props = new JSONObject();
-            props.put("task_id", new JSONObject().put("type", "integer").put("description", "目标任务的 ID"));
-            props.put("relation_id", new JSONObject().put("type", "integer").put("description", "要删除的关系 ID（可选）"));
+            props.put("task_id", new JSONObject().put("type", "long").put("description", "目标任务的 ID（支持长整型，如 JoyMan 生成的 750160066086）"));
+            props.put("relation_id", new JSONObject().put("type", "long").put("description", "要删除的关系 ID（可选）"));
             props.put("redmine_url", new JSONObject().put("type", "string").put("description", "Redmine 实例 URL"));
             props.put("username", new JSONObject().put("type", "string").put("description", "用户名"));
             props.put("password", new JSONObject().put("type", "string").put("description", "密码"));
@@ -65,8 +65,9 @@ public class RemoveTaskRelationshipTool implements Tool {
     public void executeAsync(@NonNull JSONObject args, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
             try {
-                int taskId = args.getInt("task_id");
-                int relationId = args.optInt("relation_id", -1);
+                // ✅ 修复：使用 long 类型处理 task_id（JoyMan 生成的任务 ID 是长整型）
+                long taskId = args.getLong("task_id");
+                long relationId = args.optLong("relation_id", -1);
                 String redmineUrl = args.optString("redmine_url", "").trim();
                 String username = args.optString("username", "").trim();
                 String password = args.optString("password", "").trim();
@@ -85,7 +86,7 @@ public class RemoveTaskRelationshipTool implements Tool {
                 } else {
                     JSONArray relations = getRelations(redmineUrl, taskId, username, password);
                     for (int i = 0; i < relations.length(); i++) {
-                        int relId = relations.getJSONObject(i).getInt("id");
+                        long relId = relations.getJSONObject(i).getLong("id");
                         try {
                             deleteRelation(redmineUrl, taskId, relId, username, password);
                             deletedCount++;
@@ -111,7 +112,7 @@ public class RemoveTaskRelationshipTool implements Tool {
         });
     }
 
-    private JSONArray getRelations(String url, int taskId, String user, String pass) throws Exception {
+    private JSONArray getRelations(String url, long taskId, String user, String pass) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url + "/issues/" + taskId + "/relations.json").openConnection();
         conn.setRequestMethod("GET");
         conn.setRequestProperty("Authorization", "Basic " + Base64.encodeToString((user + ":" + pass).getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP));
@@ -124,7 +125,7 @@ public class RemoveTaskRelationshipTool implements Tool {
         return new JSONObject(resp.toString()).optJSONArray("relations");
     }
 
-    private void deleteRelation(String url, int taskId, int relationId, String user, String pass) throws Exception {
+    private void deleteRelation(String url, long taskId, long relationId, String user, String pass) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url + "/issues/" + taskId + "/relations/" + relationId + ".json").openConnection();
         conn.setRequestMethod("DELETE");
         conn.setRequestProperty("Authorization", "Basic " + Base64.encodeToString((user + ":" + pass).getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP));
@@ -135,6 +136,6 @@ public class RemoveTaskRelationshipTool implements Tool {
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求删除 Redmine 任务之间的阻塞关系时才调用此工具。需要提供 task_id 参数，以及 redmine_url, username, password 等认证参数。";
+        return "必须在用户明确要求删除 Redmine 任务之间的阻塞关系时才调用此工具。需要提供 task_id 参数（支持长整型，如 JoyMan 生成的 750160066086），以及 redmine_url, username, password 等认证参数。";
     }
 }
