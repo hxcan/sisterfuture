@@ -214,7 +214,7 @@ public class CreateRedmineTaskTool implements Tool
               result.put("created_at", System.currentTimeMillis());
               
               // ✅ 新增：记录参数历史（成功调用后）
-              ToolParameterHistory history = ToolParameterHistory.getInstance(context);
+              ToolParameterHistory history = new ToolParameterHistory();
               if (history != null) {
                   // 记录非敏感参数
                   JSONObject paramsToRecord = new JSONObject();
@@ -296,7 +296,8 @@ public class CreateRedmineTaskTool implements Tool
   }
   
   // 获取工具备注
-  private String getNote(Context context)
+  @Override
+  public String getNote(Context context)
   {
       try
       {
