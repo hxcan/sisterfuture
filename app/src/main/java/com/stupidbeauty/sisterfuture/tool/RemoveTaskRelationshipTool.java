@@ -12,6 +12,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
+
 /**
  * 工具类：删除 Redmine 任务之间的阻塞关系
  */
@@ -26,14 +27,14 @@ public class RemoveTaskRelationshipTool implements Tool {
 
     @Override
     public String getName() {
-        return "remove_task_relationship";
+        return "removeTaskRelationship";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "remove_task_relationship");
+            functionDef.put("name", "removeTaskRelationship");
             functionDef.put("description", "删除 Redmine 任务之间的阻塞关系。支持通过 relation_id 删除指定关系，或批量删除某任务的所有阻塞关系。");
 
             JSONObject parameters = new JSONObject();
@@ -104,9 +105,8 @@ public class RemoveTaskRelationshipTool implements Tool {
                 callback.onResult(result);
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                try {
-                    callback.onResult(new JSONObject().put("status", "error").put("message", e.getMessage()));
-                } catch (Exception ignored) {}
+                // ✅ 修复：直接调用 onError，让 ToolManager 的 handleParameterError 统一处理
+                callback.onError(e);
             }
         });
     }
@@ -132,5 +132,9 @@ public class RemoveTaskRelationshipTool implements Tool {
         conn.disconnect();
     }
 
-    private String getNote(Context ctx, String tool) { return ""; }
+    @Override
+    public String getDefaultSystemPromptEnhancement()
+    {
+        return "必须在用户明确要求删除 Redmine 任务之间的阻塞关系时才调用此工具。需要提供 task_id 参数，以及 redmine_url, username, password 等认证参数。";
+    }
 }
