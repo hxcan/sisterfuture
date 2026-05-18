@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
 /**
  * 工具类：更新 Redmine 任务信息
  * 本工具基于 Redmine API 的 'Updating an issue' 接口，用于更新任务的任意属性。
@@ -312,16 +313,8 @@ public class UpdateRedmineIssueTool implements Tool
             catch (Exception e)
             {
                 Log.e(TAG, "执行出错", e);
-                try
-                {
-                    JSONObject error = new JSONObject();
-                    error.put("status", "error");
-                    error.put("message", e.getMessage());
-                    error.put("type", e.getClass().getSimpleName());
-                    callback.onResult(error);
-                }
-                catch (Exception ignored)
-                {}
+                // ✅ 修复：直接调用 onError，让 ToolManager 的 handleParameterError 统一处理
+                callback.onError(e);
             }
         });
     }
