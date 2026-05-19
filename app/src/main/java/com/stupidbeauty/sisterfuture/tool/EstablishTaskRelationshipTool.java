@@ -18,17 +18,15 @@ import com.stupidbeauty.sisterfuture.utils.FileLogger;
  * 专注于通过 Redmine 的 `/relations.json` API 端点创建'阻塞/被阻塞'关系。
  * 
  * @author 太极美术工程狮狮长
- * @version 2.0.5 - 使用 FileLogger 输出日志到文件
+ * @version 2.0.6 - 修正 FileLogger 为静态方法调用
  */
 public class EstablishTaskRelationshipTool implements Tool {
     private static final String TAG = "EstabTaskRel";
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final FileLogger fileLogger;
 
     public EstablishTaskRelationshipTool(Context context) {
         this.context = context;
-        this.fileLogger = FileLogger.getInstance();
     }
 
 
@@ -81,7 +79,7 @@ public class EstablishTaskRelationshipTool implements Tool {
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
-            fileLogger.error(TAG, "Failed to build definition", e);
+            FileLogger.e(TAG, "Failed to build definition", e);
             return new JSONObject();
         }
     }
@@ -146,9 +144,9 @@ public class EstablishTaskRelationshipTool implements Tool {
 
 
                             // 发起 POST 请求
-                            fileLogger.debug(TAG, "🚀 创建关系：" + taskId + " blocked_by " + blockerId);
+                            FileLogger.d(TAG, "🚀 创建关系：" + taskId + " blocked_by " + blockerId);
                             sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", username, password, requestBody.toString());
-                            fileLogger.debug(TAG, "✅ 关系创建成功：" + blockerId);
+                            FileLogger.d(TAG, "✅ 关系创建成功：" + blockerId);
                         }
                     }
                 }
@@ -169,9 +167,9 @@ public class EstablishTaskRelationshipTool implements Tool {
 
 
                             // 发起 POST 请求
-                            fileLogger.debug(TAG, "🚀 创建关系：" + taskId + " blocks " + blockedId);
+                            FileLogger.d(TAG, "🚀 创建关系：" + taskId + " blocks " + blockedId);
                             sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", username, password, requestBody.toString());
-                            fileLogger.debug(TAG, "✅ 关系创建成功：" + blockedId);
+                            FileLogger.d(TAG, "✅ 关系创建成功：" + blockedId);
                         }
                     }
                 }
@@ -186,11 +184,11 @@ public class EstablishTaskRelationshipTool implements Tool {
                 result.put("blocking_count", blockingIds != null ? blockingIds.length() : 0);
 
 
-                fileLogger.info(TAG, "✅ 执行完成：task_id=" + taskId + ", blocked_by_count=" + result.getInt("blocked_by_count") + ", blocking_count=" + result.getInt("blocking_count"));
+                FileLogger.i(TAG, "✅ 执行完成：task_id=" + taskId + ", blocked_by_count=" + result.getInt("blocked_by_count") + ", blocking_count=" + result.getInt("blocking_count"));
                 callback.onResult(result);
 
             } catch (Exception e) {
-                fileLogger.error(TAG, "❌ 执行出错：" + e.getMessage(), e);
+                FileLogger.e(TAG, "❌ 执行出错：" + e.getMessage(), e);
                 // ✅ 修复：直接调用 onError，让 ToolManager 的 handleParameterError 统一处理
                 callback.onError(e);
             }
@@ -207,8 +205,8 @@ public class EstablishTaskRelationshipTool implements Tool {
      * @throws Exception 如果 HTTP 请求失败
      */
     private void sendPostRequest(String urlString, String username, String password, String body) throws Exception {
-        fileLogger.debug(TAG, "📡 发送 POST 请求到：" + urlString);
-        fileLogger.debug(TAG, "📝 请求体：" + body);
+        FileLogger.d(TAG, "📡 发送 POST 请求到：" + urlString);
+        FileLogger.d(TAG, "📝 请求体：" + body);
         
         URL url = new URL(urlString);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -226,7 +224,7 @@ public class EstablishTaskRelationshipTool implements Tool {
 
         // 检查响应码
         int responseCode = connection.getResponseCode();
-        fileLogger.debug(TAG, "📊 响应码：" + responseCode);
+        FileLogger.d(TAG, "📊 响应码：" + responseCode);
         
         if (responseCode != 201) { // 201 Created
             throw new RuntimeException("HTTP 请求失败，响应码：" + responseCode + ", URL: " + urlString);
@@ -234,7 +232,7 @@ public class EstablishTaskRelationshipTool implements Tool {
 
 
         connection.disconnect();
-        fileLogger.debug(TAG, "✅ 请求完成");
+        FileLogger.d(TAG, "✅ 请求完成");
     }
 
 
