@@ -35,7 +35,7 @@ import javax.net.ssl.X509TrustManager;
  * - limit: 官方默认 30 (本工具采用此值)
  * - offset: 用于分页
  * - include: 可选关联数据 (trackers, issue_categories 等)
- * - ❌ status 参数不存在! (只有 issues 支持)
+ * - ❌ status 参数不存在！(只有 issues 支持)
  * 
  * @author 未来姐姐
  */
@@ -434,7 +434,8 @@ public class ListRedmineProjectsTool implements Tool {
                     
                     error.put("suggestion", smartSuggestion + "\n\n原始建议：请检查：\n1. Redmine URL 是否正确\n2. 用户名和密码是否有效\n3. 网络连接是否正常\n4. 若仍失败，请将此错误报告发给开发者进行进一步诊断\n\nDebug Info:\n- Official Redmine API does not support 'status' parameter for /projects.json!\n- Using official default limit=30\n- Auto-pagination enabled if total_count > limit");
                     
-                    callback.onResult(error);
+                    // ✅ 修复：调用 onError(e) 而非 onResult(error)，让 ToolManager 注入历史值推荐
+                    callback.onError(e);
                 } catch (Exception ignored) {}
             }
         });
