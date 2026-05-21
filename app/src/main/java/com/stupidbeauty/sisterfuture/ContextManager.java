@@ -1,7 +1,11 @@
 package com.stupidbeauty.sisterfuture;
 
 import com.stupidbeauty.codeposition.CodePosition;
+import java.io.File;
 import java.io.FileDescriptor;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.BufferedReader;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -12,7 +16,6 @@ import java.io.IOException;
 import butterknife.OnClick;
 import com.iflytek.cloud.SpeechRecognizer;
 import android.content.Context;
-import android.content.SharedPreferences;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
@@ -28,52 +31,89 @@ import java.util.UUID;
 public class ContextManager
 {
   private static final String TAG = "ContextManager";
-  private static final String PREF_NAME = "context_manager";
+  private static final String CONTEXT_FILE_NAME = "conversation_context.json";
   private static final String KEY_HISTORY = "history";
+  private static final String KEY_MAX_ROUNDS = "current_max_rounds";
   private static final int INITIAL_MAX_ROUNDS = 5;
-  private SharedPreferences sharedPreferences;
+  
+  private Context context;
+  private File contextFile;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
   private int MAX_ARGUMENTS_STR_LENGTH = 226810;
   
-  // ✅ 新增：内存中的历史列表（唯一真相源）
+  // ✅ 内存中的历史列表（唯一真相源）
   private List<JSONObject> memoryHistory;
   
-  // 🔗 新增：预留的消息 ID 集合（用于追踪尚未确认的消息）
+  // 🔗 预留的消息 ID 集合（用于追踪尚未确认的消息）
   private Set<String> reservedMessageIds = new HashSet<>();
 
   public ContextManager(Context context)
   {
-    sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-    currentMaxRounds = sharedPreferences.getInt("current_max_rounds", INITIAL_MAX_ROUNDS);
+    this.context = context;
     
-    // ✅ 启动时从 SP 加载到内存
-    loadHistoryFromSharedPreferences();
+    // ✅ 初始化 JSON 文件路径
+    contextFile = new File(context.getFilesDir(), CONTEXT_FILE_NAME);
     
-    cleanupInvalidToolCallsOnStartup();
+    // ✅ 从 JSON 文件加载历史到内存
+    loadHistoryFromFile();
   }
 
-  // ✅ 新增：从 SP 加载历史到内存
-  private void loadHistoryFromSharedPreferences()
+  // ✅ 从 JSON 文件加载历史到内存
+  private void loadHistoryFromFile()
   {
-    String historyStr = sharedPreferences.getString(KEY_HISTORY, "");
-    
-    if (historyStr.isEmpty())
+    if (!contextFile.exists())
     {
       memoryHistory = new ArrayList<>();
-      FileLogger.d(TAG, "📥 [LOAD] 从 SharedPreferences 加载历史：空");
+      FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：文件不存在，空历史");
       return;
     }
     
     try
     {
-      JSONArray array = new JSONArray(historyStr);
-      memoryHistory = new ArrayList<>();
-      
-      for (int i = 0; i < array.length(); i++)
+      BufferedReader reader = new BufferedReader(new FileReader(contextFile));
+      StringBuilder sb = new StringBuilder();
+      String line;
+      while ((line = reader.readLine()) != null)
       {
-        memoryHistory.add(array.getJSONObject(i));
+        sb.append(line);
       }
-    }// try
+      reader.close();
+      
+      String fileContent = sb.toString();
+      if (fileContent.isEmpty())
+      {
+        memoryHistory = new ArrayList<>();
+        FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：空文件");
+        return;
+      }
+      
+      JSONObject rootObj = new JSONObject(fileContent);
+      
+      // 读取 max_rounds
+      if (rootObj.has(KEY_MAX_ROUNDS))
+      {
+        currentMaxRounds = rootObj.getInt(KEY_MAX_ROUNDS);
+      }
+      
+      // 读取 history
+      if (rootObj.has(KEY_HISTORY))
+      {
+        JSONArray array = rootObj.getJSONArray(KEY_HISTORY);
+        memoryHistory = new ArrayList<>();
+        
+        for (int i = 0; i < array.length(); i++)
+        {
+          memoryHistory.add(array.getJSONObject(i));
+        }
+        
+        FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：" + memoryHistory.size() + " 条");
+      }
+      else
+      {
+        memoryHistory = new ArrayList<>();
+        FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：无 history 字段");
+      }
+    }
     catch (Exception e)
     {
       FileLogger.e(TAG, "❌ [LOAD] 加载历史失败：" + e.getMessage(), e);
@@ -86,73 +126,6 @@ public class ContextManager
     int rangeMaximal = 1890;
     int rangeMinimal= 0;
     return true;
-  }
-
-  private void cleanupInvalidToolCallsOnStartup()
-  {
-    if (memoryHistory == null || memoryHistory.isEmpty())
-    {
-      FileLogger.d(TAG, "🧹 [CLEANUP] 内存历史为空，跳过清理");
-      return;
-    }
-    
-    int invalidCount = 0;
-    int blankAssistantCount = 0;
-    List<JSONObject> validHistory = new ArrayList<>();
-    
-    try
-    {
-      // 🔍 遍历原始 memoryHistory，过滤无效消息
-      for (int i = 0; i < memoryHistory.size(); i++)
-      {
-        JSONObject currentObject = memoryHistory.get(i);
-        
-        String role = currentObject.optString("role", "");
-        String content = currentObject.optString("content", "");
-        boolean hasToolCalls = currentObject.has("tool_calls");
-        
-        if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
-        {
-          blankAssistantCount++;
-          continue;
-        }
-
-        if ((!(inDebugMessageIndexRange(i))) && (hasToolCalls))
-        {
-          continue;
-        }
-        
-        if (!isValidToolCallMessage(currentObject))
-        {
-          invalidCount++;
-          FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，已过滤");
-          FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " is invalid, invalidCount=" + invalidCount);
-          // 无效消息不加入 validHistory
-          continue;
-        }
-        
-        // 有效消息加入 validHistory
-        validHistory.add(currentObject);
-      }
-      
-      // ✅ 对过滤后的 validHistory 进行 normalize 处理
-      List<JSONObject> normalizedHistory = normalizeToolCallMessages(validHistory, false);
-      
-      // ✅ 只有当有变化时才保存
-      if (invalidCount > 0 || blankAssistantCount > 0 || normalizedHistory.size() != memoryHistory.size())
-      {
-        saveHistory(normalizedHistory);
-        FileLogger.i(TAG, "🧹 [CLEANUP] 清理完成 | 无效消息：" + invalidCount + " | 空白助手消息：" + blankAssistantCount + " | 新历史：" + normalizedHistory.size() + " 条");
-      }
-      else
-      {
-        FileLogger.d(TAG, "🧹 [CLEANUP] 无需清理，历史保持原样");
-      }
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "[Startup cleanup] Error: " + e.getMessage(), e);
-    }
   }
 
   private List<JSONObject> removeOldHistoryEntries(List<JSONObject> oldHistory)
@@ -217,7 +190,7 @@ public class ContextManager
     addMessage("assistant", message);
   }
   
-  // 🔗 新增：带 messageId 的 addAssistantMessage 重载
+  // 🔗 带 messageId 的 addAssistantMessage 重载
   public void addAssistantMessage(String message, String messageId)
   {
     JSONObject msg = createMessage("assistant", message);
@@ -265,7 +238,7 @@ public class ContextManager
             JSONObject function = toolCall.getJSONObject("function");
             if (function.has("arguments"))
             {
-                            // 🔧 #774530570947 重构：委托给 isValidToolCallMessage 进行验证
+              // 委托给 isValidToolCallMessage 进行验证
               if (!isValidToolCallMessage(message))
               {
                 FileLogger.w(TAG, "[addRawMessage] Skip: invalid tool call message");
@@ -294,9 +267,8 @@ public class ContextManager
   }
   
   
-  
   /**
-   * 🔧 #763065048722 新增：检查 JSON 语法完整性
+   * 检查 JSON 语法完整性
    * 检测括号匹配，引号闭合等基本语法结构
    */
   private boolean isJsonSyntaxComplete(String jsonStr)
@@ -385,16 +357,16 @@ public class ContextManager
   {
     // Step 1: Remove all properly quoted strings (including escaped quotes)
     String withoutQuotedStrings = jsonStr.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", "\"\"");
-    
+
     // Step 2: Look for pattern: : followed by whitespace and an identifier
     // Identifiers start with letter/underscore, followed by alphanumeric/underscore
     Pattern pattern = Pattern.compile(":\\s*([a-zA-Z_][a-zA-Z0-9_]*)");
     Matcher matcher = pattern.matcher(withoutQuotedStrings);
-    
+
     while (matcher.find())
     {
       String identifier = matcher.group(1);
-      
+
       // Step 3: Check if it's NOT a valid JSON keyword
       if (!identifier.equals("true") && 
           !identifier.equals("false") && 
@@ -420,19 +392,19 @@ public class ContextManager
     return new JSONArray(history);
   }
 
-  // ✅ 修改：直接返回内存中的历史列表（唯一真相源）
+  // ✅ 直接返回内存中的历史列表（唯一真相源）
   public List<JSONObject> getHistory()
   {
     if (memoryHistory == null)
     {
       FileLogger.w(TAG, "⚠️ [GET] 内存历史未初始化，重新加载");
-      loadHistoryFromSharedPreferences();
+      loadHistoryFromFile();
     }
 
     return memoryHistory;
   }
   
-  // 🔗 新增：生成并预留一个消息 ID
+  // 🔗 生成并预留一个消息 ID
   public String reserveMessageId()
   {
     String messageId = generateMessageId();
@@ -440,8 +412,8 @@ public class ContextManager
     FileLogger.d(TAG, "🔖 [RESERVE] 预留消息 ID | id=" + messageId + " | 当前预留数=" + reservedMessageIds.size());
     return messageId;
   }
- 
-  // 🔗 新增：丢弃未使用的预留 ID（当消息被丢弃时调用）
+
+  // 🔗 丢弃未使用的预留 ID（当消息被丢弃时调用）
   public void discardReservedMessageId(String messageId)
   {
     if (messageId != null && reservedMessageIds.remove(messageId))
@@ -450,7 +422,7 @@ public class ContextManager
     }
   }
   
-  // 🔗 新增：检查某个 ID 是否是预留中的 ID
+  // 🔗 检查某个 ID 是否是预留中的 ID
   public boolean isReservedMessageId(String messageId)
   {
     return reservedMessageIds.contains(messageId);
@@ -481,7 +453,7 @@ public class ContextManager
           if (function.has("arguments"))
           {
             String argumentsStr = function.getString("arguments");
-            // 🔧 #774530570947 新增：严格检查 JSON 对象开头，拦截非法结构如 {5LiU..."path": ...}
+            // 严格检查 JSON 对象开头，拦截非法结构如 {5LiU..."path": ...}
             String trimmedArgs = argumentsStr.trim();
             if (trimmedArgs.startsWith("{"))
             {
@@ -496,7 +468,7 @@ public class ContextManager
               }
             }
 
-            // 🔧 #774530570947 新增：使用 Gson 进行额外验证（仅用于调试，不作为判定依据）
+            // 使用 Gson 进行额外验证（仅用于调试，不作为判定依据）
             try
             {
               com.google.gson.Gson gson = new com.google.gson.Gson();
@@ -518,7 +490,7 @@ public class ContextManager
             }
 
             FileLogger.d(TAG, "[DEBUG_JSON_VALIDATION_LOAD] Checking isJsonSyntaxComplete...");
-            // 🔧 #763065048722 新增：严格语法完整性检查
+            // 严格语法完整性检查
             if (!isJsonSyntaxComplete(argumentsStr))
             {
               FileLogger.d(TAG, "[isValidToolCallMessage] Invalid: syntax incomplete");
@@ -589,7 +561,7 @@ public class ContextManager
     {
       JSONObject pendingToolCallsObject = null;
       List<String> matchedToolCallIds = new ArrayList<>();
-      // ✅ 新增：暂存匹配的 tool 消息
+      // 暂存匹配的 tool 消息
       List<JSONObject> matchedToolMessages = new ArrayList<>();
       for (int i = 0; i < history.size(); i++)
       {
@@ -628,12 +600,12 @@ public class ContextManager
             }
             if (matched)
             {
-              // ✅ 暂存匹配的 tool 消息
+              // 暂存匹配的 tool 消息
               matchedToolMessages.add(currentObject);
               
               if (matchedToolCallIds.size() == pendingToolCallsObject.getJSONArray("tool_calls").length())
               {
-                // ✅ 所有 tool 都匹配完成，按顺序添加
+                // 所有 tool 都匹配完成，按顺序添加
                 list.add(pendingToolCallsObject);  // 先添加 assistant
                 list.addAll(matchedToolMessages);  // 再添加所有 tool 消息
                 pendingToolCallsObject = null;
@@ -657,7 +629,7 @@ public class ContextManager
         list.add(currentObject);
       }
       
-      // 🔍 #759909257401 严厉模式：移除所有未匹配的 assistant+tool_calls 消息
+      // 严厉模式：移除所有未匹配的 assistant+tool_calls 消息
       if (strictMode && pendingToolCallsObject != null)
       {
         cleanedCount = removePendingAssistantMessages(list, pendingToolCallsObject);
@@ -665,7 +637,7 @@ public class ContextManager
         FileLogger.i(TAG, "🗑️ [CLEANED] 共清理 " + cleanedCount + " 条未完成的工具调用消息");
         FileLogger.i(TAG, "📝 [INFO] 当前历史长度：" + list.size());
         
-        // ✅ 严厉模式下需要显式保存清理后的历史
+        // 严厉模式下需要显式保存清理后的历史
         saveHistory(list);
       }
       else if (pendingToolCallsObject != null)
@@ -674,7 +646,7 @@ public class ContextManager
         FileLogger.w(TAG, "[normalizeToolCallMessages] Pending assistant with tool_calls added at end, but some tool messages may be missing");
       }
       
-      // 🔍 新增：记录输出历史的统计信息（精简版）
+      // 记录输出历史的统计信息（精简版）
       int userMessageCount = 0;
       int preservedMultimodalCount = 0;
       for (int i = 0; i < list.size(); i++)
@@ -754,20 +726,26 @@ public class ContextManager
     saveHistory(newHistory);
   }
 
-  // ✅ 修改：同时更新内存和 SP，内存是唯一真相源
+  // ✅ 同时更新内存和 JSON 文件，内存是唯一真相源
   private void saveHistory(List<JSONObject> history)
   {
     // 1. 更新内存（唯一真相源）
     memoryHistory = new ArrayList<>(history);
 
-    // 2. 异步保存到 SP（持久化）
+    // 2. 同步保存到 JSON 文件（持久化）
     try
     {
-      JSONArray historyArray = new JSONArray(history);
-      sharedPreferences.edit()
-          .putString(KEY_HISTORY, historyArray.toString())
-          .putInt("current_max_rounds", currentMaxRounds)
-          .apply();  // apply()异步没关系，因为读取的是内存
+      JSONObject rootObj = new JSONObject();
+      rootObj.put(KEY_HISTORY, new JSONArray(history));
+      rootObj.put(KEY_MAX_ROUNDS, currentMaxRounds);
+      
+      // 使用 FileWriter 写入，保持 UTF-8 编码
+      FileWriter writer = new FileWriter(contextFile);
+      writer.write(rootObj.toString());
+      writer.flush();
+      writer.close();
+      
+      FileLogger.d(TAG, "💾 [SAVE] 已保存历史到 JSON 文件：" + history.size() + " 条");
     }
     catch (Exception e)
     {
