@@ -9,6 +9,8 @@ import java.io.BufferedReader;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -27,6 +29,8 @@ import java.util.regex.Matcher;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ContextManager
 {
@@ -47,6 +51,10 @@ public class ContextManager
   // 🔗 预留的消息 ID 集合（用于追踪尚未确认的消息）
   private Set<String> reservedMessageIds = new HashSet<>();
 
+  // ✅ 异步写入 executor
+  private final ExecutorService writeExecutor = Executors.newSingleThreadExecutor();
+  private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
   public ContextManager(Context context)
   {
     this.context = context;
@@ -54,11 +62,11 @@ public class ContextManager
     // ✅ 初始化 JSON 文件路径
     contextFile = new File(context.getFilesDir(), CONTEXT_FILE_NAME);
     
-    // ✅ 从 JSON 文件加载历史到内存
+    // ✅ 从 JSON 文件加载历史到内存（同步读取）
     loadHistoryFromFile();
   }
 
-  // ✅ 从 JSON 文件加载历史到内存
+  // ✅ 从 JSON 文件加载历史到内存（同步读取）
   private void loadHistoryFromFile()
   {
     if (!contextFile.exists())
@@ -409,7 +417,7 @@ public class ContextManager
   {
     String messageId = generateMessageId();
     reservedMessageIds.add(messageId);
-    FileLogger.d(TAG, "🔖 [RESERVE] 预留消息 ID | id=" + messageId + " | 当前预留数=" + reservedMessageIds.size());
+    FileLogger.d(TAG, "🔖 [RESERVE] 预留消息 ID | id=" + messageId + " | 当���预留数=" + reservedMessageIds.size());
     return messageId;
   }
 
@@ -726,31 +734,36 @@ public class ContextManager
     saveHistory(newHistory);
   }
 
-  // ✅ 同时更新内存和 JSON 文件，内存是唯一真相源
+  // ✅ 内存同步更新 + 异步写入文件（与 SP 的 .apply() 行为一致）
   private void saveHistory(List<JSONObject> history)
   {
-    // 1. 更新内存（唯一真相源）
+    // 1. 同步更新内存（唯一真相源）
     memoryHistory = new ArrayList<>(history);
 
-    // 2. 同步保存到 JSON 文件（持久化）
-    try
-    {
-      JSONObject rootObj = new JSONObject();
-      rootObj.put(KEY_HISTORY, new JSONArray(history));
-      rootObj.put(KEY_MAX_ROUNDS, currentMaxRounds);
-      
-      // 使用 FileWriter 写入，保持 UTF-8 编码
-      FileWriter writer = new FileWriter(contextFile);
-      writer.write(rootObj.toString());
-      writer.flush();
-      writer.close();
-      
-      FileLogger.d(TAG, "💾 [SAVE] 已保存历史到 JSON 文件：" + history.size() + " 条");
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [SAVE] 保存历史失败：" + e.getMessage(), e);
-    }
+    // 2. 异步写入 JSON 文件（持久化）
+    final List<JSONObject> historyCopy = new ArrayList<>(history);
+    final int maxRoundsCopy = currentMaxRounds;
+    
+    writeExecutor.execute(() -> {
+      try
+      {
+        JSONObject rootObj = new JSONObject();
+        rootObj.put(KEY_HISTORY, new JSONArray(historyCopy));
+        rootObj.put(KEY_MAX_ROUNDS, maxRoundsCopy);
+        
+        // 同步写入文件（已在后台线程）
+        FileWriter writer = new FileWriter(contextFile);
+        writer.write(rootObj.toString());
+        writer.flush();
+        writer.close();
+        
+        FileLogger.d(TAG, "💾 [ASYNC_SAVE] 已异步保存历史到 JSON 文件：" + historyCopy.size() + " 条");
+      }
+      catch (Exception e)
+      {
+        FileLogger.e(TAG, "❌ [ASYNC_SAVE] 异步保存历史失败：" + e.getMessage(), e);
+      }
+    });
   }
 
   private JSONObject createMessage(String role, String content)
