@@ -10,11 +10,12 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
 /**
- * 工具类：获取Redmine任务列表
+ * 工具类：获取 Redmine 任务列表
  * 专门用于列出特定项目或全部项目的任务列表
- * 使用/issues.json接口，符合官方API规范
- * 支持分页、project_id过滤和缓存机制
+ * 使用/issues.json 接口，符合官方 API 规范
+ * 支持分页、project_id 过滤和缓存机制
  * @author 未来姐姐
  */
 public class GetIssuesListTool implements Tool {
@@ -28,14 +29,14 @@ public class GetIssuesListTool implements Tool {
 
     @Override
     public String getName() {
-        return "get_issues_list";
+        return "getIssuesList";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "get_issues_list");
+            functionDef.put("name", "getIssuesList");
             functionDef.put("description", "获取 Redmine 中指定项目或全部项目的任务列表。使用 /issues.json 接口，支持分页和项目过滤。");
 
             JSONObject parameters = new JSONObject();
@@ -52,13 +53,13 @@ public class GetIssuesListTool implements Tool {
                     .put("description", "登录密码"))
                 .put("project_id", new JSONObject()
                     .put("type", "long")
-                    .put("description", "可选：项目ID，用于查询特定项目的任务列表（支持64位长整数）"))
+                    .put("description", "可选：项目 ID，用于查询特定项目的任务列表（支持 64 位长整数）"))
                 .put("limit", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "每页数量，默认25"))
+                    .put("description", "每页数量，默认 25"))
                 .put("offset", new JSONObject()
                     .put("type", "integer")
-                    .put("description", "偏移量，默认0"))
+                    .put("description", "偏移量，默认 0"))
             );
             parameters.put("required", new JSONArray(new String[]{"redmine_url", "username", "password"}));
             functionDef.put("parameters", parameters);
@@ -137,7 +138,7 @@ public class GetIssuesListTool implements Tool {
                 Response response = client.newCall(request).execute();
 
                 if (!response.isSuccessful()) {
-                    throw new IOException("请求失败: " + response.code() + " " + response.message());
+                    throw new IOException("请求失败：" + response.code() + " " + response.message());
                 }
 
                 ResponseBody body = response.body();
@@ -159,9 +160,8 @@ public class GetIssuesListTool implements Tool {
                     error.put("status", "error");
                     error.put("message", e.getMessage());
                     error.put("type", e.getClass().getSimpleName());
-                    // 新增提示字段：引导用户检查工具备注中的配置
-                    error.put("suggestion", "请检查本工具的备注中是否已有有效的 redmine_url、username 和 password 配置。");
-                    callback.onResult(error); // 使用 onResult 而非 onError，确保 JSON 返回
+                    // ✅ 修复：调用 onError(e) 而非 onResult(error)，让 ToolManager 注入历史值推荐
+                    callback.onError(e);
                 } catch (Exception ignored) {}
             }
         });
@@ -170,6 +170,6 @@ public class GetIssuesListTool implements Tool {
     // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求获取Redmine任务列表时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取redmine_url、username和password配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为fallback。严禁工具自行验证JSON格式，这是助手的责任。";
+        return "必须在用户明确要求获取 Redmine 任务列表时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。";
     }
 }
