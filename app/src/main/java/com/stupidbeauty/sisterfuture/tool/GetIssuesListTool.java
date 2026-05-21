@@ -29,14 +29,14 @@ public class GetIssuesListTool implements Tool {
 
     @Override
     public String getName() {
-        return "get_issues_list";
+        return "getIssuesList";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "get_issues_list");
+            functionDef.put("name", "getIssuesList");
             functionDef.put("description", "获取 Redmine 中指定项目或全部项目的任务列表。使用 /issues.json 接口，支持分页和项目过滤。");
 
             JSONObject parameters = new JSONObject();
