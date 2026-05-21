@@ -18,6 +18,7 @@ import java.io.IOException;
 import butterknife.OnClick;
 import com.iflytek.cloud.SpeechRecognizer;
 import android.content.Context;
+import android.content.SharedPreferences;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
@@ -36,12 +37,14 @@ public class ContextManager
 {
   private static final String TAG = "ContextManager";
   private static final String CONTEXT_FILE_NAME = "conversation_context.json";
+  private static final String PREF_NAME = "context_manager";
   private static final String KEY_HISTORY = "history";
   private static final String KEY_MAX_ROUNDS = "current_max_rounds";
   private static final int INITIAL_MAX_ROUNDS = 5;
   
   private Context context;
   private File contextFile;
+  private SharedPreferences sharedPreferences;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
   private int MAX_ARGUMENTS_STR_LENGTH = 226810;
   
@@ -53,17 +56,22 @@ public class ContextManager
 
   // ✅ 异步写入 executor
   private final ExecutorService writeExecutor = Executors.newSingleThreadExecutor();
-  private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
   public ContextManager(Context context)
   {
     this.context = context;
+    
+    // ✅ 初始化 SP（只用于 max_rounds）
+    sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+    currentMaxRounds = sharedPreferences.getInt(KEY_MAX_ROUNDS, INITIAL_MAX_ROUNDS);
     
     // ✅ 初始化 JSON 文件路径
     contextFile = new File(context.getFilesDir(), CONTEXT_FILE_NAME);
     
     // ✅ 从 JSON 文件加载历史到内存（同步读取）
     loadHistoryFromFile();
+    
+    // ✅ 跳过 startup cleanup，后续可按需恢复
   }
 
   // ✅ 从 JSON 文件加载历史到内存（同步读取）
@@ -91,17 +99,11 @@ public class ContextManager
       if (fileContent.isEmpty())
       {
         memoryHistory = new ArrayList<>();
-        FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：空文件");
+        FileLogger.d(TAG, "📥 [LOAD] ��� JSON 文件加载历史：空文件");
         return;
       }
       
       JSONObject rootObj = new JSONObject(fileContent);
-      
-      // 读取 max_rounds
-      if (rootObj.has(KEY_MAX_ROUNDS))
-      {
-        currentMaxRounds = rootObj.getInt(KEY_MAX_ROUNDS);
-      }
       
       // 读取 history
       if (rootObj.has(KEY_HISTORY))
@@ -417,7 +419,7 @@ public class ContextManager
   {
     String messageId = generateMessageId();
     reservedMessageIds.add(messageId);
-    FileLogger.d(TAG, "🔖 [RESERVE] 预留消息 ID | id=" + messageId + " | 当���预留数=" + reservedMessageIds.size());
+    FileLogger.d(TAG, "🔖 [RESERVE] 预留消息 ID | id=" + messageId + " | 当前预留数=" + reservedMessageIds.size());
     return messageId;
   }
 
@@ -734,22 +736,20 @@ public class ContextManager
     saveHistory(newHistory);
   }
 
-  // ✅ 内存同步更新 + 异步写入文件（与 SP 的 .apply() 行为一致）
+  // ✅ 内存同步更新 + 异步写入 JSON 文件 + SM 保持 max_rounds
   private void saveHistory(List<JSONObject> history)
   {
     // 1. 同步更新内存（唯一真相源）
     memoryHistory = new ArrayList<>(history);
 
-    // 2. 异步写入 JSON 文件（持久化）
+    // 2. 异步写入 JSON 文件（历史持久化）
     final List<JSONObject> historyCopy = new ArrayList<>(history);
-    final int maxRoundsCopy = currentMaxRounds;
     
     writeExecutor.execute(() -> {
       try
       {
         JSONObject rootObj = new JSONObject();
         rootObj.put(KEY_HISTORY, new JSONArray(historyCopy));
-        rootObj.put(KEY_MAX_ROUNDS, maxRoundsCopy);
         
         // 同步写入文件（已在后台线程）
         FileWriter writer = new FileWriter(contextFile);
@@ -786,6 +786,8 @@ public class ContextManager
     if (currentMaxRounds < Integer.MAX_VALUE)
     {
       currentMaxRounds++;
+      // max_rounds 保持写入 SP
+      sharedPreferences.edit().putInt(KEY_MAX_ROUNDS, currentMaxRounds).apply();
       saveHistory(getHistory());
     }
   }
@@ -798,6 +800,8 @@ public class ContextManager
     if (idealMaxRounds > INITIAL_MAX_ROUNDS)
     {
       currentMaxRounds = idealMaxRounds;
+      // max_rounds 保持写入 SP
+      sharedPreferences.edit().putInt(KEY_MAX_ROUNDS, currentMaxRounds).apply();
       history = removeOldHistoryEntries(history);
       saveHistory(history);
     }
