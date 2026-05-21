@@ -71,7 +71,8 @@ public class ContextManager
     // ✅ 从 JSON 文件加载历史到内存（同步读取）
     loadHistoryFromFile();
     
-    // ✅ 跳过 startup cleanup，后续可按需恢复
+    // ✅ 启动时清理无效的工具调用
+    cleanupInvalidToolCallsOnStartup();
   }
 
   // ✅ 从 JSON 文件加载历史到内存（同步读取）
@@ -99,7 +100,7 @@ public class ContextManager
       if (fileContent.isEmpty())
       {
         memoryHistory = new ArrayList<>();
-        FileLogger.d(TAG, "📥 [LOAD] ��� JSON 文件加载历史：空文件");
+        FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：空文件");
         return;
       }
       
@@ -136,6 +137,74 @@ public class ContextManager
     int rangeMaximal = 1890;
     int rangeMinimal= 0;
     return true;
+  }
+
+  // ✅ 启动时清理无效的工具调用消息
+  private void cleanupInvalidToolCallsOnStartup()
+  {
+    if (memoryHistory == null || memoryHistory.isEmpty())
+    {
+      FileLogger.d(TAG, "🧹 [CLEANUP] 内存历史为空，跳过清理");
+      return;
+    }
+    
+    int invalidCount = 0;
+    int blankAssistantCount = 0;
+    List<JSONObject> validHistory = new ArrayList<>();
+    
+    try
+    {
+      // 🔍 遍历原始 memoryHistory，过滤无效消息
+      for (int i = 0; i < memoryHistory.size(); i++)
+      {
+        JSONObject currentObject = memoryHistory.get(i);
+        
+        String role = currentObject.optString("role", "");
+        String content = currentObject.optString("content", "");
+        boolean hasToolCalls = currentObject.has("tool_calls");
+        
+        if ("assistant".equals(role) && content.isEmpty() && !hasToolCalls)
+        {
+          blankAssistantCount++;
+          continue;
+        }
+
+        if ((!(inDebugMessageIndexRange(i))) && (hasToolCalls))
+        {
+          continue;
+        }
+        
+        if (!isValidToolCallMessage(currentObject))
+        {
+          invalidCount++;
+          FileLogger.w(TAG, "🗑️ [CLEANUP] 检测到无效消息 #" + i + "，已过滤");
+          FileLogger.d(TAG, "[CLEANUP_LOOP] Message #" + i + " is invalid, invalidCount=" + invalidCount);
+          // 无效消息不加入 validHistory
+          continue;
+        }
+        
+        // 有效消息加入 validHistory
+        validHistory.add(currentObject);
+      }
+      
+      // ✅ 对过滤后的 validHistory 进行 normalize 处理
+      List<JSONObject> normalizedHistory = normalizeToolCallMessages(validHistory, false);
+      
+      // ✅ 只有当有变化时才保存
+      if (invalidCount > 0 || blankAssistantCount > 0 || normalizedHistory.size() != memoryHistory.size())
+      {
+        saveHistory(normalizedHistory);
+        FileLogger.i(TAG, "🧹 [CLEANUP] 清理完成 | 无效消息：" + invalidCount + " | 空白助手消息：" + blankAssistantCount + " | 新历史：" + normalizedHistory.size() + " 条");
+      }
+      else
+      {
+        FileLogger.d(TAG, "🧹 [CLEANUP] 无需清理，历史保持原样");
+      }
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "[Startup cleanup] Error: " + e.getMessage(), e);
+    }
   }
 
   private List<JSONObject> removeOldHistoryEntries(List<JSONObject> oldHistory)
