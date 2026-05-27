@@ -1,11 +1,18 @@
 package com.stupidbeauty.sisterfuture.tool;
 
+import android.Manifest;
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.CalendarContract;
 import android.util.Log;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -15,6 +22,7 @@ import org.json.JSONObject;
  */
 public class CreateCalendarEventTool implements Tool {
     private static final String TAG = "CreateCalendarEventTool";
+    private static final int PERMISSION_REQUEST_CODE = 1001;
     private final Context context;
 
     public CreateCalendarEventTool(Context context) {
@@ -75,8 +83,63 @@ public class CreateCalendarEventTool implements Tool {
         return false;
     }
 
+    /**
+     * 检查日历权限是否已授予
+     */
+    private boolean hasCalendarPermission() {
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+            && ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /**
+     * 请求日历权限
+     */
+    private void requestCalendarPermission() {
+        if (context instanceof Activity) {
+            Activity activity = (Activity) context;
+            
+            // 显示权限说明对话框
+            new AlertDialog.Builder(context)
+                .setTitle("需要日历权限")
+                .setMessage("未来姐姐需要日历权限来创建日程提醒。是否授权？")
+                .setPositiveButton("授权", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        ActivityCompat.requestPermissions(activity,
+                            new String[]{
+                                Manifest.permission.READ_CALENDAR,
+                                Manifest.permission.WRITE_CALENDAR
+                            },
+                            PERMISSION_REQUEST_CODE);
+                    }
+                })
+                .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        // 用户取消，不执行操作
+                    }
+                })
+                .show();
+        } else {
+            Log.e(TAG, "Context is not an Activity, cannot request permission");
+        }
+    }
+
     @Override
     public JSONObject execute(JSONObject arguments) throws Exception {
+        // 检查权限
+        if (!hasCalendarPermission()) {
+            // 权限未授予，尝试请求
+            requestCalendarPermission();
+            
+            // 返回提示信息，让用户手动授权
+            JSONObject result = new JSONObject();
+            result.put("status", "permission_required");
+            result.put("message", "需要日历权限。请在弹出的权限对话框中授权，或手动在系统设置中开启日历权限。");
+            result.put("permission_required", "READ_CALENDAR and WRITE_CALENDAR");
+            return result;
+        }
+
         // 解析参数
         String title = arguments.optString("title", null);
         String description = arguments.optString("description", "");
@@ -194,6 +257,6 @@ public class CreateCalendarEventTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "当用户需要向安卓系统日历写入事件（如预约、会议、治疗等）时调用此工具。需要提供事件标题、开始时间、结束时间。可选提供描述、地点和提前提醒时间。注意：需要 WRITE_CALENDAR 权限。";
+        return "当用户需要向安卓系统日历写入事件（如预约，会议、治疗等）时调用此工具。需要提供事件标题、开始时间、结束时间。可选提供描述、地点和提前提醒时间。注意：需要 WRITE_CALENDAR 权限。工具会自动请求权限，用户授权后即可正常使用。";
     }
 }
