@@ -24,8 +24,6 @@ public class CreateCalendarEventTool implements Tool {
     private static final String TAG = "CreateCalendarEventTool";
     private static final int PERMISSION_REQUEST_CODE = 1001;
     private final Context context;
-    private JSONObject pendingArguments = null;
-    private ToolCallback pendingCallback = null;
 
     public CreateCalendarEventTool(Context context) {
         this.context = context;
@@ -96,7 +94,7 @@ public class CreateCalendarEventTool implements Tool {
     /**
      * 请求日历权限
      */
-    private void requestCalendarPermission(JSONObject arguments) {
+    private void requestCalendarPermission() {
         if (context instanceof Activity) {
             Activity activity = (Activity) context;
             
@@ -131,8 +129,8 @@ public class CreateCalendarEventTool implements Tool {
     public JSONObject execute(JSONObject arguments) throws Exception {
         // 检查权限
         if (!hasCalendarPermission()) {
-            // 权限未授予，尝试请求（注意：在非 Activity 上下文中可能无效）
-            requestCalendarPermission(arguments);
+            // 权限未授予，尝试请求
+            requestCalendarPermission();
             
             // 返回提示信息，让用户手动授权
             JSONObject result = new JSONObject();
@@ -259,6 +257,6 @@ public class CreateCalendarEventTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "当用户需要向安卓系统日历写入事件（如预约、会议、治疗等）时调用此工具。需要提供事件标题、开始时间、结束时间。可选提供描述、地点和提前提醒时间。注意：需要 WRITE_CALENDAR 权限。工具会自动请求权限，用户授权后即可正常使用。";
+        return "当用户需要向安卓系统日历写入事件（如预约，会议、治疗等）时调用此工具。需要提供事件标题、开始时间、结束时间。可选提供描述、地点和提前提醒时间。注意：需要 WRITE_CALENDAR 权限。工具会自动请求权限，用户授权后即可正常使用。";
     }
 }
