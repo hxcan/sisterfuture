@@ -17,6 +17,7 @@ import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.json.JSONArray;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 /**
  * FTP 文件写入工具增强版
@@ -113,12 +114,12 @@ public class FtpFileWriteTool implements Tool {
 
                     fileSize = file.length();
                     
-                    // 🔍 调试：使用 Log.e 确保输出到日志文件
-                    Log.e(TAG, "🔍 [DEBUG] 文件大小检查:");
-                    Log.e(TAG, "🔍 [DEBUG]   phonePath: " + phonePath);
-                    Log.e(TAG, "🔍 [DEBUG]   fileSize (bytes): " + fileSize);
-                    Log.e(TAG, "🔍 [DEBUG]   MAX_FILE_SIZE (bytes): " + MAX_FILE_SIZE);
-                    Log.e(TAG, "🔍 [DEBUG]   fileSize > MAX_FILE_SIZE: " + (fileSize > MAX_FILE_SIZE));
+                    // 🔍 调试：使用 FileLogger 记录到文件
+                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG] 文件大小检查:");
+                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG]   phonePath: " + phonePath);
+                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG]   fileSize (bytes): " + fileSize);
+                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG]   MAX_FILE_SIZE (bytes): " + MAX_FILE_SIZE);
+                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG]   fileSize > MAX_FILE_SIZE: " + (fileSize > MAX_FILE_SIZE));
 
                     if (fileSize > MAX_FILE_SIZE) {
                         throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath + 
