@@ -223,8 +223,17 @@ public class FtpFileWriteTool implements Tool {
         }
 
         long fileSize = file.length();
+        
+        // 🔍 调试日志：输出具体数值
+        Log.d(TAG, "🔍 [DEBUG] 文件大小检查:");
+        Log.d(TAG, "🔍 [DEBUG]   phonePath: " + phonePath);
+        Log.d(TAG, "🔍 [DEBUG]   fileSize (bytes): " + fileSize);
+        Log.d(TAG, "🔍 [DEBUG]   MAX_FILE_SIZE (bytes): " + MAX_FILE_SIZE);
+        Log.d(TAG, "🔍 [DEBUG]   fileSize > MAX_FILE_SIZE: " + (fileSize > MAX_FILE_SIZE));
+        
         if (fileSize > MAX_FILE_SIZE) {
-            throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
+            throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath + 
+                " (实际大小: " + fileSize + " bytes, 限制: " + MAX_FILE_SIZE + " bytes)");
         }
 
         try (FileInputStream fis = new FileInputStream(file);
