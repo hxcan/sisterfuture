@@ -33,7 +33,7 @@ import org.json.JSONArray;
  */
 public class FtpFileWriteTool implements Tool {
     private static final String TAG = "FtpFileWriteTool";
-    private static final long MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MiB
+    private static final long MAX_FILE_SIZE = 2048 * 1024 * 1024; // 2 GiB
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -67,7 +67,7 @@ public class FtpFileWriteTool implements Tool {
                     .put("description", "是否从手机读取文件内容（默认 false）。为 true 时忽略 content 参数，从 phone_path 读取文件"))
                 .put("phone_path", new JSONObject()
                     .put("type", "string")
-                    .put("description", "手机上的文件路径（当 read_from_phone=true 时使用）。支持文本和二进制文件，最大 200 MiB"))
+                    .put("description", "手机上的文件路径（当 read_from_phone=true 时使用）。支持文本和二进制文件，最大 2 GiB"))
             );
             parameters.put("required", new JSONArray(new String[]{"url"}));
 
@@ -224,7 +224,7 @@ public class FtpFileWriteTool implements Tool {
 
         long fileSize = file.length();
         if (fileSize > MAX_FILE_SIZE) {
-            throw new IOException("文件太大，超过 200 MiB 限制：" + phonePath);
+            throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
         }
 
         try (FileInputStream fis = new FileInputStream(file);
