@@ -11,9 +11,9 @@ import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.json.JSONArray;
@@ -96,19 +96,6 @@ public class FtpFileWriteTool implements Tool {
                 boolean readFromPhone = arguments.optBoolean("read_from_phone", false);
                 String phonePath = arguments.optString("phone_path", "");
 
-                byte[] fileContent;
-                String content = "";
-
-                if (readFromPhone) {
-                    if (phonePath.isEmpty()) {
-                        throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path");
-                    }
-                    fileContent = readFileFromPhone(phonePath);
-                } else {
-                    content = arguments.getString("content");
-                    fileContent = content.getBytes(StandardCharsets.UTF_8);
-                }
-
                 String username = "ftpuser";
                 String password = "yourpassword";
                 String host = "localhost";
@@ -156,8 +143,37 @@ public class FtpFileWriteTool implements Tool {
                 ftpClient.enterLocalPassiveMode();
                 ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
-                ByteArrayInputStream inputStream = new ByteArrayInputStream(fileContent);
+                // ✅ 最小化修改：根据来源动态创建 InputStream
+                InputStream inputStream;
+                long fileSize = 0;
+
+                if (readFromPhone) {
+                    if (phonePath.isEmpty()) {
+                        throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path");
+                    }
+                    File file = new File(phonePath);
+                    if (!file.exists()) {
+                        throw new IOException("手机文件不存在：" + phonePath);
+                    }
+                    if (!file.canRead()) {
+                        throw new IOException("无法读取手机文件，请检查权限：" + phonePath);
+                    }
+                    fileSize = file.length();
+                    if (fileSize > MAX_FILE_SIZE) {
+                        throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
+                    }
+                    // 🔍 调试日志
+                    FileLogger.e(TAG, "🔍 [DEBUG] 准备流式上传: " + phonePath + ", 大小: " + fileSize);
+                    inputStream = new FileInputStream(file);
+                } else {
+                    String content = arguments.getString("content");
+                    byte[] contentBytes = content.getBytes(StandardCharsets.UTF_8);
+                    fileSize = contentBytes.length;
+                    inputStream = new ByteArrayInputStream(contentBytes);
+                }
+
                 boolean success = ftpClient.storeFile(path, inputStream);
+                inputStream.close(); // 确保关闭流
 
                 if (!success) {
                     throw new IOException("文件写入失败：" + ftpClient.getReplyString());
@@ -167,14 +183,14 @@ public class FtpFileWriteTool implements Tool {
                 result.put("status", "success");
                 result.put("path", path);
                 result.put("host", host);
-                result.put("size", fileContent.length);
-                result.put("size_mib", String.format("%.2f", fileContent.length / (1024.0 * 1024.0)));
+                result.put("size", fileSize);
+                result.put("size_mib", String.format("%.2f", fileSize / (1024.0 * 1024.0)));
                 result.put("read_from_phone", readFromPhone);
                 
                 // 🔍 最小化调试：返回比较数值
                 if (readFromPhone) {
                     result.put("phone_path", phonePath);
-                    result.put("debug_file_size_bytes", new File(phonePath).length());
+                    result.put("debug_file_size_bytes", fileSize);
                     result.put("debug_max_limit_bytes", MAX_FILE_SIZE);
                 }
                 
@@ -194,44 +210,6 @@ public class FtpFileWriteTool implements Tool {
                 } catch (Exception ignored) {}
             }
         });
-    }
-
-    /**
-     * 从手机读取文件内容
-     * 支持文本和二进制文件（APK、图片、视频等）
-     * 
-     * @param phonePath 手机上的文件路径
-     * @return 文件内容的字节数组
-     */
-    private byte[] readFileFromPhone(String phonePath) throws IOException {
-        File file = new File(phonePath);
-        
-        // ✅ 恢复重要的条件检查
-        if (!file.exists()) {
-            throw new IOException("手机文件不存在：" + phonePath);
-        }
-        if (!file.canRead()) {
-            throw new IOException("无法读取手机文件，请检查权限：" + phonePath);
-        }
-
-        long fileSize = file.length();
-        
-        // 🔍 最小化调试：使用 FileLogger 输出到文件
-        FileLogger.e(TAG, "🔍 [DEBUG] fileSize=" + fileSize + ", MAX=" + MAX_FILE_SIZE);
-        
-        if (fileSize > MAX_FILE_SIZE) {
-            throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
-        }
-
-        try (FileInputStream fis = new FileInputStream(file);
-             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = fis.read(buffer)) != -1) {
-                baos.write(buffer, 0, bytesRead);
-            }
-            return baos.toByteArray();
-        }
     }
 
     @Override
