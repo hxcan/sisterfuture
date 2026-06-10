@@ -17,6 +17,7 @@ import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.json.JSONArray;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 /**
  * FTP 文件写入工具增强版
@@ -216,8 +217,8 @@ public class FtpFileWriteTool implements Tool {
 
         long fileSize = file.length();
         
-        // 🔍 最小化调试：输出具体数值
-        Log.e(TAG, "🔍 [DEBUG] fileSize=" + fileSize + ", MAX=" + MAX_FILE_SIZE);
+        // 🔍 最小化调试：使用 FileLogger 输出到文件
+        FileLogger.e(TAG, "🔍 [DEBUG] fileSize=" + fileSize + ", MAX=" + MAX_FILE_SIZE);
         
         if (fileSize > MAX_FILE_SIZE) {
             throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
