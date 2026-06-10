@@ -10,11 +10,11 @@ import androidx.annotation.NonNull;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.json.JSONObject;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONArray;
-import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 /**
  * FTP 文件写入工具增强版
@@ -93,18 +93,16 @@ public class FtpFileWriteTool implements Tool {
                 boolean readFromPhone = arguments.optBoolean("read_from_phone", false);
                 String phonePath = arguments.optString("phone_path", "");
 
+                connectAndLogin(ftpClient, url);
+
                 if (readFromPhone) {
                     if (phonePath.isEmpty()) {
                         throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path");
                     }
-                    
-                    // ✅ 流式上传：直接从文件读取并写入 FTP，不占用大量内存
-                    uploadFileFromPhone(ftpClient, url, phonePath);
+                    uploadStreamFromPhone(ftpClient, url, phonePath);
                 } else {
                     String content = arguments.getString("content");
                     byte[] fileContent = content.getBytes(StandardCharsets.UTF_8);
-                    
-                    // 小内容依然可以使用内存数组
                     uploadBytesToFTP(ftpClient, url, fileContent);
                 }
 
@@ -123,9 +121,9 @@ public class FtpFileWriteTool implements Tool {
     }
 
     /**
-     * 从手机文件流式上传到 FTP
+     * 从手机文件流式上传到 FTP (最小化修改：直接使用 FileInputStream)
      */
-    private void uploadFileFromPhone(FTPClient ftpClient, String url, String phonePath) throws IOException {
+    private void uploadStreamFromPhone(FTPClient ftpClient, String url, String phonePath) throws IOException {
         File file = new File(phonePath);
         
         if (!file.exists()) {
@@ -136,20 +134,16 @@ public class FtpFileWriteTool implements Tool {
         }
 
         long fileSize = file.length();
-        FileLogger.e(TAG, "🔍 [DEBUG] 准备流式上传: " + phonePath + ", 大小: " + fileSize);
-        
         if (fileSize > MAX_FILE_SIZE) {
             throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
         }
 
-        connectAndLogin(ftpClient, url);
-
-        // ✅ 关键优化：直接使用 FileInputStream，让 FTP 库处理缓冲
+        String path = extractPath(url);
+        ftpClient.enterLocalPassiveMode();
+        ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
+        
+        // ✅ 关键：直接使用 FileInputStream，不经过 ByteArrayOutputStream
         try (FileInputStream fis = new FileInputStream(file)) {
-            String path = extractPath(url);
-            ftpClient.enterLocalPassiveMode();
-            ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
-            
             boolean success = ftpClient.storeFile(path, fis);
             if (!success) {
                 throw new IOException("文件写入失败：" + ftpClient.getReplyString());
@@ -163,13 +157,11 @@ public class FtpFileWriteTool implements Tool {
      * 将字节数组上传到 FTP (适用于小内容)
      */
     private void uploadBytesToFTP(FTPClient ftpClient, String url, byte[] content) throws IOException {
-        connectAndLogin(ftpClient, url);
-        
         String path = extractPath(url);
         ftpClient.enterLocalPassiveMode();
         ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
         
-        try (java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(content)) {
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(content)) {
             boolean success = ftpClient.storeFile(path, inputStream);
             if (!success) {
                 throw new IOException("内容写入失败：" + ftpClient.getReplyString());
