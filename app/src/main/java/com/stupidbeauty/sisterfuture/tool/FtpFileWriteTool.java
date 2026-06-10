@@ -201,6 +201,8 @@ public class FtpFileWriteTool implements Tool {
      */
     private byte[] readFileFromPhone(String phonePath) throws IOException {
         File file = new File(phonePath);
+        
+        // ✅ 恢复重要的条件检查
         if (!file.exists()) {
             throw new IOException("手机文件不存在：" + phonePath);
         }
