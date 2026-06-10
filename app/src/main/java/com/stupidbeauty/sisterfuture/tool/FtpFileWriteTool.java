@@ -25,7 +25,7 @@ import com.stupidbeauty.sisterfuture.utils.FileLogger;
  */
 public class FtpFileWriteTool implements Tool {
     private static final String TAG = "FtpFileWriteTool";
-    private static final long MAX_FILE_SIZE = 2048 * 1024 * 1024; // 2 GiB
+    private static final long MAX_FILE_SIZE = 2048L * 1024 * 1024; // 2 GiB (注意 L 后缀防止溢出)
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -100,7 +100,6 @@ public class FtpFileWriteTool implements Tool {
                 String content = "";
 
                 if (readFromPhone) {
-                    // ✅ 恢复重要的参数校验
                     if (phonePath.isEmpty()) {
                         throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path");
                     }
