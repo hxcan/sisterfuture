@@ -97,7 +97,6 @@ public class FtpFileWriteTool implements Tool {
 
                 byte[] fileContent;
                 String content = "";
-                long fileSize = 0;
 
                 if (readFromPhone) {
                     if (phonePath.isEmpty()) {
@@ -111,10 +110,10 @@ public class FtpFileWriteTool implements Tool {
                         throw new IOException("无法读取手机文件，请检查权限：" + phonePath);
                     }
 
-                    fileSize = file.length();
+                    long fileSize = file.length();
                     
-                    // 🔍 最小化调试：输出具体数值
-                    Log.e(TAG, "🔍 [DEBUG] fileSize: " + fileSize + ", MAX_FILE_SIZE: " + MAX_FILE_SIZE);
+                    // 🔍 绝对最小化调试：仅增加这一行 Log
+                    Log.e(TAG, "🔍 [DEBUG] fileSize=" + fileSize + ", MAX=" + MAX_FILE_SIZE);
 
                     if (fileSize > MAX_FILE_SIZE) {
                         throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
@@ -196,10 +195,10 @@ public class FtpFileWriteTool implements Tool {
                 result.put("size_mib", String.format("%.2f", fileContent.length / (1024.0 * 1024.0)));
                 result.put("read_from_phone", readFromPhone);
                 
-                // 🔍 最小化调试：返回比较数值
+                // 🔍 绝对最小化调试：仅增加这两个字段
                 if (readFromPhone) {
                     result.put("phone_path", phonePath);
-                    result.put("debug_file_size_bytes", fileSize);
+                    result.put("debug_file_size_bytes", new File(phonePath).length());
                     result.put("debug_max_limit_bytes", MAX_FILE_SIZE);
                 }
                 
