@@ -17,7 +17,6 @@ import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.json.JSONArray;
-import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 /**
  * FTP 文件写入工具增强版
@@ -114,16 +113,11 @@ public class FtpFileWriteTool implements Tool {
 
                     fileSize = file.length();
                     
-                    // 🔍 调试：使用 FileLogger 记录到文件
-                    FileLogger.e(TAG, "🔍 [DEBUG] 文件大小检查:");
-                    FileLogger.e(TAG, "🔍 [DEBUG]   phonePath: " + phonePath);
-                    FileLogger.e(TAG, "🔍 [DEBUG]   fileSize (bytes): " + fileSize);
-                    FileLogger.e(TAG, "🔍 [DEBUG]   MAX_FILE_SIZE (bytes): " + MAX_FILE_SIZE);
-                    FileLogger.e(TAG, "🔍 [DEBUG]   fileSize > MAX_FILE_SIZE: " + (fileSize > MAX_FILE_SIZE));
+                    // 🔍 最小化调试：输出具体数值
+                    Log.e(TAG, "🔍 [DEBUG] fileSize: " + fileSize + ", MAX_FILE_SIZE: " + MAX_FILE_SIZE);
 
                     if (fileSize > MAX_FILE_SIZE) {
-                        throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath + 
-                            " (实际大小: " + fileSize + " bytes, 限制: " + MAX_FILE_SIZE + " bytes)");
+                        throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
                     }
 
                     try (FileInputStream fis = new FileInputStream(file);
@@ -135,7 +129,6 @@ public class FtpFileWriteTool implements Tool {
                         }
                         fileContent = baos.toByteArray();
                     }
-                    Log.d(TAG, "从手机读取文件：" + phonePath + ", 大小：" + fileContent.length + " bytes");
                 } else {
                     content = arguments.getString("content");
                     fileContent = content.getBytes(StandardCharsets.UTF_8);
@@ -203,12 +196,11 @@ public class FtpFileWriteTool implements Tool {
                 result.put("size_mib", String.format("%.2f", fileContent.length / (1024.0 * 1024.0)));
                 result.put("read_from_phone", readFromPhone);
                 
-                // 🔍 调试：将比较信息放入返回结果
+                // 🔍 最小化调试：返回比较数值
                 if (readFromPhone) {
                     result.put("phone_path", phonePath);
                     result.put("debug_file_size_bytes", fileSize);
                     result.put("debug_max_limit_bytes", MAX_FILE_SIZE);
-                    result.put("debug_is_within_limit", fileSize <= MAX_FILE_SIZE);
                 }
                 
                 result.put("processed_at", System.currentTimeMillis());
