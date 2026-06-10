@@ -10,9 +10,12 @@ import androidx.annotation.NonNull;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.json.JSONObject;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import org.json.JSONArray;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
@@ -93,20 +96,91 @@ public class FtpFileWriteTool implements Tool {
                 boolean readFromPhone = arguments.optBoolean("read_from_phone", false);
                 String phonePath = arguments.optString("phone_path", "");
 
+                byte[] fileContent;
+                String content = "";
+
                 if (readFromPhone) {
                     if (phonePath.isEmpty()) {
                         throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path");
                     }
-                    
-                    // ✅ 流式上传：直接从文件读取并写入 FTP，不占用大量内存
-                    uploadFileFromPhone(ftpClient, url, phonePath);
+                    fileContent = readFileFromPhone(phonePath);
                 } else {
-                    String content = arguments.getString("content");
-                    byte[] fileContent = content.getBytes(StandardCharsets.UTF_8);
-                    
-                    // 小内容依然可以使用内存数组
-                    uploadBytesToFTP(ftpClient, url, fileContent);
+                    content = arguments.getString("content");
+                    fileContent = content.getBytes(StandardCharsets.UTF_8);
                 }
+
+                String username = "ftpuser";
+                String password = "yourpassword";
+                String host = "localhost";
+                int port = 21;
+                String path = "";
+
+                if (url.startsWith("ftp://")) {
+                    String addr = url.substring(6);
+                    int atIdx = addr.indexOf('@');
+                    if (atIdx != -1) {
+                        String auth = addr.substring(0, atIdx);
+                        int colonIdx = auth.indexOf(':');
+                        if (colonIdx != -1) {
+                            username = auth.substring(0, colonIdx);
+                            password = auth.substring(colonIdx + 1);
+                        }
+                        addr = addr.substring(atIdx + 1);
+                    }
+
+                    int slashIdx = addr.indexOf('/');
+                    if (slashIdx != -1) {
+                        String hostPort = addr.substring(0, slashIdx);
+                        path = addr.substring(slashIdx);
+                        int portIdx = hostPort.indexOf(':');
+                        if (portIdx != -1) {
+                            host = hostPort.substring(0, portIdx);
+                            port = Integer.parseInt(hostPort.substring(portIdx + 1));
+                        } else {
+                            host = hostPort;
+                        }
+                    } else {
+                        host = addr;
+                    }
+                }
+
+                ftpClient.connect(host, port);
+                if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
+                    throw new IOException("连接失败：" + ftpClient.getReplyString());
+                }
+
+                if (!ftpClient.login(username, password)) {
+                    throw new IOException("登录失败：" + ftpClient.getReplyString());
+                }
+
+                ftpClient.enterLocalPassiveMode();
+                ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
+
+                ByteArrayInputStream inputStream = new ByteArrayInputStream(fileContent);
+                boolean success = ftpClient.storeFile(path, inputStream);
+
+                if (!success) {
+                    throw new IOException("文件写入失败：" + ftpClient.getReplyString());
+                }
+
+                JSONObject result = new JSONObject();
+                result.put("status", "success");
+                result.put("path", path);
+                result.put("host", host);
+                result.put("size", fileContent.length);
+                result.put("size_mib", String.format("%.2f", fileContent.length / (1024.0 * 1024.0)));
+                result.put("read_from_phone", readFromPhone);
+                
+                // 🔍 最小化调试：返回比较数值
+                if (readFromPhone) {
+                    result.put("phone_path", phonePath);
+                    result.put("debug_file_size_bytes", new File(phonePath).length());
+                    result.put("debug_max_limit_bytes", MAX_FILE_SIZE);
+                }
+                
+                result.put("processed_at", System.currentTimeMillis());
+
+                callback.onResult(result);
 
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
@@ -123,11 +197,16 @@ public class FtpFileWriteTool implements Tool {
     }
 
     /**
-     * 从手机文件流式上传到 FTP
+     * 从手机读取文件内容
+     * 支持文本和二进制文件（APK、图片、视频等）
+     * 
+     * @param phonePath 手机上的文件路径
+     * @return 文件内容的字节数组
      */
-    private void uploadFileFromPhone(FTPClient ftpClient, String url, String phonePath) throws IOException {
+    private byte[] readFileFromPhone(String phonePath) throws IOException {
         File file = new File(phonePath);
         
+        // ✅ 恢复重要的条件检查
         if (!file.exists()) {
             throw new IOException("手机文件不存在：" + phonePath);
         }
@@ -136,110 +215,23 @@ public class FtpFileWriteTool implements Tool {
         }
 
         long fileSize = file.length();
-        FileLogger.e(TAG, "🔍 [DEBUG] 准备流式上传: " + phonePath + ", 大小: " + fileSize);
+        
+        // 🔍 最小化调试：使用 FileLogger 输出到文件
+        FileLogger.e(TAG, "🔍 [DEBUG] fileSize=" + fileSize + ", MAX=" + MAX_FILE_SIZE);
         
         if (fileSize > MAX_FILE_SIZE) {
             throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
         }
 
-        connectAndLogin(ftpClient, url);
-
-        // ✅ 关键优化：直接使用 FileInputStream，让 FTP 库处理缓冲
-        try (FileInputStream fis = new FileInputStream(file)) {
-            String path = extractPath(url);
-            ftpClient.enterLocalPassiveMode();
-            ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
-            
-            boolean success = ftpClient.storeFile(path, fis);
-            if (!success) {
-                throw new IOException("文件写入失败：" + ftpClient.getReplyString());
+        try (FileInputStream fis = new FileInputStream(file);
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = fis.read(buffer)) != -1) {
+                baos.write(buffer, 0, bytesRead);
             }
+            return baos.toByteArray();
         }
-        
-        Log.i(TAG, "✅ 流式上传成功: " + phonePath);
-    }
-
-    /**
-     * 将字节数组上传到 FTP (适用于小内容)
-     */
-    private void uploadBytesToFTP(FTPClient ftpClient, String url, byte[] content) throws IOException {
-        connectAndLogin(ftpClient, url);
-        
-        String path = extractPath(url);
-        ftpClient.enterLocalPassiveMode();
-        ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
-        
-        try (java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(content)) {
-            boolean success = ftpClient.storeFile(path, inputStream);
-            if (!success) {
-                throw new IOException("内容写入失败：" + ftpClient.getReplyString());
-            }
-        }
-    }
-
-    /**
-     * 解析 URL 并连接登录
-     */
-    private void connectAndLogin(FTPClient ftpClient, String url) throws IOException {
-        String username = "ftpuser";
-        String password = "yourpassword";
-        String host = "localhost";
-        int port = 21;
-
-        if (url.startsWith("ftp://")) {
-            String addr = url.substring(6);
-            int atIdx = addr.indexOf('@');
-            if (atIdx != -1) {
-                String auth = addr.substring(0, atIdx);
-                int colonIdx = auth.indexOf(':');
-                if (colonIdx != -1) {
-                    username = auth.substring(0, colonIdx);
-                    password = auth.substring(colonIdx + 1);
-                }
-                addr = addr.substring(atIdx + 1);
-            }
-
-            int slashIdx = addr.indexOf('/');
-            if (slashIdx != -1) {
-                String hostPort = addr.substring(0, slashIdx);
-                int portIdx = hostPort.indexOf(':');
-                if (portIdx != -1) {
-                    host = hostPort.substring(0, portIdx);
-                    port = Integer.parseInt(hostPort.substring(portIdx + 1));
-                } else {
-                    host = hostPort;
-                }
-            } else {
-                host = addr;
-            }
-        }
-
-        ftpClient.connect(host, port);
-        if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
-            throw new IOException("连接失败：" + ftpClient.getReplyString());
-        }
-
-        if (!ftpClient.login(username, password)) {
-            throw new IOException("登录失败：" + ftpClient.getReplyString());
-        }
-    }
-
-    /**
-     * 从 URL 中提取远程路径
-     */
-    private String extractPath(String url) {
-        if (url.startsWith("ftp://")) {
-            String addr = url.substring(6);
-            int atIdx = addr.indexOf('@');
-            if (atIdx != -1) {
-                addr = addr.substring(atIdx + 1);
-            }
-            int slashIdx = addr.indexOf('/');
-            if (slashIdx != -1) {
-                return addr.substring(slashIdx);
-            }
-        }
-        return "";
     }
 
     @Override
