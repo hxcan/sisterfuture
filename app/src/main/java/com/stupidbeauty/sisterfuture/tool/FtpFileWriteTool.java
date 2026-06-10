@@ -99,6 +99,10 @@ public class FtpFileWriteTool implements Tool {
                 String content = "";
 
                 if (readFromPhone) {
+                    // ✅ 恢复重要的参数校验
+                    if (phonePath.isEmpty()) {
+                        throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path");
+                    }
                     fileContent = readFileFromPhone(phonePath);
                 } else {
                     content = arguments.getString("content");
