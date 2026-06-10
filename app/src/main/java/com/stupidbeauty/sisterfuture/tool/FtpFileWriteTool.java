@@ -115,11 +115,11 @@ public class FtpFileWriteTool implements Tool {
                     fileSize = file.length();
                     
                     // 🔍 调试：使用 FileLogger 记录到文件
-                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG] 文件大小检查:");
-                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG]   phonePath: " + phonePath);
-                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG]   fileSize (bytes): " + fileSize);
-                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG]   MAX_FILE_SIZE (bytes): " + MAX_FILE_SIZE);
-                    FileLogger.getInstance(context).log(TAG, "🔍 [DEBUG]   fileSize > MAX_FILE_SIZE: " + (fileSize > MAX_FILE_SIZE));
+                    FileLogger.e(TAG, "🔍 [DEBUG] 文件大小检查:");
+                    FileLogger.e(TAG, "🔍 [DEBUG]   phonePath: " + phonePath);
+                    FileLogger.e(TAG, "🔍 [DEBUG]   fileSize (bytes): " + fileSize);
+                    FileLogger.e(TAG, "🔍 [DEBUG]   MAX_FILE_SIZE (bytes): " + MAX_FILE_SIZE);
+                    FileLogger.e(TAG, "🔍 [DEBUG]   fileSize > MAX_FILE_SIZE: " + (fileSize > MAX_FILE_SIZE));
 
                     if (fileSize > MAX_FILE_SIZE) {
                         throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath + 
