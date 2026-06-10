@@ -17,19 +17,11 @@ import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.json.JSONArray;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 /**
  * FTP 文件写入工具增强版
  * 用于向 FTP 服务器写入文件内容
- *
- * 增强功能:
- * - 支持从手机本机读取文件上传到 FTP 服务器
- * - 支持二进制文件上传（APK、图片、视频等）
- * - 适用于将安装包上传到手机 FTP 服务器进行安装
- * 
- * 典型使用场景：
- * - 将未来姐姐最新安装包上传到小米手机的太极 FTP 服务器
- * - 使得手机端能够安装到最新版
  */
 public class FtpFileWriteTool implements Tool {
     private static final String TAG = "FtpFileWriteTool";
@@ -101,7 +93,6 @@ public class FtpFileWriteTool implements Tool {
                     throw new IllegalArgumentException("URL 不能为空");
                 }
 
-                // 新增参数：从手机读取
                 boolean readFromPhone = arguments.optBoolean("read_from_phone", false);
                 String phonePath = arguments.optString("phone_path", "");
 
@@ -109,14 +100,12 @@ public class FtpFileWriteTool implements Tool {
                 String content = "";
 
                 if (readFromPhone) {
-                    // 从手机读取文件
+                    // ✅ 恢复重要的参数校验
                     if (phonePath.isEmpty()) {
                         throw new IllegalArgumentException("read_from_phone=true 时必须提供 phone_path");
                     }
                     fileContent = readFileFromPhone(phonePath);
-                    Log.d(TAG, "从手机读取文件：" + phonePath + ", 大小：" + fileContent.length + " bytes");
                 } else {
-                    // 使用 content 参数
                     content = arguments.getString("content");
                     fileContent = content.getBytes(StandardCharsets.UTF_8);
                 }
@@ -166,7 +155,6 @@ public class FtpFileWriteTool implements Tool {
                 }
 
                 ftpClient.enterLocalPassiveMode();
-                // 始终使用二进制模式，支持所有文件类型（包括 APK）
                 ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
                 ByteArrayInputStream inputStream = new ByteArrayInputStream(fileContent);
@@ -183,17 +171,20 @@ public class FtpFileWriteTool implements Tool {
                 result.put("size", fileContent.length);
                 result.put("size_mib", String.format("%.2f", fileContent.length / (1024.0 * 1024.0)));
                 result.put("read_from_phone", readFromPhone);
+                
+                // 🔍 最小化调试：返回比较数值
                 if (readFromPhone) {
                     result.put("phone_path", phonePath);
+                    result.put("debug_file_size_bytes", new File(phonePath).length());
+                    result.put("debug_max_limit_bytes", MAX_FILE_SIZE);
                 }
+                
                 result.put("processed_at", System.currentTimeMillis());
-                // ✅ 已移除敏感字段：sister_future_note
 
                 callback.onResult(result);
 
             } catch (Exception e) {
                 Log.e(TAG, "执行出错", e);
-                // ✅ 修复：调用 onError 而不是 onResult，让 ToolManager 处理智能引导
                 callback.onError(e);
             } finally {
                 try {
@@ -215,6 +206,8 @@ public class FtpFileWriteTool implements Tool {
      */
     private byte[] readFileFromPhone(String phonePath) throws IOException {
         File file = new File(phonePath);
+        
+        // ✅ 恢复重要的条件检查
         if (!file.exists()) {
             throw new IOException("手机文件不存在：" + phonePath);
         }
@@ -223,6 +216,10 @@ public class FtpFileWriteTool implements Tool {
         }
 
         long fileSize = file.length();
+        
+        // 🔍 最小化调试：使用 FileLogger 输出到文件
+        FileLogger.e(TAG, "🔍 [DEBUG] fileSize=" + fileSize + ", MAX=" + MAX_FILE_SIZE);
+        
         if (fileSize > MAX_FILE_SIZE) {
             throw new IOException("文件太大，超过 2 GiB 限制：" + phonePath);
         }
