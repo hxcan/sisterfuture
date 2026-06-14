@@ -2,20 +2,25 @@ package com.stupidbeauty.sisterfuture.shopping;
 
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.util.Log;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class ShoppingListManager {
 
+    private static final String TAG = "ShoppingListManager";
+    private static final String DEBUG_LOG_FILE = "/sdcard/Download/shopping_list_manager_debug.log";
     private static final String DATA_FILE_NAME = "shopping_list.json";
     private List<ShoppingItem> items;
     private final Gson gson;
@@ -25,7 +30,23 @@ public class ShoppingListManager {
         this.context = context;
         this.items = new ArrayList<>();
         this.gson = new Gson();
+        logDebug("CONSTRUCTOR: about to call loadItems()");
         loadItems();
+        logDebug("CONSTRUCTOR: loadItems() done, items.size=" + (items == null ? "null" : items.size()));
+    }
+
+    private void logDebug(String message) {
+        // 同时输出到 Logcat（方便大模型回复带回来）和文件（持久化）
+        Log.d(TAG, message);
+        try {
+            try (FileOutputStream fos = new FileOutputStream(DEBUG_LOG_FILE, true)) {
+                String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(new java.util.Date());
+                String line = timestamp + " [pid=" + android.os.Process.myPid() + "] " + TAG + ": " + message + "\n";
+                fos.write(line.getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "logDebug: failed to write to file", e);
+        }
     }
 
     // 1. 创建条目 (Create)
@@ -36,6 +57,7 @@ public class ShoppingListManager {
         item.setId(generateId());
         item.setStatus("待购买");
         item.setLastUpdated(String.valueOf(System.currentTimeMillis()));
+        logDebug("addItem: new item id=[" + item.getId() + "] (class=" + item.getId().getClass().getSimpleName() + ")");
         items.add(item);
         saveItems();
         return true;
@@ -77,18 +99,39 @@ public class ShoppingListManager {
 
     // 4. 删除条目 (Delete)
     public boolean deleteItem(String id) {
+        logDebug("=== deleteItem START ===");
+        logDebug("deleteItem: input id=[" + id + "] (class=" + (id == null ? "null" : id.getClass().getSimpleName()) + ")");
+        logDebug("deleteItem: items.size=" + items.size());
+
+        if (items != null && !items.isEmpty()) {
+            String allIds = items.stream()
+                .map(item -> "[" + (item.getId() == null ? "null" : item.getId()) + "/" + (item.getId() == null ? "null" : item.getId().getClass().getSimpleName()) + "]")
+                .collect(Collectors.joining(", "));
+            logDebug("deleteItem: all item IDs in memory: " + allIds);
+        }
+
         ShoppingItem itemToDelete = null;
         for (ShoppingItem item : items) {
-            if (item.getId().equals(id)) {
+            String itemIdInList = item.getId();
+            boolean equalsResult = (id != null && itemIdInList != null && id.equals(itemIdInList));
+            logDebug("deleteItem: comparing input=[" + id + "] vs item=[" + itemIdInList + "] (itemId class=" + (itemIdInList == null ? "null" : itemIdInList.getClass().getSimpleName()) + ") | equals=" + equalsResult);
+            if (equalsResult) {
                 itemToDelete = item;
                 break;
             }
         }
+
+        logDebug("deleteItem: found? " + (itemToDelete != null));
+
         if (itemToDelete != null) {
             items.remove(itemToDelete);
+            logDebug("deleteItem: removed from in-memory list, new size=" + items.size());
             saveItems();
+            logDebug("deleteItem: saveItems() done");
+            logDebug("=== deleteItem END (success) ===");
             return true;
         }
+        logDebug("=== deleteItem END (not found) ===");
         return false;
     }
 
@@ -154,7 +197,7 @@ public class ShoppingListManager {
                 }
 
                 if (!isValidStatus(status)) {
-                    System.err.println("状态值不合法，跳过: " + line);
+                    System.err.println("状态值不合法，跳过: " + status);
                     continue;
                 }
 
@@ -201,16 +244,35 @@ public class ShoppingListManager {
 
     // 读取数据文件 (使用Gson)
     private void loadItems() {
+        logDebug("=== loadItems START ===");
         try {
             File file = getDataFile();
+            logDebug("loadItems: file path=" + file.getAbsolutePath() + ", exists=" + file.exists() + ", size=" + (file.exists() ? file.length() : -1));
+
             if (file.exists()) {
                 try (FileReader reader = new FileReader(file)) {
                     items = gson.fromJson(reader, new TypeToken<List<ShoppingItem>>(){}.getType());
+                    logDebug("loadItems: after Gson parse, items is null? " + (items == null));
+                    if (items != null) {
+                        logDebug("loadItems: after Gson parse, items.size=" + items.size());
+                        if (!items.isEmpty()) {
+                            String allIds = items.stream()
+                                .map(item -> "[" + (item.getId() == null ? "null" : item.getId()) + "/" + (item.getId() == null ? "null" : item.getId().getClass().getSimpleName()) + "]")
+                                .collect(Collectors.joining(", "));
+                            logDebug("loadItems: loaded item IDs: " + allIds);
+                        }
+                    }
                 }
+            } else {
+                logDebug("loadItems: file does NOT exist, items remains empty");
             }
         } catch (IOException e) {
+            logDebug("loadItems: IOException occurred: " + e.getMessage());
             System.err.println("无法加载购物清单: " + e.getMessage());
+        } catch (Exception e) {
+            logDebug("loadItems: Exception occurred: " + e.getClass().getName() + ": " + e.getMessage());
         }
+        logDebug("=== loadItems END ===");
     }
 
     // 保存数据文件 (使用Gson)
