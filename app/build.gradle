@@ -3,7 +3,7 @@ apply plugin: 'io.objectbox' // 这个插件必须加！
 
 // ✅ 未来姐姐的测试注释：这是一个小修改
 
-dependencies 
+dependencies
 {
   implementation fileTree(include: ['*.jar'], dir: 'libs')
   implementation 'com.jakewharton:butterknife:10.2.3'
@@ -38,7 +38,7 @@ dependencies
   // 添加注解处理器
   annotationProcessor 'io.objectbox:objectbox-processor:5.1.0'
   implementation 'commons-net:commons-net:3.8.0'
-  
+
   // #3088 百度地图 SDK 依赖（降级到 7.5.4，与旅行盲盒一致）
   // 地图组件
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Map:7.5.4'
@@ -48,26 +48,26 @@ dependencies
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Util:7.5.4'
   // 全量定位组件
   implementation 'com.baidu.lbsyun:BaiduMapSDK_Location_All:9.3.7'
-  
+
   // #4834 添加 Timber 日志库（用于日志输出到外置存储）
   implementation 'com.jakewharton.timber:timber:5.0.1'
-  
+
   // Builtin FTP Server - 最新版（用于数据备份）
   // builtinftp 2026.3.31+ includes ftpserver 2026.3.39 with LIST command fix
   implementation 'com.github.hxcan:builtinftp:2026.3.31'
-  
+
   // 🆕 Android Crash Detector - Global exception handler with crash logging to external storage
   implementation 'com.github.hxcan:android-crash-detector:2026.4.8'
 }
 
-android 
+android
 {
-  lint 
+  lint
   {
     baseline = file("lint-baseline.xml")
   }
 
-  buildFeatures 
+  buildFeatures
   {
     buildConfig = true
   }
@@ -85,9 +85,9 @@ android
     }
   }
 
-  buildTypes 
+  buildTypes
   {
-    release 
+    release
     {
       minifyEnabled false
       proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
@@ -98,15 +98,15 @@ android
     }
   }
 
-  defaultConfig 
+  defaultConfig
   {
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
     targetSdkVersion 28
-    versionCode 1094
-    versionName "2026.5.11"
+    versionCode 1095
+    versionName "2026.6.14"
     multiDexEnabled true
-    
+
     // 配置支持的 SO 库架构 - 仅保留手机端需要的架构
     ndk
     {
@@ -114,9 +114,9 @@ android
     }
   }
 
-  sourceSets 
+  sourceSets
   {
-    main 
+    main
     {
       jniLibs.srcDirs = ['libs']
     }
@@ -163,7 +163,7 @@ android.applicationVariants.all { variant ->
         def versionCode = variant.versionCode
         def buildTime = new Date().format('yyyyMMdd-HHmmss', TimeZone.getTimeZone('Asia/Shanghai'))
         def buildType = variant.buildType.name
-        
+
         if (buildType == 'debug') {
             outputFileName = "sisterfuture-debug-v${versionName}-${versionCode}-${buildTime}.apk"
         } else {
