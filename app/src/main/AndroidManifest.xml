@@ -4,7 +4,6 @@
     android:versionCode="5005"
     android:versionName="5005">
 
-    <!-- 权限声明 -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
@@ -22,18 +21,14 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
-    
-    <!-- Android 11+ 文件访问权限 -->
+
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage"/>
-    
-    <!-- 前台服务权限（Android 9+） -->
+
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    
-    <!-- 通知权限（Android 13+） -->
+
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
-    <!-- 日历读写权限（用于创建日历事件） -->
     <uses-permission android:name="android.permission.READ_CALENDAR"/>
     <uses-permission android:name="android.permission.WRITE_CALENDAR"/>
 
@@ -50,23 +45,19 @@
       android:largeHeap="true"
       android:usesCleartextTraffic="true"
       tools:ignore="GoogleAppIndexingWarning">
-      
-      <!-- 百度地图 API Key -->
-      <!-- AK 与包名 + SHA1 签名指纹强绑定，即使被反编译也无法在其他应用中使用 -->
+
       <meta-data
           android:name="com.baidu.lbsapi.API_KEY"
           android:value="ORqAPXcSHUKBVmh1ltLiXIuKlU4j6KQi" />
-      
-      <!-- 百度定位 Service -->
+
       <service
           android:name="com.baidu.location.f"
           android:enabled="true"
           android:process=":remote" />
-      
+
       <uses-library
         android:name="org.apache.http.legacy"
         android:required="false" />
-        <!-- 主 Activity -->
         <activity android:name="com.stupidbeauty.sisterfuture.SisterFutureActivity"
             android:screenOrientation="portrait"
             android:label="@string/app_name">
@@ -76,7 +67,6 @@
             </intent-filter>
         </activity>
 
-        <!-- 文字上下文菜单接收器 -->
         <receiver
             android:name="com.stupidbeauty.sisterfuture.TextSelectionReceiver"
             android:enabled="true"
@@ -84,18 +74,26 @@
             <intent-filter>
                 <action android:name="android.intent.action.PROCESS_TEXT"/>
             </intent-filter>
-            <!-- 指定返回类型 -->
             <meta-data
                 android:name="android.service.quicksettings.ACTIVE_TILE_TEMPLATE"
                 android:value="false" />
         </receiver>
 
-        <!-- 前台服务 - 显示持久化通知，防止应用被杀死 -->
         <service
             android:name="com.stupidbeauty.sisterfuture.SisterFutureService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name="com.stupidbeauty.sisterfuture.NotificationsListenerService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
     </application>
 </manifest>
