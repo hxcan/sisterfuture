@@ -1,6 +1,7 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.app.Notification;
+import android.app.NotificationManager;
 import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
@@ -8,10 +9,6 @@ import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
-
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 读取手机通知栏通知列表的工具
@@ -23,9 +20,10 @@ import java.util.List;
  * - NotificationListenerService 授权（用户在系统设置中开启）
  *   设置路径：系统设置 → 通知使用权 → "未来姐姐"
  *
- * Android 版本差异：
- * - API 23+（Android 6.0+）：通过 getActiveNotifications() 直接获取
- * - API 30+（Android 11+）：增加 EXTRA_BIG_TEXT 等字段支持
+ * 实现说明：
+ * - 直接调用 NotificationManager.getActiveNotifications()（Android 6+ 官方 API）
+ * - 系统要求先注册一个 NotificationListenerService 子类（NotificationsListenerService）
+ *   用户授权后系统才能允许此 API 返回数据
  */
 public class ListNotificationsTool implements Tool {
     private static final String TAG = "ListNotificationsTool";
@@ -86,19 +84,23 @@ public class ListNotificationsTool implements Tool {
 
         Log.i(TAG, "Reading active notifications (limit=" + limit + ", filter=" + packageFilter + ")");
 
-        // 调用 NotificationListenerService 获取当前通知列表
-        StatusBarNotification[] activeNotifications = getActiveNotifications(context);
+        // 通过 NotificationManager 直接获取当前通知列表（Android 6+ 官方 API）
+        // 前提：必须有一个 NotificationListenerService 子类（NotificationsListenerService）
+        //       且用户已授予"通知使用权"
+        NotificationManager notificationManager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        StatusBarNotification[] activeNotifications = notificationManager.getActiveNotifications();
 
-        JSONArray notificationsArray = new JSONArray();
-
+        // 检查权限：未授权时返回 null
         if (activeNotifications == null) {
-            // 用户未授权 NotificationListener 权限
             JSONObject errorResult = new JSONObject();
             errorResult.put("status", "error");
             errorResult.put("error", "permission_denied");
             errorResult.put("message", "NotificationListener 权限未授予。请前往 系统设置 → 通知使用权 → 找到'未来姐姐'并开启。");
             return errorResult;
         }
+
+        JSONArray notificationsArray = new JSONArray();
 
         int count = 0;
         for (StatusBarNotification sbn : activeNotifications) {
@@ -112,7 +114,7 @@ public class ListNotificationsTool implements Tool {
             // 包名
             notifObj.put("packageName", sbn.getPackageName());
 
-            // 应用名（key 是 sbn.getPackageName()，要查 PackageManager）
+            // 应用名（通过 PackageManager 查）
             try {
                 String appName = context.getPackageManager()
                     .getApplicationLabel(
@@ -162,67 +164,6 @@ public class ListNotificationsTool implements Tool {
         Log.i(TAG, "Retrieved " + notificationsArray.length() + " notifications");
 
         return result;
-    }
-
-    /**
-     * 调用 NotificationListenerService 的 getActiveNotifications()
-     *
-     * 实现原理：
-     * - 通过反射调用 NotificationListenerService 子类的 getActiveNotifications() 方法
-     * - 要求：
-     *   1. 必须在 AndroidManifest.xml 中注册一个 NotificationListenerService
-     *   2. 用户必须在系统设置中授予本应用"通知使用权"
-     *
-     * @param context 应用上下文
-     * @return 当前活跃通知列表；如果未授权返回 null
-     */
-    private StatusBarNotification[] getActiveNotifications(Context context) {
-        try {
-            // 方法 1：反射查找 NotificationListenerService 子类
-            Class<?> listenerServiceClass = findNotificationListenerService();
-            if (listenerServiceClass == null) {
-                Log.w(TAG, "No NotificationListenerService subclass found. " +
-                    "Please register one in AndroidManifest.xml with BIND_NOTIFICATION_LISTENER_SERVICE permission.");
-                return null;
-            }
-
-            // 创建实例（仅用于反射调用；不会被系统真正使用）
-            Object instance = listenerServiceClass.getDeclaredConstructor().newInstance();
-            Method method = listenerServiceClass.getMethod("getActiveNotifications");
-            Object result = method.invoke(instance);
-            return (StatusBarNotification[]) result;
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to call getActiveNotifications via reflection", e);
-            return null;
-        }
-    }
-
-    /**
-     * 查找 NotificationListenerService 子类
-     *
-     * 通过扫描 dex 中的所有类，找到继承自 android.service.notification.NotificationListenerService 的类。
-     * 简化实现：通过反射加载常见类名。
-     */
-    private Class<?> findNotificationListenerService() {
-        // 尝试加载已知的 Service 类名（按命名约定）
-        String[] candidates = new String[] {
-            "com.stupidbeauty.sisterfuture.NotificationsListenerService",
-            "com.stupidbeauty.sisterfuture.service.NotificationsListenerService",
-            "com.stupidbeauty.sisterfuture.NotificationListenerServiceImpl"
-        };
-
-        for (String className : candidates) {
-            try {
-                Class<?> clazz = Class.forName(className);
-                if (android.service.notification.NotificationListenerService.class.isAssignableFrom(clazz)) {
-                    Log.i(TAG, "Found NotificationListenerService: " + className);
-                    return clazz;
-                }
-            } catch (ClassNotFoundException e) {
-                // 类不存在，继续尝试下一个
-            }
-        }
-        return null;
     }
 
     /**
