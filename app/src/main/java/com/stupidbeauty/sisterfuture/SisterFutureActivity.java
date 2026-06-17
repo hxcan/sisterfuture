@@ -5,6 +5,7 @@ import com.stupidbeauty.sisterfuture.tool.ToolRegistry;
 import com.stupidbeauty.sisterfuture.tool.ToolManager;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
+import com.stupidbeauty.sisterfuture.manager.EmptyDeltaDetectionManager;
 import com.stupidbeauty.sisterfuture.ContextManager;
 import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
 import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
@@ -1572,12 +1573,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 		public void onVolumeChanged(int i, byte[] bytes)
     {
       volumeIndicatorprogressBar.setProgress(i);
-		}
+    }
 
 		@Override
 		public void onBeginOfSpeech()
     {
-      voiceRecognizeResultString="";
+      voiceEndDetected=false;
       volumeIndicatorprogressBar.setVisibility(View.VISIBLE);
 		}
 
@@ -1614,7 +1615,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     @Override
 		public void onError(SpeechError speechError)
-		{
+    {
       commandRecognizebutton2.setVisibility(View.VISIBLE);
       commandRecognizebutton2.setEnabled(true);
       progressBar.setVisibility(View.INVISIBLE);
@@ -1625,7 +1626,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 		@Override
 		public void onEvent(int i, int i1, int i2, Bundle bundle)
-		{
+    {
     }
 	};
 
@@ -1638,7 +1639,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       switch (event.getAction())
       {
         case MotionEvent.ACTION_DOWN:
-          commandRecognizebutton2startRecognize();
+          commandRecognizeButton2startRecognize();
           break;
 
         case MotionEvent.ACTION_UP:
@@ -1661,6 +1662,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     server.get("/commitText/", commitTextCallback);
     PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback();
     server.get("/phoneInformation/", phoneInformationCallback);
+    phoneInformationCallback.init(server);
     server.listen(LanServicePort);
   }
 
@@ -1766,7 +1768,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       @Override
       public void onPermissionDenied(String permission) {
-        FileLogger.w(TAG, "Permission denied: " + permission);
+        FileLogger.w(TAG, "Permission denied: permission");
       }
 
       @Override
@@ -1905,98 +1907,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     builtinFtpServer.setPort(FTP_SERVER_PORT);
     builtinFtpServer.setAllowActiveMode(false);
     builtinFtpServer.setErrorListener(builtinFtpServerErrorListener);
-    builtinFtpServer.start();
-    
-    FileLogger.d(TAG, "🚀 [FTP_DEBUG] 内置 FTP 服务器已启动，端口：" + FTP_SERVER_PORT);
+    return;
   }
-
-  private void scheduleStartBuiltinFtpServer() {
-    Timer timerObj = new Timer();
-    TimerTask timerTaskObj = new TimerTask() {
-      public void run() {
-        startBuiltinFtpServer();
-      }
-    };
-    timerObj.schedule(timerTaskObj, 2000);
-  }
-
-  // 📷 #280 初始化图片选择器
-  private void initImagePicker()
-  {
-    // 由于 Activity 不支持 registerForActivityResult，需要使用传统的 startActivityForResult 方式
-    FileLogger.d(TAG, "📷 [IMAGE_PICKER_INIT] 图片选择器已初始化");
-  }
-
-  // 📷 #280 处理选中的图片
-  private void handleSelectedImage(Intent data)
-  {
-    try
-    {
-      Uri imageUri = data.getData();
-      if (imageUri == null) return;
-      
-      InputStream inputStream = getContentResolver().openInputStream(imageUri);
-      if (inputStream == null) return;
-      
-      ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-      byte[] buffer = new byte[4096];
-      int bytesRead;
-      while ((bytesRead = inputStream.read(buffer)) != -1)
-      {
-        byteArrayOutputStream.write(buffer, 0, bytesRead);
-      }
-      inputStream.close();
-      
-      byte[] imageBytes = byteArrayOutputStream.toByteArray();
-      currentImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
-      
-      runOnUiThread(() -> {
-        Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
-        // ✅ 不再隐藏按钮，保持始终可见
-        // uploadImageButton.setVisibility(View.VISIBLE); // 本来就可见，不需要设置
-      });
-      
-      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [IMAGE_ERROR] 加载图片失败", e);
-      runOnUiThread(() -> {
-        Toast.makeText(this, "❌ 图片加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
-      });
-    }
-  }
-
-  // 📷 #280 打开图片选择器
-  private void openImagePicker()
-  {
-    FileLogger.d(TAG, "📂 [PICKER] 准备打开相册选择器...");
-    
-    Intent pickIntent = new Intent(Intent.ACTION_PICK);
-    pickIntent.setType("image/*");
-    try
-    {
-      startActivityForResult(pickIntent, 1001);
-      FileLogger.d(TAG, "📷 [IMAGE_PICKER] 已打开图片选择器");
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
-      Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
-    }
-  }
-
-  @Override
-  protected void onActivityResult(int requestCode, int resultCode, Intent data)
-  {
-    super.onActivityResult(requestCode, resultCode, data);
-    
-    FileLogger.d(TAG, "🔄 [RESULT] 收到相册返回结果 | requestCode=" + requestCode + " | resultCode=" + resultCode);
-    
-    if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
-    {
-      handleSelectedImage(data);
-    }
-  }
-
 }
