@@ -1422,16 +1422,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
           String fullAnswer = accumulatedAnswer.toString();
           
+          // 🔍 #759909257401 检测连续重复回复
+          boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
           
-          // 🆕 #816587404117 检测空响应：在正常流程中检测（不是 onError）
+          // 🆕 #816587404117 检测空响应：在正常流程中检测连续空响应
           if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
               EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
               handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
               return;
           }
           
-          ttsSayReply(fullAnswer);
-          // ⚠️ #5031 跳过工具调用消息的空回复检测（工具调用时 content 为空是正常的）
+          if (!hasToolCalls && repeatDetectionManager != null && repeatDetectionManager.recordAndCheck(fullAnswer)) {
           boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
           
           if (!hasToolCalls && repeatDetectionManager != null && repeatDetectionManager.recordAndCheck(fullAnswer))
@@ -1450,6 +1451,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             // 🔄 切换接入点后，立即重新发送请求（与 onError() 中的逻辑保持一致）
             FileLogger.d(TAG, "🔄 [RETRY] 准备重试，使用新接入点发送请求");
             sendChatRequestTongYi();
+            return; // 不再继续处理当前回复，等待新请求的结果
+          }
+          
+          ttsSayReply(fullAnswer);
+          contextManager.addAssistantMessage(fullAnswer);
+          contextManager.increaseMaxRounds();
+          
+          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "回复完成");
+          
+          modelAccessPointManager.resetFailureCount();
+          rateLimitRetryCount = 0;
         });
       }
     }
