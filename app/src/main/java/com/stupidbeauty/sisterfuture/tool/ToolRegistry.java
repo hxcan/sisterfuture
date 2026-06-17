@@ -145,5 +145,7 @@ public class ToolRegistry {
         toolManager.registerTool(new GetInstalledAppsTool(context));
         // 🔥 新增：日历写入工具
         toolManager.registerTool(new CreateCalendarEventTool(context));
+        // 🔥 新增：通知监听工具
+        toolManager.registerTool(new ListNotificationsTool(context));
     }
 }
