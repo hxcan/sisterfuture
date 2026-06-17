@@ -3,6 +3,12 @@ apply plugin: 'io.objectbox' // 这个插件必须加！
 
 // ✅ 未来姐姐的测试注释：这是一个小修改
 
+configurations.all {
+    // 修复 Kotlin stdlib 重复类问题：排除旧版 kotlin-stdlib-jdk7/jdk8
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+}
+
 dependencies
 {
   implementation fileTree(include: ['*.jar'], dir: 'libs')
