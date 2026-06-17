@@ -5,6 +5,7 @@ import com.stupidbeauty.sisterfuture.tool.ToolRegistry;
 import com.stupidbeauty.sisterfuture.tool.ToolManager;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
+import com.stupidbeauty.sisterfuture.manager.EmptyDeltaDetectionManager;
 import com.stupidbeauty.sisterfuture.ContextManager;
 import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
 import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
@@ -1442,6 +1443,19 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.d(TAG, "🔄 [RETRY] 准备重试，使用新接入点发送请求");
             sendChatRequestTongYi();
             return; // 不再继续处理当前回复，等待新请求的结果
+
+          // 🆕 #816587404117 集成 EmptyDeltaDetectionManager
+          boolean hasContent = !fullAnswer.isEmpty();
+          boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
+          EmptyDeltaDetectionManager.getInstance().recordResponse(hasContent, hasToolCalls);
+
+          int currentContextSize = contextManager.getHistory().size();
+          if (EmptyDeltaDetectionManager.getInstance().shouldTriggerContextShorten(currentContextSize)) {
+              EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
+              handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
+              return;
+          }
+
           }
           
           ttsSayReply(fullAnswer);
