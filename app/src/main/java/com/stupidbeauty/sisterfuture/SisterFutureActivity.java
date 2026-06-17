@@ -1445,17 +1445,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             return; // 不再继续处理当前回复，等待新请求的结果
 
           // 🆕 #816587404117 集成 EmptyDeltaDetectionManager
-          boolean hasContent = !fullAnswer.isEmpty();
-          boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
-          EmptyDeltaDetectionManager.getInstance().recordResponse(hasContent, hasToolCalls);
-
-          int currentContextSize = contextManager.getHistory().size();
-          if (EmptyDeltaDetectionManager.getInstance().shouldTriggerContextShorten(currentContextSize)) {
+          if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
               EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
               handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
               return;
           }
-
           }
           
           ttsSayReply(fullAnswer);
