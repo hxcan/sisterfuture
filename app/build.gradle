@@ -73,8 +73,7 @@ android
   {
     buildConfig = true
   }
-  compileSdkVersion 33
-  buildToolsVersion '28.0.3'
+  compileSdkVersion 34  // 升级到 34 以支持 androidx.activity:1.8.0
   namespace 'com.stupidbeauty.sisterfuture'
   signingConfigs {
     debug {
