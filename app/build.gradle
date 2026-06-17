@@ -59,6 +59,9 @@ dependencies
 
   // 🆕 Android Crash Detector - Global exception handler with crash logging to external storage
   implementation 'com.github.hxcan:android-crash-detector:2026.4.8'
+
+  // Activity Result API (修复 ActivityLauncher/ActivityResultLauncher 找不到的问题)
+  implementation 'androidx.activity:activity:1.8.0'
 }
 android
 {
