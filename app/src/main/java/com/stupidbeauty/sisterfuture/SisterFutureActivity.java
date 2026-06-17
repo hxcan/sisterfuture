@@ -53,7 +53,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.ActivityLauncher;
 import android.net.Uri;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
@@ -360,7 +360,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       else if ("user".equals(role))
       {
-        // 🖼️ 检测是否为多模态消息（包含图片）
         if (contentObj instanceof JSONArray)
         {
           JSONArray contentArray = (JSONArray) contentObj;
@@ -387,7 +386,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   String url = imageUrlObj.optString("url");
                   if (url != null && url.startsWith("data:image/jpeg;base64,"))
                   {
-                    // ✅ 修复：使用 lastIndexOf(',') 动态查找逗号位置，替代硬编码的 substring(21)
                     int commaIndex = url.lastIndexOf(',');
                     if (commaIndex > 0) {
                       imageUrl = url.substring(commaIndex + 1);
@@ -404,12 +402,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             }
           }
           
-          // 使用三参数构造函数，传递文字和图片
           messageAdapter.addMessage(new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl));
         }
         else
         {
-          // 纯文本消息
           String content = msg.optString("content");
           if (!content.isEmpty())
           {
@@ -465,17 +461,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     String toolCallId = lastMsg.optString("tool_call_id", "");
     
     boolean shouldResume = false;
-    String resumeReason = "";
     
     if ("user".equals(role))
     {
       shouldResume = true;
-      resumeReason = "最后一条是用户消息";
     }
     else if ("tool".equals(role) && !toolCallId.isEmpty())
     {
       shouldResume = true;
-      resumeReason = "最后一条是工具调用结果";
     }
     
     if (shouldResume)
@@ -497,7 +490,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     if (message == null || message.trim().isEmpty())
     {
-      // 如果没有文字但有图片，仍然可以发送图片
       if (currentImageBase64 == null || currentImageBase64.isEmpty())
       {
         return;
@@ -506,7 +498,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
     
-    // 🖼️ 检测是否有图片，构建多模态消息或纯文本消息
     if (hasImage)
     {
       FileLogger.i(TAG, "📷 [SEND_WITH_IMAGE] 发送带图片的消息 | 文字长度：" + (message != null ? message.length() : 0) + " | Base64 长度：" + currentImageBase64.length());
@@ -515,7 +506,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       {
         JSONArray contentArray = new JSONArray();
         
-        // 添加文字部分（如果有）
         if (message != null && !message.trim().isEmpty())
         {
           JSONObject textContent = new JSONObject();
@@ -524,7 +514,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           contentArray.put(textContent);
         }
         
-        // 添加图片部分
         JSONObject imageContent = new JSONObject();
         imageContent.put("type", "image_url");
         
@@ -533,28 +522,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         imageContent.put("image_url", imageUrl);
         contentArray.put(imageContent);
         
-        // 构建完整的用户消息
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
         userMessage.put("content", contentArray);
         
-        // ✅ 添加到上下文管理器（唯一真相源）
         contextManager.addRawMessage(userMessage);
         
-        // 验证是否成功添加
         List<JSONObject> history = contextManager.getHistory();
         int contextSize = history != null ? history.size() : 0;
         FileLogger.i(TAG, "✅ [CONTEXT_ADDED] 多模态消息已添加到上下文 | 消息总数=" + contextSize);
         
-        // UI 显示 - 🖼️ 传递图片数据到 MessageItem，保留原始文字
         messageAdapter.addMessage(new MessageItem(message != null ? message : "", MessageType.USER, hasImage ? currentImageBase64 : null));
         
-        // ✅ 发送完成后清除图片缓存，但保持按钮可见
         currentImageBase64 = null;
         
         scrollToBottom();
         
-        // 继续发送请求
         if (isDeadlockRescueMode) {
           return;
         }
@@ -600,7 +583,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     else
     {
-      // 📝 纯文本消息处理（原有逻辑）
       FileLogger.i(TAG, "📝 [SEND_TEXT] 发送纯文本消息 | 长度：" + message.length());
       
       messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
@@ -828,7 +810,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       accumulatedAnswer.setLength(0);
       showThinkingOverlay();
 
-      // 获取当前历史并应用严厉模式清理
       List<JSONObject> history = contextManager.getHistory();
       List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
       
@@ -865,7 +846,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
-      // 🔗 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();
 
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
@@ -891,7 +871,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             return;
           }
           
-          // ❌ 记录 AI 错误
           String errorType = error.getClass().getSimpleName();
           String errorMsg = error.getMessage();
           FileLogger.e(TAG, "❌ [AI_ERROR] AI 响应错误 | 错误类型=" + errorType + " | 错误信息=" + errorMsg);
@@ -929,6 +908,24 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 }
               }
             }
+            
+            String errorBody = responseException.getCustomMessage();
+            FileLogger.e(TAG, "HTTP " + (response != null ? response.code() : 0) + ": " + errorBody);
+            
+            if (isHtmlResponse(errorBody))
+            {
+              FileLogger.e(TAG, "API 返回 HTML 页面，防止崩溃");
+              runOnUiThread(() ->
+              {
+                messageAdapter.addMessage(new MessageItem("API 返回 HTML 页面", MessageType.AI));
+                scrollToBottom();
+              });
+              return;
+            }
+          }
+          else
+          {
+            FileLogger.e(TAG, "未知异常，不触发切换：" + error.getMessage());
           }
 
           if (isAccessPointUnavailable)
@@ -1127,28 +1124,24 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private final RecognizerListener mRecognizerListener=new RecognizerListener()
 	{
 		@Override
-		public void onVolumeChanged(int i, byte[] bytes)
-    {
+		public void onVolumeChanged(int i, byte[] bytes) {
       volumeIndicatorprogressBar.setProgress(i);
-    }
+		}
 
 		@Override
-		public void onBeginOfSpeech()
-    {
+		public void onBeginOfSpeech() {
       voiceEndDetected=false;
       volumeIndicatorprogressBar.setVisibility(View.VISIBLE);
 		}
 
 		@Override
-		public void onEndOfSpeech()
-    {
+		public void onEndOfSpeech() {
       volumeIndicatorprogressBar.setVisibility(View.INVISIBLE);
       voiceEndDetected=true;
 		}
 
 		@Override
-		public void onResult(RecognizerResult recognizerResult, boolean b)
-    {
+		public void onResult(RecognizerResult recognizerResult, boolean b) {
       progressBar.setVisibility(View.INVISIBLE);
       commandRecognizebutton2.setVisibility(View.VISIBLE);
       commandRecognizebutton2.setEnabled(true);
@@ -1171,8 +1164,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
 
     @Override
-		public void onError(SpeechError speechError)
-    {
+		public void onError(SpeechError speechError) {
       commandRecognizebutton2.setVisibility(View.VISIBLE);
       commandRecognizebutton2.setEnabled(true);
       progressBar.setVisibility(View.INVISIBLE);
@@ -1182,8 +1174,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 		}
 
 		@Override
-		public void onEvent(int i, int i1, int i2, Bundle bundle)
-    {
+		public void onEvent(int i, int i1, int i2, Bundle bundle) {
     }
 	};
 
@@ -1447,7 +1438,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void startBuiltinFtpServer() 
   {
     File rootDir = getFilesDir();
-    
+
     builtinFtpServer = new BuiltinFtpServer(this);
     builtinFtpServerErrorListener = new BuiltinFtpServerErrorListener();
     
