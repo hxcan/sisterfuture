@@ -2,17 +2,21 @@ package com.stupidbeauty.sisterfuture.manager;
 
 import android.util.Log;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
- * 连续空 Delta 检测管理器
+ * 连续空响应检测管理器
  *
- * 用于检测 SSE 流中 delta.content 连续为空的情况，并判定是否需要触发上下文缩短。
+ * 用于跨请求跟踪"连续空响应"的情况，并判定是否需要触发上下文缩短。
  * 当 M3 等思考型模型在上下文超长时，可能因为思考过程消耗大量 token，
- * 导致 delta.content 连续为空（只有 reasoning_content）。这种情况下，
- * 应当判定为"上下文超长"并触发自动缩短机制。
+ * 导致整个响应中 delta.content 都是空的（只有 reasoning_content）。
+ * 多次连续出现这种"空响应"，就应当判定为"上下文超长"并触发自动缩短。
  *
- * 触发条件（需要同时满足）：
- * 1. 连续 N 次（默认 2 次）delta.content 为空
- * 2. 当前上下文消息总数 > M（默认 200）
+ * 重要设计：
+ * - 统计单位是"请求"，不是"delta"（一次请求中多次空 delta 只算一次）
+ * - 跨请求累积统计（不会在每次请求前 reset）
+ * - 排除 tool_call 干扰（带 tool_calls 的响应不算空）
+ * - 阈值：连续 N 次（默认 2 次）空响应 + 上下文 > M（默认 200）
  *
  * @author SisterFuture Team
  * @since 2026-06-17
@@ -22,8 +26,8 @@ public class EmptyDeltaDetectionManager {
     private static final String TAG = "EmptyDeltaDetectionManager";
 
     /**
-     * 连续空 delta 的阈值
-     * 当连续检测到该次数的空 delta 时，可能触发上下文缩短
+     * 连续空响应的阈值
+     * 当连续 N 次请求的响应为空时，触发上下文缩短
      */
     private static final int CONSECUTIVE_EMPTY_THRESHOLD = 2;
 
@@ -34,54 +38,66 @@ public class EmptyDeltaDetectionManager {
     private static final int CONTEXT_SIZE_THRESHOLD = 200;
 
     /**
-     * 当前连续空 delta 的计数
+     * 当前连续空响应的计数（跨请求累积）
      */
-    private int consecutiveEmptyCount = 0;
+    private final AtomicInteger consecutiveEmptyResponseCount = new AtomicInteger(0);
 
     /**
      * 是否已经触发了缩短操作
-     * 防止在同一次请求中重复触发
+     * 防止重复触发，直到外部调用 acknowledgeTrigger() 或 reset() 才解除
      */
-    private boolean alreadyTriggered = false;
+    private volatile boolean alreadyTriggered = false;
 
     /**
-     * 记录一次空 delta
+     * 记录一次请求的响应情况
+     *
+     * @param hasContent 响应中是否有 content（文本内容）
+     * @param hasToolCalls 响应中是否有 tool_calls（工具调用）
      */
-    public void recordEmptyDelta() {
-        consecutiveEmptyCount++;
-        Log.d(TAG, "📊 [EMPTY_DELTA] 记录空 delta | 当前连续次数=" + consecutiveEmptyCount);
-    }
-
-    /**
-     * 记录一次有内容的 delta
-     * 一旦检测到有内容，重置连续空计数
-     */
-    public void recordContentDelta() {
-        if (consecutiveEmptyCount > 0) {
-            Log.d(TAG, "✅ [CONTENT_DELTA] 检测到内容 delta，重置连续空计数 | 原计数=" + consecutiveEmptyCount);
+    public void recordResponse(boolean hasContent, boolean hasToolCalls) {
+        // 如果响应有 tool_calls，不算空响应（这是正常的工具调用流程）
+        if (hasToolCalls) {
+            if (consecutiveEmptyResponseCount.get() > 0) {
+                Log.d(TAG, "🔧 [TOOL_CALL_RESPONSE] 检测到 tool_call 响应，重置连续空响应计数 | 原计数=" + consecutiveEmptyResponseCount.get());
+            }
+            consecutiveEmptyResponseCount.set(0);
+            return;
         }
-        consecutiveEmptyCount = 0;
+
+        // 如果响应有 content（即使是思考后的简短回复），也不算空
+        if (hasContent) {
+            if (consecutiveEmptyResponseCount.get() > 0) {
+                Log.d(TAG, "✅ [CONTENT_RESPONSE] 检测到 content 响应，重置连续空响应计数 | 原计数=" + consecutiveEmptyResponseCount.get());
+            }
+            consecutiveEmptyResponseCount.set(0);
+            return;
+        }
+
+        // 既无 content 也无 tool_calls → 真正的空响应
+        int newCount = consecutiveEmptyResponseCount.incrementAndGet();
+        Log.w(TAG, "📊 [EMPTY_RESPONSE] 记录空响应 | 当前连续次数=" + newCount);
     }
 
     /**
      * 判定是否应该触发上下文缩短
      *
      * @param currentContextSize 当前上下文消息总数
-     * @return 如果同时满足"连续空 delta >= 阈值"和"上下文 > 阈值"，返回 true
+     * @return 如果同时满足"连续空响应 >= 阈值"和"上下文 > 阈值"，返回 true
      */
     public boolean shouldTriggerContextShorten(int currentContextSize) {
         if (alreadyTriggered) {
-            return false; // 已经触发过，不再重复触发
+            return false; // 已经触发过，等待外部确认
         }
 
-        boolean emptyCountReached = consecutiveEmptyCount >= CONSECUTIVE_EMPTY_THRESHOLD;
+        int currentEmptyCount = consecutiveEmptyResponseCount.get();
+        boolean emptyCountReached = currentEmptyCount >= CONSECUTIVE_EMPTY_THRESHOLD;
         boolean contextSizeReached = currentContextSize > CONTEXT_SIZE_THRESHOLD;
 
         if (emptyCountReached && contextSizeReached) {
-            Log.w(TAG, "🚨 [TRIGGER] 满足上下文缩短触发条件 | 连续空次数=" + consecutiveEmptyCount +
+            Log.w(TAG, "🚨 [TRIGGER] 满足上下文缩短触发条件 | 连续空响应次数=" + currentEmptyCount +
                     " (>= " + CONSECUTIVE_EMPTY_THRESHOLD + ") | 上下文大小=" + currentContextSize +
                     " (> " + CONTEXT_SIZE_THRESHOLD + ")");
-            alreadyTriggered = true; // 标记已触发
+            alreadyTriggered = true; // 标记已触发，防止重复
             return true;
         }
 
@@ -89,22 +105,28 @@ public class EmptyDeltaDetectionManager {
     }
 
     /**
-     * 重置检测器状态
-     * 在请求成功完成或开始新请求时调用
+     * 确认已处理触发（例如调用方已成功执行上下文缩短后调用）
+     * 重置触发状态，允许下次重新判定
      */
-    public void reset() {
-        if (consecutiveEmptyCount > 0 || alreadyTriggered) {
-            Log.d(TAG, "🔄 [RESET] 重置检测器状态 | 原连续空次数=" + consecutiveEmptyCount + " | 原已触发=" + alreadyTriggered);
-        }
-        consecutiveEmptyCount = 0;
+    public void acknowledgeTrigger() {
+        Log.d(TAG, "✅ [ACK] 确认触发已处理，重置触发状态 | 保留连续空响应计数=" + consecutiveEmptyResponseCount.get());
         alreadyTriggered = false;
     }
 
     /**
-     * 获取当前连续空 delta 次数（用于调试和日志）
+     * 强制重置所有状态（仅在必要时使用，如手动清理）
      */
-    public int getConsecutiveEmptyCount() {
-        return consecutiveEmptyCount;
+    public void forceReset() {
+        Log.d(TAG, "🔄 [FORCE_RESET] 强制重置检测器状态 | 原连续空响应次数=" + consecutiveEmptyResponseCount.get() + " | 原已触发=" + alreadyTriggered);
+        consecutiveEmptyResponseCount.set(0);
+        alreadyTriggered = false;
+    }
+
+    /**
+     * 获取当前连续空响应次数（用于调试和日志）
+     */
+    public int getConsecutiveEmptyResponseCount() {
+        return consecutiveEmptyResponseCount.get();
     }
 
     /**
@@ -115,18 +137,10 @@ public class EmptyDeltaDetectionManager {
     }
 
     /**
-     * 获取连续空 delta 阈值（用于调试和测试）
+     * 获取连续空响应阈值（用于调试和测试）
      */
     public static int getConsecutiveEmptyThreshold() {
         return CONSECUTIVE_EMPTY_THRESHOLD;
-    }
-
-    /**
-     * 私有构造函数，防止实例化
-     */
-    private EmptyDeltaDetectionManager() {
-        // 工具类不应被实例化
-        throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
 
     // ========== 单例模式 ==========
