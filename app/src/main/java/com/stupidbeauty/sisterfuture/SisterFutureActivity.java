@@ -593,6 +593,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       catch (JSONException e)
       {
         FileLogger.e(TAG, "❌ [MULTIMODAL_ERROR] 构建多模态消息失败", e);
+        runOnUiThread(() -> {
+          Toast.makeText(SisterFutureActivity.this, "❌ 构建消息失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        });
       }
     }
     else
@@ -881,17 +884,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         @Override
         public void onError(Exception error)
         {
-          FileLogger.d(TAG, "❌ [ERROR_CHECK] 请求 #" + requestId + " 错误");
+          FileLogger.d(TAG, "❌ [ERROR_CHECK] 请求 #" + requestId + " 错误 | lastSuccessRequestId=" + lastSuccessRequestId + " | 忽略=" + (requestId < lastSuccessRequestId));
           
           if (requestId < lastSuccessRequestId) {
+            FileLogger.w(TAG, "⚠️ [IGNORED] 忽略旧请求 #" + requestId + " 的错误回调（lastSuccessRequestId=" + lastSuccessRequestId + "）");
             return;
           }
           
+          // ❌ 记录 AI 错误
           String errorType = error.getClass().getSimpleName();
           String errorMsg = error.getMessage();
           FileLogger.e(TAG, "❌ [AI_ERROR] AI 响应错误 | 错误类型=" + errorType + " | 错误信息=" + errorMsg);
           
+          FileLogger.e(TAG, "请求出错：" + errorType + " - " + errorMsg);
           hideThinkingOverlay();
+          
+          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "请求出错，请重试");
           
           boolean isAccessPointUnavailable = false;
 
@@ -1253,6 +1261,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
 
         promptBuilder.append("- ").append(name).append(":").append(description).append("\n");
+      }
+
+      for (Tool tool : tools)
+      {
+        String enhancement = tool.getSystemPromptEnhancement(context);
+        if (enhancement != null && !enhancement.trim().isEmpty())
+        {
+          promptBuilder.append("\n【").append(tool.getName()).append(" 特别约束】")
+           .append(enhancement).append("\n");
+        }
       }
 
       promptBuilder.append("\n/no_think\n");
