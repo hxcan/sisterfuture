@@ -4,6 +4,8 @@ import android.util.Log;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.stupidbeauty.sisterfuture.bean.Delta;
+
 /**
  * 连续空响应检测管理器
  *
@@ -25,131 +27,57 @@ public class EmptyDeltaDetectionManager {
 
     private static final String TAG = "EmptyDeltaDetectionManager";
 
-    /**
-     * 连续空响应的阈值
-     * 当连续 N 次请求的响应为空时，触发上下文缩短
-     */
     private static final int CONSECUTIVE_EMPTY_THRESHOLD = 2;
-
-    /**
-     * 上下文消息数量的阈值
-     * 只有当消息总数超过此阈值时，才认为可能存在"上下文超长"问题
-     */
     private static final int CONTEXT_SIZE_THRESHOLD = 200;
 
-    /**
-     * 当前连续空响应的计数（跨请求累积）
-     */
     private final AtomicInteger consecutiveEmptyResponseCount = new AtomicInteger(0);
-
-    /**
-     * 是否已经触发了缩短操作
-     * 防止重复触发，直到外部调用 acknowledgeTrigger() 或 reset() 才解除
-     */
     private volatile boolean alreadyTriggered = false;
 
     /**
-     * 记录一次请求的响应情况
+     * 检测并记录响应，在需要时触发上下文缩短
      *
-     * @param hasContent 响应中是否有 content（文本内容）
-     * @param hasToolCalls 响应中是否有 tool_calls（工具调用）
+     * @param delta 模型响应Delta
+     * @param fullAnswer 完整回答文本
+     * @param contextSize 当前上下文消息数量
+     * @return true 表示触发了上下文缩短（调用方应 return）
      */
-    public void recordResponse(boolean hasContent, boolean hasToolCalls) {
-        // 如果响应有 tool_calls，不算空响应（这是正常的工具调用流程）
-        if (hasToolCalls) {
-            if (consecutiveEmptyResponseCount.get() > 0) {
-                Log.d(TAG, "🔧 [TOOL_CALL_RESPONSE] 检测到 tool_call 响应，重置连续空响应计数 | 原计数=" + consecutiveEmptyResponseCount.get());
-            }
-            consecutiveEmptyResponseCount.set(0);
-            return;
-        }
-
-        // 如果响应有 content（即使是思考后的简短回复），也不算空
-        if (hasContent) {
-            if (consecutiveEmptyResponseCount.get() > 0) {
-                Log.d(TAG, "✅ [CONTENT_RESPONSE] 检测到 content 响应，重置连续空响应计数 | 原计数=" + consecutiveEmptyResponseCount.get());
-            }
-            consecutiveEmptyResponseCount.set(0);
-            return;
-        }
-
-        // 既无 content 也无 tool_calls → 真正的空响应
-        int newCount = consecutiveEmptyResponseCount.incrementAndGet();
-        Log.w(TAG, "📊 [EMPTY_RESPONSE] 记录空响应 | 当前连续次数=" + newCount);
-    }
-
-    /**
-     * 判定是否应该触发上下文缩短
-     *
-     * @param currentContextSize 当前上下文消息总数
-     * @return 如果同时满足"连续空响应 >= 阈值"和"上下文 > 阈值"，返回 true
-     */
-    public boolean shouldTriggerContextShorten(int currentContextSize) {
-        if (alreadyTriggered) {
-            return false; // 已经触发过，等待外部确认
-        }
-
-        int currentEmptyCount = consecutiveEmptyResponseCount.get();
-        boolean emptyCountReached = currentEmptyCount >= CONSECUTIVE_EMPTY_THRESHOLD;
-        boolean contextSizeReached = currentContextSize > CONTEXT_SIZE_THRESHOLD;
-
-        if (emptyCountReached && contextSizeReached) {
-            Log.w(TAG, "🚨 [TRIGGER] 满足上下文缩短触发条件 | 连续空响应次数=" + currentEmptyCount +
-                    " (>= " + CONSECUTIVE_EMPTY_THRESHOLD + ") | 上下文大小=" + currentContextSize +
-                    " (> " + CONTEXT_SIZE_THRESHOLD + ")");
-            alreadyTriggered = true; // 标记已触发，防止重复
+    public boolean checkAndRecordResponse(Delta delta, String fullAnswer, int contextSize) {
+        boolean hasContent = !fullAnswer.isEmpty();
+        boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
+        
+        recordResponse(hasContent, hasToolCalls);
+        
+        if (shouldTriggerContextShorten(contextSize)) {
             return true;
         }
-
         return false;
     }
 
-    /**
-     * 确认已处理触发（例如调用方已成功执行上下文缩短后调用）
-     * 重置触发状态，允许下次重新判定
-     */
+    private void recordResponse(boolean hasContent, boolean hasToolCalls) {
+        if (hasToolCalls || hasContent) {
+            if (consecutiveEmptyResponseCount.get() > 0) {
+                consecutiveEmptyResponseCount.set(0);
+            }
+            return;
+        }
+        consecutiveEmptyResponseCount.incrementAndGet();
+    }
+
+    private boolean shouldTriggerContextShorten(int currentContextSize) {
+        if (alreadyTriggered) return false;
+
+        if (consecutiveEmptyResponseCount.get() >= CONSECUTIVE_EMPTY_THRESHOLD 
+            && currentContextSize > CONTEXT_SIZE_THRESHOLD) {
+            alreadyTriggered = true;
+            return true;
+        }
+        return false;
+    }
+
     public void acknowledgeTrigger() {
-        Log.d(TAG, "✅ [ACK] 确认触发已处理，重置触发状态 | 保留连续空响应计数=" + consecutiveEmptyResponseCount.get());
         alreadyTriggered = false;
     }
 
-    /**
-     * 强制重置所有状态（仅在必要时使用，如手动清理）
-     */
-    public void forceReset() {
-        Log.d(TAG, "🔄 [FORCE_RESET] 强制重置检测器状态 | 原连续空响应次数=" + consecutiveEmptyResponseCount.get() + " | 原已触发=" + alreadyTriggered);
-        consecutiveEmptyResponseCount.set(0);
-        alreadyTriggered = false;
-    }
-
-    /**
-     * 获取当前连续空响应次数（用于调试和日志）
-     */
-    public int getConsecutiveEmptyResponseCount() {
-        return consecutiveEmptyResponseCount.get();
-    }
-
-    /**
-     * 获取上下文大小阈值（用于调试和测试）
-     */
-    public static int getContextSizeThreshold() {
-        return CONTEXT_SIZE_THRESHOLD;
-    }
-
-    /**
-     * 获取连续空响应阈值（用于调试和测试）
-     */
-    public static int getConsecutiveEmptyThreshold() {
-        return CONSECUTIVE_EMPTY_THRESHOLD;
-    }
-
-    // ========== 单例模式 ==========
-
-    private static volatile EmptyDeltaDetectionManager instance;
-
-    /**
-     * 获取单例实例
-     */
     public static EmptyDeltaDetectionManager getInstance() {
         if (instance == null) {
             synchronized (EmptyDeltaDetectionManager.class) {
@@ -160,4 +88,6 @@ public class EmptyDeltaDetectionManager {
         }
         return instance;
     }
+
+    private static volatile EmptyDeltaDetectionManager instance;
 }
