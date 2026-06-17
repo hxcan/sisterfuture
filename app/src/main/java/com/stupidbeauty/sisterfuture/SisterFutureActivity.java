@@ -848,6 +848,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       catch (Exception e)
       {
         e.printStackTrace();
+
+        try
+        {
+          messagesArray = new JSONArray();
+          String enhancedSystemPrompt = buildEnhancedSystemPrompt(toolManager, this);
+
+          messagesArray.put(new JSONObject().put("role", "system").put("content", enhancedSystemPrompt));
+          messagesArray.put(new JSONObject().put("role", "user").put("content", voiceRecognizeResultString));
+        }
+        catch (Exception ignored)
+        {
+        }
       }
 
       // 🔗 生成预留消息 ID
