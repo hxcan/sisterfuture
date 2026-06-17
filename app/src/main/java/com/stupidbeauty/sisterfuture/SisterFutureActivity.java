@@ -597,13 +597,37 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     else
     {
-      // 📝 纯文本消息处理
+      // 📝 纯文本消息处理（原有逻辑）
       FileLogger.i(TAG, "📝 [SEND_TEXT] 发送纯文本消息 | 长度：" + message.length());
       
       messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
       contextManager.addUserMessage(message);
       
       if (isDeadlockRescueMode) {
+        FileLogger.d(TAG, "🔥 [RESCUE_MODE] 处于死循环救援模式，处理 API Key 输入");
+        guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
+          @Override
+          public void onResponse(String response) {
+            runOnUiThread(() -> {
+              messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
+              scrollToBottom();
+              ttsSayReply(response);
+              if (response.contains("✅")) {
+                FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
+                isDeadlockRescueMode = false;
+                modelAccessPointManager.resetFailureCount();
+              }
+            });
+          }
+
+          @Override
+            public void onError(String error) {
+              runOnUiThread(() -> {
+                messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+                scrollToBottom();
+              });
+            }
+        });
         return;
       }
       
