@@ -165,9 +165,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final int LanServicePort =10471;
   private String voiceRecognizeResultString;
   private Vibrator vibrator;
-  @BindView(R.id.sendButton
-2) Button sendButton
-2;
+  @BindView(R.id.sendButtonn2) Button sendButtonn2;
   @BindView(R.id.commandRecognizebutton2) Button commandRecognizebutton2;
   @BindView(R.id.thinking_overlay) TextView thinking_overlay;
   @BindView(R.id.progressBar) ProgressBar progressBar;
@@ -641,10 +639,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
   
-  @OnClick(R.id.sendButton
-2)
-  public void sendButton
-2()
+  @OnClick(R.id.sendButtonn2)
+  public void sendButtonn2()
   {
     voiceRecognizeResultString = recognizeResulttextView.getText().toString();
     sendMessageToSister(voiceRecognizeResultString);
@@ -714,8 +710,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
         thinking_overlay.setVisibility(View.VISIBLE);
         recognizeResulttextView.setEnabled(false);
-        sendButton
-2.setEnabled(false);
+        sendButtonn2.setEnabled(false);
         commandRecognizebutton2.setEnabled(false);
         
         SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在思考中...");
@@ -732,8 +727,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       {
         thinking_overlay.setVisibility(View.GONE);
         recognizeResulttextView.setEnabled(true);
-        sendButton
-2.setEnabled(true);
+        sendButtonn2.setEnabled(true);
         commandRecognizebutton2.setEnabled(true);
       }
     });
