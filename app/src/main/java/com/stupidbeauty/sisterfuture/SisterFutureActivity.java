@@ -120,6 +120,7 @@ import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
 import com.stupidbeauty.sisterfuture.manager.PermissionManager;
 import com.stupidbeauty.sisterfuture.manager.RepeatDetectionManager;
+import com.stupidbeauty.sisterfuture.manager.EmptyDeltaDetectionManager;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
@@ -1441,7 +1442,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             // 🔄 切换接入点后，立即重新发送请求（与 onError() 中的逻辑保持一致）
             FileLogger.d(TAG, "🔄 [RETRY] 准备重试，使用新接入点发送请求");
             sendChatRequestTongYi();
-            return; // 不再继续处理当前回复，等待新请求的结果
+          // 🆕 #816587404117 集成 EmptyDeltaDetectionManager
+          if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
+              EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
+              handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
+              return;
+          }
+          
+          ttsSayReply(fullAnswer);
           }
           
           ttsSayReply(fullAnswer);
