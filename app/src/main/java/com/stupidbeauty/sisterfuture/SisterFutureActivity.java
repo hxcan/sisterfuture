@@ -120,6 +120,7 @@ import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
 import com.stupidbeauty.sisterfuture.manager.PermissionManager;
 import com.stupidbeauty.sisterfuture.manager.RepeatDetectionManager;
+import com.stupidbeauty.sisterfuture.manager.EmptyDeltaDetectionManager;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
@@ -1422,8 +1423,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           String fullAnswer = accumulatedAnswer.toString();
           
           // 🔍 #759909257401 检测连续重复回复
-          // ⚠️ #5031 跳过工具调用消息的空回复检测（工具调用时 content 为空是正常的）
           boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
+          
+          // 🆕 #816587404117 检测空响应：在正常流程中检测连续空响应
+          if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
+              EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
+              handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
+              return;
+          }
           
           if (!hasToolCalls && repeatDetectionManager != null && repeatDetectionManager.recordAndCheck(fullAnswer))
           {
