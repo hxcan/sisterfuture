@@ -2,9 +2,12 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.app.Notification;
 import android.app.NotificationManager;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import org.json.JSONArray;
@@ -24,6 +27,7 @@ import org.json.JSONObject;
  * - 直接调用 NotificationManager.getActiveNotifications()（Android 6+ 官方 API）
  * - 系统要求先注册一个 NotificationListenerService 子类（NotificationsListenerService）
  *   用户授权后系统才能允许此 API 返回数据
+ * - 工具启动时检测权限，未授权时返回引导信息让用户去授权
  */
 public class ListNotificationsTool implements Tool {
     private static final String TAG = "ListNotificationsTool";
@@ -76,6 +80,45 @@ public class ListNotificationsTool implements Tool {
         return false;
     }
 
+    /**
+     * 检查通知使用权是否已授予
+     */
+    private boolean isNotificationListenerEnabled() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            return false;
+        }
+
+        String packageName = context.getPackageName();
+        String flat = Settings.Secure.getString(context.getContentResolver(),
+            "enabled_notification_listeners");
+        if (flat == null || flat.isEmpty()) {
+            return false;
+        }
+
+        // 检查包名是否在启用的监听器列表中
+        for (String componentNameStr : flat.split(":")) {
+            ComponentName componentName = ComponentName.unflattenFromString(componentNameStr);
+            if (componentName != null && packageName.equals(componentName.getPackageName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 引导用户前往设置授权
+     */
+    private void openNotificationListenerSettings() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+            Log.i(TAG, "Opened notification listener settings");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to open notification listener settings", e);
+        }
+    }
+
     @Override
     public JSONObject execute(JSONObject arguments) throws Exception {
         // 解析参数
@@ -83,6 +126,19 @@ public class ListNotificationsTool implements Tool {
         String packageFilter = arguments.optString("packageFilter", "");
 
         Log.i(TAG, "Reading active notifications (limit=" + limit + ", filter=" + packageFilter + ")");
+
+        // 检查权限：未授权时引导用户去设置
+        if (!isNotificationListenerEnabled()) {
+            // 自动打开设置页面（让用户更容易授权）
+            openNotificationListenerSettings();
+
+            JSONObject errorResult = new JSONObject();
+            errorResult.put("status", "error");
+            errorResult.put("error", "permission_denied");
+            errorResult.put("message", "NotificationListener 权限未授予。已自动打开设置页面，请前往 系统设置 → 通知使用权 → 找到'未来姐姐'并开启。开启后再次调用此工具即可。");
+            errorResult.put("action", "已自动跳转到系统设置，请授权后重试");
+            return errorResult;
+        }
 
         // 通过 NotificationManager 直接获取当前通知列表（Android 6+ 官方 API）
         // 前提：必须有一个 NotificationListenerService 子类（NotificationsListenerService）
@@ -202,7 +258,7 @@ public class ListNotificationsTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "当用户询问手机通知、短信验证码、社保通知、银行通知等内容时，调用 listNotifications 工具" +
+        return "当用户询问手机通知、短信验证码等内容时，调用 listNotifications 工具" +
             "获取通知栏当前可见的通知。可以按 packageFilter 过滤特定应用（如 com.tencent.mm 微信）。" +
             "返回的通知列表包含标题、内容、包名、应用名、时间戳等。";
     }
