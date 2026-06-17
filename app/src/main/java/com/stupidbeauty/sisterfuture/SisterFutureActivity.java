@@ -788,7 +788,35 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     if (modelAccessPointManager.checkFailureThreshold()) {
       FileLogger.e(TAG, "🚨 [DEADLOCK_RESCUE] 检测到连续失败超过阈值！触发救援模式");
+      FileLogger.d(TAG, "⚠️ [RESCUE_MODE] 进入救援模式：true");
       isDeadlockRescueMode = true;
+      runOnUiThread(() -> {
+        Toast.makeText(SisterFutureActivity.this, 
+          "⚠️ 所有接入点连续失败，正在启动备用接入点配置向导...", 
+          Toast.LENGTH_LONG).show();
+        
+        guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
+          @Override
+          public void onResponse(String message) {
+            messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+            scrollToBottom();
+            ttsSayReply(message);
+            if (message.contains("✅")) {
+              FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
+              isDeadlockRescueMode = false;
+              FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
+              modelAccessPointManager.resetFailureCount();
+              FileLogger.i(TAG, "✅ [FAILURE_RESET] 救援成功，计数器已重置：" + modelAccessPointManager.getConsecutiveFailures());
+            }
+          }
+
+          @Override
+          public void onError(String error) {
+            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
+            scrollToBottom();
+          }
+        });
+      });
       return;
     }
 
