@@ -32,10 +32,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * - 每次通知被划掉时，onNotificationRemoved 被调用，缓存中对应条目被移除
  * - ListNotificationsTool 通过 getCachedNotifications() 读取缓存
  *
- * 通知正文提取策略：
- * - 修复 #1：延迟读取 (300ms) 解决 onNotificationPosted 时 extras 还未完整的问题
- * - 修复 #2：同时读 EXTRA_BIG_TEXT / EXTRA_MESSAGES / EXTRA_TEXT_LINES
- * - 修复 #3：诊断模式下打印所有 extras keys
+ * 通知正文提取策略（PR #446 综合修复）：
+ * 1. EXTRA_BIG_TEXT / EXTRA_MESSAGES / EXTRA_TEXT_LINES 多字段读取
+ * 2. **同时使用 getString() 和 getCharSequence() 两种方法读 EXTRA_TEXT**（修复短信应用正文）
+ *    - getString() 对 String 类型有效
+ *    - getCharSequence() 对 CharSequence 类型有效（短信应用用此类型）
+ * 3. 延迟 300ms 重新读取，解决 onNotificationPosted 时 extras 未完整的问题
+ * 4. 短信应用额外 dump 所有 extras keys（诊断日志）
  *
  * 日志约定：使用 FileLogger 而非 android.util.Log，日志输出到应用日志文件供后续回顾。
  */
@@ -69,14 +72,21 @@ public class NotificationsListenerService extends NotificationListenerService {
         public final String packageName;
         public final String appName;
         public final String title;
+        /** 主文本字段（向后兼容） */
         public final String text;
+        /** 大文本字段（向后兼容） */
         public final String bigText;
+        /** 详细文本字段 - 用 getCharSequence() 读取（PR #446 新增） */
+        public final String textCharSequence;
+        /** 文本来源记录（PR #446 新增，方便诊断） */
+        public final String textSource;
         public final long postTime;
         public final int id;
         public final String tag;
 
         public CachedNotification(String key, String packageName, String appName,
                                  String title, String text, String bigText,
+                                 String textCharSequence, String textSource,
                                  long postTime, int id, String tag) {
             this.key = key;
             this.packageName = packageName;
@@ -84,6 +94,8 @@ public class NotificationsListenerService extends NotificationListenerService {
             this.title = title;
             this.text = text;
             this.bigText = bigText;
+            this.textCharSequence = textCharSequence;
+            this.textSource = textSource;
             this.postTime = postTime;
             this.id = id;
             this.tag = tag;
@@ -103,15 +115,14 @@ public class NotificationsListenerService extends NotificationListenerService {
             notificationCache.put(cached.key, cached);
             FileLogger.i(TAG, "onNotificationPosted: cached notification | key=" + cached.key +
                 " | package=" + cached.packageName + " | title=" + cached.title +
-                " | text=" + cached.text + " | bigText=" + cached.bigText);
+                " | text=" + cached.text + " | bigText=" + cached.bigText +
+                " | textCharSeq=" + cached.textCharSequence + " | textSource=" + cached.textSource);
 
             // 修复：延迟再次读取，更新缓存
-            // 短信应用在 onNotificationPosted 第一次回调时 extras 可能未完整
             mainHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
                     try {
-                        // 重新获取当前的通知状态（可能已经被更新）
                         StatusBarNotification[] active = getActiveNotifications();
                         if (active != null) {
                             for (StatusBarNotification current : active) {
@@ -119,7 +130,8 @@ public class NotificationsListenerService extends NotificationListenerService {
                                     CachedNotification updated = buildCachedNotification(current);
                                     notificationCache.put(updated.key, updated);
                                     FileLogger.i(TAG, "onNotificationPosted[delayed]: updated | key=" + updated.key +
-                                        " | text=" + updated.text + " | bigText=" + updated.bigText);
+                                        " | text=" + updated.text + " | bigText=" + updated.bigText +
+                                        " | textCharSeq=" + updated.textCharSequence + " | textSource=" + updated.textSource);
                                     break;
                                 }
                             }
@@ -188,6 +200,13 @@ public class NotificationsListenerService extends NotificationListenerService {
     /**
      * 从 StatusBarNotification 构建 CachedNotification
      * 这里要把所有需要的信息都提取出来，避免持有 StatusBarNotification 引用导致内存泄漏
+     *
+     * PR #446 重要修复：
+     * - 同时用 getString() 和 getCharSequence() 两种方法读 EXTRA_TEXT
+     * - getString() 对 String 有效
+     * - getCharSequence() 对 CharSequence 有效（短信应用用此类型）
+     * - 日志输出两种方法的实际值
+     * - 返回字段：text（兼容）、textCharSequence（CharSequence 值）、textSource（来源标记）
      */
     private CachedNotification buildCachedNotification(StatusBarNotification sbn) {
         String key = sbn.getKey();
@@ -206,14 +225,40 @@ public class NotificationsListenerService extends NotificationListenerService {
         }
 
         String title = "";
-        String text = "";
-        String bigText = "";
+        String text = "";              // getString() 结果
+        String bigText = "";           // EXTRA_BIG_TEXT
+        String textCharSequence = "";  // getCharSequence() 结果
+        String textSource = "";        // 标记 text 来自哪个字段
         Notification notification = sbn.getNotification();
         if (notification != null) {
             Bundle extras = notification.extras;
             if (extras != null) {
                 title = extras.getString(Notification.EXTRA_TITLE, "");
-                text = extras.getString(Notification.EXTRA_TEXT, "");
+
+                // PR #446: 双轨读取 EXTRA_TEXT
+                // getString() 适合 String 类型
+                String textFromGetString = extras.getString(Notification.EXTRA_TEXT, "");
+                // getCharSequence() 适合 CharSequence 类型（短信应用用此类型！）
+                CharSequence textFromGetCharSeqCs = extras.getCharSequence(Notification.EXTRA_TEXT, "");
+                String textFromGetCharSeq = (textFromGetCharSeqCs != null) ? textFromGetCharSeqCs.toString() : "";
+
+                text = textFromGetString;  // 主字段保持向后兼容
+                textCharSequence = textFromGetCharSeq;
+
+                // 标记来源
+                if (!textFromGetString.isEmpty() && !textFromGetCharSeq.isEmpty()) {
+                    if (textFromGetString.equals(textFromGetCharSeq)) {
+                        textSource = "BOTH_AGREE";
+                    } else {
+                        textSource = "BOTH_DIFFER";
+                    }
+                } else if (!textFromGetString.isEmpty()) {
+                    textSource = "GET_STRING_ONLY";
+                } else if (!textFromGetCharSeq.isEmpty()) {
+                    textSource = "GET_CHARSEQUENCE_ONLY";
+                } else {
+                    textSource = "BOTH_EMPTY";
+                }
 
                 // 修复：短信应用把完整正文放在 EXTRA_BIG_TEXT
                 CharSequence bigTextCs = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
@@ -249,16 +294,21 @@ public class NotificationsListenerService extends NotificationListenerService {
                     }
                 }
 
-                // 兼容性处理：如果 text 为空但 bigText 有内容，把 bigText 的第一行复制到 text
+                // 兼容性处理：text 为空时从 bigText 第一行填充
                 if (text.isEmpty() && !bigText.isEmpty()) {
                     int newlineIdx = bigText.indexOf('\n');
                     text = (newlineIdx > 0) ? bigText.substring(0, newlineIdx) : bigText;
+                    if (textSource.isEmpty() || textSource.equals("BOTH_EMPTY")) {
+                        textSource = "FROM_BIGTEXT";
+                    }
                     FileLogger.i(TAG, "buildCachedNotification: text was empty, populated from bigText first line");
                 }
 
-                // 诊断：如果是短信应用，dump 所有 extras keys
+                // 诊断：短信应用额外 dump 所有 extras keys
                 if ("com.android.messaging".equals(packageName)) {
                     StringBuilder keysDump = new StringBuilder();
+                    keysDump.append("getString(EXTRA_TEXT)=\"").append(textFromGetString).append("\" | ");
+                    keysDump.append("getCharSeq(EXTRA_TEXT)=\"").append(textFromGetCharSeq).append("\" | ");
                     for (String key2 : extras.keySet()) {
                         Object value = extras.get(key2);
                         String valueStr;
@@ -276,7 +326,6 @@ public class NotificationsListenerService extends NotificationListenerService {
                         } else {
                             valueStr = String.valueOf(value);
                         }
-                        // 截断过长的值
                         if (valueStr.length() > 200) {
                             valueStr = valueStr.substring(0, 200) + "...";
                         }
@@ -287,7 +336,8 @@ public class NotificationsListenerService extends NotificationListenerService {
             }
         }
 
-        return new CachedNotification(key, packageName, appName, title, text, bigText, postTime, id, tag);
+        return new CachedNotification(key, packageName, appName, title, text, bigText,
+                                     textCharSequence, textSource, postTime, id, tag);
     }
 
     /**
