@@ -50,12 +50,24 @@ public class SisterFutureApplication extends Application
 		// #4968 初始化全局崩溃检测器 - 使用 JitPack 库
 		CrashHandler.init(this);
 		Log.i("SisterFutureApplication", "✅ android-crash-detector 库已初始化 (v2026.4.5)");
+
+		// 🔔 启动 NotificationsListenerService 作为应用级服务
+		// 这样通知监听从应用启动就开始运行，不再依赖工具调用触发
+		try {
+			Intent notificationServiceIntent = new Intent(this, NotificationsListenerService.class);
+			startService(notificationServiceIntent);
+			Log.i("SisterFutureApplication", "✅ NotificationsListenerService 已启动为应用级服务");
+			FileLogger.i("SisterFutureApplication", "✅ NotificationsListenerService started as application-level service");
+		} catch (Exception e) {
+			Log.e("SisterFutureApplication", "❌ 启动 NotificationsListenerService 失败", e);
+			FileLogger.e("SisterFutureApplication", "❌ Failed to start NotificationsListenerService", e);
+		}
 	} //public void onCreate()
 
 	/**
 	 * 获取应用程序上下文。
 	 * @return 应用程序上下文。
-	 */
+	 **/
 	public static Context getAppContext() 
 	{ 
 		return mContext; 

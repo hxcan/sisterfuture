@@ -16,6 +16,8 @@ import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+
 /**
  * 读取手机通知栏通知列表的工具
  *
@@ -27,15 +29,9 @@ import org.json.JSONObject;
  *   设置路径：系统设置 → 通知使用权 → "未来姐姐"
  *
  * 实现说明：
- * - 直接调用 NotificationManager.getActiveNotifications()（Android 6+ 官方 API）
- * - 系统要求先注册一个 NotificationListenerService 子类（NotificationsListenerService）
- *   用户授权后系统才能允许此 API 返回数据
- * - 工具启动时检测权限，未授权时返回引导信息让用户去授权
- *
- * 调试日志（用于排查 Motorola Android 13 等 ROM 上 getActiveNotifications() 返回空数组的问题）：
- * - execute() 入口/出口都有详细日志
- * - 调用 getActiveNotifications() 前后都有日志
- * - 在调用前主动调用 NotificationsListenerService.rebind() 强制系统重新绑定
+ * - 通过 NotificationsListenerService 缓存的通知列表返回（绕开部分 ROM 上 getActiveNotifications() 返回空的问题）
+ * - 应用启动时 SisterFutureApplication 会自动启动该服务
+ * - 通知被划掉时会自动从缓存移除（与 getActiveNotifications() 行为一致）
  *
  * 日志说明：使用 FileLogger 而非 android.util.Log，这样日志会输出到应用日志文件，
  *          方便主人通过日志文件回顾调试信息。
@@ -136,9 +132,8 @@ public class ListNotificationsTool implements Tool {
         int limit = arguments.optInt("limit", 50);
         String packageFilter = arguments.optString("packageFilter", "");
 
-        // 调试：记录入口
         FileLogger.i(TAG, "=== listNotifications execute() start ===");
-        FileLogger.i(TAG, "Reading active notifications (limit=" + limit + ", filter=" + packageFilter + ")");
+        FileLogger.i(TAG, "Reading cached notifications (limit=" + limit + ", filter=" + packageFilter + ")");
 
         // 检查权限：未授权时引导用户去设置
         boolean enabled = isNotificationListenerEnabled();
@@ -155,74 +150,35 @@ public class ListNotificationsTool implements Tool {
             return errorResult;
         }
 
-        // 通过 NotificationManager 直接获取当前通知列表（Android 6+ 官方 API）
-        // 前提：必须有一个 NotificationListenerService 子类（NotificationsListenerService）
-        //       且用户已授予"通知使用权"
-        NotificationManager notificationManager =
-            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        // 从 NotificationsListenerService 缓存中读取通知列表
+        // 不再调用 NotificationManager.getActiveNotifications()（部分 ROM 上返回空）
+        ArrayList<NotificationsListenerService.CachedNotification> cachedList =
+            NotificationsListenerService.getCachedNotifications();
 
-        // 修复：在调用 getActiveNotifications() 之前，主动请求系统重新绑定 Service
-        // 解决部分 ROM (如 Motorola Android 13) 上 API 返回空数组的问题
-        FileLogger.i(TAG, "Calling NotificationsListenerService.rebind() before getActiveNotifications()");
-        NotificationsListenerService.rebind(context);
-
-        FileLogger.i(TAG, "Calling notificationManager.getActiveNotifications()");
-        StatusBarNotification[] activeNotifications = notificationManager.getActiveNotifications();
-        FileLogger.i(TAG, "getActiveNotifications() returned array of length: " +
-            (activeNotifications == null ? "null" : String.valueOf(activeNotifications.length)));
-
-        // 检查权限：未授权时返回 null
-        if (activeNotifications == null) {
-            JSONObject errorResult = new JSONObject();
-            errorResult.put("status", "error");
-            errorResult.put("error", "permission_denied");
-            errorResult.put("message", "NotificationListener 权限未授予。请前往 系统设置 → 通知使用权 → 找到'未来姐姐'并开启。");
-            return errorResult;
-        }
+        FileLogger.i(TAG, "Cache contains " + cachedList.size() + " notifications");
 
         JSONArray notificationsArray = new JSONArray();
 
         int count = 0;
-        for (StatusBarNotification sbn : activeNotifications) {
+        for (NotificationsListenerService.CachedNotification cached : cachedList) {
             // 按包名过滤
-            if (!packageFilter.isEmpty() && !packageFilter.equals(sbn.getPackageName())) {
+            if (!packageFilter.isEmpty() && !packageFilter.equals(cached.packageName)) {
                 continue;
             }
 
             JSONObject notifObj = new JSONObject();
-
-            // 包名
-            notifObj.put("packageName", sbn.getPackageName());
-
-            // 应用名（通过 PackageManager 查）
-            try {
-                String appName = context.getPackageManager()
-                    .getApplicationLabel(
-                        context.getPackageManager().getApplicationInfo(sbn.getPackageName(), 0))
-                    .toString();
-                notifObj.put("appName", appName);
-            } catch (Exception e) {
-                notifObj.put("appName", sbn.getPackageName());
+            notifObj.put("key", cached.key);
+            notifObj.put("packageName", cached.packageName);
+            notifObj.put("appName", cached.appName);
+            notifObj.put("title", cached.title);
+            notifObj.put("text", cached.text);
+            if (cached.bigText != null && !cached.bigText.isEmpty()) {
+                notifObj.put("bigText", cached.bigText);
             }
-
-            // 通知 key（唯一标识）
-            notifObj.put("key", sbn.getKey());
-
-            // 时间戳（通知发出的时间，毫秒）
-            notifObj.put("time", sbn.getPostTime());
-
-            // 通知 ID
-            notifObj.put("id", sbn.getId());
-
-            // tag（如果有）
-            if (sbn.getTag() != null) {
-                notifObj.put("tag", sbn.getTag());
-            }
-
-            // 解析 Notification 对象的 title 和 text
-            Notification notification = sbn.getNotification();
-            if (notification != null) {
-                parseNotificationFields(notification, notifObj);
+            notifObj.put("time", cached.postTime);
+            notifObj.put("id", cached.id);
+            if (cached.tag != null) {
+                notifObj.put("tag", cached.tag);
             }
 
             notificationsArray.put(notifObj);
@@ -239,52 +195,12 @@ public class ListNotificationsTool implements Tool {
         result.put("message", "成功获取通知列表");
         result.put("count", notificationsArray.length());
         result.put("notifications", notificationsArray);
-        result.put("note", "调用时通知栏中可见的通知。如果想抓已被用户划掉的通知，需要实现 NotificationListenerService 持续监听并保存。");
+        result.put("note", "调用时通知缓存中可见的通知（已过滤被划掉的）。" +
+            "如果想抓已被用户划掉的通知，需要实现持久化存储 + 历史记录功能（暂未实现）。");
 
-        FileLogger.i(TAG, "Retrieved " + notificationsArray.length() + " notifications");
+        FileLogger.i(TAG, "Retrieved " + notificationsArray.length() + " notifications (cache size=" + cachedList.size() + ")");
         FileLogger.i(TAG, "=== listNotifications execute() end ===");
 
         return result;
-    }
-
-    /**
-     * 解析 Notification 对象，提取 title / text / bigText
-     */
-    private void parseNotificationFields(Notification notification, JSONObject target) throws Exception {
-        // Notification.extras（Bundle）从 API 19 开始可用
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
-            target.put("title", "");
-            target.put("text", "");
-            return;
-        }
-
-        Bundle extras = notification.extras;
-        if (extras == null) {
-            target.put("title", "");
-            target.put("text", "");
-            return;
-        }
-
-        // 标准字段
-        String title = extras.getString(Notification.EXTRA_TITLE, "");
-        String text = extras.getString(Notification.EXTRA_TEXT, "");
-
-        target.put("title", title);
-        target.put("text", text);
-
-        // API 21+（Android 5.0+）：big text（展开后的长文本）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            String bigText = extras.getString(Notification.EXTRA_BIG_TEXT, "");
-            if (!bigText.isEmpty()) {
-                target.put("bigText", bigText);
-            }
-        }
-    }
-
-    @Override
-    public String getDefaultSystemPromptEnhancement() {
-        return "当用户询问手机通知、短信验证码等内容时，调用 listNotifications 工具" +
-            "获取通知栏当前可见的通知。可以按 packageFilter 过滤特定应用（如 com.tencent.mm 微信）。" +
-            "返回的通知列表包含标题、内容、包名、应用名、时间戳等。";
     }
 }
