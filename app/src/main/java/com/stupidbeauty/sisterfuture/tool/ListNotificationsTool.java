@@ -9,7 +9,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
-import android.util.Log;
+
+import com.stupidbeauty.sisterfuture.NotificationsListenerService;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -28,6 +31,14 @@ import org.json.JSONObject;
  * - 系统要求先注册一个 NotificationListenerService 子类（NotificationsListenerService）
  *   用户授权后系统才能允许此 API 返回数据
  * - 工具启动时检测权限，未授权时返回引导信息让用户去授权
+ *
+ * 调试日志（用于排查 Motorola Android 13 等 ROM 上 getActiveNotifications() 返回空数组的问题）：
+ * - execute() 入口/出口都有详细日志
+ * - 调用 getActiveNotifications() 前后都有日志
+ * - 在调用前主动调用 NotificationsListenerService.rebind() 强制系统重新绑定
+ *
+ * 日志说明：使用 FileLogger 而非 android.util.Log，这样日志会输出到应用日志文件，
+ *          方便主人通过日志文件回顾调试信息。
  */
 public class ListNotificationsTool implements Tool {
     private static final String TAG = "ListNotificationsTool";
@@ -65,7 +76,7 @@ public class ListNotificationsTool implements Tool {
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to build definition", e);
+            FileLogger.e(TAG, "Failed to build definition", e);
             return new JSONObject();
         }
     }
@@ -113,9 +124,9 @@ public class ListNotificationsTool implements Tool {
             Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(intent);
-            Log.i(TAG, "Opened notification listener settings");
+            FileLogger.i(TAG, "Opened notification listener settings");
         } catch (Exception e) {
-            Log.e(TAG, "Failed to open notification listener settings", e);
+            FileLogger.e(TAG, "Failed to open notification listener settings", e);
         }
     }
 
@@ -125,10 +136,14 @@ public class ListNotificationsTool implements Tool {
         int limit = arguments.optInt("limit", 50);
         String packageFilter = arguments.optString("packageFilter", "");
 
-        Log.i(TAG, "Reading active notifications (limit=" + limit + ", filter=" + packageFilter + ")");
+        // 调试：记录入口
+        FileLogger.i(TAG, "=== listNotifications execute() start ===");
+        FileLogger.i(TAG, "Reading active notifications (limit=" + limit + ", filter=" + packageFilter + ")");
 
         // 检查权限：未授权时引导用户去设置
-        if (!isNotificationListenerEnabled()) {
+        boolean enabled = isNotificationListenerEnabled();
+        FileLogger.i(TAG, "isNotificationListenerEnabled() returned: " + enabled);
+        if (!enabled) {
             // 自动打开设置页面（让用户更容易授权）
             openNotificationListenerSettings();
 
@@ -145,7 +160,16 @@ public class ListNotificationsTool implements Tool {
         //       且用户已授予"通知使用权"
         NotificationManager notificationManager =
             (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+        // 修复：在调用 getActiveNotifications() 之前，主动请求系统重新绑定 Service
+        // 解决部分 ROM (如 Motorola Android 13) 上 API 返回空数组的问题
+        FileLogger.i(TAG, "Calling NotificationsListenerService.rebind() before getActiveNotifications()");
+        NotificationsListenerService.rebind(context);
+
+        FileLogger.i(TAG, "Calling notificationManager.getActiveNotifications()");
         StatusBarNotification[] activeNotifications = notificationManager.getActiveNotifications();
+        FileLogger.i(TAG, "getActiveNotifications() returned array of length: " +
+            (activeNotifications == null ? "null" : String.valueOf(activeNotifications.length)));
 
         // 检查权限：未授权时返回 null
         if (activeNotifications == null) {
@@ -217,7 +241,8 @@ public class ListNotificationsTool implements Tool {
         result.put("notifications", notificationsArray);
         result.put("note", "调用时通知栏中可见的通知。如果想抓已被用户划掉的通知，需要实现 NotificationListenerService 持续监听并保存。");
 
-        Log.i(TAG, "Retrieved " + notificationsArray.length() + " notifications");
+        FileLogger.i(TAG, "Retrieved " + notificationsArray.length() + " notifications");
+        FileLogger.i(TAG, "=== listNotifications execute() end ===");
 
         return result;
     }
