@@ -37,7 +37,7 @@ public class SisterFutureApplication extends Application
 	@Override
 	/*
 	  程序被创建。
-	 *//
+	 */
 	public void onCreate() 
 	{
 		super.onCreate(); //创建超类。
