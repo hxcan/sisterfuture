@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
@@ -30,11 +32,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * - 每次通知被划掉时，onNotificationRemoved 被调用，缓存中对应条目被移除
  * - ListNotificationsTool 通过 getCachedNotifications() 读取缓存
  *
- * 通知正文提取策略（修复短信应用等特殊通知读不到正文的问题）：
- * - EXTRA_BIG_TEXT：短信应用把完整正文放在这里
- * - EXTRA_TEXT：作为通用 fallback
- * - EXTRA_MESSAGES：短信应用把每条短信放在 List<CharSequence> 里
- * - EXTRA_TEXT_LINES：部分应用把多行文本放这里
+ * 通知正文提取策略：
+ * - 修复 #1：延迟读取 (300ms) 解决 onNotificationPosted 时 extras 还未完整的问题
+ * - 修复 #2：同时读 EXTRA_BIG_TEXT / EXTRA_MESSAGES / EXTRA_TEXT_LINES
+ * - 修复 #3：诊断模式下打印所有 extras keys
  *
  * 日志约定：使用 FileLogger 而非 android.util.Log，日志输出到应用日志文件供后续回顾。
  */
@@ -42,11 +43,23 @@ public class NotificationsListenerService extends NotificationListenerService {
     private static final String TAG = "NotificationsListenerService";
 
     /**
+     * 延迟读取 extras 的时间（毫秒）
+     * 短信应用等可能在 onNotificationPosted 第一次回调时 extras 还未完整
+     * 延迟 300ms 后重新读取可以拿到完整内容
+     */
+    private static final long DELAY_READ_EXTRAS_MS = 300L;
+
+    /**
      * 通知缓存：key = StatusBarNotification.getKey()（唯一标识）
      * 使用 ConcurrentHashMap 保证线程安全
      * Service 可能在任意线程收到回调
      */
     private static final ConcurrentHashMap<String, CachedNotification> notificationCache = new ConcurrentHashMap<>();
+
+    /**
+     * 主线程 Handler 用于延迟任务
+     */
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     /**
      * 缓存的通知信息（不依赖 StatusBarNotification 对象，因为原对象可能被回收）
@@ -79,6 +92,8 @@ public class NotificationsListenerService extends NotificationListenerService {
 
     /**
      * 当通知被系统投递时调用
+     * 第一次回调：立即缓存（可能 extras 不完整）
+     * 第二次回调（延迟 300ms）：更新缓存（extras 已完整）
      */
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
@@ -89,6 +104,31 @@ public class NotificationsListenerService extends NotificationListenerService {
             FileLogger.i(TAG, "onNotificationPosted: cached notification | key=" + cached.key +
                 " | package=" + cached.packageName + " | title=" + cached.title +
                 " | text=" + cached.text + " | bigText=" + cached.bigText);
+
+            // 修复：延迟再次读取，更新缓存
+            // 短信应用在 onNotificationPosted 第一次回调时 extras 可能未完整
+            mainHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        // 重新获取当前的通知状态（可能已经被更新）
+                        StatusBarNotification[] active = getActiveNotifications();
+                        if (active != null) {
+                            for (StatusBarNotification current : active) {
+                                if (current.getKey().equals(sbn.getKey())) {
+                                    CachedNotification updated = buildCachedNotification(current);
+                                    notificationCache.put(updated.key, updated);
+                                    FileLogger.i(TAG, "onNotificationPosted[delayed]: updated | key=" + updated.key +
+                                        " | text=" + updated.text + " | bigText=" + updated.bigText);
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        FileLogger.e(TAG, "onNotificationPosted[delayed]: failed to re-read", e);
+                    }
+                }
+            }, DELAY_READ_EXTRAS_MS);
         } catch (Exception e) {
             FileLogger.e(TAG, "onNotificationPosted: failed to cache notification", e);
         }
@@ -175,14 +215,13 @@ public class NotificationsListenerService extends NotificationListenerService {
                 title = extras.getString(Notification.EXTRA_TITLE, "");
                 text = extras.getString(Notification.EXTRA_TEXT, "");
 
-                // 修复：短信应用等通知把正文放在 EXTRA_BIG_TEXT 而不是 EXTRA_TEXT
+                // 修复：短信应用把完整正文放在 EXTRA_BIG_TEXT
                 CharSequence bigTextCs = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
                 if (bigTextCs != null) {
                     bigText = bigTextCs.toString();
                 }
 
-                // 修复：短信应用用 EXTRA_MESSAGES 存储 List<CharSequence>，每条一行
-                // 如果 BIG_TEXT 为空，尝试从 MESSAGES 中拼接
+                // 修复：短信应用用 EXTRA_MESSAGES 存储 List<CharSequence>
                 if (bigText.isEmpty()) {
                     CharSequence[] messages = extras.getCharSequenceArray(Notification.EXTRA_MESSAGES);
                     if (messages != null && messages.length > 0) {
@@ -210,12 +249,40 @@ public class NotificationsListenerService extends NotificationListenerService {
                     }
                 }
 
-                // 修复：如果 text 为空但 bigText 有内容，把 bigText 复制到 text（兼容字段）
+                // 兼容性处理：如果 text 为空但 bigText 有内容，把 bigText 的第一行复制到 text
                 if (text.isEmpty() && !bigText.isEmpty()) {
-                    // 截取 bigText 的第一行作为 text（保持向后兼容）
                     int newlineIdx = bigText.indexOf('\n');
                     text = (newlineIdx > 0) ? bigText.substring(0, newlineIdx) : bigText;
                     FileLogger.i(TAG, "buildCachedNotification: text was empty, populated from bigText first line");
+                }
+
+                // 诊断：如果是短信应用，dump 所有 extras keys
+                if ("com.android.messaging".equals(packageName)) {
+                    StringBuilder keysDump = new StringBuilder();
+                    for (String key2 : extras.keySet()) {
+                        Object value = extras.get(key2);
+                        String valueStr;
+                        if (value instanceof CharSequence) {
+                            valueStr = "\"" + value.toString() + "\"";
+                        } else if (value instanceof CharSequence[]) {
+                            StringBuilder arr = new StringBuilder("[");
+                            CharSequence[] arrVal = (CharSequence[]) value;
+                            for (int i = 0; i < arrVal.length; i++) {
+                                if (i > 0) arr.append(", ");
+                                arr.append("\"").append(arrVal[i].toString()).append("\"");
+                            }
+                            arr.append("]");
+                            valueStr = arr.toString();
+                        } else {
+                            valueStr = String.valueOf(value);
+                        }
+                        // 截断过长的值
+                        if (valueStr.length() > 200) {
+                            valueStr = valueStr.substring(0, 200) + "...";
+                        }
+                        keysDump.append(key2).append("=").append(valueStr).append(" | ");
+                    }
+                    FileLogger.i(TAG, "buildCachedNotification[SMS DEBUG]: " + keysDump.toString());
                 }
             }
         }
