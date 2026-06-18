@@ -30,6 +30,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * - 每次通知被划掉时，onNotificationRemoved 被调用，缓存中对应条目被移除
  * - ListNotificationsTool 通过 getCachedNotifications() 读取缓存
  *
+ * 通知正文提取策略（修复短信应用等特殊通知读不到正文的问题）：
+ * - EXTRA_BIG_TEXT：短信应用把完整正文放在这里
+ * - EXTRA_TEXT：作为通用 fallback
+ * - EXTRA_MESSAGES：短信应用把每条短信放在 List<CharSequence> 里
+ * - EXTRA_TEXT_LINES：部分应用把多行文本放这里
+ *
  * 日志约定：使用 FileLogger 而非 android.util.Log，日志输出到应用日志文件供后续回顾。
  */
 public class NotificationsListenerService extends NotificationListenerService {
@@ -81,7 +87,8 @@ public class NotificationsListenerService extends NotificationListenerService {
             CachedNotification cached = buildCachedNotification(sbn);
             notificationCache.put(cached.key, cached);
             FileLogger.i(TAG, "onNotificationPosted: cached notification | key=" + cached.key +
-                " | package=" + cached.packageName + " | title=" + cached.title);
+                " | package=" + cached.packageName + " | title=" + cached.title +
+                " | text=" + cached.text + " | bigText=" + cached.bigText);
         } catch (Exception e) {
             FileLogger.e(TAG, "onNotificationPosted: failed to cache notification", e);
         }
@@ -167,9 +174,48 @@ public class NotificationsListenerService extends NotificationListenerService {
             if (extras != null) {
                 title = extras.getString(Notification.EXTRA_TITLE, "");
                 text = extras.getString(Notification.EXTRA_TEXT, "");
+
+                // 修复：短信应用等通知把正文放在 EXTRA_BIG_TEXT 而不是 EXTRA_TEXT
                 CharSequence bigTextCs = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
                 if (bigTextCs != null) {
                     bigText = bigTextCs.toString();
+                }
+
+                // 修复：短信应用用 EXTRA_MESSAGES 存储 List<CharSequence>，每条一行
+                // 如果 BIG_TEXT 为空，尝试从 MESSAGES 中拼接
+                if (bigText.isEmpty()) {
+                    CharSequence[] messages = extras.getCharSequenceArray(Notification.EXTRA_MESSAGES);
+                    if (messages != null && messages.length > 0) {
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = 0; i < messages.length; i++) {
+                            if (i > 0) sb.append("\n");
+                            sb.append(messages[i].toString());
+                        }
+                        bigText = sb.toString();
+                        FileLogger.i(TAG, "buildCachedNotification: extracted " + messages.length + " message lines from EXTRA_MESSAGES");
+                    }
+                }
+
+                // 修复：部分应用用 EXTRA_TEXT_LINES 存储多行文本
+                if (bigText.isEmpty()) {
+                    CharSequence[] textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+                    if (textLines != null && textLines.length > 0) {
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = 0; i < textLines.length; i++) {
+                            if (i > 0) sb.append("\n");
+                            sb.append(textLines[i].toString());
+                        }
+                        bigText = sb.toString();
+                        FileLogger.i(TAG, "buildCachedNotification: extracted " + textLines.length + " text lines from EXTRA_TEXT_LINES");
+                    }
+                }
+
+                // 修复：如果 text 为空但 bigText 有内容，把 bigText 复制到 text（兼容字段）
+                if (text.isEmpty() && !bigText.isEmpty()) {
+                    // 截取 bigText 的第一行作为 text（保持向后兼容）
+                    int newlineIdx = bigText.indexOf('\n');
+                    text = (newlineIdx > 0) ? bigText.substring(0, newlineIdx) : bigText;
+                    FileLogger.i(TAG, "buildCachedNotification: text was empty, populated from bigText first line");
                 }
             }
         }
