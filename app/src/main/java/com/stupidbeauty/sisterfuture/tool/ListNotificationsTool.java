@@ -35,6 +35,10 @@ import java.util.ArrayList;
  *
  * 日志说明：使用 FileLogger 而非 android.util.Log，这样日志会输出到应用日志文件，
  *          方便主人通过日志文件回顾调试信息。
+ *
+ * PR #447 修复：
+ * - 将 PR #446 在 NotificationsListenerService 中已经缓存的 textCharSequence 和 textSource 字段
+ *   同步序列化到返回的 JSON 中，使大模型能读到 CharSequence 类型的短信正文
  */
 public class ListNotificationsTool implements Tool {
     private static final String TAG = "ListNotificationsTool";
@@ -172,6 +176,13 @@ public class ListNotificationsTool implements Tool {
             notifObj.put("appName", cached.appName);
             notifObj.put("title", cached.title);
             notifObj.put("text", cached.text);
+            // PR #447: 把 PR #446 在 service 里缓存的 CharSequence 读取结果也序列化到 JSON
+            if (cached.textCharSequence != null && !cached.textCharSequence.isEmpty()) {
+                notifObj.put("textCharSequence", cached.textCharSequence);
+            }
+            if (cached.textSource != null && !cached.textSource.isEmpty()) {
+                notifObj.put("textSource", cached.textSource);
+            }
             if (cached.bigText != null && !cached.bigText.isEmpty()) {
                 notifObj.put("bigText", cached.bigText);
             }
