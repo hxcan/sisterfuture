@@ -101,7 +101,22 @@ public class ReadPhoneFileTool implements Tool
             throw new IllegalArgumentException("路径不是文件：" + path);
         }
 
-        long fileSize = file.length();
+long fileSize = file.length();
+        // 🆕 #818324303966 文件大小限制：300KB
+        long MAX_FILE_SIZE = 300 * 1024; // 300KB
+        if (fileSize > MAX_FILE_SIZE)
+        {
+            throw new IllegalArgumentException(
+                "❌ 拒绝读取：文件过大\n\n" +
+                "📏 文件大小：" + formatFileSize(fileSize) + "\n" +
+                "⚠️ 限制阈值：300 KB\n\n" +
+                "💡 建议：\n" +
+                "- 请选择较小的文件（≤ 300KB）\n" +
+                "- 或对文件进行压缩后再读取\n" +
+                "- 或分段读取文件内容\n\n" +
+                "文件路径：" + path
+            );
+        }
         if (fileSize > 100 * 1024 * 1024)
         {
             throw new IllegalArgumentException("文件过大（最大支持 100MB）: " + formatFileSize(fileSize));
