@@ -1,6 +1,7 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -8,6 +9,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
@@ -31,7 +33,7 @@ import java.util.Locale;
  * 实现说明：
  * - 通过 Android SMS ContentProvider 查询系统短信库
  * - 短信存储在 content://sms/ URI
- * - 需要用户在系统设置中授予 READ_SMS 权限（运行时权限）
+ * - 检测到权限未授予时，自动发起动态权限申请
  *
  * 日志说明：使用 FileLogger 而非 android.util.Log，这样日志会输出到应用日志文件，
  *          方便主人通过日志文件回顾调试信息。
@@ -47,6 +49,9 @@ public class GetSmsListTool implements Tool {
 
     /** 最大返回数量限制（防止一次返回过多导致 OOM） */
     private static final int MAX_LIMIT = 200;
+
+    /** READ_SMS 动态权限申请的请求码 */
+    private static final int REQUEST_CODE_READ_SMS = 1001;
 
     private final Context context;
 
@@ -122,6 +127,40 @@ public class GetSmsListTool implements Tool {
             == PackageManager.PERMISSION_GRANTED;
     }
 
+    /**
+     * 发起 READ_SMS 动态权限申请
+     * 弹出系统权限申请对话框，不等待结果
+     */
+    private void requestReadSmsPermission() {
+        FileLogger.i(TAG, "发起 READ_SMS 动态权限申请");
+
+        // 尝试找到当前 Activity
+        Activity activity = null;
+        if (context instanceof Activity) {
+            activity = (Activity) context;
+        } else if (context instanceof android.content.ContextWrapper) {
+            // 尝试从 ContextWrapper 找到 Activity
+            android.content.Context baseContext = ((android.content.ContextWrapper) context).getBaseContext();
+            if (baseContext instanceof Activity) {
+                activity = (Activity) baseContext;
+            }
+        }
+
+        if (activity == null) {
+            FileLogger.w(TAG, "无法获取 Activity，权限申请可能无法弹出对话框");
+            return;
+        }
+
+        try {
+            ActivityCompat.requestPermissions(activity,
+                new String[]{Manifest.permission.READ_SMS},
+                REQUEST_CODE_READ_SMS);
+            FileLogger.i(TAG, "READ_SMS 权限申请已发起，请求码: " + REQUEST_CODE_READ_SMS);
+        } catch (Exception e) {
+            FileLogger.e(TAG, "发起 READ_SMS 权限申请失败", e);
+        }
+    }
+
     @Override
     public JSONObject execute(JSONObject arguments) throws Exception {
         // 解析参数
@@ -144,13 +183,17 @@ public class GetSmsListTool implements Tool {
 
         // 检查权限
         if (!hasReadSmsPermission()) {
-            FileLogger.w(TAG, "READ_SMS permission not granted");
+            FileLogger.w(TAG, "READ_SMS permission not granted, requesting dynamically");
+
+            // 自动发起动态权限申请
+            requestReadSmsPermission();
 
             JSONObject errorResult = new JSONObject();
             errorResult.put("status", "error");
             errorResult.put("error", "permission_denied");
-            errorResult.put("message", "READ_SMS 权限未授予。请前往 系统设置 → 应用 → 未来姐姐 → 权限 → 短信，授予读取短信权限后再次调用此工具。");
-            errorResult.put("action", "请在系统设置中授予短信读取权限");
+            errorResult.put("message", "READ_SMS 权限未授予。已自动弹出权限申请对话框，请在弹窗中允许'读取短信'权限后再次调用此工具。");
+            errorResult.put("action", "请在权限申请弹窗中授予短信读取权限");
+            errorResult.put("permissionRequested", true);
             return errorResult;
         }
 
