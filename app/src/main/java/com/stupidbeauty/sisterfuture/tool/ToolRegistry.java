@@ -147,5 +147,7 @@ public class ToolRegistry {
         toolManager.registerTool(new CreateCalendarEventTool(context));
         // 🔥 新增：通知监听工具
         toolManager.registerTool(new ListNotificationsTool(context));
+        // 🔥 新增：读取短信内容列表工具
+        toolManager.registerTool(new GetSmsListTool(context));
     }
 }
