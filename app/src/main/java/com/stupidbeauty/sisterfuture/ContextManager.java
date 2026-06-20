@@ -44,6 +44,8 @@ public class ContextManager
 private static final int INITIAL_MAX_ROUNDS = 5;
   // 🆕 #819154835086 重复"上下文超长"提示清理阈值
   private static final int CONTEXT_ALERT_CLEANUP_THRESHOLD = 5;
+  // 🆕 #819154835086 重复"上下文超长"提示清理阈值
+  private static final int CONTEXT_ALERT_CLEANUP_THRESHOLD = 5;
   private Context context;
   private File contextFile;
   private SharedPreferences sharedPreferences;
