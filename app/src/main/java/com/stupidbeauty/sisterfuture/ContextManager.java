@@ -41,9 +41,6 @@ public class ContextManager
   private static final String KEY_HISTORY = "history";
   private static final String KEY_MAX_ROUNDS = "current_max_rounds";
   private static final int INITIAL_MAX_ROUNDS = 5;
-private static final int INITIAL_MAX_ROUNDS = 5;
-  // 🆕 #819154835086 重复"上下文超长"提示清理阈值
-  private static final int CONTEXT_ALERT_CLEANUP_THRESHOLD = 5;
   // 🆕 #819154835086 重复"上下文超长"提示清理阈值
   private static final int CONTEXT_ALERT_CLEANUP_THRESHOLD = 5;
   private Context context;
@@ -251,7 +248,9 @@ private static final int INITIAL_MAX_ROUNDS = 5;
     {
       FileLogger.e(TAG, "[Startup cleanup] Error: " + e.getMessage(), e);
     }
-// 🆕 #819154835086 启动时清理重复的"上下文超长"提示
+  }
+
+  // 🆕 #819154835086 启动时清理重复的"上下文超长"提示
   private void cleanupDuplicateContextAlertsOnStartup()
   {
     if (memoryHistory == null || memoryHistory.isEmpty())
@@ -311,7 +310,6 @@ private static final int INITIAL_MAX_ROUNDS = 5;
     int originalSize = memoryHistory.size();
     saveHistory(validHistory);
     FileLogger.i(TAG, "✅ [ALERT_CLEANUP] 清理完成 | 原始：" + originalSize + " 条 | 清理后：" + validHistory.size() + " 条");
-  }
   }
 
   private List<JSONObject> removeOldHistoryEntries(List<JSONObject> oldHistory)
