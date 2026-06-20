@@ -41,7 +41,9 @@ public class ContextManager
   private static final String KEY_HISTORY = "history";
   private static final String KEY_MAX_ROUNDS = "current_max_rounds";
   private static final int INITIAL_MAX_ROUNDS = 5;
-  
+private static final int INITIAL_MAX_ROUNDS = 5;
+  // 🆕 #819154835086 重复"上下文超长"提示清理阈值（超过此数量才执行清理）
+  private static final int CONTEXT_ALERT_CLEANUP_THRESHOLD = 5;
   private Context context;
   private File contextFile;
   private SharedPreferences sharedPreferences;
@@ -71,6 +73,8 @@ public class ContextManager
     // ✅ 从 JSON 文件加载历史到内存（同步读取）
     loadHistoryFromFile();
     
+// 🆕 #819154835086 启动时清理重复的"上下文超长"提示
+    cleanupDuplicateContextAlertsOnStartup();
     // ✅ 启动时清理无效的工具调用
     cleanupInvalidToolCallsOnStartup();
   }
@@ -245,6 +249,69 @@ public class ContextManager
     {
       FileLogger.e(TAG, "[Startup cleanup] Error: " + e.getMessage(), e);
     }
+// 🆕 #819154835086 启动时清理重复的"上下文超长"提示
+  // 主人要求：先统计，超过 5 条才执行清理。清理后通过杀进程重启可恢复姐姐
+  private void cleanupDuplicateContextAlertsOnStartup()
+  {
+    if (memoryHistory == null || memoryHistory.isEmpty())
+    {
+      FileLogger.d(TAG, "🧹 [ALERT_CLEANUP] 内存历史为空，跳过清理");
+      return;
+    }
+
+    String ALERT_MARKER = "⚠️ 上下文超长，已自动缩短";
+
+    // 步骤 1: 统计重复消息数量
+    int duplicateCount = 0;
+    for (int i = 0; i < memoryHistory.size(); i++)
+    {
+      JSONObject msg = memoryHistory.get(i);
+      String role = msg.optString("role", "");
+      String content = msg.optString("content", "");
+      if ("assistant".equals(role) && content.contains(ALERT_MARKER))
+      {
+        duplicateCount++;
+      }
+    }
+
+    // 步骤 2: 阈值判断
+    if (duplicateCount <= CONTEXT_ALERT_CLEANUP_THRESHOLD)
+    {
+      FileLogger.d(TAG, "🧹 [ALERT_CLEANUP] 重复提示数量 " + duplicateCount + " 未超过阈值 " + CONTEXT_ALERT_CLEANUP_THRESHOLD + "，跳过清理");
+      return;
+    }
+
+    FileLogger.w(TAG, "🚨 [ALERT_CLEANUP] 检测到 " + duplicateCount + " 条重复的'上下文超长'提示，开始清理（阈值=" + CONTEXT_ALERT_CLEANUP_THRESHOLD + "）");
+
+    // 步骤 3: 倒序遍历，保留最新的一条，删除其余
+    List<JSONObject> validHistory = new ArrayList<>();
+    boolean foundLatest = false;
+    for (int i = memoryHistory.size() - 1; i >= 0; i--)
+    {
+      JSONObject msg = memoryHistory.get(i);
+      String role = msg.optString("role", "");
+      String content = msg.optString("content", "");
+
+      if ("assistant".equals(role) && content.contains(ALERT_MARKER))
+      {
+        if (foundLatest)
+        {
+          // 删除（不加入 validHistory）
+          continue;
+        }
+        else
+        {
+          foundLatest = true;
+        }
+      }
+      validHistory.add(0, msg);  // 倒序重建，保持原始顺序
+    }
+
+    // 步骤 4: 保存清理后的历史
+    int originalSize = memoryHistory.size();
+    saveHistory(validHistory);
+    FileLogger.i(TAG, "✅ [ALERT_CLEANUP] 清理完成 | 原始：" + originalSize + " 条 | 清理后：" + validHistory.size() + " 条 | 删除：" + (originalSize - validHistory.size()) + " 条");
+  }
   }
 
   private List<JSONObject> removeOldHistoryEntries(List<JSONObject> oldHistory)
