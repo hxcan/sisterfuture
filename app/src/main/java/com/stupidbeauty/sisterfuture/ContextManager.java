@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import com.stupidbeauty.sisterfuture.manager.ToolAvoidanceDetectionManager;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.Set;
@@ -76,6 +77,28 @@ public class ContextManager
     cleanupDuplicateContextAlertsOnStartup();
     // ✅ 启动时清理无效的工具调用
     cleanupInvalidToolCallsOnStartup();
+    // 🆕 #820049914004 检测并恢复 Tool Avoidance
+    recoverFromToolAvoidanceOnStartup();
+  }
+
+  /**
+   * 🆕 #820049914004 启动时检测 Tool Avoidance 并恢复
+   * 主人要求：基于 Persona Bleed 引起的 Tool Avoidance
+   * 判定策略：4 段时序分析（满足任意 2 个条件即触发）
+   *   1. 4 段比例单调上升（r1 < r2 < r3 < r4）
+   *   2. 末段纯文本比例 >= 80%
+   *   3. 连续 >= 20 条助手消息无 tool_calls
+   */
+  private void recoverFromToolAvoidanceOnStartup()
+  {
+    if (memoryHistory == null || memoryHistory.isEmpty()) return;
+    ToolAvoidanceDetectionManager detector = new ToolAvoidanceDetectionManager();
+    int removeCount = detector.performCleanup(memoryHistory);
+    if (removeCount > 0)
+    {
+      FileLogger.w(TAG, "🧹 [TOOL_AVOIDANCE] 启动恢复 | 删除" + removeCount + "条污染消息 | 剩余" + memoryHistory.size() + "条");
+      saveHistory(memoryHistory);
+    }
   }
 
   // ✅ 从 JSON 文件加载历史到内存（同步读取），支持向下兼容
