@@ -359,7 +359,7 @@ public class ContextManager
 
     return history;
   }
-  
+
   // 🗑️ 新增：根据索引删除消息
   public void removeMessage(int index)
   {
