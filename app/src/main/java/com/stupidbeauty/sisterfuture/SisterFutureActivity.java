@@ -1,5 +1,6 @@
 package com.stupidbeauty.sisterfuture;
 
+import java.io.File;
 import com.stupidbeauty.sisterfuture.tool.ToolRegistry;
 import com.stupidbeauty.sisterfuture.tool.ToolManager;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
@@ -107,7 +108,6 @@ import java.security.NoSuchAlgorithmException;
 import butterknife.BindView;
 import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
 import com.koushikdutta.async.http.server.AsyncHttpServer;
-import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
 import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
 import com.koushikdutta.async.http.server.HttpServerRequestCallback;
@@ -553,8 +553,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         
         // ✅ 发送完成后清除图片缓存，但保持按钮可见
         currentImageBase64 = null;
-        // 不再隐藏按钮，保持始终可见
-        // uploadImageButton.setVisibility(View.GONE); ❌ 移除这行
         
         scrollToBottom();
         
@@ -696,7 +694,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 清除了旧图片，准备选择新图片");
     }
     
-    // ✅ 始终打开相册选择器（不再隐藏按钮）
+    // ✅ 始终打开相册选择器
     openImagePicker();
   }
 
@@ -911,7 +909,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   if (imageUrl != null) {
                     String url = imageUrl.optString("url", "");
                     if (url.startsWith("data:image/jpeg;base64,")) {
-                      // ✅ 同样修复此处的 substring 逻辑
                       int commaIndex = url.lastIndexOf(',');
                       String base64 = (commaIndex > 0) ? url.substring(commaIndex + 1) : url;
                       String preview = base64.length() > 50 ? base64.substring(0, 50) + "..." : base64;
@@ -937,7 +934,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             catch (JSONException e) 
             {
             }
-          } // if ("tool".equals(role)) 
+          }
           
           if ("assistant".equals(role)) 
           {
@@ -954,8 +951,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 {
                   String funcName = func.optString("name", "unknown_function");
                   String args = func.optString("arguments", "");
-                  
-                  // ✅ 先输出原始内容（无论有效无效）
                   
                   // 尝试解析 arguments 是否为有效 JSON
                   try 
@@ -984,9 +979,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
-      
-      // 📤 发送请求前记录
-      // Deleted: FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
       
       // 🔗 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();
@@ -1100,7 +1092,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       () ->
         {
         },
-        currentReservedMessageId); // 🔗 第 5 个参数：传递预留的消息 ID
+        currentReservedMessageId);
     }
     else
     {
@@ -1450,13 +1442,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.i(TAG, "🔄 [ACCESS_POINT_SWITCH] 因重复回复切换到下一个接入点");
             
             repeatDetectionManager.reset();
-            // 注意：此处不调用 modelAccessPointManager.resetFailureCount()
-            // 因为这是真正的接入点问题，应保留失败计数
             
-            // 🔄 切换接入点后，立即重新发送请求（与 onError() 中的逻辑保持一致）
+            // 🔄 切换接入点后，立即重新发送请求
             FileLogger.d(TAG, "🔄 [RETRY] 准备重试，使用新接入点发送请求");
             sendChatRequestTongYi();
-            return; // 不再继续处理当前回复，等待新请求的结果
+            return;
           }
           
           ttsSayReply(fullAnswer);
@@ -1488,7 +1478,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       try
       {
         // 🔑 关键修复：遍历所有工具，检查幂等性
-        // 如果发现任何一个工具已处理过，说明已经触发过请求，直接返回
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
@@ -1510,7 +1499,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           if (isDuplicate)
           {
             FileLogger.w(TAG, "⚠️ [DUPLICATE] 发现重复工具 | id=" + id + " | name=" + name + " | 说明已处理过，跳过本次请求触发");
-            return; // ✅ 直接返回，不触发新请求
+            return;
           }
           
           // 只有未处理过的工具才添加消息
@@ -1543,7 +1532,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     if (messageAdapter.getItemCount() > 0)
     {
       // ✅ 修复 #753566214831：使用 post() + scrollToPosition() 消除震荡
-      // ❌ 原 smoothScrollToPosition() 会与布局重算冲突，导致界面抖动
       articleListmyRecyclerView.post(() -> {
         articleListmyRecyclerView.scrollToPosition(messageAdapter.getItemCount() - 1);
       });
@@ -1826,7 +1814,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
     articleListmyRecyclerView.setAdapter(messageAdapter);
 
-    // 🗑️ #821166321034 设置删除消息监听器（仅删除上下文，不自动触发新请求）
+    // 🗑️ #821166321034 设置删除消息监听器
     messageAdapter.setOnMessageDeleteListener(new MessageAdapter.OnMessageDeleteListener() {
       @Override
       public void onMessageDeleted(MessageItem message, int position) {
@@ -1855,8 +1843,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.i(TAG, "🗑️ 删除上下文中最后一条消息");
           }
         }
-        
-        // ⚠️ 不再自动触发新请求继续对话
       }
     });
 
@@ -1889,7 +1875,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     
-    // 委托给权限管理器处理
     if (permissionManager != null) {
       permissionManager.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
@@ -1972,7 +1957,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   // 📷 #280 初始化图片选择器
   private void initImagePicker()
   {
-    // 由于 Activity 不支持 registerForActivityResult，需要使用传统的 startActivityForResult 方式
     FileLogger.d(TAG, "📷 [IMAGE_PICKER_INIT] 图片选择器已初始化");
   }
 
@@ -2001,8 +1985,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       runOnUiThread(() -> {
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
-        // ✅ 不再隐藏按钮，保持始终可见
-        // uploadImageButton.setVisibility(View.VISIBLE); 本来就可见，不需要设置
       });
       
       FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
