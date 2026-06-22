@@ -340,7 +340,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     return result;
   }
-  
+
   private void displayExistingContext()
   {
     List<JSONObject> history = contextManager.getHistory();
@@ -561,7 +561,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           // 救援模式下不处理，由救援逻辑接管
           return;
         }
-        
+
         if (guideManager != null && guideManager.isEmptyAccessPointList())
         {
           guideManager.processWithGuideLogic(message != null ? message : "", new GuideManager.ChatCallback()
@@ -610,7 +610,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
       contextManager.addUserMessage(message);
-      
+
       if (isDeadlockRescueMode) {
         FileLogger.d(TAG, "🔥 [RESCUE_MODE] 处于死循环救援模式，处理 API Key 输入");
         guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
@@ -640,7 +640,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         });
         return;
       }
-      
+
       if (guideManager != null && guideManager.isEmptyAccessPointList())
       {
         guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
@@ -672,7 +672,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       sendChatRequestTongYi();
     }
   }
-  
+
   @OnClick(R.id.sendButtonn2)
   public void sendButtonn2()
   {
@@ -843,7 +843,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // 🌌 #759909257401 平行宇宙时间线理论：发送请求前清理悬而未决的工具调用
 
-
       // 获取当前历史并应用严厉模式清理
       List<JSONObject> history = contextManager.getHistory();
       List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
@@ -984,8 +983,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
       
+      // 📤 发送请求前记录
       // Deleted: FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
-
+      
       // 🔗 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();
       FileLogger.i(TAG, "🔗 [RESERVE_ID] 已生成预留消息 ID | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
@@ -999,6 +999,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
           
           lastSuccessRequestId = requestId;
+          
+          // 🤖 记录 AI 响应
+          int responseLength = response != null ? response.length() : 0;
+          String responsePreview = response != null && response.length() > 100 ? response.substring(0, 100) + "..." : response;
+          FileLogger.i(TAG, "🤖 [AI_RESPONSE] 收到 AI 响应 | 长度=" + responseLength + " | 前 100 字符：" + responsePreview);
           
           parseTongYiResponse(response);
         }
@@ -1286,37 +1291,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   @Override
                   public void onError(Exception e)
                   {
-                    // 🔍 [TOOL_ASYNC_ERROR_DEBUG] 异步工具失败回调详细日志
-                    FileLogger.e(TAG, "🔧 [TOOL_ASYNC_ERROR] 异步工具失败 | id=" + toolCallId + " | name=" + toolName + " | errorType=" + e.getClass().getSimpleName() + " | errorMsg=" + e.getMessage(), e);
+                    // 🔍 添加日志：异步工具失败回调
+                    FileLogger.e(TAG, "❌ [TOOL_ASYNC_ERROR] 异步工具失败 | id=" + toolCallId + " | name=" + toolName + " | error=" + e.getMessage());
                     
                     synchronized (pendingResults)
                     {
-                      try
-                      {
-                        // ✅ 修复：构造错误结果对象，确保异步工具失败时也能生成 Tool Message
-                        JSONObject errorResult = new JSONObject();
-                        errorResult.put("error", e.getMessage());
-                        errorResult.put("error_type", e.getClass().getSimpleName());
-                        errorResult.put("tool_name", toolName);
-                        
-                        JSONObject wrapper = new JSONObject();
-                        wrapper.put("id", toolCallId);
-                        wrapper.put("name", toolName);
-                        wrapper.put("result", errorResult);
-                        pendingResults.put(toolCallId, wrapper);
-                        
-                        FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发 | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
-                        
-                        if (pendingResults.size() == toolCallsArray.length())
-                        {
-                          FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成（含错误），准备调用 postProcessToolResults");
-                          postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
-                        }
-                      }
-                      catch (Exception ex)
-                      {
-                        FileLogger.e(TAG, "❌ [TOOL_ERROR_WRAPPER_FAIL] 封装错误结果失败", ex);
-                      }
+                      FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发，pendingResults 大小：" + pendingResults.size() + " / total=" + toolCallsArray.length());
+                      postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
                     }
                   }
                 });
@@ -1423,6 +1404,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           String fullAnswer = accumulatedAnswer.toString();
           
           // 🔍 #759909257401 检测连续重复回复
+          // ⚠️ #5031 跳过工具调用消息的空回复检测（工具调用时 content 为空是正常的）
           boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
           
           // 🆕 #816587404117 检测空响应：在正常流程中检测连续空响应
@@ -1479,48 +1461,46 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       try
       {
-        // 🔑 关键修复：遍历所有工具，检查幂等性
-        // 如果发现任何一个工具已处理过，说明已经触发过请求，直接返回
+        int validResultsCount = 0;
+        
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
           String id = call.getString("id");
           JSONObject wrapper = pendingResults.get(id);
           
-          if (wrapper == null)
+          if (wrapper != null)
           {
-            FileLogger.w(TAG, "⚠️ [SKIP] 工具结果不存在 | id=" + id);
-            continue;
-          }
-          
-          String name = wrapper.getString("name");
-          JSONObject result = wrapper.getJSONObject("result");
+            String name = wrapper.getString("name");
+            JSONObject result = wrapper.getJSONObject("result");
 
-          // 🔑 关键：检查幂等性
-          boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
-          
-          if (isDuplicate)
-          {
-            FileLogger.w(TAG, "⚠️ [DUPLICATE] 发现重复工具 | id=" + id + " | name=" + name + " | 说明已处理过，跳过本次请求触发");
-            return; // ✅ 直接返回，不触发新请求
+            // 🔍 添加幂等性检查日志
+            boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
+            FileLogger.d(TAG, "🔧 [TOOL_IDEMPOTENCY] 幂等性检查 | id=" + id + " | name=" + name + " | isDuplicate=" + isDuplicate);
+            
+            if (isDuplicate)
+            {
+              FileLogger.w(TAG, "⚠️ 忽略重复的工具回复消息，toolCallId=" + id + ", toolName=" + name);
+              continue;
+            }
+            
+            validResultsCount++;
+
+            contextManager.addToolMessage(id, name, result.toString());
+            FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
+            messageAdapter.addMessage(
+              new MessageItem(
+                "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
+                MessageType.TOOL_CALL_RESULT
+              )
+            );
           }
-          
-          // 只有未处理过的工具才添加消息
-          FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
-          contextManager.addToolMessage(id, name, result.toString());
-          FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
-          messageAdapter.addMessage(
-            new MessageItem(
-              "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
-              MessageType.TOOL_CALL_RESULT
-            )
-          );
         }
 
         clearAccumulatedToolCalls();
 
-        // 🔑 能走到这里，说明没有重复的工具，需要触发新请求
-        FileLogger.i(TAG, "🚀 [TRIGGER] 准备触发新请求 | toolCallsCount=" + toolCallsArray.length());
+        // 🔍 添加触发新请求前的日志
+        FileLogger.i(TAG, "🚀 [TOOL_REQUEST_TRIGGER] 准备触发新请求 | validResultsCount=" + validResultsCount + " | totalTools=" + toolCallsArray.length());
         sendChatRequestTongYi();
       }
       catch (Exception e)
@@ -1817,6 +1797,40 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     messageAdapter = new MessageAdapter();
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
     articleListmyRecyclerView.setAdapter(messageAdapter);
+
+    // 🗑️ #821166321034 设置删除消息监听器（仅删除上下文，不自动触发新请求）
+    messageAdapter.setOnMessageDeleteListener(new MessageAdapter.OnMessageDeleteListener() {
+      @Override
+      public void onMessageDeleted(MessageItem message, int position) {
+        FileLogger.i(TAG, "🗑️ 收到删除消息回调 | position=" + position);
+        
+        // 从上下文中删除对应位置的消息
+        List<JSONObject> history = contextManager.getHistory();
+        
+        if (history != null && !history.isEmpty()) {
+          String deleteContent = message.getText();
+          boolean foundAndRemoved = false;
+          
+          for (int i = history.size() - 1; i >= 0 && !foundAndRemoved; i--) {
+            JSONObject msg = history.get(i);
+            String content = msg.optString("content", "");
+            
+            if (content.contains(deleteContent) || deleteContent.contains(content)) {
+              contextManager.removeMessage(i);
+              foundAndRemoved = true;
+              FileLogger.i(TAG, "🗑️ 已从上下文删除 | index=" + i);
+            }
+          }
+          
+          if (!foundAndRemoved) {
+            contextManager.removeMessage(history.size() - 1);
+            FileLogger.i(TAG, "🗑️ 删除上下文中最后一条消息");
+          }
+        }
+        
+        // ⚠️ 不再自动触发新请求继续对话
+      }
+    });
 
     recognizeResulttextView.setOnEditorActionListener(new TextView.OnEditorActionListener()
     {
