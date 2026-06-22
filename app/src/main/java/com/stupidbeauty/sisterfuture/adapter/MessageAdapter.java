@@ -30,6 +30,7 @@ import android.content.Context;
 import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.PopupMenu;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import butterknife.BindView;
@@ -53,6 +54,17 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     private static final String TAG = "MessageAdapter";
 
     private List<MessageItem> messages = new ArrayList<>();
+    
+    // 🗑️ #821166321034 删除消息回调接口
+    public interface OnMessageDeleteListener {
+        void onMessageDeleted(MessageItem message, int position);
+    }
+    
+    private OnMessageDeleteListener deleteListener;
+    
+    public void setOnMessageDeleteListener(OnMessageDeleteListener listener) {
+        this.deleteListener = listener;
+    }
 
     public MessageItem getItem(int position) {
         return messages.get(position);
@@ -102,39 +114,56 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         return messages.size();
     }
 
-    // 🔗 新增：添加消息并返回消息项，方便后续关联
+    // 🔗 添加消息并返回消息项，方便后续关联
     public MessageItem addMessage(MessageItem message) {
         messages.add(message);
         notifyItemInserted(messages.size() - 1);
         return message;
     }
 
-    // 🔗 新增：根据消息 ID 查找位置
+    // 🔗 根据消息 ID 查找位置
     public int getMessagePositionById(String messageId) {
         if (messageId == null || messageId.isEmpty()) {
-            FileLogger.w(TAG, "⚠️ [FIND_BY_ID] 消息 ID 为空，无法查找");
             return -1;
         }
         
         for (int i = 0; i < messages.size(); i++) {
             MessageItem item = messages.get(i);
             if (item.getMessageId() != null && item.getMessageId().equals(messageId)) {
-                FileLogger.d(TAG, "🔍 [FOUND] 找到消息 | id=" + messageId + " | position=" + i);
                 return i;
             }
         }
-        
-        FileLogger.w(TAG, "⚠️ [NOT_FOUND] 未找到消息 | id=" + messageId);
         return -1;
     }
 
-    // 🔗 新增：根据消息 ID 移除消息条目
+    // 🔗 根据消息 ID 移除消息条目
     public boolean removeMessageById(String messageId) {
         int position = getMessagePositionById(messageId);
         if (position >= 0) {
-            messages.remove(position);
+            MessageItem removed = messages.remove(position);
             notifyItemRemoved(position);
-            FileLogger.i(TAG, "✅ [REMOVED] 已移除消息 | id=" + messageId + " | position=" + position);
+            notifyItemRangeChanged(position, messages.size() - position);
+            
+            // 回调删除监听器
+            if (deleteListener != null) {
+                deleteListener.onMessageDeleted(removed, position);
+            }
+            return true;
+        }
+        return false;
+    }
+    
+    // 🗑️ #821166321034 根据位置移除消息
+    public boolean removeMessage(int position) {
+        if (position >= 0 && position < messages.size()) {
+            MessageItem removed = messages.remove(position);
+            notifyItemRemoved(position);
+            notifyItemRangeChanged(position, messages.size() - position);
+            
+            // 回调删除监听器
+            if (deleteListener != null) {
+                deleteListener.onMessageDeleted(removed, position);
+            }
             return true;
         }
         return false;
@@ -159,6 +188,30 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
         return text;
     }
+    
+    // 🗑️ #821166321034 显示长按菜单（同时包含"删除"和"复制"选项）
+    private void showLongPressMenu(View anchorView, MessageItem message, int position, TextView textView) {
+        PopupMenu popup = new PopupMenu(anchorView.getContext(), anchorView);
+        popup.getMenu().add(0, 1, 0, "删除"); // 🗑️ 删除选项
+        popup.getMenu().add(0, 2, 1, "复制"); // 📋 复制选项（兼容原有功能）
+        
+        popup.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == 1) {
+                // 删除消息
+                removeMessage(position);
+                return true;
+            } else if (item.getItemId() == 2) {
+                // 复制文本（兼容原有功能）
+                String selectedText = textView.getText().toString();
+                ClipboardManager clipboard = (ClipboardManager)anchorView.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                android.content.ClipData clip = android.content.ClipData.newPlainText("selected text", selectedText);
+                clipboard.setPrimaryClip(clip);
+                return true;
+            }
+            return false;
+        });
+        popup.show();
+    }
 
     public static class UserMessageViewHolder extends RecyclerView.ViewHolder 
     {
@@ -169,6 +222,17 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
       {
         super(itemView);
         ButterKnife.bind(this, itemView);
+        
+        // 🗑️ #821166321034 长按显示菜单（删除+复制）
+        itemView.setOnLongClickListener(v -> {
+            int position = getBindingAdapterPosition();
+            if (position != RecyclerView.NO_POSITION) {
+                showLongPressMenu(v, messages.get(position), position, textView);
+            }
+            return true;
+        });
+        
+        // 保留原有文本选择功能
         textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() 
         {
           @Override
@@ -286,6 +350,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
         else 
         {
+          FileLogger.d(TAG, "🚫 [NO_IMAGE] 没有图片数据");
           // 没有图片，隐藏 ImageView，只显示文字
           imageView.setImageBitmap(null); // 清除旧图片，防止复用
           imageView.setVisibility(View.GONE);
@@ -307,6 +372,17 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 .usePlugin(StrikethroughPlugin.create())
                 .usePlugin(TablePlugin.create(itemView.getContext()))
                 .build();
+            
+            // 🗑️ #821166321034 长按显示菜单
+            itemView.setOnLongClickListener(v -> {
+                int position = getBindingAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    showLongPressMenu(v, messages.get(position), position, textView);
+                }
+                return true;
+            });
+            
+            // 保留原有文本选择功能
             textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
                 @Override
                 public boolean onCreateActionMode(ActionMode mode, Menu menu) {
@@ -352,6 +428,15 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         public ToolCallResultViewHolder(View itemView) {
             super(itemView);
             ButterKnife.bind(this, itemView);
+            
+            // 🗑️ #821166321034 长按显示菜单
+            itemView.setOnLongClickListener(v -> {
+                int position = getBindingAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    showLongPressMenu(v, messages.get(position), position, textView);
+                }
+                return true;
+            });
             
             // 点击切换展开/收起状态
             itemView.setOnClickListener(v -> {
