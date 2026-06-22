@@ -142,11 +142,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private ContextManager contextManager;
   private MessageAdapter messageAdapter;
   @BindView(R.id.articleListmy_recycler_view) RecyclerView articleListmyRecyclerView;
-  private static final String DEFAULT_INPUT_TEXT = "君不见，黄河之水天上来，奔流到海不复回，君不见，高堂明镜悲白发，朝如青丝暮成雪，人生得意须尽欢，莫使金樽空对月";
+  private static final String DEFAULT_INPUT_TEXT = "君不见，黄河之水天上来，奔流到海不复回君不见，高堂明镜悲白发，朝如青丝暮成雪，人生得意须尽欢，莫使金樽空对月";
 
   private StringBuilder accumulatedAnswer = new StringBuilder();
 
-  // 📷 #280 图片输入功能相关变量
+  // 📷 图片输入功能相关变量
   private ActivityResultLauncher<Intent> imagePickerLauncher;
   private String currentImageBase64 = null;
   @BindView(R.id.uploadImageButton) Button uploadImageButton;
@@ -178,18 +178,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
-  // 🔥 #4657 死循环救援模式标记
+  // 死循环救援模式标记
   private boolean isDeadlockRescueMode = false;
   
-  // ⚠️ #4824 HTTP 429 限流重试计数器
+  // HTTP 429 限流重试计数器
   private int rateLimitRetryCount = 0;
   private static final int MAX_RATE_LIMIT_RETRIES = 3;
 
-  // 🔍 #4997 请求 ID 追踪 - 过滤旧请求的错误回调
+  // 请求 ID 追踪 - 过滤旧请求的错误回调
   private volatile long currentRequestId = 0;
   private volatile long lastSuccessRequestId = 0;
   // === 内置 FTP 服务器相关成员变量 ===
-  private static final int FTP_SERVER_PORT = 2123;  // 端口规划：BlindBox.her=2121, JoyMan=2122, SisterFuture=2123
+  private static final int FTP_SERVER_PORT = 2123;
   private BuiltinFtpServer builtinFtpServer = null;
   private BuiltinFtpServerErrorListener builtinFtpServerErrorListener = null;
 
@@ -360,7 +360,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       else if ("user".equals(role))
       {
-        // 🖼️ 检测是否为多模态消息（包含图片）
         if (contentObj instanceof JSONArray)
         {
           JSONArray contentArray = (JSONArray) contentObj;
@@ -387,7 +386,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   String url = imageUrlObj.optString("url");
                   if (url != null && url.startsWith("data:image/jpeg;base64,"))
                   {
-                    // ✅ 修复：使用 lastIndexOf(',') 动态查找逗号位置，替代硬编码的 substring(21)
                     int commaIndex = url.lastIndexOf(',');
                     if (commaIndex > 0) {
                       imageUrl = url.substring(commaIndex + 1);
@@ -404,12 +402,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             }
           }
           
-          // 使用三参数构造函数，传递文字和图片
           messageAdapter.addMessage(new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl));
         }
         else
         {
-          // 纯文本消息
           String content = msg.optString("content");
           if (!content.isEmpty())
           {
@@ -456,7 +452,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     List<JSONObject> history = contextManager.getHistory();
     if (history == null || history.isEmpty())
     {
-      FileLogger.d(TAG, "🔄 [AUTO_RESUME] 历史记录为空，跳过自动恢复");
       return;
     }
     
@@ -465,39 +460,30 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     String toolCallId = lastMsg.optString("tool_call_id", "");
     
     boolean shouldResume = false;
-    String resumeReason = "";
     
     if ("user".equals(role))
     {
       shouldResume = true;
-      resumeReason = "最后一条是用户消息";
     }
     else if ("tool".equals(role) && !toolCallId.isEmpty())
     {
       shouldResume = true;
-      resumeReason = "最后一条是工具调用结果";
     }
     
     if (shouldResume)
     {
       new Handler(Looper.getMainLooper()).postDelayed(() -> 
       {
-        FileLogger.d(TAG, "🔄 [AUTO_RESUME] 开始发送自动恢复请求");
         sendChatRequestTongYi();
       }, 500);
     }
-    else
-    {
-      FileLogger.d(TAG, "🔄 [AUTO_RESUME] 不需要自动恢复");
-    }
   }
 
-  // 📷 #280 修改：统一处理纯文本和多模态消息
+  // 📷 修改：统一处理纯文本和多模态消息
   public void sendMessageToSister(String message)
   {
     if (message == null || message.trim().isEmpty())
     {
-      // 如果没有文字但有图片，仍然可以发送图片
       if (currentImageBase64 == null || currentImageBase64.isEmpty())
       {
         return;
@@ -506,16 +492,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
     
-    // 🖼️ 检测是否有图片，构建多模态消息或纯文本消息
     if (hasImage)
     {
-      FileLogger.i(TAG, "📷 [SEND_WITH_IMAGE] 发送带图片的消息 | 文字长度：" + (message != null ? message.length() : 0) + " | Base64 长度：" + currentImageBase64.length());
-      
       try
       {
         JSONArray contentArray = new JSONArray();
         
-        // 添加文字部分（如果有）
         if (message != null && !message.trim().isEmpty())
         {
           JSONObject textContent = new JSONObject();
@@ -524,7 +506,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           contentArray.put(textContent);
         }
         
-        // 添加图片部分
         JSONObject imageContent = new JSONObject();
         imageContent.put("type", "image_url");
         
@@ -533,28 +514,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         imageContent.put("image_url", imageUrl);
         contentArray.put(imageContent);
         
-        // 构建完整的用户消息
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
         userMessage.put("content", contentArray);
         
-        // ✅ 添加到上下文管理器（唯一真相源）
         contextManager.addRawMessage(userMessage);
         
-        // 验证是否成功添加
-        List<JSONObject> history = contextManager.getHistory();
-        int contextSize = history != null ? history.size() : 0;
-        FileLogger.i(TAG, "✅ [CONTEXT_ADDED] 多模态消息已添加到上下文 | 消息总数=" + contextSize);
-        
-        // UI 显示 - 🖼️ 传递图片数据到 MessageItem，保留原始文字
         messageAdapter.addMessage(new MessageItem(message != null ? message : "", MessageType.USER, hasImage ? currentImageBase64 : null));
         
-        // ✅ 发送完成后清除图片缓存，但保持按钮可见
         currentImageBase64 = null;
         
         scrollToBottom();
         
-        // 继续发送请求
         if (isDeadlockRescueMode) {
           return;
         }
@@ -591,7 +562,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       catch (JSONException e)
       {
-        FileLogger.e(TAG, "❌ [MULTIMODAL_ERROR] 构建多模态消息失败", e);
         runOnUiThread(() -> {
           Toast.makeText(SisterFutureActivity.this, "❌ 构建消息失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
         });
@@ -599,9 +569,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     else
     {
-      // 📝 纯文本消息处理（原有逻辑）
-      FileLogger.i(TAG, "📝 [SEND_TEXT] 发送纯文本消息 | 长度：" + message.length());
-      
       messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
       contextManager.addUserMessage(message);
       
@@ -671,20 +638,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText("");
   }
 
-  // 📷 #280 图片上传按钮点击事件 - 始终可见
+  // 📷 图片上传按钮点击事件
   @OnClick(R.id.uploadImageButton)
   public void onUploadImageButton()
   {
-    FileLogger.d(TAG, "📷 [CLICK] 图片按钮被点击了！当前状态：hasImage=" + (currentImageBase64 != null));
-    
-    // ✅ 如果有旧图片，���清���它
     if (currentImageBase64 != null)
     {
       currentImageBase64 = null;
-      FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 清除了旧图片，准备选择新图片");
     }
     
-    // ✅ 始终打开相册选择器（不再隐藏按钮）
     openImagePicker();
   }
 
@@ -765,8 +727,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void handleContextLengthError(String errorMessage, final boolean isRetry)
   {
-    FileLogger.w(TAG, "🔍 [CONTEXT_LENGTH] 检测到上下文超长错误，自动缩短上下文");
-    
     runOnUiThread(() ->
     {
       String displayMessage = errorMessage + "\n⚠️ 上下文超长，自动缩短后重试";
@@ -793,7 +753,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     SisterFutureService.updateNotificationStatus(this, "正在发送请求...");
 
     if (modelAccessPointManager.checkFailureThreshold()) {
-      FileLogger.e(TAG, "🚨 [DEADLOCK_RESCUE] 检测到连续失败超过阈值！触发救援模式");
       isDeadlockRescueMode = true;
       runOnUiThread(() -> {
         Toast.makeText(SisterFutureActivity.this, 
@@ -827,7 +786,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       accumulatedAnswer.setLength(0);
       showThinkingOverlay();
 
-      // 获取当前历史并应用严厉模式清理
       List<JSONObject> history = contextManager.getHistory();
       List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
       
@@ -864,7 +822,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
-      // 🔗 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();
 
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
@@ -883,16 +840,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         @Override
         public void onError(Exception error)
         {
-          FileLogger.d(TAG, "❌ [ERROR_CHECK] 请求 #" + requestId + " 错误 | lastSuccessRequestId=" + lastSuccessRequestId + " | 忽略=" + (requestId < lastSuccessRequestId));
-          
           if (requestId < lastSuccessRequestId) {
-            FileLogger.w(TAG, "⚠️ [IGNORED] 忽略旧请求 #" + requestId + " 的错误回调");
             return;
           }
           
           String errorType = error.getClass().getSimpleName();
-          String errorMsg = error.getMessage();
-          FileLogger.e(TAG, "❌ [AI_ERROR] AI 响应错误 | 错误类型=" + errorType + " | 错误信息=" + errorMsg);
+          FileLogger.e(TAG, "❌ AI 响应错误：" + errorType);
           
           hideThinkingOverlay();
           
@@ -975,10 +928,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     
     String trimmedContent = content.trim();
     return trimmedContent.startsWith("<!DOCTYPE html") ||
-           trimmedContent.startsWith("<html") ||
-           trimmedContent.startsWith("<HTML") ||
-           trimmedContent.contains("<title") ||
-           trimmedContent.contains("<TITLE");
+           trimmedContent.startsWith("<html");
   }
 
   protected void parseTongYiResponse(String jsonString)
@@ -1011,7 +961,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       if (response == null || response.getChoices() == null || response.getChoices().isEmpty())
       {
-        FileLogger.e(TAG, "响应为空或 choices 为空");
         return;
       }
 
@@ -1033,7 +982,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
             if (finalCalls == null || finalCalls.isEmpty())
             {
-              FileLogger.w(TAG, "没有有效的工具调用，跳过执行");
               return;
             }
 
@@ -1177,7 +1125,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           }
           catch (Exception e)
           {
-            FileLogger.e(TAG, "处理工具调用失败", e);
           }
         });
         return;
@@ -1239,7 +1186,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     catch (Exception e)
     {
-      FileLogger.e(TAG, "解析 JSON 响应失败：" + e.getMessage());
     }
   }
 
@@ -1286,7 +1232,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       catch (Exception e)
       {
-        FileLogger.e(TAG, "postProcessToolResults 出错", e);
       }
     });
   }
@@ -1465,7 +1410,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
         catch (Exception e)
         {
-          FileLogger.e("SisterFutureActivity", "提取工具描述失败：" + name, e);
         }
 
         promptBuilder.append("- ").append(name).append(":").append(description).append("\n");
@@ -1523,25 +1467,20 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     mediaPlayer = new MediaPlayer();
     mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
     
-    // 初始化权限管理器
     permissionManager = new PermissionManager(this, new PermissionManager.PermissionCallback() {
       @Override
       public void onAllPermissionsGranted() {
-        FileLogger.d(TAG, "All permissions granted");
       }
 
       @Override
       public void onPermissionDenied(String permission) {
-        FileLogger.w(TAG, "Permission denied: " + permission);
       }
 
       @Override
       public void onNotificationPermissionDenied() {
-        FileLogger.w(TAG, "Notification permission denied");
       }
     });
     
-    // 检查并请求权限
     if (permissionManager != null) {
       permissionManager.checkPermission();
       permissionManager.requestNotificationPermission();
@@ -1577,45 +1516,37 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
     articleListmyRecyclerView.setAdapter(messageAdapter);
 
-    // 🗑️ 新增：设置删除消息监听器
+    // 🗑️ 设置删除消息监听器（仅删除上下文，不自动触发新请求）
     messageAdapter.setOnMessageDeleteListener(new MessageAdapter.OnMessageDeleteListener() {
       @Override
       public void onMessageDeleted(MessageItem message, int position) {
-        FileLogger.i(TAG, "🗑️ [DELETE_LISTENER] 收到删除消息回调 | position=" + position);
+        FileLogger.i(TAG, "🗑️ 收到删除消息回调 | position=" + position);
         
         // 从上下文中删除对应位置的消息
-        // 注意：UI 消息顺序可能与上下文不完全对应，需要根据 messageId 映射
-        // 这里简化处理：如果删除的是最后一条之前的消息，可能需要调整
         List<JSONObject> history = contextManager.getHistory();
         
         if (history != null && !history.isEmpty()) {
-          // 尝试根据消息内容匹配删除
           String deleteContent = message.getText();
           boolean foundAndRemoved = false;
           
-          // 从后向前遍历查找匹配的消息（UI 显示顺���与���下文可能相反）
           for (int i = history.size() - 1; i >= 0 && !foundAndRemoved; i--) {
             JSONObject msg = history.get(i);
-            String role = msg.optString("role", "");
             String content = msg.optString("content", "");
             
-            // 检查是否匹配（简单匹配：内容包含关系）
             if (content.contains(deleteContent) || deleteContent.contains(content)) {
               contextManager.removeMessage(i);
               foundAndRemoved = true;
-              FileLogger.i(TAG, "🗑️ [DELETE_FROM_CONTEXT] 已从上下文删除 | index=" + i + " | role=" + role);
+              FileLogger.i(TAG, "🗑️ 已从上下文删除 | index=" + i);
             }
           }
           
           if (!foundAndRemoved) {
-            // 尝试直接删除最后一个消息（安全策略）
             contextManager.removeMessage(history.size() - 1);
-            FileLogger.i(TAG, "🗑️ [DELETE_FALLBACK] 删除上下文中最后一条消息");
+            FileLogger.i(TAG, "🗑️ 删除上下文中最后一条消息");
           }
         }
         
-        // 🗑️ 删除后自动触发新请求继续对话（可选）
-        checkAndResumeLastMessage();
+        // ⚠️ 不再自动触发新请求继续对话
       }
     });
 
@@ -1648,7 +1579,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     
-    // 委托给权限管理器处理
     if (permissionManager != null) {
       permissionManager.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
@@ -1699,14 +1629,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void startBuiltinFtpServer() 
   {
-    File rootDir = getFilesDir();
-    File parentDir = rootDir.getParentFile();
-    
-    if (parentDir != null && parentDir.exists()) 
-    {
-      File[] files = parentDir.listFiles();
-    }
-    
     builtinFtpServer = new BuiltinFtpServer(this);
     builtinFtpServerErrorListener = new BuiltinFtpServerErrorListener();
     
@@ -1714,8 +1636,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     builtinFtpServer.setAllowActiveMode(false);
     builtinFtpServer.setErrorListener(builtinFtpServerErrorListener);
     builtinFtpServer.start();
-    
-    FileLogger.d(TAG, "🚀 [FTP_DEBUG] 内置 FTP 服务器已启动，端口：" + FTP_SERVER_PORT);
   }
 
   private void scheduleStartBuiltinFtpServer() {
@@ -1728,13 +1648,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     timerObj.schedule(timerTaskObj, 2000);
   }
 
-  // 📷 #280 初始化图片选择器
   private void initImagePicker()
   {
-    FileLogger.d(TAG, "📷 [IMAGE_PICKER_INIT] 图片选择器已初始化");
   }
 
-  // 📷 #280 处理选中的图片
   private void handleSelectedImage(Intent data)
   {
     try
@@ -1760,34 +1677,26 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       runOnUiThread(() -> {
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
       });
-      
-      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
     }
     catch (Exception e)
     {
-      FileLogger.e(TAG, "❌ [IMAGE_ERROR] 加载图片失败", e);
       runOnUiThread(() -> {
-        Toast.makeText(this, "❌ 图片加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "❌ 图片加载失败", Toast.LENGTH_LONG).show();
       });
     }
   }
 
-  // 📷 #280 打开图片选择器
   private void openImagePicker()
   {
-    FileLogger.d(TAG, "📂 [PICKER] 准备打开相册选择器...");
-    
     Intent pickIntent = new Intent(Intent.ACTION_PICK);
     pickIntent.setType("image/*");
     try
     {
       startActivityForResult(pickIntent, 1001);
-      FileLogger.d(TAG, "📷 [IMAGE_PICKER] 已打开图片选择器");
     }
     catch (Exception e)
     {
-      FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
-      Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
+      Toast.makeText(this, "❌ 无法打开相册", Toast.LENGTH_LONG).show();
     }
   }
 
@@ -1795,8 +1704,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   protected void onActivityResult(int requestCode, int resultCode, Intent data)
   {
     super.onActivityResult(requestCode, resultCode, data);
-    
-    FileLogger.d(TAG, "🔄 [RESULT] 收到相册返回结果 | requestCode=" + requestCode + " | resultCode=" + resultCode);
     
     if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
     {
