@@ -1,6 +1,5 @@
 package com.stupidbeauty.sisterfuture;
 
-import java.io.File;
 import com.stupidbeauty.sisterfuture.tool.ToolRegistry;
 import com.stupidbeauty.sisterfuture.tool.ToolManager;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
@@ -108,6 +107,7 @@ import java.security.NoSuchAlgorithmException;
 import butterknife.BindView;
 import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
 import com.koushikdutta.async.http.server.AsyncHttpServer;
+import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
 import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
 import com.koushikdutta.async.http.server.HttpServerRequestCallback;
@@ -195,8 +195,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 
 	@Override
-  public void onInit(int arg0)
-  {
+	public void onInit(int arg0)
+	{
 
   }
 
@@ -320,6 +320,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText(R.string.empty);
   }
 
+
   public boolean setParam()
   {
     boolean result = false;
@@ -340,6 +341,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     return result;
   }
+
 
   private void displayExistingContext()
   {
@@ -552,7 +554,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         // ✅ 发送完成后清除图片缓存，但保持按钮可见
         currentImageBase64 = null;
         // 不再隐藏按钮，保持始终可见
-        // uploadImageButton.setVisibility(View.GONE); // ❌ 移除这行
+        // uploadImageButton.setVisibility(View.GONE); ❌ 移除这行
         
         scrollToBottom();
         
@@ -1138,7 +1140,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     
     String trimmedContent = content.trim();
-    return trimmedContent.startsWith("<!DOCTYPE html") ||
+    return trimmedContent.startsWith("<!DOCTYPE html>") ||
            trimmedContent.startsWith("<html") ||
            trimmedContent.startsWith("<HTML") ||
            trimmedContent.contains("<title") ||
@@ -1296,8 +1298,32 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                     
                     synchronized (pendingResults)
                     {
-                      FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发，pendingResults 大小：" + pendingResults.size() + " / total=" + toolCallsArray.length());
-                      postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
+                      // ✅ 修复：构造错误结果对象，确保异步工具失败时也能生成 Tool Message
+                      try
+                      {
+                        JSONObject errorResult = new JSONObject();
+                        errorResult.put("error", e.getMessage());
+                        errorResult.put("error_type", e.getClass().getSimpleName());
+                        errorResult.put("tool_name", toolName);
+                        
+                        JSONObject wrapper = new JSONObject();
+                        wrapper.put("id", toolCallId);
+                        wrapper.put("name", toolName);
+                        wrapper.put("result", errorResult);
+                        pendingResults.put(toolCallId, wrapper);
+                        
+                        FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发 | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
+                        
+                        if (pendingResults.size() == toolCallsArray.length())
+                        {
+                          FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成（含错误），准备调用 postProcessToolResults");
+                          postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
+                        }
+                      }
+                      catch (Exception ex)
+                      {
+                        FileLogger.e(TAG, "❌ [TOOL_ERROR_WRAPPER_FAIL] 封装错误结果失败", ex);
+                      }
                     }
                   }
                 });
@@ -1461,46 +1487,48 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       try
       {
-        int validResultsCount = 0;
-        
+        // 🔑 关键修复：遍历所有工具，检查幂等性
+        // 如果发现任何一个工具已处理过，说明已经触发过请求，直接返回
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
           String id = call.getString("id");
           JSONObject wrapper = pendingResults.get(id);
           
-          if (wrapper != null)
+          if (wrapper == null)
           {
-            String name = wrapper.getString("name");
-            JSONObject result = wrapper.getJSONObject("result");
-
-            // 🔍 添加幂等性检查日志
-            boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
-            FileLogger.d(TAG, "🔧 [TOOL_IDEMPOTENCY] 幂等性检查 | id=" + id + " | name=" + name + " | isDuplicate=" + isDuplicate);
-            
-            if (isDuplicate)
-            {
-              FileLogger.w(TAG, "⚠️ 忽略重复的工具回复消息，toolCallId=" + id + ", toolName=" + name);
-              continue;
-            }
-            
-            validResultsCount++;
-
-            contextManager.addToolMessage(id, name, result.toString());
-            FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
-            messageAdapter.addMessage(
-              new MessageItem(
-                "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
-                MessageType.TOOL_CALL_RESULT
-              )
-            );
+            FileLogger.w(TAG, "⚠️ [SKIP] 工具结果不存在 | id=" + id);
+            continue;
           }
+          
+          String name = wrapper.getString("name");
+          JSONObject result = wrapper.getJSONObject("result");
+
+          // 🔑 关键：检查幂等性
+          boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
+          
+          if (isDuplicate)
+          {
+            FileLogger.w(TAG, "⚠️ [DUPLICATE] 发现重复工具 | id=" + id + " | name=" + name + " | 说明已处理过，跳过本次请求触发");
+            return; // ✅ 直接返回，不触发新请求
+          }
+          
+          // 只有未处理过的工具才添加消息
+          FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
+          contextManager.addToolMessage(id, name, result.toString());
+          FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
+          messageAdapter.addMessage(
+            new MessageItem(
+              "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
+              MessageType.TOOL_CALL_RESULT
+            )
+          );
         }
 
         clearAccumulatedToolCalls();
 
-        // 🔍 添加触发新请求前的日志
-        FileLogger.i(TAG, "🚀 [TOOL_REQUEST_TRIGGER] 准备触发新请求 | validResultsCount=" + validResultsCount + " | totalTools=" + toolCallsArray.length());
+        // 🔑 能走到这里，说明没有重复的工具，需要触发新请求
+        FileLogger.i(TAG, "🚀 [TRIGGER] 准备触发新请求 | toolCallsCount=" + toolCallsArray.length());
         sendChatRequestTongYi();
       }
       catch (Exception e)
@@ -1974,7 +2002,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       runOnUiThread(() -> {
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
         // ✅ 不再隐藏按钮，保持始终可见
-        // uploadImageButton.setVisibility(View.VISIBLE); // 本来就可见，不需要设置
+        // uploadImageButton.setVisibility(View.VISIBLE); 本来就可见，不需要设置
       });
       
       FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
