@@ -359,7 +359,25 @@ public class ContextManager
 
     return history;
   }
-  
+
+  // 🗑️ #821166321034 新增：根据索引删除消息
+  public void removeMessage(int index)
+  {
+    if (memoryHistory == null || index < 0 || index >= memoryHistory.size())
+    {
+      FileLogger.w(TAG, "⚠️ [REMOVE] 索引无效 | index=" + index + " | size=" + (memoryHistory != null ? memoryHistory.size() : 0));
+      return;
+    }
+    
+    JSONObject removedMessage = memoryHistory.remove(index);
+    String removedRole = removedMessage.optString("role", "unknown");
+    FileLogger.i(TAG, "🗑️ [REMOVE] 已删除消息 | index=" + index + " | role=" + removedRole);
+    
+    // 触发已有清理方法处理 tool_calls 配对
+    List<JSONObject> normalizedHistory = normalizeToolCallMessages(memoryHistory, false);
+    saveHistory(normalizedHistory);
+  }
+
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
     List<JSONObject> history = getHistory();
@@ -881,7 +899,7 @@ public class ContextManager
       FileLogger.e(TAG, "❌ [ERROR] normalizeToolCallMessages 异常：" + e.getMessage(), e);
       e.printStackTrace();
     }
-    
+
     return list;
   }
 
