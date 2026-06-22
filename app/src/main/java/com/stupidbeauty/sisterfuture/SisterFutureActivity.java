@@ -178,27 +178,27 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
-  // 死循环救援模式标记
+  // 🔥 #4657 死循环救援模式标记
   private boolean isDeadlockRescueMode = false;
   
-  // HTTP 429 限流重试计数器
+  // ⚠️ #4824 HTTP 429 限流重试计数器
   private int rateLimitRetryCount = 0;
   private static final int MAX_RATE_LIMIT_RETRIES = 3;
 
-  // 请求 ID 追踪 - 过滤旧请求的错误回调
+  // 🔍 #4997 请求 ID 追踪 - 过滤旧请求的错误回调
   private volatile long currentRequestId = 0;
   private volatile long lastSuccessRequestId = 0;
   // === 内置 FTP 服务器相关成员变量 ===
-  private static final int FTP_SERVER_PORT = 2123;
+  private static final int FTP_SERVER_PORT = 2123;  // 端口规划：BlindBox.her=2121, JoyMan=2122, SisterFuture=2123
   private BuiltinFtpServer builtinFtpServer = null;
   private BuiltinFtpServerErrorListener builtinFtpServerErrorListener = null;
 
 
 	@Override
-	public void onInit(int arg0)
-	{
+  public void onInit(int arg0)
+  {
 
-	}
+  }
 
   private void accumulateToolCalls(List<ToolCall> calls)
   {
@@ -340,7 +340,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     return result;
   }
-  
+
   private void displayExistingContext()
   {
     List<JSONObject> history = contextManager.getHistory();
@@ -360,6 +360,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       else if ("user".equals(role))
       {
+        // 🖼️ 检测是否为多模态消息（包含图片）
         if (contentObj instanceof JSONArray)
         {
           JSONArray contentArray = (JSONArray) contentObj;
@@ -386,6 +387,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   String url = imageUrlObj.optString("url");
                   if (url != null && url.startsWith("data:image/jpeg;base64,"))
                   {
+                    // ✅ 修复：使用 lastIndexOf(',') 动态查找逗号位置
                     int commaIndex = url.lastIndexOf(',');
                     if (commaIndex > 0) {
                       imageUrl = url.substring(commaIndex + 1);
@@ -402,10 +404,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             }
           }
           
+          // 使用三参数构造函数，传递文字和图片
           messageAdapter.addMessage(new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl));
         }
         else
         {
+          // 纯文本消息
           String content = msg.optString("content");
           if (!content.isEmpty())
           {
@@ -452,6 +456,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     List<JSONObject> history = contextManager.getHistory();
     if (history == null || history.isEmpty())
     {
+      FileLogger.d(TAG, "🔄 [AUTO_RESUME] 历史记录为空，跳过自动恢复");
       return;
     }
     
@@ -460,22 +465,30 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     String toolCallId = lastMsg.optString("tool_call_id", "");
     
     boolean shouldResume = false;
+    String resumeReason = "";
     
     if ("user".equals(role))
     {
       shouldResume = true;
+      resumeReason = "最后一条是用户消息";
     }
     else if ("tool".equals(role) && !toolCallId.isEmpty())
     {
       shouldResume = true;
+      resumeReason = "最后一条是工具调用结果";
     }
     
     if (shouldResume)
     {
       new Handler(Looper.getMainLooper()).postDelayed(() -> 
       {
+        FileLogger.d(TAG, "🔄 [AUTO_RESUME] 开始发送自动恢复请求");
         sendChatRequestTongYi();
       }, 500);
+    }
+    else
+    {
+      FileLogger.d(TAG, "🔄 [AUTO_RESUME] 不需要自动恢复");
     }
   }
 
@@ -484,6 +497,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     if (message == null || message.trim().isEmpty())
     {
+      // 如果没有文字但有图片，仍然可以发送图片
       if (currentImageBase64 == null || currentImageBase64.isEmpty())
       {
         return;
@@ -492,12 +506,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
     
+    // 🖼️ 检测是否有图片，构建多模态消息或纯文本消息
     if (hasImage)
     {
+      FileLogger.i(TAG, "📷 [SEND_WITH_IMAGE] 发送带图片的消息 | 文字长度：" + (message != null ? message.length() : 0) + " | Base64 长度：" + currentImageBase64.length());
+      
       try
       {
         JSONArray contentArray = new JSONArray();
         
+        // 添加文字部分（如果有）
         if (message != null && !message.trim().isEmpty())
         {
           JSONObject textContent = new JSONObject();
@@ -506,6 +524,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           contentArray.put(textContent);
         }
         
+        // 添加图片部分
         JSONObject imageContent = new JSONObject();
         imageContent.put("type", "image_url");
         
@@ -514,22 +533,35 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         imageContent.put("image_url", imageUrl);
         contentArray.put(imageContent);
         
+        // 构建完整的用户消息
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
         userMessage.put("content", contentArray);
         
+        // ✅ 添加到上下文管理器（唯一真相源）
         contextManager.addRawMessage(userMessage);
         
+        // 验证是否成功添加
+        List<JSONObject> history = contextManager.getHistory();
+        int contextSize = history != null ? history.size() : 0;
+        FileLogger.i(TAG, "✅ [CONTEXT_ADDED] 多模态消息已添加到上下文 | 消息总数=" + contextSize);
+        
+        // UI 显示 - 🖼️ 传递图片数据到 MessageItem，保留原始文字
         messageAdapter.addMessage(new MessageItem(message != null ? message : "", MessageType.USER, hasImage ? currentImageBase64 : null));
         
+        // ✅ 发送完成后清除图片缓存，但保持按钮可见
         currentImageBase64 = null;
+        // 不再隐藏按钮，保持始终可见
+        // uploadImageButton.setVisibility(View.GONE); // ❌ 移除这行
         
         scrollToBottom();
         
+        // 继续发送请求
         if (isDeadlockRescueMode) {
+          // 救援模式下不处理，由救援逻辑接管
           return;
         }
-        
+
         if (guideManager != null && guideManager.isEmptyAccessPointList())
         {
           guideManager.processWithGuideLogic(message != null ? message : "", new GuideManager.ChatCallback()
@@ -541,8 +573,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 scrollToBottom();
                 ttsSayReply(response);
                 if (response.contains("✅")) {
+                  FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
                   isDeadlockRescueMode = false;
+                  FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
                   modelAccessPointManager.resetFailureCount();
+                  FileLogger.i(TAG, "✅ [FAILURE_RESET] 救援成功，计数器已重置：" + modelAccessPointManager.getConsecutiveFailures());
                 }
               });
             }
@@ -562,6 +597,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       catch (JSONException e)
       {
+        FileLogger.e(TAG, "❌ [MULTIMODAL_ERROR] 构建多模态消息失败", e);
         runOnUiThread(() -> {
           Toast.makeText(SisterFutureActivity.this, "❌ 构建消息失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
         });
@@ -569,10 +605,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     else
     {
+      // 📝 纯文本消息处理（原有逻辑）
+      FileLogger.i(TAG, "📝 [SEND_TEXT] 发送纯文本消息 | 长度：" + message.length());
+      
       messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
       contextManager.addUserMessage(message);
-      
+
       if (isDeadlockRescueMode) {
+        FileLogger.d(TAG, "🔥 [RESCUE_MODE] 处于死循环救援模式，处理 API Key 输入");
         guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
           @Override
           public void onResponse(String response) {
@@ -581,8 +621,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               scrollToBottom();
               ttsSayReply(response);
               if (response.contains("✅")) {
+                FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
                 isDeadlockRescueMode = false;
+                FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
                 modelAccessPointManager.resetFailureCount();
+                FileLogger.i(TAG, "✅ [FAILURE_RESET] 救援成功，计数器已重置：" + modelAccessPointManager.getConsecutiveFailures());
               }
             });
           }
@@ -597,7 +640,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         });
         return;
       }
-      
+
       if (guideManager != null && guideManager.isEmptyAccessPointList())
       {
         guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
@@ -629,7 +672,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       sendChatRequestTongYi();
     }
   }
-  
+
   @OnClick(R.id.sendButtonn2)
   public void sendButtonn2()
   {
@@ -638,15 +681,20 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText("");
   }
 
-  // 📷 图片上传按钮点击事件
+  // 📷 图片上传按钮点击事件 - 始终可见
   @OnClick(R.id.uploadImageButton)
   public void onUploadImageButton()
   {
+    FileLogger.d(TAG, "📷 [CLICK] 图片按钮被点击了！当前状态：hasImage=" + (currentImageBase64 != null));
+    
+    // ✅ 如果有旧图片，先清除它
     if (currentImageBase64 != null)
     {
       currentImageBase64 = null;
+      FileLogger.d(TAG, "🗑️ [IMAGE_CLEARED] 清除了旧图片，准备选择新图片");
     }
     
+    // ✅ 始终打开相册选择器（不再隐藏按钮）
     openImagePicker();
   }
 
@@ -727,6 +775,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void handleContextLengthError(String errorMessage, final boolean isRetry)
   {
+    FileLogger.w(TAG, "🔍 [CONTEXT_LENGTH] 检测到上下文超长错误，自动缩短上下文");
+    
     runOnUiThread(() ->
     {
       String displayMessage = errorMessage + "\n⚠️ 上下文超长，自动缩短后重试";
@@ -753,10 +803,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     SisterFutureService.updateNotificationStatus(this, "正在发送请求...");
 
     if (modelAccessPointManager.checkFailureThreshold()) {
+      FileLogger.e(TAG, "🚨 [DEADLOCK_RESCUE] 检测到连续失败超过阈值！触发救援模式");
+      FileLogger.d(TAG, "⚠️ [RESCUE_MODE] 进入救援模式：true");
       isDeadlockRescueMode = true;
       runOnUiThread(() -> {
         Toast.makeText(SisterFutureActivity.this, 
-          "⚠️ 所有接入点连续失败正在启动备用接入点配置向导...", 
+          "⚠️ 所有接入点连续失败，正在启动备用接入点配置向导...", 
           Toast.LENGTH_LONG).show();
         
         guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
@@ -766,8 +818,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             scrollToBottom();
             ttsSayReply(message);
             if (message.contains("✅")) {
+              FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
               isDeadlockRescueMode = false;
+              FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
               modelAccessPointManager.resetFailureCount();
+              FileLogger.i(TAG, "✅ [FAILURE_RESET] 救援成功，计数器已重置：" + modelAccessPointManager.getConsecutiveFailures());
             }
           }
 
@@ -786,6 +841,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       accumulatedAnswer.setLength(0);
       showThinkingOverlay();
 
+      // 🌌 #759909257401 平行宇宙时间线理论：发送请求前清理悬而未决的工具调用
+      FileLogger.d(TAG, "🌌 [TIMELINE_BRANCH] 准备创建新时间线，调用严厉模式 normalize");
+      
+      // 获取当前历史并应用严厉模式清理
       List<JSONObject> history = contextManager.getHistory();
       List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
       
@@ -822,17 +881,130 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
+      // 🔍 #5030【救援模式】遍历消息列表，检查所有 tool_call 的 arguments
+      FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 开始检查消息列表中的 tool_call arguments | 消息总数：" + messagesArray.length());
+      
+      // 🖼️ 检测是否有图片消息在上下文中
+      boolean hasImageInContext = false;
+      int imageMessageIndex = -1;
+      
+      for (int i = 0; i < messagesArray.length(); i++) 
+      {
+        try 
+        {
+          JSONObject msg = messagesArray.getJSONObject(i);
+          String role = msg.optString("role", "unknown");
+          
+          if ("user".equals(role)) {
+            Object contentObj = msg.opt("content");
+            if (contentObj instanceof JSONArray) {
+              JSONArray contentArray = (JSONArray) contentObj;
+              for (int j = 0; j < contentArray.length(); j++) {
+                JSONObject item = contentArray.optJSONObject(j);
+                if (item != null && "image_url".equals(item.optString("type"))) {
+                  hasImageInContext = true;
+                  imageMessageIndex = i;
+                  
+                  // 获取 Base64 前 50 字符用于验证
+                  JSONObject imageUrl = item.optJSONObject("image_url");
+                  if (imageUrl != null) {
+                    String url = imageUrl.optString("url", "");
+                    if (url.startsWith("data:image/jpeg;base64,")) {
+                      // ✅ 同样修复此处的 substring 逻辑
+                      int commaIndex = url.lastIndexOf(',');
+                      String base64 = (commaIndex > 0) ? url.substring(commaIndex + 1) : url;
+                      String preview = base64.length() > 50 ? base64.substring(0, 50) + "..." : base64;
+                      FileLogger.i(TAG, "🖼️ [IMAGE_IN_CONTEXT] 检测到图片消息 | 位置=" + i + " | Base64 长度=" + base64.length() + " | 前 50 字符：" + preview);
+                    }
+                  }
+                  break;
+                }
+              }
+            }
+          }
+          
+          if ("tool".equals(role)) 
+          {
+            String toolCallId = msg.optString("tool_call_id", "unknown");
+            String toolName = msg.optString("name", "unknown_tool");
+            String content = msg.optString("content", "");
+            
+            try 
+            {
+              new JSONObject(content);
+            }
+            catch (JSONException e) 
+            {
+            }
+          } // if ("tool".equals(role)) 
+          
+          if ("assistant".equals(role)) 
+          {
+            JSONArray toolCalls = msg.optJSONArray("tool_calls");
+            if (toolCalls != null && toolCalls.length() > 0) 
+            {
+              for (int j = 0; j < toolCalls.length(); j++) 
+              {
+                JSONObject toolCall = toolCalls.getJSONObject(j);
+                String id = toolCall.optString("id", "unknown");
+                JSONObject func = toolCall.optJSONObject("function");
+                
+                if (func != null) 
+                {
+                  String funcName = func.optString("name", "unknown_function");
+                  String args = func.optString("arguments", "");
+                  
+                  // ✅ 先输出原始内容（无论有效无效）
+                  
+                  // 尝试解析 arguments 是否为有效 JSON
+                  try 
+                  {
+                    new JSONObject(args);
+                  }
+                  catch (JSONException e) 
+                  {
+                    FileLogger.e(TAG, "      ❌ [JSON_INVALID] 解析失败：" + e.getMessage());
+                  }
+                }
+              }
+            }
+          }
+        }
+        catch (JSONException e) 
+        {
+          FileLogger.e(TAG, "❌ [PARSE_ERROR] 解析消息 #" + i + " 失败", e);
+        }
+      }
+      
+      if (hasImageInContext) {
+        FileLogger.i(TAG, "✅ [IMAGE_CONFIRMED] 图片消息已确认存在于上下文中 | 总消息数=" + messagesArray.length());
+      } else {
+        FileLogger.w(TAG, "⚠️ [IMAGE_MISSING] 上下文中未检测到图片消息 | 总消息数=" + messagesArray.length());
+      }
+      
+      FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
+      
+      // 📤 发送请求前记录
+      // Deleted: FileLogger.i(TAG, "📤 [SENDING] 开始发送 " + messagesArray.length() + " 条消息给 AI 服务");
+      
+      // 🔗 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();
+      FileLogger.i(TAG, "🔗 [RESERVE_ID] 已生成预留消息 ID | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
 
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
         @Override
         public void onResponse(String response)
         {
-          hideThinkingOverlay();
+        hideThinkingOverlay();
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
           
           lastSuccessRequestId = requestId;
+          
+          // 🤖 记录 AI 响应
+          int responseLength = response != null ? response.length() : 0;
+          String responsePreview = response != null && response.length() > 100 ? response.substring(0, 100) + "..." : response;
+          FileLogger.i(TAG, "🤖 [AI_RESPONSE] 收到 AI 响应 | 长度=" + responseLength + " | 前 100 字符：" + responsePreview);
           
           parseTongYiResponse(response);
         }
@@ -840,13 +1012,19 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         @Override
         public void onError(Exception error)
         {
+          FileLogger.d(TAG, "❌ [ERROR_CHECK] 请求 #" + requestId + " 错误 | lastSuccessRequestId=" + lastSuccessRequestId + " | 忽略=" + (requestId < lastSuccessRequestId));
+          
           if (requestId < lastSuccessRequestId) {
+            FileLogger.w(TAG, "⚠️ [IGNORED] 忽略旧请求 #" + requestId + " 的错误回调（lastSuccessRequestId=" + lastSuccessRequestId + "）");
             return;
           }
           
+          // ❌ 记录 AI 错误
           String errorType = error.getClass().getSimpleName();
-          FileLogger.e(TAG, "❌ AI 响应错误：" + errorType);
+          String errorMsg = error.getMessage();
+          FileLogger.e(TAG, "❌ [AI_ERROR] AI 响应错误 | 错误类型=" + errorType + " | 错误信息=" + errorMsg);
           
+          FileLogger.e(TAG, "请求出错：" + errorType + " - " + errorMsg);
           hideThinkingOverlay();
           
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "请求出错，请重试");
@@ -855,9 +1033,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           if (error instanceof TongYiClient.AccessPointUnavailableException)
           {
+            FileLogger.d(TAG, "接入点不可用异常，准备切换");
             isAccessPointUnavailable = true;
           }
           else if (error instanceof TongYiClient.RateLimitException) {
+            FileLogger.w(TAG, "⚠️ [RATE_LIMIT] 限流错误，等待后重试 #" + rateLimitRetryCount);
             handleRateLimitError();
             return;
           }
@@ -867,8 +1047,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             Response response = responseException.getResponse();
             if (response != null) {
               int statusCode = response.code();
+              FileLogger.d(TAG, "HTTP 响应异常，状态码：" + statusCode);
               
               if (statusCode == 401 || statusCode == 403 || statusCode == 500 || statusCode == 503) {
+                FileLogger.d(TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换");
                 isAccessPointUnavailable = true;
               }
               else if (statusCode == 400) {
@@ -879,11 +1061,33 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 }
               }
             }
+            
+            String errorBody = responseException.getCustomMessage();
+            FileLogger.e(TAG, "HTTP " + (response != null ? response.code() : 0) + ": " + errorBody);
+            
+            if (isHtmlResponse(errorBody))
+            {
+              FileLogger.e(TAG, "API 返回 HTML 页面，防止崩溃");
+              runOnUiThread(() ->
+              {
+                messageAdapter.addMessage(new MessageItem("API 返回 HTML 页面", MessageType.AI));
+                scrollToBottom();
+              });
+              return;
+            }
+          }
+          else
+          {
+            FileLogger.e(TAG, "未知异常，不触发切换：" + error.getMessage());
           }
 
           if (isAccessPointUnavailable)
           {
             int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
+            FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 接入点不可用，计数器递增：" + failures);
+            
+            FileLogger.d(TAG, "🔄 [RETRY] 准备重试，thread=" + Thread.currentThread().getName());
+            
             sendChatRequestTongYi();
           }
           else
@@ -895,7 +1099,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       () ->
         {
         },
-        currentReservedMessageId);
+        currentReservedMessageId); // 🔗 第 5 个参数：传递预留的消息 ID
+    }
+    else
+    {
     }
   }
 
@@ -903,15 +1110,20 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES) 
     {
+      FileLogger.e(TAG, "❌ [RATE_LIMIT] 限流重试次数过多（" + rateLimitRetryCount + " >= " + MAX_RATE_LIMIT_RETRIES + "），切换接入点");
       rateLimitRetryCount = 0;
       
+      // 🔥 #4824 重试失败后切换接入点
       int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
+      FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 限流导致接入点标记为不可用，计数器：" + failures);
+      
+      FileLogger.i(TAG, "🔄 [ACCESS_POINT_SWITCH] 限流重试失败，切换到下一个接入点");
       sendChatRequestTongYi();
       return;
     }
-    
+
     int delayMs = 1000 * (1 << rateLimitRetryCount);
-    
+
     new Handler(Looper.getMainLooper()).postDelayed(() -> 
     {
       rateLimitRetryCount++;
@@ -925,10 +1137,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       return false;
     }
-    
+
     String trimmedContent = content.trim();
     return trimmedContent.startsWith("<!DOCTYPE html") ||
-           trimmedContent.startsWith("<html");
+           trimmedContent.startsWith("<html") ||
+           trimmedContent.startsWith("<HTML") ||
+           trimmedContent.contains("<title") ||
+           trimmedContent.contains("<TITLE");
   }
 
   protected void parseTongYiResponse(String jsonString)
@@ -961,6 +1176,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       if (response == null || response.getChoices() == null || response.getChoices().isEmpty())
       {
+        FileLogger.e(TAG, "响应为空或 choices 为空");
         return;
       }
 
@@ -982,6 +1198,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
             if (finalCalls == null || finalCalls.isEmpty())
             {
+              FileLogger.w(TAG, "没有有效的工具调用，跳过执行");
               return;
             }
 
@@ -1001,6 +1218,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
               if (toolName == null || toolCallId == null)
               {
+                FileLogger.w(TAG, "工具调用无效：name 或 id 为空");
                 continue;
               }
 
@@ -1009,6 +1227,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 argsJsonStr = "{}";
               }
 
+              // 🔧 #4886 添加 JSON 解析异常处理，容忍格式错误的工具调用参数
               JSONObject args;
               try
               {
@@ -1016,6 +1235,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               }
               catch (JSONException e)
               {
+                FileLogger.e(TAG, "❌ [TOOL_CALL_JSON_ERROR] 工具调用参数 JSON 格式错误，已跳过 | toolName=" + toolName + ", toolCallId=" + toolCallId, e);
+                FileLogger.e(TAG, "   📋 [RAW_ARGS] 原始参数：" + argsJsonStr);
                 continue;
               }
 
@@ -1031,11 +1252,19 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
               if (toolManager.isToolAsync(toolName))
               {
+                SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在执行：" + toolName);
+                
+                // 🔍 添加日志：工具执行开始
+                FileLogger.d(TAG, "🔧 [TOOL_EXEC_START] 执行异步工具 | id=" + toolCallId + " | name=" + toolName);
+                
                 toolManager.executeToolAsync(toolCallId, toolName, args, new Tool.OnResultCallback()
                 {
                   @Override
                   public void onResult(JSONObject result)
                   {
+                    // 🔍 添加日志：异步工具成功回调
+                    FileLogger.d(TAG, "🔧 [TOOL_ASYNC_RESULT] 异步工具成功 | id=" + toolCallId + " | name=" + toolName);
+                    
                     synchronized (pendingResults)
                     {
                       try
@@ -1045,13 +1274,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         wrapper.put("name", toolName);
                         wrapper.put("result", result);
                         pendingResults.put(toolCallId, wrapper);
+                        FileLogger.d(TAG, "🔧 [TOOL_PENDING_UPDATE] pendingResults 大小：" + pendingResults.size() + " / total=" + toolCallsArray.length());
                       }
                       catch (Exception e)
                       {
+                        FileLogger.e(TAG, "封装异步结果失败", e);
                       }
 
                       if (pendingResults.size() == toolCallsArray.length())
                       {
+                        FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成，准备调用 postProcessToolResults");
                         postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
                       }
                     }
@@ -1060,35 +1292,48 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   @Override
                   public void onError(Exception e)
                   {
+                    // 🔍 添加日志：异步工具失败回调
+                    FileLogger.e(TAG, "❌ [TOOL_ASYNC_ERROR] 异步工具失败 | id=" + toolCallId + " | name=" + toolName + " | error=" + e.getMessage());
+                    
                     synchronized (pendingResults)
                     {
-                      try
-                      {
-                        JSONObject errorResult = new JSONObject();
-                        errorResult.put("error", e.getMessage());
-                        errorResult.put("tool_name", toolName);
-                        
-                        JSONObject wrapper = new JSONObject();
-                        wrapper.put("id", toolCallId);
-                        wrapper.put("name", toolName);
-                        wrapper.put("result", errorResult);
-                        pendingResults.put(toolCallId, wrapper);
-                        
-                        if (pendingResults.size() == toolCallsArray.length())
-                        {
-                          postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
-                        }
-                      }
-                      catch (Exception ex)
-                      {
-                      }
+                      FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发，pendingResults 大小：" + pendingResults.size() + " / total=" + toolCallsArray.length());
+                      postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
                     }
                   }
                 });
               }
               else
               {
-                JSONObject toolResult = toolManager.executeTool(toolName, args);
+                // 🔍 添加日志：同步工具执行
+                FileLogger.d(TAG, "🔧 [TOOL_SYNC_EXEC] 执行同步工具 | id=" + toolCallId + " | name=" + toolName);
+                
+                JSONObject toolResult = new JSONObject();
+
+                try
+                {
+                  toolResult = toolManager.executeTool(toolName, args);
+                  FileLogger.d(TAG, "🔧 [TOOL_SYNC_SUCCESS] 同步工具成功 | id=" + toolCallId + " | name=" + toolName);
+                }
+                catch (IllegalArgumentException e)
+                {
+                  FileLogger.e(TAG, "❌ [TOOL_SYNC_ILLEGAL_ARG] 同步工具参数错误 | id=" + toolCallId + " | name=" + toolName, e);
+                  JSONObject errorResult = new JSONObject();
+                  errorResult.put("error", e.getMessage());
+                  errorResult.put("tool_name", toolName);
+                  errorResult.put("request", args.toString());
+                  toolResult = errorResult;
+                }
+                catch (Exception e)
+                {
+                  FileLogger.e(TAG, "❌ [TOOL_SYNC_ERROR] 同步工具执行出错 | id=" + toolCallId + " | name=" + toolName, e);
+                  JSONObject errorResult = new JSONObject();
+                  errorResult.put("error", "工具执行出错：" + e.getMessage());
+                  errorResult.put("tool_name", toolName);
+                  errorResult.put("request", args.toString());
+                  errorResult.put("stack_trace", android.util.Log.getStackTraceString(e));
+                  toolResult = errorResult;
+                }
 
                 JSONObject wrapper = new JSONObject();
                 wrapper.put("id", toolCallId);
@@ -1120,11 +1365,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
             if (pendingResults.size() == toolCallsArray.length())
             {
+              FileLogger.d(TAG, "🔧 [TOOL_SYNC_ALL_COMPLETE] 同步工具全部完成，准备调用 postProcessToolResults");
               postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
             }
           }
           catch (Exception e)
           {
+            FileLogger.e(TAG, "处理工具调用失败", e);
           }
         });
         return;
@@ -1157,6 +1404,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
           String fullAnswer = accumulatedAnswer.toString();
           
+          // 🔍 #759909257401 检测连续重复回复
+          // ⚠️ #5031 跳过工具调用消息的空回复检测（工具调用时 content 为空是正常的）
           boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
           
           if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
@@ -1167,10 +1416,21 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           if (!hasToolCalls && repeatDetectionManager != null && repeatDetectionManager.recordAndCheck(fullAnswer))
           {
+            FileLogger.e(TAG, "🚨 [REPEAT_THRESHOLD_REACHED] 检测到连续 3 次相同回复，触发接入点切换！");
+            
             int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
+            FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 重复回复导致接入点标记为不可用，计数器：" + failures);
+            
+            FileLogger.i(TAG, "🔄 [ACCESS_POINT_SWITCH] 因重复回复切换到下一个接入点");
+            
             repeatDetectionManager.reset();
+            // 注意：此处不调用 modelAccessPointManager.resetFailureCount()
+            // 因为这是真正的接入点问题，应保留失败计数
+            
+            // 🔄 切换接入点后，立即重新发送请求（与 onError() 中的逻辑保持一致）
+            FileLogger.d(TAG, "🔄 [RETRY] 准备重试，使用新接入点发送请求");
             sendChatRequestTongYi();
-            return;
+            return; // 不再继续处理当前回复，等待新请求的结果
           }
           
           ttsSayReply(fullAnswer);
@@ -1186,6 +1446,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     catch (Exception e)
     {
+      FileLogger.e(TAG, "解析 JSON 响应失败：" + e.getMessage());
     }
   }
 
@@ -1193,45 +1454,58 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                                     JSONObject assistantMessage,
                                     JSONArray toolCallsArray)
   {
+    // 🔍 添加入口日志
+    FileLogger.d(TAG, "🔧 [POST_PROCESS_ENTER] 进入 postProcessToolResults | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
+    
     runOnUiThread(() ->
     {
       try
       {
+        int validResultsCount = 0;
+        
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
           String id = call.getString("id");
           JSONObject wrapper = pendingResults.get(id);
           
-          if (wrapper == null)
+          if (wrapper != null)
           {
-            continue;
-          }
-          
-          String name = wrapper.getString("name");
-          JSONObject result = wrapper.getJSONObject("result");
+            String name = wrapper.getString("name");
+            JSONObject result = wrapper.getJSONObject("result");
 
-          boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
-          
-          if (isDuplicate)
-          {
-            return;
+            // 🔍 添加幂等性检查日志
+            boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
+            FileLogger.d(TAG, "🔧 [TOOL_IDEMPOTENCY] 幂等性检查 | id=" + id + " | name=" + name + " | isDuplicate=" + isDuplicate);
+            
+            if (isDuplicate)
+            {
+              FileLogger.w(TAG, "⚠️ 忽略重复的工具回复消息，toolCallId=" + id + ", toolName=" + name);
+              continue;
+            }
+            
+            validResultsCount++;
+
+            contextManager.addToolMessage(id, name, result.toString());
+            FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
+            messageAdapter.addMessage(
+              new MessageItem(
+                "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
+                MessageType.TOOL_CALL_RESULT
+              )
+            );
           }
-          
-          contextManager.addToolMessage(id, name, result.toString());
-          messageAdapter.addMessage(
-            new MessageItem(
-              "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
-              MessageType.TOOL_CALL_RESULT
-            )
-          );
         }
 
         clearAccumulatedToolCalls();
+
+        // 🔍 添加触发新请求前的日志
+        FileLogger.i(TAG, "🚀 [TOOL_REQUEST_TRIGGER] 准备触发新请求 | validResultsCount=" + validResultsCount + " | totalTools=" + toolCallsArray.length());
         sendChatRequestTongYi();
       }
       catch (Exception e)
       {
+        FileLogger.e(TAG, "postProcessToolResults 出错", e);
       }
     });
   }
@@ -1240,6 +1514,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     if (messageAdapter.getItemCount() > 0)
     {
+      // ✅ 修复 #753566214831：使用 post() + scrollToPosition() 消除震荡
+      // ❌ 原 smoothScrollToPosition() 会与布局重算冲突，导致界面抖动
       articleListmyRecyclerView.post(() -> {
         articleListmyRecyclerView.scrollToPosition(messageAdapter.getItemCount() - 1);
       });
@@ -1323,9 +1599,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     }
 
-		@Override
+    @Override
 		public void onError(SpeechError speechError)
-		{
+    {
       commandRecognizebutton2.setVisibility(View.VISIBLE);
       commandRecognizebutton2.setEnabled(true);
       progressBar.setVisibility(View.INVISIBLE);
@@ -1336,7 +1612,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
 		@Override
 		public void onEvent(int i, int i1, int i2, Bundle bundle)
-		{
+    {
     }
 	};
 
@@ -1410,6 +1686,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
         catch (Exception e)
         {
+          FileLogger.e("SisterFutureActivity", "提取工具描述失败：" + name, e);
         }
 
         promptBuilder.append("- ").append(name).append(":").append(description).append("\n");
@@ -1467,20 +1744,25 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     mediaPlayer = new MediaPlayer();
     mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
     
+    // 初始化权限管理器
     permissionManager = new PermissionManager(this, new PermissionManager.PermissionCallback() {
       @Override
       public void onAllPermissionsGranted() {
+        FileLogger.d(TAG, "All permissions granted");
       }
 
       @Override
       public void onPermissionDenied(String permission) {
+        FileLogger.w(TAG, "Permission denied: " + permission);
       }
 
       @Override
       public void onNotificationPermissionDenied() {
+        FileLogger.w(TAG, "Notification permission denied");
       }
     });
     
+    // 检查并请求权限
     if (permissionManager != null) {
       permissionManager.checkPermission();
       permissionManager.requestNotificationPermission();
@@ -1579,6 +1861,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     
+    // 委托给权限管理器处理
     if (permissionManager != null) {
       permissionManager.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
@@ -1629,13 +1912,32 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void startBuiltinFtpServer() 
   {
+    File rootDir = getFilesDir();
+    File parentDir = rootDir.getParentFile();
+    
+    FileLogger.d(TAG, "📁 [FTP_DEBUG] 应用 files 目录：" + rootDir.getAbsolutePath());
+
+    FileLogger.d(TAG, "📂 [FTP_DEBUG] 根目录是否存在：" + (parentDir != null ? parentDir.exists() : "null"));
+    
+    if (parentDir != null && parentDir.exists()) 
+    {
+      File[] files = parentDir.listFiles();
+      FileLogger.d(TAG, "📋 [FTP_DEBUG] 根目录下文件/目录数量：" + (files != null ? files.length : "null"));
+      
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] shared_prefs/ 存在：" + new File(parentDir, "shared_prefs").exists());
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] files/ 存在：" + new File(parentDir, "files").exists());
+      FileLogger.d(TAG, "📂 [FTP_DEBUG] code_cache/ 存在：" + new File(parentDir, "code_cache").exists());
+    }
+    
     builtinFtpServer = new BuiltinFtpServer(this);
     builtinFtpServerErrorListener = new BuiltinFtpServerErrorListener();
-    
+
     builtinFtpServer.setPort(FTP_SERVER_PORT);
     builtinFtpServer.setAllowActiveMode(false);
     builtinFtpServer.setErrorListener(builtinFtpServerErrorListener);
     builtinFtpServer.start();
+    
+    FileLogger.d(TAG, "🚀 [FTP_DEBUG] 内置 FTP 服务器已启动，端口：" + FTP_SERVER_PORT);
   }
 
   private void scheduleStartBuiltinFtpServer() {
@@ -1648,10 +1950,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     timerObj.schedule(timerTaskObj, 2000);
   }
 
+  // 📷 #280 初始化图片选择器
   private void initImagePicker()
   {
+    // 由于 Activity 不支持 registerForActivityResult，需要使用传统的 startActivityForResult 方式
+    FileLogger.d(TAG, "📷 [IMAGE_PICKER_INIT] 图片选择器已初始化");
   }
 
+  // 📷 #280 处理选中的图片
   private void handleSelectedImage(Intent data)
   {
     try
@@ -1676,27 +1982,37 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       runOnUiThread(() -> {
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
+        // ✅ 不再隐藏按钮，保持始终可见
+        // uploadImageButton.setVisibility(View.VISIBLE); // 本来就可见，不需要设置
       });
+      
+      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
     }
     catch (Exception e)
     {
+      FileLogger.e(TAG, "❌ [IMAGE_ERROR] 加载图片失败", e);
       runOnUiThread(() -> {
-        Toast.makeText(this, "❌ 图片加载失败", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "❌ 图片加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
       });
     }
   }
 
+  // 📷 #280 打开图片选择器
   private void openImagePicker()
   {
+    FileLogger.d(TAG, "📂 [PICKER] 准备打开相册选择器...");
+    
     Intent pickIntent = new Intent(Intent.ACTION_PICK);
     pickIntent.setType("image/*");
     try
     {
       startActivityForResult(pickIntent, 1001);
+      FileLogger.d(TAG, "📷 [IMAGE_PICKER] 已打开图片选择器");
     }
     catch (Exception e)
     {
-      Toast.makeText(this, "❌ 无法打开相册", Toast.LENGTH_LONG).show();
+      FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
+      Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
     }
   }
 
@@ -1704,6 +2020,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   protected void onActivityResult(int requestCode, int resultCode, Intent data)
   {
     super.onActivityResult(requestCode, resultCode, data);
+    
+    FileLogger.d(TAG, "🔄 [RESULT] 收到相册返回结果 | requestCode=" + requestCode + " | resultCode=" + resultCode);
     
     if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
     {
