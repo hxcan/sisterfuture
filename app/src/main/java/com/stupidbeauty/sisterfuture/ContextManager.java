@@ -492,6 +492,7 @@ public class ContextManager
   }
   
   
+  
   /**
    * 检查 JSON 语法完整性
    * 检测括号匹配，引号闭合等基本语法结构
@@ -693,7 +694,7 @@ public class ContextManager
               }
             }
 
-            // 使用 Gson 进行额外验��（仅用于调试，不作为判定依据）
+            // 使用 Gson 进行额外验证（仅用于调试，不作为判定依据）
             try
             {
               com.google.gson.Gson gson = new com.google.gson.Gson();
