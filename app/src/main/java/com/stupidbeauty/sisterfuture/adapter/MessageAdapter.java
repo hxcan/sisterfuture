@@ -76,13 +76,13 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
         if (viewType == TYPE_USER) {
             View itemView = inflater.inflate(R.layout.item_user_message, parent, false);
-            return new UserMessageViewHolder(itemView);
+            return new UserMessageViewHolder(itemView, messages, deleteListener);
         } else if (viewType == TYPE_AI) {
             View itemView = inflater.inflate(R.layout.item_ai_message, parent, false);
-            return new AIMessageViewHolder(itemView);
+            return new AIMessageViewHolder(itemView, messages, deleteListener);
         } else {
             View itemView = inflater.inflate(R.layout.item_tool_call_result_message, parent, false);
-            return new ToolCallResultViewHolder(itemView);
+            return new ToolCallResultViewHolder(itemView, messages, deleteListener);
         }
     }
 
