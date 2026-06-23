@@ -6,34 +6,23 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.text.Spannable;
 import android.text.Selection;
 import butterknife.ButterKnife;
-import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
-import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.stupidbeauty.sisterfuture.R;
 import java.util.List;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.TextView;
 import android.widget.ImageView;
-import com.stupidbeauty.sisterfuture.R;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.widget.TextView;
-import androidx.annotation.NonNull;
+import android.widget.PopupMenu;
+import androidx.recyclerview.widget.RecyclerView;
 import butterknife.BindView;
-import butterknife.ButterKnife;
 import io.noties.markwon.Markwon;
 import io.noties.markwon.core.CorePlugin;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
@@ -53,6 +42,17 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     private static final String TAG = "MessageAdapter";
 
     private List<MessageItem> messages = new ArrayList<>();
+    
+    // 🗑️ 删除消息回调接口 - 传递 messageId 以便精确删除
+    public interface OnMessageDeleteListener {
+        void onMessageDeleted(MessageItem message, int position, String messageId);
+    }
+    
+    private OnMessageDeleteListener deleteListener;
+    
+    public void setOnMessageDeleteListener(OnMessageDeleteListener listener) {
+        this.deleteListener = listener;
+    }
 
     public MessageItem getItem(int position) {
         return messages.get(position);
@@ -64,13 +64,13 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
         if (viewType == TYPE_USER) {
             View itemView = inflater.inflate(R.layout.item_user_message, parent, false);
-            return new UserMessageViewHolder(itemView);
+            return new UserMessageViewHolder(itemView, messages, deleteListener);
         } else if (viewType == TYPE_AI) {
             View itemView = inflater.inflate(R.layout.item_ai_message, parent, false);
-            return new AIMessageViewHolder(itemView);
+            return new AIMessageViewHolder(itemView, messages, deleteListener);
         } else {
             View itemView = inflater.inflate(R.layout.item_tool_call_result_message, parent, false);
-            return new ToolCallResultViewHolder(itemView);
+            return new ToolCallResultViewHolder(itemView, messages, deleteListener);
         }
     }
 
@@ -112,19 +112,15 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     // 🔗 新增：根据消息 ID 查找位置
     public int getMessagePositionById(String messageId) {
         if (messageId == null || messageId.isEmpty()) {
-            FileLogger.w(TAG, "⚠️ [FIND_BY_ID] 消息 ID 为空，无法查找");
             return -1;
         }
         
         for (int i = 0; i < messages.size(); i++) {
             MessageItem item = messages.get(i);
             if (item.getMessageId() != null && item.getMessageId().equals(messageId)) {
-                FileLogger.d(TAG, "🔍 [FOUND] 找到消息 | id=" + messageId + " | position=" + i);
                 return i;
             }
         }
-        
-        FileLogger.w(TAG, "⚠️ [NOT_FOUND] 未找到消息 | id=" + messageId);
         return -1;
     }
 
@@ -132,9 +128,31 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     public boolean removeMessageById(String messageId) {
         int position = getMessagePositionById(messageId);
         if (position >= 0) {
-            messages.remove(position);
+            MessageItem removed = messages.remove(position);
             notifyItemRemoved(position);
-            FileLogger.i(TAG, "✅ [REMOVED] 已移除消息 | id=" + messageId + " | position=" + position);
+            notifyItemRangeChanged(position, messages.size() - position);
+            
+            // 回调删除监听器，传递 messageId
+            if (deleteListener != null) {
+                deleteListener.onMessageDeleted(removed, position, messageId);
+            }
+            return true;
+        }
+        return false;
+    }
+    
+    // 🗑️ 根据位置移除消息
+    public boolean removeMessage(int position) {
+        if (position >= 0 && position < messages.size()) {
+            MessageItem removed = messages.remove(position);
+            notifyItemRemoved(position);
+            notifyItemRangeChanged(position, messages.size() - position);
+            
+            // 回调删除监听器，传递 messageId
+            if (deleteListener != null) {
+                String messageId = removed.getMessageId();
+                deleteListener.onMessageDeleted(removed, position, messageId);
+            }
             return true;
         }
         return false;
@@ -159,16 +177,63 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
         return text;
     }
+    
+    // 🗑️ 显示长按菜单（同时包含"删除"和"复制"选项）- 传递 messageId
+    private static void showLongPressMenuStatic(View anchorView, MessageItem message, int position, TextView textView, List<MessageItem> messagesList, OnMessageDeleteListener listener) {
+        PopupMenu popup = new PopupMenu(anchorView.getContext(), anchorView);
+        popup.getMenu().add(0, 1, 0, "删除");
+        popup.getMenu().add(0, 2, 1, "复制");
+        
+        // 获取 messageId
+        String messageId = message.getMessageId();
+        
+        popup.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == 1) {
+                // 删除消息 - 传递 messageId 以便精确删除
+                if (position >= 0 && position < messagesList.size()) {
+                    MessageItem removed = messagesList.remove(position);
+                    // 回调删除监听器，传递 messageId
+                    if (listener != null) {
+                        listener.onMessageDeleted(removed, position, messageId);
+                    }
+                }
+                return true;
+            } else if (item.getItemId() == 2) {
+                // 复制文本
+                String selectedText = textView.getText().toString();
+                ClipboardManager clipboard = (ClipboardManager)anchorView.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                android.content.ClipData clip = android.content.ClipData.newPlainText("selected text", selectedText);
+                clipboard.setPrimaryClip(clip);
+                return true;
+            }
+            return false;
+        });
+        popup.show();
+    }
 
     public static class UserMessageViewHolder extends RecyclerView.ViewHolder 
     {
       @BindView(R.id.user_text) TextView textView;
-      @BindView(R.id.user_image) ImageView imageView; // 🖼️ 新增
+      @BindView(R.id.user_image) ImageView imageView;
+      private List<MessageItem> messagesRef;
+      private MessageAdapter.OnMessageDeleteListener deleteListenerRef;
 
-      public UserMessageViewHolder(View itemView) 
+      public UserMessageViewHolder(View itemView, List<MessageItem> messages, MessageAdapter.OnMessageDeleteListener deleteListener) 
       {
         super(itemView);
         ButterKnife.bind(this, itemView);
+        this.messagesRef = messages;
+        this.deleteListenerRef = deleteListener;
+        
+        // 🗑️ 长按显示菜单
+        itemView.setOnLongClickListener(v -> {
+            int position = getBindingAdapterPosition();
+            if (position != RecyclerView.NO_POSITION && messagesRef != null)
+                showLongPressMenuStatic(v, messagesRef.get(position), position, textView, messagesRef, deleteListenerRef);
+            return true;
+        });
+        
+        // 保留原有文本选择功能
         textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() 
         {
           @Override
@@ -229,10 +294,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 FileLogger.d(TAG, "✂️ [PREFIX_REMOVED] 已去除 Base64 前缀：" + prefix);
               }
             }
-                  
+            
             // 清理可能存在的空白字符
             base64Data = base64Data.trim();
-                  
+            
             // 验证 Base64 字符串是否有效
             if (base64Data.isEmpty()) 
             {
@@ -241,15 +306,15 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
               imageView.setVisibility(View.GONE);
               return;
             }
-                  
+            
             FileLogger.d(TAG, "📦 [DECODE_START] 开始 Base64 解码 | 数据长度=" + base64Data.length());
-                  
+            
             // 解码 Base64 图片 - 使用 NO_WRAP 标志
             byte[] decodedString = Base64.decode(base64Data, Base64.NO_WRAP);
             FileLogger.d(TAG, "✅ [DECODED] Base64 解码完成 | 字节数组长度=" + decodedString.length);
-                  
+            
             Bitmap decodedBitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
-                  
+            
             if (decodedBitmap != null) 
             {
               FileLogger.d(TAG, "✅ [BITMAP_DECODED] 图片解码成功，尺寸：" + decodedBitmap.getWidth() + "x" + decodedBitmap.getHeight());
@@ -263,7 +328,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
               imageView.setImageBitmap(null);
               imageView.setVisibility(View.GONE);
             }
-                  
+            
             // 文字部分只显示非图片内容（如果有）
             textView.setText(message.getText());
             FileLogger.d(TAG, "📝 [TEXT_SET] 文字已设置，长度：" + (message.getText() != null ? message.getText().length() : 0));
@@ -298,15 +363,30 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         @BindView(R.id.ai_text) TextView textView;
 
         private final Markwon markwon;
+        private List<MessageItem> messagesRef;
+        private MessageAdapter.OnMessageDeleteListener deleteListenerRef;
 
-        public AIMessageViewHolder(View itemView) {
+        public AIMessageViewHolder(View itemView, List<MessageItem> messages, MessageAdapter.OnMessageDeleteListener deleteListener) {
             super(itemView);
             ButterKnife.bind(this, itemView);
+            this.messagesRef = messages;
+            this.deleteListenerRef = deleteListener;
+            
             markwon = Markwon.builder(itemView.getContext())
                 .usePlugin(CorePlugin.create())
                 .usePlugin(StrikethroughPlugin.create())
                 .usePlugin(TablePlugin.create(itemView.getContext()))
                 .build();
+            
+            // 🗑️ 长按显示菜单
+            itemView.setOnLongClickListener(v -> {
+                int position = getBindingAdapterPosition();
+                if (position != RecyclerView.NO_POSITION && messagesRef != null)
+                    showLongPressMenuStatic(v, messagesRef.get(position), position, textView, messagesRef, deleteListenerRef);
+                return true;
+            });
+            
+            // 保留原有文本选择功能
             textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
                 @Override
                 public boolean onCreateActionMode(ActionMode mode, Menu menu) {
@@ -340,7 +420,6 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
-            // AI 消息不限制长度
             markwon.setMarkdown(textView, message.getText());
         }
     }
@@ -348,10 +427,22 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     public static class ToolCallResultViewHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.tool_call_result_text) TextView textView;
         private boolean isExpanded = false;
+        private List<MessageItem> messagesRef;
+        private MessageAdapter.OnMessageDeleteListener deleteListenerRef;
 
-        public ToolCallResultViewHolder(View itemView) {
+        public ToolCallResultViewHolder(View itemView, List<MessageItem> messages, MessageAdapter.OnMessageDeleteListener deleteListener) {
             super(itemView);
             ButterKnife.bind(this, itemView);
+            this.messagesRef = messages;
+            this.deleteListenerRef = deleteListener;
+            
+            // 🗑️ 长按显示菜单
+            itemView.setOnLongClickListener(v -> {
+                int position = getBindingAdapterPosition();
+                if (position != RecyclerView.NO_POSITION && messagesRef != null)
+                    showLongPressMenuStatic(v, messagesRef.get(position), position, textView, messagesRef, deleteListenerRef);
+                return true;
+            });
             
             // 点击切换展开/收起状态
             itemView.setOnClickListener(v -> {
@@ -365,6 +456,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 }
             });
             
+            // 保留原有文本选择功能
             textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
                 @Override
                 public boolean onCreateActionMode(ActionMode mode, Menu menu) {
