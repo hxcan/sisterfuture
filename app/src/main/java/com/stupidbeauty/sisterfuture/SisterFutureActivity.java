@@ -542,12 +542,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
                 scrollToBottom();
                 ttsSayReply(response);
-                
-                // ✅ 恢复：备用接入点配置成功的处理逻辑
                 if (response.contains("✅")) {
                   FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
                   isDeadlockRescueMode = false;
-                  FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
                   modelAccessPointManager.resetFailureCount();
                 }
               });
@@ -586,12 +583,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
               scrollToBottom();
               ttsSayReply(response);
-              
-              // ✅ 恢复：备用接入点配置成功的处理逻辑
               if (response.contains("✅")) {
                 FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
                 isDeadlockRescueMode = false;
-                FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
                 modelAccessPointManager.resetFailureCount();
               }
             });
@@ -773,8 +767,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
             scrollToBottom();
             ttsSayReply(message);
-            
-            // ✅ 恢复：备用接入点配置成功的处理逻辑
             if (message.contains("✅")) {
               FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
               isDeadlockRescueMode = false;
@@ -832,7 +824,109 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
+      // 🔍 #5030【救援模式】遍历消息列表，检查所有 tool_call 的 arguments
+      FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 开始检查消息列表中的 tool_call arguments | 消息总数：" + messagesArray.length());
+      
+      // 🖼️ 检测是否有图片消息在上下文中
+      boolean hasImageInContext = false;
+      int imageMessageIndex = -1;
+      
+      for (int i = 0; i < messagesArray.length(); i++) 
+      {
+        try 
+        {
+          JSONObject msg = messagesArray.getJSONObject(i);
+          String role = msg.optString("role", "unknown");
+          
+          if ("user".equals(role)) {
+            Object contentObj = msg.opt("content");
+            if (contentObj instanceof JSONArray) {
+              JSONArray contentArray = (JSONArray) contentObj;
+              for (int j = 0; j < contentArray.length(); j++) {
+                JSONObject item = contentArray.optJSONObject(j);
+                if (item != null && "image_url".equals(item.optString("type"))) {
+                  hasImageInContext = true;
+                  imageMessageIndex = i;
+                  
+                  // 获取 Base64 前 50 字符用于验证
+                  JSONObject imageUrl = item.optJSONObject("image_url");
+                  if (imageUrl != null) {
+                    String url = imageUrl.optString("url", "");
+                    if (url.startsWith("data:image/jpeg;base64,")) {
+                      int commaIndex = url.lastIndexOf(',');
+                      String base64 = (commaIndex > 0) ? url.substring(commaIndex + 1) : url;
+                      String preview = base64.length() > 50 ? base64.substring(0, 50) + "..." : base64;
+                      FileLogger.i(TAG, "🖼️ [IMAGE_IN_CONTEXT] 检测到图片消息 | 位置=" + i + " | Base64 长度=" + base64.length() + " | 前 50 字符：" + preview);
+                    }
+                  }
+                  break;
+                }
+              }
+            }
+          }
+          
+          if ("tool".equals(role)) 
+          {
+            String toolCallId = msg.optString("tool_call_id", "unknown");
+            String toolName = msg.optString("name", "unknown_tool");
+            String content = msg.optString("content", "");
+            
+            try 
+            {
+              new JSONObject(content);
+            }
+            catch (JSONException e) 
+            {
+            }
+          }
+          
+          if ("assistant".equals(role)) 
+          {
+            JSONArray toolCalls = msg.optJSONArray("tool_calls");
+            if (toolCalls != null && toolCalls.length() > 0) 
+            {
+              for (int j = 0; j < toolCalls.length(); j++) 
+              {
+                JSONObject toolCall = toolCalls.getJSONObject(j);
+                String id = toolCall.optString("id", "unknown");
+                JSONObject func = toolCall.optJSONObject("function");
+                
+                if (func != null) 
+                {
+                  String funcName = func.optString("name", "unknown_function");
+                  String args = func.optString("arguments", "");
+                  
+                  // 尝试解析 arguments 是否为有效 JSON
+                  try 
+                  {
+                    new JSONObject(args);
+                  }
+                  catch (JSONException e) 
+                  {
+                    FileLogger.e(TAG, "      ❌ [JSON_INVALID] 解析失败：" + e.getMessage());
+                  }
+                }
+              }
+            }
+          }
+        }
+        catch (JSONException e) 
+        {
+          FileLogger.e(TAG, "❌ [PARSE_ERROR] 解析消息 #" + i + " 失败", e);
+        }
+      }
+      
+      if (hasImageInContext) {
+        FileLogger.i(TAG, "✅ [IMAGE_CONFIRMED] 图片消息已确认存在于上下文中 | 总消息数=" + messagesArray.length());
+      } else {
+        FileLogger.w(TAG, "⚠️ [IMAGE_MISSING] 上下文中未检测到图片消息 | 总消息数=" + messagesArray.length());
+      }
+      
+      FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
+      
+      // 🔗 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();
+      FileLogger.i(TAG, "🔗 [RESERVE_ID] 已生成预留消息 ID | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
 
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
@@ -840,7 +934,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         public void onResponse(String response)
         {
           hideThinkingOverlay();
+          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
+          
           lastSuccessRequestId = requestId;
+          
           parseTongYiResponse(response);
         }
 
@@ -1047,6 +1144,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               if (toolManager.isToolAsync(toolName))
               {
                 SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在执行：" + toolName);
+                
                 toolManager.executeToolAsync(toolCallId, toolName, args, new Tool.OnResultCallback()
                 {
                   @Override
