@@ -359,8 +359,11 @@ public class ContextManager
   }
 
   // 🗑️ #821166321034 根据索引删除消息（保留以兼容旧调用）
+  // 🆕 添加调试日志
   public void removeMessage(int index)
   {
+    FileLogger.i(TAG, "🗑️ [REMOVE_INDEX] 收到删除请求 | index=" + index);
+    
     if (memoryHistory == null || index < 0 || index >= memoryHistory.size())
     {
       FileLogger.w(TAG, "⚠️ [REMOVE_INDEX] 索引无效 | index=" + index + " | size=" + (memoryHistory != null ? memoryHistory.size() : 0));
@@ -375,11 +378,16 @@ public class ContextManager
     // 触发已有清理方法处理 tool_calls 配对
     List<JSONObject> normalizedHistory = normalizeToolCallMessages(memoryHistory, false);
     saveHistory(normalizedHistory);
+    
+    FileLogger.i(TAG, "🗑️ [REMOVE_INDEX] 删除完成 | 剩余历史：" + normalizedHistory.size() + " 条");
   }
 
   // 🗑️ #821166321034 根据 messageId 删除消息
+  // 🆕 添加调试日志
   public void removeMessageById(String messageId)
   {
+    FileLogger.i(TAG, "🗑️ [REMOVE_ID] 收到删除请求 | messageId=" + messageId);
+    
     if (memoryHistory == null || messageId == null || messageId.isEmpty())
     {
       FileLogger.w(TAG, "⚠️ [REMOVE_ID] 参数无效 | messageId=" + messageId + " | size=" + (memoryHistory != null ? memoryHistory.size() : 0));
@@ -399,6 +407,7 @@ public class ContextManager
       {
         foundIndex = i;
         foundMessage = msg;
+        FileLogger.d(TAG, "🗑️ [REMOVE_ID] 找到匹配消息 | index=" + i + " | role=" + msg.optString("role"));
         break;
       }
     }
@@ -413,6 +422,8 @@ public class ContextManager
       // 触发清理方法处理 tool_calls 配对
       List<JSONObject> normalizedHistory = normalizeToolCallMessages(memoryHistory, false);
       saveHistory(normalizedHistory);
+      
+      FileLogger.i(TAG, "🗑️ [REMOVE_ID] 删除完成 | 剩余历史：" + normalizedHistory.size() + " 条");
     }
     else
     {
@@ -530,7 +541,6 @@ public class ContextManager
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
   }
   
-  
 
   /**
    * 检查 JSON 语法完整性
@@ -587,7 +597,7 @@ public class ContextManager
       }
     }
     
-    // 检查是否所有括号都闭合
+    // 检��是��所有括号都闭合
     if (braceCount != 0 || bracketCount != 0)
     {
       FileLogger.d(TAG, "[isJsonSyntaxComplete] Unclosed brackets: brace=" + braceCount + ", bracket=" + bracketCount);
@@ -1003,7 +1013,7 @@ public class ContextManager
         writer.flush();
         writer.close();
         
-        FileLogger.d(TAG, "💾 [ASYNC_SAVE] 已异步保存历史到 JSON 文件：" + historyCopy.size() + " 条");
+        FileLogger.d(TAG, "💾 [ASYNC_SAVE] 已异步��存��史到 JSON 文件：" + historyCopy.size() + " 条");
       }
       catch (Exception e)
       {

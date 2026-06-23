@@ -179,7 +179,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
     
     // 🗑️ 显示长按菜单（同时包含"删除"和"复制"选项）- 传递 messageId
+    // 🆕 #821166321034 添加调试日志
     private static void showLongPressMenuStatic(View anchorView, MessageItem message, int position, TextView textView, List<MessageItem> messagesList, OnMessageDeleteListener listener) {
+        FileLogger.i(TAG, "🗑️ [LONG_PRESS_MENU] 长按菜单触发 | position=" + position + " | messageId=" + message.getMessageId());
+        
         PopupMenu popup = new PopupMenu(anchorView.getContext(), anchorView);
         popup.getMenu().add(0, 1, 0, "删除");
         popup.getMenu().add(0, 2, 1, "复制");
@@ -187,13 +190,18 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         // 获取 messageId
         String messageId = message.getMessageId();
         
+        FileLogger.d(TAG, "🗑️ [POPUP_MENU] 菜单项已添加 | 删除(id=1) | 复制(id=2)");
+        
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
                 // 删除消息 - 传递 messageId 以便精确删除
+                FileLogger.i(TAG, "🗑️ [DELETE_CLICK] 用户点击删除 | position=" + position + " | messageId=" + messageId);
+                
                 if (position >= 0 && position < messagesList.size()) {
                     MessageItem removed = messagesList.remove(position);
                     // 回调删除监听器，传递 messageId
                     if (listener != null) {
+                        FileLogger.i(TAG, "🗑️ [DELETE_CALLBACK] 准备回调 | messageId=" + messageId);
                         listener.onMessageDeleted(removed, position, messageId);
                     }
                 }
@@ -204,11 +212,15 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 ClipboardManager clipboard = (ClipboardManager)anchorView.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
                 android.content.ClipData clip = android.content.ClipData.newPlainText("selected text", selectedText);
                 clipboard.setPrimaryClip(clip);
+                FileLogger.i(TAG, "📋 [COPY_CLICK] 已复制到剪贴板 | 长度=" + selectedText.length());
                 return true;
             }
             return false;
         });
+        
+        FileLogger.d(TAG, "🗑️ [POPUP_SHOW] 准备显示 PopupMenu");
         popup.show();
+        FileLogger.i(TAG, "🗑️ [POPUP_SHOWN] PopupMenu 已显示");
     }
 
     public static class UserMessageViewHolder extends RecyclerView.ViewHolder 
@@ -226,10 +238,16 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         this.deleteListenerRef = deleteListener;
         
         // 🗑️ 长按显示菜单
+        // 🆕 #821166321034 添加调试日志
         itemView.setOnLongClickListener(v -> {
             int position = getBindingAdapterPosition();
-            if (position != RecyclerView.NO_POSITION && messagesRef != null)
-                showLongPressMenuStatic(v, messagesRef.get(position), position, textView, messagesRef, deleteListenerRef);
+            FileLogger.i(TAG, "👆 [USER_LONG_CLICK] User 消息长按 | position=" + position);
+            
+            if (position != RecyclerView.NO_POSITION && messagesRef != null) {
+                MessageItem msg = messagesRef.get(position);
+                FileLogger.d(TAG, "📝 [USER_LONG_CLICK] messageId=" + msg.getMessageId());
+                showLongPressMenuStatic(v, msg, position, textView, messagesRef, deleteListenerRef);
+            }
             return true;
         });
         
@@ -277,7 +295,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         // 🖼️ 检测是否有图片
         if (message.getImageUrl() != null && !message.getImageUrl().isEmpty()) 
         {
-          FileLogger.d(TAG, "🖼️ [IMAGE_FOUND] 检测到图片，开始解码");
+          FileLogger.d(TAG, "🖼️ [IMAGE_FOUND] 检测到图片");
           try 
           {
             // 处理 Base64 前缀 - 支持多种格式
@@ -379,10 +397,16 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 .build();
             
             // 🗑️ 长按显示菜单
+            // 🆕 #821166321034 添加调试日志
             itemView.setOnLongClickListener(v -> {
                 int position = getBindingAdapterPosition();
-                if (position != RecyclerView.NO_POSITION && messagesRef != null)
-                    showLongPressMenuStatic(v, messagesRef.get(position), position, textView, messagesRef, deleteListenerRef);
+                FileLogger.i(TAG, "👆 [AI_LONG_CLICK] AI 消息长按 | position=" + position);
+                
+                if (position != RecyclerView.NO_POSITION && messagesRef != null) {
+                    MessageItem msg = messagesRef.get(position);
+                    FileLogger.d(TAG, "📝 [AI_LONG_CLICK] messageId=" + msg.getMessageId());
+                    showLongPressMenuStatic(v, msg, position, textView, messagesRef, deleteListenerRef);
+                }
                 return true;
             });
             
@@ -437,10 +461,16 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             this.deleteListenerRef = deleteListener;
             
             // 🗑️ 长按显示菜单
+            // 🆕 #821166321034 添加调试日志
             itemView.setOnLongClickListener(v -> {
                 int position = getBindingAdapterPosition();
-                if (position != RecyclerView.NO_POSITION && messagesRef != null)
-                    showLongPressMenuStatic(v, messagesRef.get(position), position, textView, messagesRef, deleteListenerRef);
+                FileLogger.i(TAG, "👆 [TOOL_LONG_CLICK] 工具结果消息长按 | position=" + position);
+                
+                if (position != RecyclerView.NO_POSITION && messagesRef != null) {
+                    MessageItem msg = messagesRef.get(position);
+                    FileLogger.d(TAG, "📝 [TOOL_LONG_CLICK] messageId=" + msg.getMessageId());
+                    showLongPressMenuStatic(v, msg, position, textView, messagesRef, deleteListenerRef);
+                }
                 return true;
             });
             
