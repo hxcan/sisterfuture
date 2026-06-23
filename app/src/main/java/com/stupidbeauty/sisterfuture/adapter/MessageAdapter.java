@@ -6,35 +6,23 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.text.Spannable;
 import android.text.Selection;
 import butterknife.ButterKnife;
-import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
-import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.stupidbeauty.sisterfuture.R;
 import java.util.List;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.TextView;
 import android.widget.ImageView;
-import com.stupidbeauty.sisterfuture.R;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.PopupMenu;
-import android.widget.TextView;
-import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 import butterknife.BindView;
-import butterknife.ButterKnife;
 import io.noties.markwon.Markwon;
 import io.noties.markwon.core.CorePlugin;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
@@ -55,9 +43,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
     private List<MessageItem> messages = new ArrayList<>();
     
-    // 🗑️ 删除消息回调接口
+    // 🗑️ 删除消息回调接口 - 传递 messageId 以便精确删除
     public interface OnMessageDeleteListener {
-        void onMessageDeleted(MessageItem message, int position);
+        void onMessageDeleted(MessageItem message, int position, String messageId);
     }
     
     private OnMessageDeleteListener deleteListener;
@@ -144,9 +132,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             notifyItemRemoved(position);
             notifyItemRangeChanged(position, messages.size() - position);
             
-            // 回调删除监听器
+            // 回调删除监听器，传递 messageId
             if (deleteListener != null) {
-                deleteListener.onMessageDeleted(removed, position);
+                deleteListener.onMessageDeleted(removed, position, messageId);
             }
             return true;
         }
@@ -160,9 +148,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             notifyItemRemoved(position);
             notifyItemRangeChanged(position, messages.size() - position);
             
-            // 回调删除监听器
+            // 回调删除监听器，传递 messageId
             if (deleteListener != null) {
-                deleteListener.onMessageDeleted(removed, position);
+                String messageId = removed.getMessageId();
+                deleteListener.onMessageDeleted(removed, position, messageId);
             }
             return true;
         }
@@ -189,11 +178,14 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         return text;
     }
     
-    // 🗑️ 显示长按菜单（同时包含"删除"和"复制"选项）
+    // 🗑️ 显示长按菜单（同时包含"删除"和"复制"选项）- 传递 messageId
     private static void showLongPressMenuStatic(View anchorView, MessageItem message, int position, TextView textView, List<MessageItem> messagesList, OnMessageDeleteListener listener) {
         PopupMenu popup = new PopupMenu(anchorView.getContext(), anchorView);
         popup.getMenu().add(0, 1, 0, "删除");
         popup.getMenu().add(0, 2, 1, "复制");
+        
+        // 获取 messageId
+        String messageId = message.getMessageId();
         
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
@@ -202,7 +194,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     MessageItem removed = messagesList.remove(position);
                     // 回调删除监听器，传递 messageId
                     if (listener != null) {
-                        listener.onMessageDeleted(removed, position);
+                        listener.onMessageDeleted(removed, position, messageId);
                     }
                 }
                 return true;
