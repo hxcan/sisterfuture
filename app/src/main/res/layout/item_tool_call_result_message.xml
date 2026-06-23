@@ -13,8 +13,7 @@
         android:textColor="#FFFFFF" 
         android:background="#FF6B6B" 
         android:padding="8dp" 
-        android:textAlignment="viewStart" 
-        android:textIsSelectable="true"
+        android:textAlignment="viewStart"
         android:maxLines="5"
         android:ellipsize="end"/>
 </LinearLayout>

@@ -13,8 +13,7 @@
         android:textColor="#000000"
         android:background="#DDDDDD"
         android:padding="8dp"
-        android:textAlignment="viewStart"
-        android:textIsSelectable="true" />
+        android:textAlignment="viewStart" />
 
     <ImageView
         android:id="@+id/user_image"
