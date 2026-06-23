@@ -78,7 +78,7 @@ android
 
   signingConfigs {
     debug {
-      storeFile file('..\/keystore.31\/debug.keystore')
+      storeFile file('../keystore.31/debug.keystore')
       storePassword 'android'
       keyAlias 'androiddebugkey'
       keyPassword 'android'
@@ -103,8 +103,8 @@ android
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
     targetSdkVersion 28
-    versionCode 1096  // 🆕 #821166321034 长按删除调试版本
-    versionName "2026.6.23"  // 🆕 #821166321034 长按删除调试版本
+    versionCode 1096
+    versionName "2026.6.23"
     multiDexEnabled true
 
     // 配置支持的 SO 库架构 - 仅保留手机端需要的架构
