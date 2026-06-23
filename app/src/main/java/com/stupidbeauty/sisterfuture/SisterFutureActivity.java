@@ -481,7 +481,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
-  // 📷 #280 修改：统一处理纯文本和多模态消息
   public void sendMessageToSister(String message)
   {
     if (message == null || message.trim().isEmpty())
@@ -642,7 +641,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText("");
   }
 
-  // 📷 #280 图片上传按钮点击事件
   @OnClick(R.id.uploadImageButton)
   public void onUploadImageButton()
   {
@@ -848,7 +846,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   hasImageInContext = true;
                   imageMessageIndex = i;
                   
-                  // 获取 Base64 前 50 字符用于验证
                   JSONObject imageUrl = item.optJSONObject("image_url");
                   if (imageUrl != null) {
                     String url = imageUrl.optString("url", "");
@@ -896,7 +893,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   String funcName = func.optString("name", "unknown_function");
                   String args = func.optString("arguments", "");
                   
-                  // 尝试解析 arguments 是否为有效 JSON
                   try 
                   {
                     new JSONObject(args);
@@ -944,9 +940,20 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         @Override
         public void onError(Exception error)
         {
+          // ❌ 记录 AI 错误
+          FileLogger.d(TAG, "❌ [ERROR_CHECK] 请求 #" + requestId + " 错误 | lastSuccessRequestId=" + lastSuccessRequestId + " | 忽略=" + (requestId < lastSuccessRequestId));
+          
           if (requestId < lastSuccessRequestId) {
+            FileLogger.w(TAG, "⚠️ [IGNORED] 忽略旧请求 #" + requestId + " 的错误回调（lastSuccessRequestId=" + lastSuccessRequestId + "）");
             return;
           }
+          
+          // ❌ 记录 AI 错误
+          String errorType = error.getClass().getSimpleName();
+          String errorMsg = error.getMessage();
+          FileLogger.e(TAG, "❌ [AI_ERROR] AI 响应错误 | 错误类型=" + errorType + " | 错误信息=" + errorMsg);
+          
+          FileLogger.e(TAG, "请求出错：" + errorType + " - " + errorMsg);
           
           hideThinkingOverlay();
           
