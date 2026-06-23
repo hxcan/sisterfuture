@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.adapter;
 
 import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
+import com.stupidbeauty.sisterfuture.ContextManager;
 import androidx.recyclerview.widget.RecyclerView;
 import android.text.Spannable;
 import android.text.Selection;
@@ -21,7 +22,6 @@ import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.PopupMenu;
-import androidx.recyclerview.widget.RecyclerView;
 import butterknife.BindView;
 import io.noties.markwon.Markwon;
 import io.noties.markwon.core.CorePlugin;
@@ -43,6 +43,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
     private List<MessageItem> messages = new ArrayList<>();
     
+    // 🔗 数据源引用（用于刷新）
+    private ContextManager contextManager;
+    
     // 🗑️ 删除消息回调接口 - 传递 messageId 以便精确删除
     public interface OnMessageDeleteListener {
         void onMessageDeleted(MessageItem message, int position, String messageId);
@@ -52,6 +55,11 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     
     public void setOnMessageDeleteListener(OnMessageDeleteListener listener) {
         this.deleteListener = listener;
+    }
+
+    // 🔗 设置数据源引用
+    public void setContextManager(ContextManager contextManager) {
+        this.contextManager = contextManager;
     }
 
     public MessageItem getItem(int position) {
@@ -102,14 +110,14 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         return messages.size();
     }
 
-    // 🔗 新增：添加消息并返回消息项，方便后续关联
+    // 🔗 添加消息并返回消息项，方便后续关联
     public MessageItem addMessage(MessageItem message) {
         messages.add(message);
         notifyItemInserted(messages.size() - 1);
         return message;
     }
 
-    // 🔗 新增：根据消息 ID 查找位置
+    // 🔗 查找位置
     public int getMessagePositionById(String messageId) {
         if (messageId == null || messageId.isEmpty()) {
             return -1;
@@ -124,40 +132,121 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         return -1;
     }
 
-    // 🔗 新增：根据消息 ID 移除消息条目
-    // 🆕 #821166321034 修复 RecyclerView IndexOutOfBoundsException 崩溃
-    // 原因：notifyItemRemoved + notifyItemRangeChanged 在异步预取时导致 GapWorker 访问过时 position
-    // 最小化修改：只改删除方法，其他代码保持原样
-    public boolean removeMessageById(String messageId) {
-        int position = getMessagePositionById(messageId);
-        if (position >= 0) {
-            MessageItem removed = messages.remove(position);
-            notifyDataSetChanged(); // 改用 notifyDataSetChanged 避免 GapWorker 崩溃
+    // 🆕 #821166321034 从数据源刷新（解决 RecyclerView 崩溃）
+    // 正确的架构：数据源修改 → 视图刷新
+    public void refreshFromDataSource() {
+        if (contextManager != null) {
+            List<JSONObject> history = contextManager.getHistory();
+            messages.clear();
             
-            // 回调删除监听器，传递 messageId
-            if (deleteListener != null) {
-                deleteListener.onMessageDeleted(removed, position, messageId);
+            // 将 ContextManager 的 JSON 转换为 MessageItem
+            for (JSONObject msg : history) {
+                String role = msg.optString("role", "");
+                String toolCallId = msg.optString("tool_call_id", "");
+                JSONArray toolCalls = msg.optJSONArray("tool_calls");
+                
+                if ("tool".equals(role) && !toolCallId.isEmpty()) {
+                    String toolName = msg.optString("name", "unknown_tool");
+                    String content = msg.optString("content", "");
+                    String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
+                    messages.add(new MessageItem(displayText, MessageType.TOOL_CALL_RESULT));
+                }
+                else if ("user".equals(role)) {
+                    Object contentObj = msg.opt("content");
+                    String imageUrl = null;
+                    String textContent = "";
+                    
+                    if (contentObj instanceof JSONArray) {
+                        JSONArray contentArray = (JSONArray) contentObj;
+                        StringBuilder textBuilder = new StringBuilder();
+                        
+                        for (int i = 0; i < contentArray.length(); i++) {
+                            try {
+                                JSONObject item = contentArray.optJSONObject(i);
+                                if (item == null) continue;
+                                
+                                String type = item.optString("type", "");
+                                if ("text".equals(type)) {
+                                    textBuilder.append(item.optString("text", ""));
+                                }
+                                else if ("image_url".equals(type)) {
+                                    JSONObject imageUrlObj = item.optJSONObject("image_url");
+                                    if (imageUrlObj != null) {
+                                        String url = imageUrlObj.optString("url", "");
+                                        if (url != null && url.startsWith("data:image/jpeg;base64,")) {
+                                            int commaIndex = url.lastIndexOf(',');
+                                            if (commaIndex > 0) {
+                                                imageUrl = url.substring(commaIndex + 1);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            catch (Exception e) {
+                                FileLogger.e(TAG, "解析多模态消息失败", e);
+                            }
+                        }
+                        textContent = textBuilder.toString();
+                    }
+                    else {
+                        textContent = msg.optString("content", "");
+                    }
+                    
+                    messages.add(new MessageItem(textContent, MessageType.USER, imageUrl));
+                }
+                else if ("assistant".equals(role)) {
+                    if (toolCalls != null && toolCalls.length() > 0) {
+                        StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
+                        for (int i = 0; i < toolCalls.length(); i++) {
+                            try {
+                                JSONObject toolCall = toolCalls.getJSONObject(i);
+                                JSONObject func = toolCall.optJSONObject("function");
+                                if (func != null) {
+                                    String toolName = func.optString("name", "unknown");
+                                    callText.append("- `").append(toolName).append("`\n");
+                                }
+                            }
+                            catch (Exception e) {
+                                FileLogger.e(TAG, "解析工具调用失败", e);
+                            }
+                        }
+                        messages.add(new MessageItem(callText.toString(), MessageType.AI));
+                    }
+                    else if (!msg.optString("content").isEmpty()) {
+                        messages.add(new MessageItem(msg.optString("content"), MessageType.AI));
+                    }
+                }
             }
-            return true;
+            
+            notifyDataSetChanged();
+            FileLogger.i(TAG, "🔄 [REFRESH] 从数据源刷新完成 | 消息数：" + messages.size());
         }
-        return false;
+        else {
+            FileLogger.w(TAG, "⚠️ [REFRESH] contextManager 未设置，无法刷新");
+        }
+    }
+
+    // 🗑️ 删除消息 - 只触发回调，由数据源处理删除
+    // 🆕 #821166321034 修复 RecyclerView 崩溃
+    // 正确的流程：回调给 Activity/Presenter → 修改数据源(ContextManager) → 刷新 Adapter
+    public void deleteMessage(int position) {
+        if (position >= 0 && position < messages.size()) {
+            MessageItem message = messages.get(position);
+            String messageId = message.getMessageId();
+            
+            // 回调给 Activity 处理
+            if (deleteListener != null) {
+                deleteListener.onMessageDeleted(message, position, messageId);
+            }
+        }
     }
     
-    // 🗑️ 根据位置移除消息
-    // 🆕 #821166321034 修复 RecyclerView IndexOutOfBoundsException 崩溃
-    public boolean removeMessage(int position) {
-        if (position >= 0 && position < messages.size()) {
-            MessageItem removed = messages.remove(position);
-            notifyDataSetChanged(); // 改用 notifyDataSetChanged 避免 GapWorker 崩溃
-            
-            // 回调删除监听器，传递 messageId
-            if (deleteListener != null) {
-                String messageId = removed.getMessageId();
-                deleteListener.onMessageDeleted(removed, position, messageId);
-            }
-            return true;
+    // 🗑️ 根据 messageId 删除
+    public void deleteMessageById(String messageId) {
+        int position = getMessagePositionById(messageId);
+        if (position >= 0) {
+            deleteMessage(position);
         }
-        return false;
     }
 
     public void updateAiMessage(int position, String newText) {
@@ -180,24 +269,19 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         return text;
     }
     
-    // 🗑️ 显示长按菜单（同时包含"删除"和"复制"选项）- 传递 messageId
+    // 🗑️ 显示长按菜单
     private static void showLongPressMenuStatic(View anchorView, MessageItem message, int position, TextView textView, List<MessageItem> messagesList, OnMessageDeleteListener listener) {
         PopupMenu popup = new PopupMenu(anchorView.getContext(), anchorView);
         popup.getMenu().add(0, 1, 0, "删除");
         popup.getMenu().add(0, 2, 1, "复制");
         
-        // 获取 messageId
         String messageId = message.getMessageId();
         
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
-                // 删除消息 - 传递 messageId 以便精确删除
-                if (position >= 0 && position < messagesList.size()) {
-                    MessageItem removed = messagesList.remove(position);
-                    // 回调删除监听器，传递 messageId
-                    if (listener != null) {
-                        listener.onMessageDeleted(removed, position, messageId);
-                    }
+                // 删除消息 - 回调给 Activity 处理
+                if (listener != null) {
+                    listener.onMessageDeleted(message, position, messageId);
                 }
                 return true;
             } else if (item.getItemId() == 2) {
@@ -239,22 +323,12 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() 
         {
           @Override
-          public boolean onCreateActionMode(ActionMode mode, Menu menu) 
-          {
-            return true;
-          }
-
+          public boolean onCreateActionMode(ActionMode mode, Menu menu) { return true; }
           @Override
-          public boolean onPrepareActionMode(ActionMode mode, Menu menu) 
-          {
-            return false;
-          }
-
+          public boolean onPrepareActionMode(ActionMode mode, Menu menu) { return false; }
           @Override
-          public boolean onActionItemClicked(ActionMode mode, MenuItem item) 
-          {
-            if (item.getItemId() == android.R.id.copy) 
-            {
+          public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+            if (item.getItemId() == android.R.id.copy) {
               String selectedText = textView.getText().toString();
               ClipboardManager clipboard = (ClipboardManager)itemView.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
               android.content.ClipData clip = android.content.ClipData.newPlainText("selected text", selectedText);
@@ -264,10 +338,8 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             }
             return false;
           }
-
           @Override
-          public void onDestroyActionMode(ActionMode mode) 
-          {
+          public void onDestroyActionMode(ActionMode mode) {
             Spannable spannable = (Spannable)textView.getText();
             Selection.setSelection(spannable, 0, 0);
           }
@@ -391,15 +463,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             // 保留原有文本选择功能
             textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
                 @Override
-                public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                    return true;
-                }
-
+                public boolean onCreateActionMode(ActionMode mode, Menu menu) { return true; }
                 @Override
-                public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                    return false;
-                }
-
+                public boolean onPrepareActionMode(ActionMode mode, Menu menu) { return false; }
                 @Override
                 public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
                     if (item.getItemId() == android.R.id.copy) {
@@ -412,7 +478,6 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     }
                     return false;
                 }
-
                 @Override
                 public void onDestroyActionMode(ActionMode mode) {
                     Spannable spannable = (Spannable)textView.getText();
@@ -461,15 +526,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             // 保留原有文本选择功能
             textView.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
                 @Override
-                public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                    return true;
-                }
-
+                public boolean onCreateActionMode(ActionMode mode, Menu menu) { return true; }
                 @Override
-                public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                    return false;
-                }
-
+                public boolean onPrepareActionMode(ActionMode mode, Menu menu) { return false; }
                 @Override
                 public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
                     if (item.getItemId() == android.R.id.copy) {
@@ -482,7 +541,6 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     }
                     return false;
                 }
-
                 @Override
                 public void onDestroyActionMode(ActionMode mode) {
                     Spannable spannable = (Spannable)textView.getText();
