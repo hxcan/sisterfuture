@@ -947,6 +947,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           FileLogger.e(TAG, "请求出错：" + errorType + " - " + errorMsg);
           hideThinkingOverlay();
           
+          // 🆕 #11 审核意见修复：恢复通知栏更新
+          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "请求出错，请重试");
+
           boolean isAccessPointUnavailable = false;
 
           if (error instanceof TongYiClient.AccessPointUnavailableException)
@@ -1525,8 +1528,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 		}
 
 		@Override
-		public void onEvent(int i, int i1, int i2, Bundle bundle)
-		{
+		public void onEvent(int i, int i1, int arg2, Bundle bundle)
+    {
     }
 	};
 
@@ -1671,7 +1674,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       @Override
       public void onNotificationPermissionDenied() {
-        FileLogger.w(TAG, "Notification permission denied");
+        FileLogger.w(TAG, "Notification permission denied: " + permission);
       }
     });
     
