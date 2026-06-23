@@ -177,13 +177,14 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
     }
 
-    // 🔥 救援：仅截断工具调用结果消息的超长文本
+    // 🔥 #4881 救援：仅截断工具调用结果消息的超长文本
     private static String limitToolResultDisplayLength(String text) {
         if (text == null) {
             return "";
         }
         if (text.length() > MAX_TOOL_RESULT_DISPLAY_LENGTH) {
-            return text.substring(0, MAX_TOOL_RESULT_DISPLAY_LENGTH) + "\n\n... [内容过长，已截断显示] ...";
+            FileLogger.w(TAG, "🔥 工具结果文本超长，截断显示：" + text.length() + " → " + MAX_TOOL_RESULT_DISPLAY_LENGTH + " 字符");
+            return text.substring(0, MAX_TOOL_RESULT_DISPLAY_LENGTH) + "\n\n... [内容过长，已截断显示 " + (text.length() - MAX_TOOL_RESULT_DISPLAY_LENGTH) + " 字符] ...";
         }
         return text;
     }
@@ -466,8 +467,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
+            // 🔥 #4881 仅工具调用结果消息限制显示长度
             String text = limitToolResultDisplayLength(message.getText());
             textView.setText(text);
+            // 重置状态 - 依赖布局文件中的 maxLines 和 ellipsize 设置
             isExpanded = false;
         }
     }
