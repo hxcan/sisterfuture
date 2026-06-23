@@ -193,6 +193,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@Override
 	public void onInit(int arg0)
 	{
+
   }
 
   private void accumulateToolCalls(List<ToolCall> calls)
@@ -311,15 +312,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     }
     volumeIndicatorprogressBar.setIndeterminate(false);
-    volumeIndicatorprogressBar.setProgress(0);
-
-    volumeIndicatorprogressBar.setVisibility(View.INVISIBLE);
-
-    progressBar.setVisibility(View.VISIBLE);
-
-    commandRecognizebutton2.setEnabled(false);
-    commandRecognizebutton2.setVisibility(View.INVISIBLE);
-
+    progressBar.setVisibility(View.INVISIBLE);
     recognizeResulttextView.setText(R.string.empty);
   }
 
@@ -1801,7 +1794,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     public void onReceive(Context context, Intent intent)
     {
       String action = intent.getAction();
-      
+
       if (Constants.Operation.CommitText.equals(action))
       {
         Bundle extras=intent.getExtras();
