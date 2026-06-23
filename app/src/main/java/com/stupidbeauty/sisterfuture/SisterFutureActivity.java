@@ -1814,34 +1814,20 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
     articleListmyRecyclerView.setAdapter(messageAdapter);
 
-    // 🗑️ #821166321034 设置删除消息监听器
+    // 🗑️ #821166321034 设置删除消息监听器 - 使用 messageId 删除
     messageAdapter.setOnMessageDeleteListener(new MessageAdapter.OnMessageDeleteListener() {
       @Override
-      public void onMessageDeleted(MessageItem message, int position) {
-        FileLogger.i(TAG, "🗑️ 收到删除消息回调 | position=" + position);
+      public void onMessageDeleted(MessageItem message, int position, String messageId) {
+        FileLogger.i(TAG, "🗑️ 收到删除消息回调 | position=" + position + " | messageId=" + messageId);
         
-        // 从上下文中删除对应位置的消息
-        List<JSONObject> history = contextManager.getHistory();
-        
-        if (history != null && !history.isEmpty()) {
-          String deleteContent = message.getText();
-          boolean foundAndRemoved = false;
-          
-          for (int i = history.size() - 1; i >= 0 && !foundAndRemoved; i--) {
-            JSONObject msg = history.get(i);
-            String content = msg.optString("content", "");
-            
-            if (content.contains(deleteContent) || deleteContent.contains(content)) {
-              contextManager.removeMessage(i);
-              foundAndRemoved = true;
-              FileLogger.i(TAG, "🗑️ 已从上下文删除 | index=" + i);
-            }
-          }
-          
-          if (!foundAndRemoved) {
-            contextManager.removeMessage(history.size() - 1);
-            FileLogger.i(TAG, "🗑️ 删除上下文中最后一条消息");
-          }
+        // 优先使用 messageId 精确删除
+        if (messageId != null && !messageId.isEmpty()) {
+          contextManager.removeMessageById(messageId);
+          FileLogger.i(TAG, "🗑️ 已根据 messageId 删除 | messageId=" + messageId);
+        } else {
+          // 如果没有 messageId，使用下标删除（降级方案）
+          FileLogger.w(TAG, "⚠️ messageId 为空，使用下标删除 | position=" + position);
+          contextManager.removeMessage(position);
         }
       }
     });
