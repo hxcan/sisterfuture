@@ -362,7 +362,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       else if ("user".equals(role))
       {
-        // 🖼️ 检测是否为多模态消息（包含图片）
         if (contentObj instanceof JSONArray)
         {
           JSONArray contentArray = (JSONArray) contentObj;
@@ -389,7 +388,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   String url = imageUrlObj.optString("url");
                   if (url != null && url.startsWith("data:image/jpeg;base64,"))
                   {
-                    // ✅ 修复：使用 lastIndexOf(',') 动态查找逗号位置
                     int commaIndex = url.lastIndexOf(',');
                     if (commaIndex > 0) {
                       imageUrl = url.substring(commaIndex + 1);
@@ -544,6 +542,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
                 scrollToBottom();
                 ttsSayReply(response);
+                
+                // ✅ 恢复：备用接入点配置成功的处理逻辑
+                if (response.contains("✅")) {
+                  FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
+                  isDeadlockRescueMode = false;
+                  FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
+                  modelAccessPointManager.resetFailureCount();
+                }
               });
             }
 
@@ -580,6 +586,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
               scrollToBottom();
               ttsSayReply(response);
+              
+              // ✅ 恢复：备用接入点配置成功的处理逻辑
+              if (response.contains("✅")) {
+                FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
+                isDeadlockRescueMode = false;
+                FileLogger.d(TAG, "ℹ️ [RESCUE_MODE] 退出救援模式：false");
+                modelAccessPointManager.resetFailureCount();
+              }
             });
           }
 
@@ -759,7 +773,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
             scrollToBottom();
             ttsSayReply(message);
+            
+            // ✅ 恢复：备用接入点配置成功的处理逻辑
             if (message.contains("✅")) {
+              FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
               isDeadlockRescueMode = false;
               modelAccessPointManager.resetFailureCount();
             }
@@ -782,7 +799,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       List<JSONObject> history = contextManager.getHistory();
       List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
-      
       JSONArray historyArray = new JSONArray(cleanedHistory);
       JSONArray messagesArray = new JSONArray();
 
@@ -1031,7 +1047,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               if (toolManager.isToolAsync(toolName))
               {
                 SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在执行：" + toolName);
-                
                 toolManager.executeToolAsync(toolCallId, toolName, args, new Tool.OnResultCallback()
                 {
                   @Override
