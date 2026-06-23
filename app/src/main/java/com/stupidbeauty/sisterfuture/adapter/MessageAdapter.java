@@ -197,10 +197,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
-                // 删除消息
+                // 删除消息 - 传递 messageId 以便精确删除
                 if (position >= 0 && position < messagesList.size()) {
                     MessageItem removed = messagesList.remove(position);
-                    // 回调删除监听器
+                    // 回调删除监听器，传递 messageId
                     if (listener != null) {
                         listener.onMessageDeleted(removed, position);
                     }
