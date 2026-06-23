@@ -31,7 +31,6 @@ import com.stupidbeauty.sisterfuture.bean.MessageType;
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
-import com.stupidbeauty.sisterfuture.tool.Tool;
 import com.stupidbeauty.sisterfuture.bean.ToolCall;
 import com.stupidbeauty.sisterfuture.bean.Function;
 import butterknife.ButterKnife;
@@ -110,7 +109,6 @@ import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
 import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
 import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
-import com.koushikdutta.async.http.server.HttpServerRequestCallback;
 import com.stupidbeauty.lanime.network.volley.MapUtils;
 import com.stupidbeauty.sisterfuture.SisterFutureApplication;
 import com.stupidbeauty.lanime.Constants;
@@ -126,110 +124,88 @@ import com.stupidbeauty.sisterfuture.utils.FileLogger;
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
   private GuideManager guideManager ;
-
   private JSONObject firstToolCallDelta = null;
   private boolean isFirstToolCallProcessed = false;
   private ModelAccessPointManager modelAccessPointManager;
   private ToolManager toolManager;
   private MemoryManager memoryManager;
   private RepeatDetectionManager repeatDetectionManager;
-
   private Map<Integer, String> indexToOriginalIdMap = new HashMap<>();
   private Map<String, Function> partialToolArgs = new HashMap<>();
-
   private static final Gson gson = new Gson();
-
   private ContextManager contextManager;
   private MessageAdapter messageAdapter;
   @BindView(R.id.articleListmy_recycler_view) RecyclerView articleListmyRecyclerView;
   private static final String DEFAULT_INPUT_TEXT = "君不见，黄河之水天上来，奔流到海不复回，君不见，高堂明镜悲白发，朝如青丝暮成雪，人生得意须尽欢，莫使金樽空对月";
-
   private StringBuilder accumulatedAnswer = new StringBuilder();
-
   private ActivityResultLauncher<Intent> imagePickerLauncher;
   private String currentImageBase64 = null;
   @BindView(R.id.uploadImageButton) Button uploadImageButton;
-
   private TongYiClient tongYiClient;
   private boolean isTtsSpeaking = false;
-
   private MediaPlayer mediaPlayer;
   private boolean voiceEndDetected=false;
-
   private TextToSpeech mTts;
-
   private PermissionManager permissionManager;
-
   private static final int LanServicePort =10471;
   private String voiceRecognizeResultString;
   private Vibrator vibrator;
-  @BindView(R.id.sendButtonn2) Button sendButtonn2;
+  @BindView(R.id.sendButton
+2) Button sendButton
+2;
   @BindView(R.id.commandRecognizebutton2) Button commandRecognizebutton2;
   @BindView(R.id.thinking_overlay) TextView thinking_overlay;
   @BindView(R.id.progressBar) ProgressBar progressBar;
   int ret = 0;
   private static final String TAG="SisterFutureActivity";
-
   private SpeechRecognizer mIat;
-
 
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
-
   private boolean isDeadlockRescueMode = false;
-  
+ 
   private int rateLimitRetryCount = 0;
   private static final int MAX_RATE_LIMIT_RETRIES = 3;
-
   private volatile long currentRequestId = 0;
   private volatile long lastSuccessRequestId = 0;
   private static final int FTP_SERVER_PORT = 2123;
   private BuiltinFtpServer builtinFtpServer = null;
   private BuiltinFtpServerErrorListener builtinFtpServerErrorListener = null;
 
-
 	@Override
 	public void onInit(int arg0)
 	{
-
   }
-
   private void accumulateToolCalls(List<ToolCall> calls)
   {
     for (ToolCall call : calls)
     {
       if (call == null || call.getFunction() == null) continue;
-
       int index = call.getIndex();
-
       if (call.getId() != null && !call.getId().trim().isEmpty())
       {
         indexToOriginalIdMap.put(index, call.getId());
       }
-
       String originalId = indexToOriginalIdMap.get(index);
       if (originalId == null)
       {
         originalId = "fallback_" + index + "_" + (call.getFunction().getName() != null ? call.getFunction().getName() : "");
         indexToOriginalIdMap.put(index, originalId);
       }
-
       Function func = call.getFunction();
       Function existing = partialToolArgs.get(originalId);
-
       if (existing == null)
       {
         existing = new Function();
         existing.setName(func.getName());
         existing.setArguments("");
       }
-
       String newChunk = func.getArguments() != null ? func.getArguments() : "";
       existing.setArguments(existing.getArguments() + newChunk);
       partialToolArgs.put(originalId, existing);
     }
   }
-  
+ 
   private List<ToolCall> getFinalToolCalls()
   {
     List<ToolCall> result = new ArrayList<>();
@@ -244,7 +220,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           break;
         }
       }
-
       ToolCall call = new ToolCall();
       call.setId(entry.getKey());
       call.setType("function");
@@ -254,51 +229,41 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     return result;
   }
-
   private void clearAccumulatedToolCalls()
   {
     partialToolArgs.clear();
   }
-
   public void stopRecordbutton2()
   {
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
     vibrator.vibrate( 100);
-
     if (voiceEndDetected)
     {}
     else
     {
       mIat.stopListening();
     }
-
     volumeIndicatorprogressBar.setIndeterminate(true);
     volumeIndicatorprogressBar.setProgress(0);
-
     volumeIndicatorprogressBar.setVisibility(View.INVISIBLE);
-
     progressBar.setVisibility(View.VISIBLE);
-
     commandRecognizebutton2.setEnabled(false);
     commandRecognizebutton2.setVisibility(View.INVISIBLE);
   }
-  
+ 
   public void commandRecognizebutton2startRecognize()
   {
     voiceEndDetected=false;
-
     vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
     vibrator.vibrate( 100);
     if (mIat==null)
     {
       mIat=SpeechRecognizer.createRecognizer(this,null);
     }
-
     if (!setParam())
     {
       return;
     }
-
     ret = mIat.startListening(mRecognizerListener);
     if (ret != ErrorCode.SUCCESS)
     {
@@ -314,14 +279,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText(R.string.empty);
   }
 
-
   public boolean setParam()
   {
     boolean result = false;
     String mEngineType = SpeechConstant.TYPE_CLOUD;
     mIat.setParameter(SpeechConstant.ENGINE_TYPE, mEngineType);
     mIat.setParameter(SpeechConstant.RESULT_TYPE, "json");
-
     if ("cloud".equalsIgnoreCase(mEngineType))
     {
       mIat.setParameter(SpeechConstant.DOMAIN,"iat");
@@ -329,28 +292,24 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       mIat.setParameter(SpeechConstant.ACCENT, "mandarin");
       result = true;
     }
-
     mIat.setParameter(SpeechConstant.AUDIO_FORMAT, "wav");
     mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
-
     return result;
   }
-
 
   private void displayExistingContext()
   {
     List<JSONObject> history = contextManager.getHistory();
     for (JSONObject msg : history)
     {
-      String role = msg.optString("role");
+      String role = msg.optString("role", "");
       Object contentObj = msg.opt("content");
-      String toolCallId = msg.optString("tool_call_id");
+      String toolCallId = msg.optString("tool_call_id", "");
       JSONArray toolCalls = msg.optJSONArray("tool_calls");
-
       if ("tool".equals(role) && !toolCallId.isEmpty())
       {
         String toolName = msg.optString("name", "unknown_tool");
-        String content = msg.optString("content");
+        String content = msg.optString("content", "");
         String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
         messageAdapter.addMessage(new MessageItem(displayText, MessageType.TOOL_CALL_RESULT));
       }
@@ -369,17 +328,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               JSONObject item = contentArray.optJSONObject(i);
               if (item == null) continue;
               
-              String type = item.optString("type");
+              String type = item.optString("type", "");
               if ("text".equals(type))
               {
-                textBuilder.append(item.optString("text"));
+                textBuilder.append(item.optString("text", ""));
               }
               else if ("image_url".equals(type))
               {
                 JSONObject imageUrlObj = item.optJSONObject("image_url");
                 if (imageUrlObj != null)
                 {
-                  String url = imageUrlObj.optString("url");
+                  String url = imageUrlObj.optString("url", "");
                   if (url != null && url.startsWith("data:image/jpeg;base64,"))
                   {
                     int commaIndex = url.lastIndexOf(',');
@@ -402,7 +361,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
         else
         {
-          String content = msg.optString("content");
+          String content = msg.optString("content", "");
           if (!content.isEmpty())
           {
             messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
@@ -442,7 +401,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     
     checkAndResumeLastMessage();
   }
-  
+ 
   private void checkAndResumeLastMessage()
   {
     List<JSONObject> history = contextManager.getHistory();
@@ -474,7 +433,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }, 500);
     }
   }
-
   public void sendMessageToSister(String message)
   {
     if (message == null || message.trim().isEmpty())
@@ -484,7 +442,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         return;
       }
     }
-
     boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
     
     if (hasImage)
@@ -524,7 +481,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         if (isDeadlockRescueMode) {
           return;
         }
-
         if (guideManager != null && guideManager.isEmptyAccessPointList())
         {
           guideManager.processWithGuideLogic(message != null ? message : "", new GuideManager.ChatCallback()
@@ -542,7 +498,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 }
               });
             }
-
             @Override
             public void onError(String error) {
               runOnUiThread(() -> {
@@ -553,7 +508,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           });
           return;
         }
-
         sendChatRequestTongYi();
       }
       catch (JSONException e)
@@ -567,7 +521,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
       contextManager.addUserMessage(message);
-
       if (isDeadlockRescueMode) {
         guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
           @Override
@@ -583,7 +536,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               }
             });
           }
-
           @Override
           public void onError(String error) {
             runOnUiThread(() -> {
@@ -594,7 +546,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         });
         return;
       }
-
       if (guideManager != null && guideManager.isEmptyAccessPointList())
       {
         guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
@@ -609,7 +560,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               ttsSayReply(message);
             });
           }
-
           @Override
           public void onError(String error)
           {
@@ -622,19 +572,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         });
         return;
       }
-
       sendChatRequestTongYi();
     }
   }
-
-  @OnClick(R.id.sendButtonn2)
-  public void sendButtonn2()
+  @OnClick(R.id.sendButton
+2)
+  public void sendButton
+2()
   {
     voiceRecognizeResultString = recognizeResulttextView.getText().toString();
     sendMessageToSister(voiceRecognizeResultString);
     recognizeResulttextView.setText("");
   }
-
   @OnClick(R.id.uploadImageButton)
   public void onUploadImageButton()
   {
@@ -644,7 +593,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
     openImagePicker();
   }
-
   private void sendChatRequest() 
   {
     recognizeResulttextView.setText("");
@@ -663,7 +611,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             ttsSayReply(message);
           });
         }
-
         @Override
         public void onError(String error)
         {
@@ -676,15 +623,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       });
       return;
     }
-
     sendChatRequestTongYi();
   }
-
   protected void reportOperationFail(String string)
   {
     Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();
   }
-
   private void showThinkingOverlay()
   {
     runOnUiThread(new Runnable()
@@ -694,17 +638,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       {
         ModelAccessPoint currentAp = modelAccessPointManager.getCurrentAccessPoint();
         thinking_overlay.setText(currentAp.getName() + " is thinking...");
-
         thinking_overlay.setVisibility(View.VISIBLE);
         recognizeResulttextView.setEnabled(false);
-        sendButtonn2.setEnabled(false);
+        sendButton
+2.setEnabled(false);
         commandRecognizebutton2.setEnabled(false);
         
         SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在思考中...");
       }
     });
   }
-
   private void hideThinkingOverlay()
   {
     runOnUiThread(new Runnable()
@@ -714,12 +657,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       {
         thinking_overlay.setVisibility(View.GONE);
         recognizeResulttextView.setEnabled(true);
-        sendButtonn2.setEnabled(true);
+        sendButton
+2.setEnabled(true);
         commandRecognizebutton2.setEnabled(true);
       }
     });
   }
-
   private void handleContextLengthError(String errorMessage, final boolean isRetry)
   {
     runOnUiThread(() ->
@@ -738,14 +681,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     });
   }
-
   private void sendChatRequestTongYi()
   {
     final long requestId = System.currentTimeMillis();
     currentRequestId = requestId;
     
     SisterFutureService.updateNotificationStatus(this, "正在发送请求...");
-
     if (modelAccessPointManager.checkFailureThreshold()) {
       isDeadlockRescueMode = true;
       runOnUiThread(() -> {
@@ -765,7 +706,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               modelAccessPointManager.resetFailureCount();
             }
           }
-
           @Override
           public void onError(String error) {
             messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
@@ -775,17 +715,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       });
       return;
     }
-
     if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
     {
       accumulatedAnswer.setLength(0);
-      showThinkingOverlay();
-
+      showThinkingOverlay()
       List<JSONObject> history = contextManager.getHistory();
       List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
       JSONArray historyArray = new JSONArray(cleanedHistory);
       JSONArray messagesArray = new JSONArray();
-
+      
       try
       {
         JSONObject systemMsg = new JSONObject();
@@ -793,7 +731,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         String enhancedSystemPrompt = buildEnhancedSystemPrompt(toolManager, this);
         systemMsg.put("content", enhancedSystemPrompt);
         messagesArray.put(systemMsg);
-
+        
         for (int i = 0; i < historyArray.length(); i++)
         {
           messagesArray.put(historyArray.getJSONObject(i));
@@ -801,13 +739,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
       catch (Exception e)
       {
-        e.printStackTrace();
-
+        e.printStackTrace()
         try
         {
           messagesArray = new JSONArray();
           String enhancedSystemPrompt = buildEnhancedSystemPrompt(toolManager, this);
-
           messagesArray.put(new JSONObject().put("role", "system").put("content", enhancedSystemPrompt));
           messagesArray.put(new JSONObject().put("role", "user").put("content", voiceRecognizeResultString));
         }
@@ -815,7 +751,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
         }
       }
-
+      
       // 🔍 #5030【救援模式】遍历消息列表，检查所有 tool_call 的 arguments
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 开始检查消息列表中的 tool_call arguments | 消息总数：" + messagesArray.length());
       
@@ -846,7 +782,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                       int commaIndex = url.lastIndexOf(',');
                       String base64 = (commaIndex > 0) ? url.substring(commaIndex + 1) : url;
                       String preview = base64.length() > 50 ? base64.substring(0, 50) + "..." : base64;
-                      FileLogger.i(TAG, "🖼️ [IMAGE_IN_CONTEXT] 检测到图片消息 | 位置=" + i + " | Base64 长度=" + base64.length() + " | 前 50 字符：" + preview);
+                      FileLogger.i(TAG, "🖼️ [IMAGE_IN_CONTEXT] 检测到图片消息 | 位置=" + i + " | Base64长度=" + base64.length() + " | 前50字符：" + preview);
                     }
                   }
                   break;
@@ -916,7 +852,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       // 🔗 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();
       FileLogger.i(TAG, "🔗 [RESERVE_ID] 已生成预留消息 ID | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
-
       tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
       {
         @Override
@@ -929,7 +864,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           parseTongYiResponse(response);
         }
-
+        
         @Override
         public void onError(Exception error)
         {
@@ -949,9 +884,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           // 🆕 #11 审核意见修复：恢复通知栏更新
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "请求出错，请重试");
-
           boolean isAccessPointUnavailable = false;
-
           if (error instanceof TongYiClient.AccessPointUnavailableException)
           {
             FileLogger.d(TAG, "接入点不可用异常，准备切换");
@@ -1001,7 +934,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             FileLogger.e(TAG, "未知异常，不触发切换：" + error.getMessage());
           }
-
           if (isAccessPointUnavailable)
           {
             int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
@@ -1016,12 +948,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       },
       () ->
-        {
-        },
-        currentReservedMessageId);
+      {
+      },
+      currentReservedMessageId);
     }
   }
-
   private void handleRateLimitError() 
   {
     if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES) 
@@ -1044,7 +975,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       sendChatRequestTongYi();
     }, delayMs);
   }
-
   private boolean isHtmlResponse(String content)
   {
     if (content == null || content.isEmpty())
@@ -1059,18 +989,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
            trimmedContent.contains("<title") ||
            trimmedContent.contains("<TITLE");
   }
-
   protected void parseTongYiResponse(String jsonString)
   {
     try
     {
       TongYiResponse response = new Gson().fromJson(jsonString, TongYiResponse.class);
-
       if (response != null && response.getError() != null)
       {
         String errorMessage = response.getError().getMessage();
         boolean isContextTooLong = ContextLengthUtils.isContextLengthError(errorMessage);
-
         if (isContextTooLong)
         {
           handleContextLengthError(errorMessage, true);
@@ -1087,21 +1014,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
         return;
       }
-
       if (response == null || response.getChoices() == null || response.getChoices().isEmpty())
       {
         FileLogger.e(TAG, "响应为空或 choices 为空");
         return;
       }
-
       Choice choice = response.getChoices().get(0);
       Delta delta = choice.getDelta();
-
       if (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty())
       {
         accumulateToolCalls(delta.getToolCalls());
       }
-
       if ("tool_calls".equals(choice.getFinishReason()))
       {
         runOnUiThread(() ->
@@ -1109,38 +1032,30 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           try
           {
             List<ToolCall> finalCalls = getFinalToolCalls();
-
             if (finalCalls == null || finalCalls.isEmpty())
             {
               FileLogger.w(TAG, "没有有效的工具调用，跳过执行");
               return;
             }
-
             JSONObject assistantMessage = new JSONObject();
             assistantMessage.put("role", "assistant");
-
             JSONArray toolCallsArray = new JSONArray();
             java.util.Map<String, JSONObject> pendingResults = new java.util.HashMap<>();
-
             for (ToolCall call : finalCalls)
             {
               if (call == null || call.getFunction() == null) continue;
-
               String toolName = call.getFunction().getName();
               String argsJsonStr = call.getFunction().getArguments();
               String toolCallId = call.getId();
-
               if (toolName == null || toolCallId == null)
               {
                 FileLogger.w(TAG, "工具调用无效：name 或 id 为空");
                 continue;
               }
-
               if (argsJsonStr == null || argsJsonStr.trim().isEmpty())
               {
                 argsJsonStr = "{}";
               }
-
               JSONObject args;
               try
               {
@@ -1151,17 +1066,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 FileLogger.e(TAG, "❌ [TOOL_CALL_JSON_ERROR] 工具调用参数 JSON 格式错误，已跳过 | toolName=" + toolName + ", toolCallId=" + toolCallId, e);
                 continue;
               }
-
               JSONObject toolCallObject = new JSONObject();
               toolCallObject.put("id", toolCallId);
               toolCallObject.put("type", "function");
-
               JSONObject functionObject = new JSONObject();
               functionObject.put("name", toolName);
               functionObject.put("arguments", argsJsonStr);
               toolCallObject.put("function", functionObject);
               toolCallsArray.put(toolCallObject);
-
               if (toolManager.isToolAsync(toolName))
               {
                 SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在执行：" + toolName);
@@ -1190,7 +1102,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                       {
                         FileLogger.e(TAG, "封装异步结果失败", e);
                       }
-
                       if (pendingResults.size() == toolCallsArray.length())
                       {
                         FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成，准备调用 postProcessToolResults");
@@ -1198,7 +1109,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                       }
                     }
                   }
-
+                  
                   @Override
                   public void onError(Exception e)
                   {
@@ -1240,7 +1151,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 FileLogger.d(TAG, "🔧 [TOOL_SYNC_EXEC] 执行同步工具 | id=" + toolCallId + " | name=" + toolName);
                 
                 JSONObject toolResult = new JSONObject();
-
+                
                 try
                 {
                   toolResult = toolManager.executeTool(toolName, args);
@@ -1265,7 +1176,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   errorResult.put("stack_trace", android.util.Log.getStackTraceString(e));
                   toolResult = errorResult;
                 }
-
                 JSONObject wrapper = new JSONObject();
                 wrapper.put("id", toolCallId);
                 wrapper.put("name", toolName);
@@ -1273,11 +1183,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 pendingResults.put(toolCallId, wrapper);
               }
             }
-
             assistantMessage.put("tool_calls", toolCallsArray);
             contextManager.addRawMessage(assistantMessage);
             contextManager.increaseMaxRounds();
-
             runOnUiThread(() ->
             {
               StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
@@ -1289,11 +1197,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                   callText.append("- `").append(toolName).append("`").append("\n");
                 }
               }
-
               messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
               scrollToBottom();
             });
-
             if (pendingResults.size() == toolCallsArray.length())
             {
               FileLogger.d(TAG, "🔧 [TOOL_SYNC_ALL_COMPLETE] 同步工具全部完成，准备调用 postProcessToolResults");
@@ -1307,11 +1213,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         });
         return;
       }
-
       String answerIncrement = (delta != null && delta.getContent() != null) ? delta.getContent() : "";
       boolean isNewMessage = (accumulatedAnswer.length() == 0 && !answerIncrement.isEmpty());
       accumulatedAnswer.append(answerIncrement);
-
       if (isNewMessage)
       {
         runOnUiThread(() ->
@@ -1328,7 +1232,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           scrollToBottom();
         });
       }
-
       if (!response.getChoices().isEmpty() && "stop".equals(response.getChoices().get(0).getFinishReason()))
       {
         runOnUiThread(() ->
@@ -1337,7 +1240,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
           
-          if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
+          if (!hasToolCalls && EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
               EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
               handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
               return;
@@ -1372,7 +1275,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       FileLogger.e(TAG, "解析 JSON 响应失败：" + e.getMessage());
     }
   }
-
   private void postProcessToolResults(java.util.Map<String, JSONObject> pendingResults,
                                     JSONObject assistantMessage,
                                     JSONArray toolCallsArray)
@@ -1397,7 +1299,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           String name = wrapper.getString("name");
           JSONObject result = wrapper.getJSONObject("result");
-
+          
           boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
           
           if (isDuplicate)
@@ -1416,9 +1318,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             )
           );
         }
-
+        
         clearAccumulatedToolCalls();
-
         FileLogger.i(TAG, "🚀 [TRIGGER] 准备触发新请求 | toolCallsCount=" + toolCallsArray.length());
         sendChatRequestTongYi();
       }
@@ -1428,7 +1329,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     });
   }
-
   private void scrollToBottom()
   {
     if (messageAdapter.getItemCount() > 0)
@@ -1438,7 +1338,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       });
     }
   }
-
   @Override
   public void onBackPressed()
   {
@@ -1446,21 +1345,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       mTts.shutdown();
     }
-
     super.onBackPressed();
   }
-
   private void ttsSayReply(final String text)
   {
     ttsByFindroidTts(text);
   }
-
   private void ttsByFindroidTts(String text)
   {
     ThreadPoolManager.getInstance().execute(() ->
     {
       float speed = 1.0F;
-
       String inputText = text;
       if (TextUtils.isEmpty(inputText))
       {
@@ -1469,7 +1364,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       TtsManager.getInstance().speak(inputText, speed, true);
     });
   }
-
   private final RecognizerListener mRecognizerListener=new RecognizerListener()
 	{
 		@Override
@@ -1477,21 +1371,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       volumeIndicatorprogressBar.setProgress(i);
 		}
-
 		@Override
 		public void onBeginOfSpeech()
     {
       voiceRecognizeResultString="";
       volumeIndicatorprogressBar.setVisibility(View.VISIBLE);
 		}
-
 		@Override
 		public void onEndOfSpeech()
     {
       volumeIndicatorprogressBar.setVisibility(View.INVISIBLE);
       voiceEndDetected=true;
 		}
-
 		@Override
 		public void onResult(RecognizerResult recognizerResult, boolean b)
     {
@@ -1499,23 +1390,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       commandRecognizebutton2.setVisibility(View.VISIBLE);
       commandRecognizebutton2.setEnabled(true);
       String text=recognizerResult.getResultString();
-
       Gson gson=new Gson();
       VoiceRecognizeResult voiceRecognizeResult=gson.fromJson(text, VoiceRecognizeResult.class);
       String saidText=voiceRecognizeResult.getSaidText();
-
       recognizeResulttextView.append(saidText);
       voiceRecognizeResultString=voiceRecognizeResultString+saidText;
-
       boolean isLast=voiceRecognizeResult.isLs();
-
       if (isLast) 
       {
         sendMessageToSister(voiceRecognizeResultString);
         recognizeResulttextView.setText("");
       }
     }
-
     @Override
 		public void onError(SpeechError speechError)
 	{
@@ -1523,16 +1409,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       commandRecognizebutton2.setEnabled(true);
       progressBar.setVisibility(View.INVISIBLE);
       String errorText=speechError.getErrorDescription();
-
       recognizeResulttextView.setText(errorText+",error code:"+speechError.getErrorCode());
 		}
-
 		@Override
 		public void onEvent(int i, int i1, int arg2, Bundle bundle)
     {
     }
 	};
-
   private final View.OnTouchListener commandRecognizeButtonTouchListener=new View.OnTouchListener()
   {
     @SuppressLint("ClickableViewAccessibility")
@@ -1544,7 +1427,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         case MotionEvent.ACTION_DOWN:
           commandRecognizebutton2startRecognize();
           break;
-
         case MotionEvent.ACTION_UP:
           stopRecordbutton2();
           break;
@@ -1552,12 +1434,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       return true;
    }
   };
-
   private void connectSignals()
   {
     commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
   }
-
   private void startHttpServer()
   {
     AsyncHttpServer server=new AsyncHttpServer();
@@ -1567,28 +1447,23 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     server.get("/phoneInformation/", phoneInformationCallback);
     server.listen(LanServicePort);
   }
-
   private static String buildEnhancedSystemPrompt(ToolManager toolManager, Context context)
   {
     SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
-
     StringBuilder promptBuilder = new StringBuilder();
-
+    
     promptBuilder.append(promptManager.getCurrentPrompt());
     promptBuilder.append("\n\n");
-
+    
     List<Tool> tools = toolManager.getRegisteredTools();
     if (!tools.isEmpty())
     {
       promptBuilder.append("你可以使用以下工具来获取实时信息，请在需要时调用，不要自行编造：\n");
-
       for (Tool tool : tools)
       {
         if (!tool.shouldInclude()) continue;
-
         String name = tool.getName();
         String description = "（无描述）";
-
         try
         {
           JSONObject definition = tool.getDefinition();
@@ -1605,10 +1480,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
           FileLogger.e("SisterFutureActivity", "提取工具描述失败：" + name, e);
         }
-
         promptBuilder.append("- ").append(name).append(":").append(description).append("\n");
       }
-
       for (Tool tool : tools)
       {
         String enhancement = tool.getSystemPromptEnhancement(context);
@@ -1618,19 +1491,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                       .append(enhancement).append("\n");
         }
       }
-
       promptBuilder.append("\n/no_think\n");
     }
     return promptBuilder.toString();
   }
 
-  @Override
+	@Override
 	protected void onCreate(Bundle savedInstanceState) 
 	{
 		super.onCreate(savedInstanceState);
 		requestWindowFeature(Window.FEATURE_NO_TITLE);
 		setContentView(R.layout.sister_future);
-
     initServices();
     initData();
     initImagePicker();
@@ -1640,18 +1511,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     displayExistingContext();
     
     scheduleStartBuiltinFtpServer();
-
+    
     SisterFutureService.startForegroundService(this);
     
     if (savedInstanceState == null)
     {
-      articleListmyRecyclerView.post(() -> 
-      {
+      articleListmyRecyclerView.post(() -> {
         scrollToBottom();
       });
     }
 	}
-
   private void initServices()
   {
     TtsManager.getInstance().init(this);
@@ -1664,14 +1533,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     permissionManager = new PermissionManager(this, new PermissionManager.PermissionCallback() {
       @Override
       public void onAllPermissionsGranted() {
-        FileLogger.d(TAG, "All permissions granted");
+        FileLogger.d(TAG, "All permissions granted")
       }
-
+      
       @Override
       public void onPermissionDenied(String permission) {
         FileLogger.w(TAG, "Permission denied: " + permission);
       }
-
+      
       @Override
       public void onNotificationPermissionDenied() {
         FileLogger.w(TAG, "Notification permission denied");
@@ -1712,20 +1581,28 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     messageAdapter = new MessageAdapter();
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
     articleListmyRecyclerView.setAdapter(messageAdapter);
-
-    // 🗑️ #821166321034 设置删除消息监听器 - 使用 messageId 删除
+    
+    // 🆕 #821166321034 设置数据源引用（用于刷新）
+    messageAdapter.setContextManager(contextManager);
+    
+    // 🗑️ #821166321034 设置删除消息监听器 - 正确的MVC架构
     messageAdapter.setOnMessageDeleteListener(new MessageAdapter.OnMessageDeleteListener() {
       @Override
       public void onMessageDeleted(MessageItem message, int position, String messageId) {
         FileLogger.i(TAG, "🗑️ 收到删除消息回调 | position=" + position + " | messageId=" + messageId);
         
+        // ✅ 正确的架构：先从数据源删除，再刷新Adapter
         if (messageId != null && !messageId.isEmpty()) {
           contextManager.removeMessageById(messageId);
-          FileLogger.i(TAG, "🗑️ 已根据 messageId 删除 | messageId=" + messageId);
+          FileLogger.i(TAG, "🗑️ 已从数据源删除 | messageId=" + messageId);
         } else {
           FileLogger.w(TAG, "⚠️ messageId 为空，使用下标删除 | position=" + position);
           contextManager.removeMessage(position);
         }
+        
+        // ✅ 从数据源刷新Adapter
+        messageAdapter.refreshFromDataSource();
+        FileLogger.i(TAG, "🗑️ 已刷新Adapter");
       }
     });
 
@@ -1743,7 +1620,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         return false;
       }
     });
-
+    
     tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
     guideManager = new GuideManager(this, modelAccessPointManager, toolManager);
 
@@ -1766,22 +1643,20 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void registerBroadcastReceiver()
   {
     IntentFilter filter = new IntentFilter();
-
     filter.addAction(Constants.Operation.CommitText);
     filter.addAction(Constants.NativeMessage.NOTIFY_CALLBACK_IP);
     filter.addAction(Constants.Operation.HideKeyboard);
-
     LocalBroadcastManager localBroadcastManager=LocalBroadcastManager.getInstance(this);
     localBroadcastManager.registerReceiver(mBroadcastReceiver, filter);
   }
-  
+ 
   private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
   {
     @Override
     public void onReceive(Context context, Intent intent)
     {
       String action = intent.getAction();
-
+      
       if (Constants.Operation.CommitText.equals(action))
       {
         Bundle extras=intent.getExtras();
@@ -1863,7 +1738,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
       });
       
-      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
+      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
     }
     catch (Exception e)
     {
@@ -1904,5 +1779,4 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       handleSelectedImage(data);
     }
   }
-
 }
