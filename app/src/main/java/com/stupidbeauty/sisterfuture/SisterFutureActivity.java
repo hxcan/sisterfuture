@@ -163,9 +163,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final int LanServicePort =10471;
   private String voiceRecognizeResultString;
   private Vibrator vibrator;
-  @BindView(R.id.sendButton
-2) Button sendButton
-2;
+  @BindView(R.id.sendButton2) Button sendButton2;
   @BindView(R.id.commandRecognizebutton2) Button commandRecognizebutton2;
   @BindView(R.id.thinking_overlay) TextView thinking_overlay;
   @BindView(R.id.progressBar) ProgressBar progressBar;
@@ -173,7 +171,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final String TAG="SisterFutureActivity";
 
   private SpeechRecognizer mIat;
-
 
 	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
@@ -193,7 +190,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@Override
 	public void onInit(int arg0)
 	{
-
   }
 
   private void accumulateToolCalls(List<ToolCall> calls)
@@ -316,7 +312,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText(R.string.empty);
   }
 
-
   public boolean setParam()
   {
     boolean result = false;
@@ -337,7 +332,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     return result;
   }
-
 
   private void displayExistingContext()
   {
@@ -629,10 +623,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
-  @OnClick(R.id.sendButton
-2)
-  public void sendButton
-2()
+  @OnClick(R.id.sendButton2)
+  public void sendButton2()
   {
     voiceRecognizeResultString = recognizeResulttextView.getText().toString();
     sendMessageToSister(voiceRecognizeResultString);
@@ -701,8 +693,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
         thinking_overlay.setVisibility(View.VISIBLE);
         recognizeResulttextView.setEnabled(false);
-        sendButton
-2.setEnabled(false);
+        sendButton2.setEnabled(false);
         commandRecognizebutton2.setEnabled(false);
         
         SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在思考中...");
@@ -719,8 +710,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       {
         thinking_overlay.setVisibility(View.GONE);
         recognizeResulttextView.setEnabled(true);
-        sendButton
-2.setEnabled(true);
+        sendButton2.setEnabled(true);
         commandRecognizebutton2.setEnabled(true);
       }
     });
@@ -1343,7 +1333,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
           
-          if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
+          if (!hasToolCalls && EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
               EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
               handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
               return;
@@ -1424,7 +1414,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
 
         clearAccumulatedToolCalls();
-
         FileLogger.i(TAG, "🚀 [TRIGGER] 准备触发新请求 | toolCallsCount=" + toolCallsArray.length());
         sendChatRequestTongYi();
       }
