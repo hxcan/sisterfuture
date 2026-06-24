@@ -1,3 +1,4 @@
+// SisterFutureActivity.java
 package com.stupidbeauty.sisterfuture;
 
 import java.io.File;
@@ -12,20 +13,6 @@ import android.os.Handler;
 import android.os.Looper;
 import java.io.FileDescriptor;
 import android.os.Build;
-import com.stupidbeauty.sisterfuture.bean.MemoryEntity;
-import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import java.io.IOException;
-import butterknife.OnClick;
-import com.iflytek.cloud.SpeechRecognizer;
-import androidx.recyclerview.widget.RecyclerView;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import android.util.Log;
 import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
 import com.stupidbeauty.sisterfuture.bean.Delta;
@@ -34,7 +21,6 @@ import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
 import com.stupidbeauty.sisterfuture.tool.Tool;
 import com.stupidbeauty.sisterfuture.bean.ToolCall;
 import com.stupidbeauty.sisterfuture.bean.Function;
-import butterknife.ButterKnife;
 import com.stupidbeauty.sisterfuture.R;
 import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
@@ -42,9 +28,7 @@ import java.util.List;
 import android.text.TextUtils;
 import android.widget.EditText;
 import android.widget.RadioGroup;
-import net.tatans.tensorflowtts.utils.ThreadPoolManager;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-import net.tatans.tensorflowtts.tts.TtsManager;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import java.util.ArrayList;
@@ -101,27 +85,45 @@ import com.iflytek.cloud.SpeechError;
 import com.iflytek.cloud.SpeechUtility;
 import com.stupidbeauty.sisterfuture.network.TongYiClient;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import butterknife.BindView;
 import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
-import com.koushikdutta.async.http.server.AsyncHttpServer;
-import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
-import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
-import com.koushikdutta.async.http.server.HttpServerRequestCallback;
-import com.stupidbeauty.lanime.network.volley.MapUtils;
-import com.stupidbeauty.sisterfuture.SisterFutureApplication;
-import com.stupidbeauty.lanime.Constants;
-import com.stupidbeauty.lanime.callback.CommitTextCallback;
-import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
 import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
 import com.stupidbeauty.sisterfuture.manager.PermissionManager;
 import com.stupidbeauty.sisterfuture.manager.RepeatDetectionManager;
 import com.stupidbeauty.sisterfuture.manager.EmptyDeltaDetectionManager;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import com.google.gson.Gson;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import java.io.IOException;
+import com.google.gson.JsonSyntaxException;
+import com.stupidbeauty.sisterfuture.SisterFutureApplication;
+import com.stupidbeauty.lanime.Constants;
+import com.stupidbeauty.lanime.callback.CommitTextCallback;
+import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
+import com.koushikdutta.async.http.server.AsyncHttpServer;
+import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
+import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
+import com.koushikdutta.async.http.server.HttpServerRequestCallback;
+import com.stupidbeauty.lanime.network.volley.MapUtils;
+import com.stupidbeauty.sisterfuture.tool.Tool;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import android.util.Log;
+import butterknife.OnClick;
+import com.iflytek.cloud.SpeechRecognizer;
+import butterknife.ButterKnife;
+import butterknife.BindView;
+import com.stupidbeauty.sisterfuture.bean.Delta;
+import com.stupidbeauty.sisterfuture.bean.Choice;
+import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
+import com.stupidbeauty.sisterfuture.bean.ToolCall;
+import com.stupidbeauty.sisterfuture.bean.Function;
+import net.tatans.tensorflowtts.utils.ThreadPoolManager;
+import net.tatans.tensorflowtts.tts.TtsManager;
 
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
@@ -343,6 +345,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       String role = msg.optString("role");
       Object contentObj = msg.opt("content");
       String toolCallId = msg.optString("tool_call_id");
+      String messageId = msg.optString("id"); // 🆕 #821166321034 从数据源读取 messageId
       JSONArray toolCalls = msg.optJSONArray("tool_calls");
 
       if ("tool".equals(role) && !toolCallId.isEmpty())
@@ -350,7 +353,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         String toolName = msg.optString("name", "unknown_tool");
         String content = msg.optString("content");
         String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
-        messageAdapter.addMessage(new MessageItem(displayText, MessageType.TOOL_CALL_RESULT));
+        MessageItem item = new MessageItem(displayText, MessageType.TOOL_CALL_RESULT);
+        if (messageId != null && !messageId.isEmpty()) {
+          item.setMessageId(messageId); // 🆕 设置正确的 messageId
+        }
+        messageAdapter.addMessage(item);
       }
       else if ("user".equals(role))
       {
@@ -396,14 +403,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             }
           }
           
-          messageAdapter.addMessage(new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl));
+          MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
+          if (messageId != null && !messageId.isEmpty()) {
+            item.setMessageId(messageId); // 🆕 设置正确的 messageId
+          }
+          messageAdapter.addMessage(item);
         }
         else
         {
           String content = msg.optString("content");
           if (!content.isEmpty())
           {
-            messageAdapter.addMessage(new MessageItem(content, MessageType.USER));
+            MessageItem item = new MessageItem(content, MessageType.USER);
+            if (messageId != null && !messageId.isEmpty()) {
+              item.setMessageId(messageId); // 🆕 设置正确的 messageId
+            }
+            messageAdapter.addMessage(item);
           }
         }
       }
@@ -429,11 +444,19 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               Log.e(TAG, "解析工具调用失败", e);
             }
           }
-          messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
+          MessageItem item = new MessageItem(callText.toString(), MessageType.AI);
+          if (messageId != null && !messageId.isEmpty()) {
+            item.setMessageId(messageId); // 🆕 设置正确的 messageId
+          }
+          messageAdapter.addMessage(item);
         }
         else if (!msg.optString("content").isEmpty())
         {
-          messageAdapter.addMessage(new MessageItem(msg.optString("content"), MessageType.AI));
+          MessageItem item = new MessageItem(msg.optString("content"), MessageType.AI);
+          if (messageId != null && !messageId.isEmpty()) {
+            item.setMessageId(messageId); // 🆕 设置正确的 messageId
+          }
+          messageAdapter.addMessage(item);
         }
       }
     }
@@ -1517,7 +1540,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     @Override
 		public void onError(SpeechError speechError)
-	{
+		{
       commandRecognizebutton2.setVisibility(View.VISIBLE);
       commandRecognizebutton2.setEnabled(true);
       progressBar.setVisibility(View.INVISIBLE);
