@@ -503,7 +503,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         imageContent.put("type", "image_url");
         
         JSONObject imageUrl = new JSONObject();
-        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+        imageUrl.put("url", "data:image/jpeg:base64," + currentImageBase64);
         imageContent.put("image_url", imageUrl);
         contentArray.put(imageContent);
         
@@ -1335,6 +1335,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
           
+          // 🆕 审核意见修复：恢复原有逻辑 - 只有在没有工具调用时才检测空响应
           if (!hasToolCalls && EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
               EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
               handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
