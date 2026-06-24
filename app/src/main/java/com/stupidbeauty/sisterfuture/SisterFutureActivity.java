@@ -503,7 +503,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         imageContent.put("type", "image_url");
         
         JSONObject imageUrl = new JSONObject();
-        imageUrl.put("url", "data:image/jpeg:base64," + currentImageBase64);
+        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
         imageContent.put("image_url", imageUrl);
         contentArray.put(imageContent);
         
