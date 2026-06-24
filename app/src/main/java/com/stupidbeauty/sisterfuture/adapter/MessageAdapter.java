@@ -63,24 +63,31 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     public void setContextManager(ContextManager contextManager) {
         this.contextManager = contextManager;
     }
-    
+
     // 🆕 从数据源刷新 Adapter
     public void refreshFromDataSource() {
         if (contextManager != null) {
             List<JSONObject> history = contextManager.getHistory();
             messages.clear();
             
-            for (JSONObject msg : history) {
+            for (int i = 0; i < history.size(); i++) {
+                JSONObject msg = history.get(i);
                 String role = msg.optString("role");
                 Object contentObj = msg.opt("content");
                 String toolCallId = msg.optString("tool_call_id");
+                String messageId = msg.optString("id"); // 🆕 从数据源读取 messageId
                 JSONArray toolCalls = msg.optJSONArray("tool_calls");
 
                 if ("tool".equals(role) && !toolCallId.isEmpty()) {
                     String toolName = msg.optString("name", "unknown_tool");
                     String content = msg.optString("content");
                     String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
-                    messages.add(new MessageItem(displayText, MessageType.TOOL_CALL_RESULT));
+                    MessageItem item = new MessageItem(displayText, MessageType.TOOL_CALL_RESULT);
+                    // 🆕 设置 messageId
+                    if (messageId != null && !messageId.isEmpty()) {
+                        item.setMessageId(messageId);
+                    }
+                    messages.add(item);
                 }
                 else if ("user".equals(role)) {
                     if (contentObj instanceof JSONArray) {
@@ -88,9 +95,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                         StringBuilder textBuilder = new StringBuilder();
                         String imageUrl = null;
                         
-                        for (int i = 0; i < contentArray.length(); i++) {
+                        for (int j = 0; j < contentArray.length(); j++) {
                             try {
-                                JSONObject item = contentArray.optJSONObject(i);
+                                JSONObject item = contentArray.optJSONObject(j);
                                 if (item == null) continue;
                                 
                                 String type = item.optString("type");
@@ -117,21 +124,31 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                             }
                         }
                         
-                        messages.add(new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl));
+                        MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
+                        // 🆕 设置 messageId
+                        if (messageId != null && !messageId.isEmpty()) {
+                            item.setMessageId(messageId);
+                        }
+                        messages.add(item);
                     }
                     else {
                         String content = msg.optString("content");
                         if (!content.isEmpty()) {
-                            messages.add(new MessageItem(content, MessageType.USER));
+                            MessageItem item = new MessageItem(content, MessageType.USER);
+                            // 🆕 设置 messageId
+                            if (messageId != null && !messageId.isEmpty()) {
+                                item.setMessageId(messageId);
+                            }
+                            messages.add(item);
                         }
                     }
                 }
                 else if ("assistant".equals(role)) {
                     if (toolCalls != null && toolCalls.length() > 0) {
                         StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
-                        for (int i = 0; i < toolCalls.length(); i++) {
+                        for (int j = 0; j < toolCalls.length(); j++) {
                             try {
-                                JSONObject toolCall = toolCalls.getJSONObject(i);
+                                JSONObject toolCall = toolCalls.getJSONObject(j);
                                 JSONObject func = toolCall.optJSONObject("function");
                                 if (func != null) {
                                     String toolName = func.optString("name", "unknown");
@@ -142,10 +159,20 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                                 FileLogger.e(TAG, "解析工具调用失败", e);
                             }
                         }
-                        messages.add(new MessageItem(callText.toString(), MessageType.AI));
+                        MessageItem item = new MessageItem(callText.toString(), MessageType.AI);
+                        // 🆕 设置 messageId
+                        if (messageId != null && !messageId.isEmpty()) {
+                            item.setMessageId(messageId);
+                        }
+                        messages.add(item);
                     }
                     else if (!msg.optString("content").isEmpty()) {
-                        messages.add(new MessageItem(msg.optString("content"), MessageType.AI));
+                        MessageItem item = new MessageItem(msg.optString("content"), MessageType.AI);
+                        // 🆕 设置 messageId
+                        if (messageId != null && !messageId.isEmpty()) {
+                            item.setMessageId(messageId);
+                        }
+                        messages.add(item);
                     }
                 }
             }
