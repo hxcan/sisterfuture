@@ -75,6 +75,9 @@ public class ContextManager
     // ✅ 从 JSON 文件加载历史到内存（同步读取）
     loadHistoryFromFile();
     
+    // 🆕 #821166321034 为历史消息补上 id（兼容老数据）
+    backfillMessageIds();
+    
 // 🆕 #819154835086 启动时清理重复的"上下文超长"提示
     cleanupDuplicateContextAlertsOnStartup();
     // ✅ 启动时清理无效的工具调用
@@ -100,6 +103,53 @@ public class ContextManager
     {
       FileLogger.w(TAG, "🧹 [TOOL_AVOIDANCE] 启动恢复 | 删除" + removeCount + "条污染消息 | 剩余" + memoryHistory.size() + "条");
       saveHistory(memoryHistory);
+    }
+  }
+
+  /**
+   * 🆕 #821166321034 为历史消息补上 id
+   * 兼容老数据：之前的历史消息没有 id 字段，导致删除功能失效
+   * 启动时遍历所有消息，为没有 id 的消息生成新的 id
+   * 只对老数据生效一次，之后所有新消息都会自动带 id
+   */
+  private void backfillMessageIds()
+  {
+    if (memoryHistory == null || memoryHistory.isEmpty()) return;
+    
+    int backfilled = 0;
+    int alreadyHasId = 0;
+    
+    for (int i = 0; i < memoryHistory.size(); i++)
+    {
+      JSONObject msg = memoryHistory.get(i);
+      String existingId = msg.optString("id", "");
+      
+      if (existingId.isEmpty())
+      {
+        try
+        {
+          msg.put("id", generateMessageId());
+          backfilled++;
+        }
+        catch (JSONException e)
+        {
+          FileLogger.e(TAG, "❌ [BACKFILL] 为第 " + i + " 条消息补 id 失败", e);
+        }
+      }
+      else
+      {
+        alreadyHasId++;
+      }
+    }
+    
+    if (backfilled > 0)
+    {
+      saveHistory(memoryHistory);
+      FileLogger.w(TAG, "🔧 [BACKFILL] 为 " + backfilled + " 条历史消息补上 id（已有 id 的消息：" + alreadyHasId + " 条）");
+    }
+    else
+    {
+      FileLogger.d(TAG, "🔧 [BACKFILL] 所有消息都已有 id，无需补齐（共 " + alreadyHasId + " 条）");
     }
   }
 
