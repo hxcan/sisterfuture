@@ -177,7 +177,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
 
   private boolean isDeadlockRescueMode = false;
-  
+ 
   private int rateLimitRetryCount = 0;
   private static final int MAX_RATE_LIMIT_RETRIES = 3;
 
@@ -229,7 +229,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       partialToolArgs.put(originalId, existing);
     }
   }
-  
+ 
   private List<ToolCall> getFinalToolCalls()
   {
     List<ToolCall> result = new ArrayList<>();
@@ -282,7 +282,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     commandRecognizebutton2.setEnabled(false);
     commandRecognizebutton2.setVisibility(View.INVISIBLE);
   }
-  
+ 
   public void commandRecognizebutton2startRecognize()
   {
     voiceEndDetected=false;
@@ -314,7 +314,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     recognizeResulttextView.setText(R.string.empty);
   }
 
-
   public boolean setParam()
   {
     boolean result = false;
@@ -335,7 +334,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     return result;
   }
-
 
   private void displayExistingContext()
   {
@@ -442,7 +440,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     
     checkAndResumeLastMessage();
   }
-  
+ 
   private void checkAndResumeLastMessage()
   {
     List<JSONObject> history = contextManager.getHistory();
@@ -1016,9 +1014,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       },
       () ->
-        {
-        },
-        currentReservedMessageId);
+      {
+      },
+      currentReservedMessageId);
     }
   }
 
@@ -1337,6 +1335,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
           
+          // 🆕 审核意见修复：恢复原有逻辑 - 删除 !hasToolCalls 条件
           if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
               EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
               handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
@@ -1645,8 +1644,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     
     if (savedInstanceState == null)
     {
-      articleListmyRecyclerView.post(() -> 
-      {
+      articleListmyRecyclerView.post(() -> {
         scrollToBottom();
       });
     }
@@ -1666,12 +1664,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       public void onAllPermissionsGranted() {
         FileLogger.d(TAG, "All permissions granted");
       }
-
+      
       @Override
       public void onPermissionDenied(String permission) {
         FileLogger.w(TAG, "Permission denied: " + permission);
       }
-
+      
       @Override
       public void onNotificationPermissionDenied() {
         FileLogger.w(TAG, "Notification permission denied");
@@ -1713,19 +1711,27 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
     articleListmyRecyclerView.setAdapter(messageAdapter);
 
-    // 🗑️ #821166321034 设置删除消息监听器 - 使用 messageId 删除
+    // 🆕 #821166321034 设置数据源引用（用于刷新）
+    messageAdapter.setContextManager(contextManager);
+    
+    // 🗑️ #821166321034 设置删除消息监听器 - 正确的MVC架构
     messageAdapter.setOnMessageDeleteListener(new MessageAdapter.OnMessageDeleteListener() {
       @Override
       public void onMessageDeleted(MessageItem message, int position, String messageId) {
         FileLogger.i(TAG, "🗑️ 收到删除消息回调 | position=" + position + " | messageId=" + messageId);
         
+        // ✅ 正确的架构：先从数据源删除，再刷新Adapter
         if (messageId != null && !messageId.isEmpty()) {
           contextManager.removeMessageById(messageId);
-          FileLogger.i(TAG, "🗑️ 已根据 messageId 删除 | messageId=" + messageId);
+          FileLogger.i(TAG, "🗑️ 已从数据源删除 | messageId=" + messageId);
         } else {
           FileLogger.w(TAG, "⚠️ messageId 为空，使用下标删除 | position=" + position);
           contextManager.removeMessage(position);
         }
+        
+        // ✅ 从数据源刷新Adapter
+        messageAdapter.refreshFromDataSource();
+        FileLogger.i(TAG, "🗑️ 已刷新Adapter");
       }
     });
 
@@ -1774,7 +1780,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     LocalBroadcastManager localBroadcastManager=LocalBroadcastManager.getInstance(this);
     localBroadcastManager.registerReceiver(mBroadcastReceiver, filter);
   }
-  
+ 
   private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
   {
     @Override
@@ -1863,7 +1869,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
       });
       
-      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64 长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
+      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
     }
     catch (Exception e)
     {
@@ -1904,5 +1910,4 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       handleSelectedImage(data);
     }
   }
-
 }

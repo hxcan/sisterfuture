@@ -31,6 +31,9 @@ import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import android.util.Base64;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import com.stupidbeauty.sisterfuture.ContextManager;
 
 public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final int TYPE_USER = 0;
@@ -52,6 +55,104 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     
     public void setOnMessageDeleteListener(OnMessageDeleteListener listener) {
         this.deleteListener = listener;
+    }
+
+    // 🆕 添加 ContextManager 引用，用于数据源驱动架构
+    private ContextManager contextManager;
+    
+    public void setContextManager(ContextManager contextManager) {
+        this.contextManager = contextManager;
+    }
+    
+    // 🆕 从数据源刷新 Adapter
+    public void refreshFromDataSource() {
+        if (contextManager != null) {
+            List<JSONObject> history = contextManager.getHistory();
+            messages.clear();
+            
+            for (JSONObject msg : history) {
+                String role = msg.optString("role");
+                Object contentObj = msg.opt("content");
+                String toolCallId = msg.optString("tool_call_id");
+                JSONArray toolCalls = msg.optJSONArray("tool_calls");
+
+                if ("tool".equals(role) && !toolCallId.isEmpty()) {
+                    String toolName = msg.optString("name", "unknown_tool");
+                    String content = msg.optString("content");
+                    String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
+                    messages.add(new MessageItem(displayText, MessageType.TOOL_CALL_RESULT));
+                }
+                else if ("user".equals(role)) {
+                    if (contentObj instanceof JSONArray) {
+                        JSONArray contentArray = (JSONArray) contentObj;
+                        StringBuilder textBuilder = new StringBuilder();
+                        String imageUrl = null;
+                        
+                        for (int i = 0; i < contentArray.length(); i++) {
+                            try {
+                                JSONObject item = contentArray.optJSONObject(i);
+                                if (item == null) continue;
+                                
+                                String type = item.optString("type");
+                                if ("text".equals(type)) {
+                                    textBuilder.append(item.optString("text"));
+                                }
+                                else if ("image_url".equals(type)) {
+                                    JSONObject imageUrlObj = item.optJSONObject("image_url");
+                                    if (imageUrlObj != null) {
+                                        String url = imageUrlObj.optString("url");
+                                        if (url != null && url.startsWith("data:image/jpeg;base64,")) {
+                                            int commaIndex = url.lastIndexOf(',');
+                                            if (commaIndex > 0) {
+                                                imageUrl = url.substring(commaIndex + 1);
+                                            } else {
+                                                imageUrl = url;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            catch (Exception e) {
+                                FileLogger.e(TAG, "解析多模态消息失败", e);
+                            }
+                        }
+                        
+                        messages.add(new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl));
+                    }
+                    else {
+                        String content = msg.optString("content");
+                        if (!content.isEmpty()) {
+                            messages.add(new MessageItem(content, MessageType.USER));
+                        }
+                    }
+                }
+                else if ("assistant".equals(role)) {
+                    if (toolCalls != null && toolCalls.length() > 0) {
+                        StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
+                        for (int i = 0; i < toolCalls.length(); i++) {
+                            try {
+                                JSONObject toolCall = toolCalls.getJSONObject(i);
+                                JSONObject func = toolCall.optJSONObject("function");
+                                if (func != null) {
+                                    String toolName = func.optString("name", "unknown");
+                                    callText.append("- `").append(toolName).append("`").append("\n");
+                                }
+                            }
+                            catch (Exception e) {
+                                FileLogger.e(TAG, "解析工具调用失败", e);
+                            }
+                        }
+                        messages.add(new MessageItem(callText.toString(), MessageType.AI));
+                    }
+                    else if (!msg.optString("content").isEmpty()) {
+                        messages.add(new MessageItem(msg.optString("content"), MessageType.AI));
+                    }
+                }
+            }
+            
+            notifyDataSetChanged();
+            FileLogger.i(TAG, "✅ [REFRESH] 已从数据源刷新消息列表，共 " + messages.size() + " 条");
+        }
     }
 
     public MessageItem getItem(int position) {
