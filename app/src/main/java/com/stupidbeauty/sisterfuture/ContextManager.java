@@ -441,6 +441,8 @@ public class ContextManager
       toolMessage.put("tool_call_id", toolCallId);
       toolMessage.put("name", toolName);
       toolMessage.put("content", content);
+      // 🆕 添加消息 ID
+      toolMessage.put("id", generateMessageId());
     }
     catch (Exception e)
     {
@@ -541,7 +543,6 @@ public class ContextManager
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
   }
   
-
   /**
    * 检查 JSON 语法完整性
    * 检测括号匹配，引号闭合等基本语法结构
@@ -597,7 +598,7 @@ public class ContextManager
       }
     }
     
-    // 检��是��所有括号都闭合
+    // 检查是否所有括号都闭合
     if (braceCount != 0 || bracketCount != 0)
     {
       FileLogger.d(TAG, "[isJsonSyntaxComplete] Unclosed brackets: brace=" + braceCount + ", bracket=" + bracketCount);
@@ -1013,7 +1014,7 @@ public class ContextManager
         writer.flush();
         writer.close();
         
-        FileLogger.d(TAG, "💾 [ASYNC_SAVE] 已异步��存��史到 JSON 文件：" + historyCopy.size() + " 条");
+        FileLogger.d(TAG, "💾 [ASYNC_SAVE] 已异步保存历史到 JSON 文件：" + historyCopy.size() + " 条");
       }
       catch (Exception e)
       {
@@ -1029,6 +1030,8 @@ public class ContextManager
     {
       msg.put("role", role);
       msg.put("content", content);
+      // 🆕 添加消息 ID，确保 UI 与数据源一致
+      msg.put("id", generateMessageId());
     }
     catch (Exception e)
     {
