@@ -1332,6 +1332,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 {
                   toolResult = toolManager.executeTool(toolName, args);
                   FileLogger.d(TAG, "🔧 [TOOL_SYNC_SUCCESS] 同步工具成功 | id=" + toolCallId + " | name=" + toolName);
+                  FileLogger.d(TAG, "🔧 [TOOL_RESULT] toolResult: " + (toolResult != null ? toolResult.toString() : "null"));
                 }
                 catch (IllegalArgumentException e)
                 {

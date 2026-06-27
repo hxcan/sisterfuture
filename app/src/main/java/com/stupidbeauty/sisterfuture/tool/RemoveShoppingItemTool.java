@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import androidx.annotation.NonNull;
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -62,8 +63,11 @@ public class RemoveShoppingItemTool implements Tool {
 
     @Override
     public JSONObject execute(JSONObject arguments) throws Exception {
+        // 🔍 调试日志:追踪工具结果success字段
+        FileLogger.d(TAG, "execute() called with arguments: " + (arguments != null ? arguments.toString() : "null"));
         // 解析参数
         String itemId = arguments.getString("item_id");
+        FileLogger.d(TAG, "parsed itemId: [" + itemId + "] (class=" + (itemId == null ? "null" : itemId.getClass().getSimpleName()) + ")");
         if (itemId == null || itemId.trim().isEmpty()) {
             throw new IllegalArgumentException("物品的唯一标识符（ID）不能为空。");
         }
@@ -71,13 +75,14 @@ public class RemoveShoppingItemTool implements Tool {
         // 每次执行时都创建新的 ShoppingListManager 实例，强制重新加载数据
         ShoppingListManager shoppingListManager = new ShoppingListManager(context);
         boolean success = shoppingListManager.deleteItem(itemId);
+        FileLogger.d(TAG, "underlying deleteItem() returned: " + success + " (itemId=" + itemId + ")");
 
         // 构建返回结果
         JSONObject result = new JSONObject();
         result.put("success", success);
         result.put("message", success ? "已成功删除物品 '" + itemId + "' 从购物清单。" : "删除失败，可能该物品不存在或系统错误。");
         result.put("processed_at", System.currentTimeMillis());
-        
+        FileLogger.d(TAG, "returning result: " + result.toString());
         return result;
     }
 
