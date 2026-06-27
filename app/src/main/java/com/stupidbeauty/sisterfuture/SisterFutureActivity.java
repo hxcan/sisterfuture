@@ -1698,6 +1698,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       public void onNotificationPermissionDenied() {
         FileLogger.w(TAG, "Notification permission denied");
       }
+
+      @Override
+      public void onNotificationPermissionPermanentlyDenied() {
+        FileLogger.w(TAG, "Notification permission permanently denied, need to go to settings");
+        permissionManager.showPermissionPermanentlyDeniedDialog();
+      }
     });
     
     if (permissionManager != null) {
