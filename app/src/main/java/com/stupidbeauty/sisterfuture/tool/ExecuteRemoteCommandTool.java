@@ -104,7 +104,7 @@ public class ExecuteRemoteCommandTool implements Tool {
 
     /**
      * 安全地打印 Session 配置
-     */
+     **/
     private void logSessionSetup(Session session, String hostname, int port, String username, 
                                 String hostKeyCheckPolicy, long connectTimeoutMs) {
         Log.d(TAG, "[SESSION_SETUP] Target: " + username + "@" + hostname + ":" + port);
@@ -320,6 +320,6 @@ public class ExecuteRemoteCommandTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求执行远程命令时才调用此工具。需要提供 hostname、username 和 command 参数。若需认证，可选提供 password 参数（推荐使用密码认证，私钥认证暂不通过大模型传递）。";
+        return "必须在用户明确要求执行远程命令时才调用此工具。需要提供 hostname、username 和 command 参数。若需认证，可选提供 password 参数（推荐使用密码认证，私钥认证暂不通过大模型传递）。\n\n当远程命令执行失败、连接超时或拒绝连接时，应该主动调用 get_network_info 和 get_location 工具，检查当前网络连接状况和地理位置，以便判断与目标电脑之间是否还具有网络连接，并将诊断结果告知主人。";
     }
 }
