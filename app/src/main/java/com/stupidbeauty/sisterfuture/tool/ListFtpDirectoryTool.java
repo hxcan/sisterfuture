@@ -36,14 +36,14 @@ public class ListFtpDirectoryTool implements Tool {
 
     @Override
     public String getName() {
-        return "list_ftp_directory";
+        return "listFtpDirectory";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "list_ftp_directory");
+            functionDef.put("name", "listFtpDirectory");
             functionDef.put("description", "列出 FTP 服务器上的目录内容，支持浏览文件系统结构");
 
             JSONObject parameters = new JSONObject();
@@ -142,6 +142,11 @@ public class ListFtpDirectoryTool implements Tool {
                 
                 FileLogger.d(TAG, "🔑 [FTP] 解析 - Host: " + host + ", Port: " + port + ", Path: " + path);
 
+                // ⏱️ 设置超时参数，防止卡死
+                ftpClient.setConnectTimeout(5000);    // 连接超时 5秒
+                ftpClient.setDataTimeout(10000);       // 数据传输超时 10秒
+                ftpClient.setSoTimeout(15000);         // Socket 读取超时 15秒
+                FileLogger.d(TAG, "⏱️ [FTP] 超时设置: connect=5s, data=10s, so=15s");
                 // 🔌 连接服务器
                 FileLogger.d(TAG, "🔌 [FTP] 正在连接 " + host + ":" + port);
                 ftpClient.connect(host, port);
