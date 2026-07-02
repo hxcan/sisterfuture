@@ -36,14 +36,14 @@ public class ListFtpDirectoryTool implements Tool {
 
     @Override
     public String getName() {
-        return "list_ftp_directory";
+        return "listFtpDirectory";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "list_ftp_directory");
+            functionDef.put("name", "listFtpDirectory");
             functionDef.put("description", "列出 FTP 服务器上的目录内容，支持浏览文件系统结构");
 
             JSONObject parameters = new JSONObject();
