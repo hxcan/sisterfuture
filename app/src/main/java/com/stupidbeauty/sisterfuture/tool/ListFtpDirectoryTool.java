@@ -142,6 +142,11 @@ public class ListFtpDirectoryTool implements Tool {
                 
                 FileLogger.d(TAG, "🔑 [FTP] 解析 - Host: " + host + ", Port: " + port + ", Path: " + path);
 
+                // ⏱️ 设置超时参数，防止卡死
+                ftpClient.setConnectTimeout(5000);    // 连接超时 5秒
+                ftpClient.setDataTimeout(10000);       // 数据传输超时 10秒
+                ftpClient.setSoTimeout(15000);         // Socket 读取超时 15秒
+                FileLogger.d(TAG, "⏱️ [FTP] 超时设置: connect=5s, data=10s, so=15s");
                 // 🔌 连接服务器
                 FileLogger.d(TAG, "🔌 [FTP] 正在连接 " + host + ":" + port);
                 ftpClient.connect(host, port);
