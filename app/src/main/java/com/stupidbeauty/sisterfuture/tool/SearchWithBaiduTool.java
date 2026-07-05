@@ -38,7 +38,7 @@ public class SearchWithBaiduTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "search_with_baidu");
-            functionDef.put("description", "通过百度千帆"百度搜索"工具进行网页搜索，中文搜索质量优于通用搜索 API。API Key 支持运行时传入或从备注读取。");
+            functionDef.put("description", "通过百度千帆\"百度搜索\"工具进行网页搜索，中文搜索质量优于通用搜索 API。API Key 支持运行时传入或从备注读取。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
