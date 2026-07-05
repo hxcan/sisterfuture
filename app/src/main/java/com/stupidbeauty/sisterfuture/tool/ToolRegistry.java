@@ -118,6 +118,8 @@ public class ToolRegistry {
         
         // === 网页搜索工具 ===
         toolManager.registerTool(new SearchWithBraveTool(context));
+        // 🔥 新增：百度搜索工具（中文搜索）
+        toolManager.registerTool(new SearchWithBaiduTool(context));
         
         // === 购物清单维护工具 ===
         toolManager.registerTool(new RemoveShoppingItemTool(context));
