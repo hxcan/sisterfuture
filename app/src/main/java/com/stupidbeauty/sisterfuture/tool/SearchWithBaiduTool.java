@@ -11,13 +11,13 @@ import java.util.concurrent.Executors;
 
 /**
  * 使用百度千帆开放平台"百度搜索"工具进行网页搜索
- * 支持 text/raw/summary 三种返回模式，当主搜索失败时自动降级调用
+ * 支持 text/raw/summary 三种返回模式
  * API Key 支持运行时参数传入，并降级从工具备注中读取
- * 构造函数不再需要密钥参数
+ * API endpoint: https://qianfan.baidubce.com/v2/ai_search/web_search
  */
 public class SearchWithBaiduTool implements Tool {
     private static final String TAG = "SearchWithBaiduTool";
-    private static final String BASE_URL = "https://qianfan.baidubce.com/v2/tools/search/baidu_search";
+    private static final String BASE_URL = "https://qianfan.baidubce.com/v2/ai_search/web_search";
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final OkHttpClient client = new OkHttpClient();
@@ -52,7 +52,7 @@ public class SearchWithBaiduTool implements Tool {
                         .put("description", "返回模式：text(文本摘要), raw(原始数据), summary(智能摘要)"))
                     .put("count", new JSONObject()
                         .put("type", "integer")
-                        .put("description", "返回结果数量，默认 5"))
+                        .put("description", "返回结果数量，默认 10"))
                     .put("api_key", new JSONObject()
                         .put("type", "string")
                         .put("description", "可选：百度千帆 API Key。如未提供，将自动从工具备注中读取 baidu_api_key")));
@@ -82,7 +82,7 @@ public class SearchWithBaiduTool implements Tool {
             try {
                 String query = arguments.getString("query").trim();
                 String mode = arguments.optString("mode", "text");
-                int count = arguments.optInt("count", 5);
+                int count = arguments.optInt("count", 10);
 
                 if (query.isEmpty()) {
                     throw new IllegalArgumentException("搜索关键词不能为空");
@@ -106,11 +106,22 @@ public class SearchWithBaiduTool implements Tool {
                     throw new IllegalStateException("百度千帆 API Key 未配置，请先在工具参数中传入 api_key，或先在工具备注中设置 baidu_api_key");
                 }
 
-                // 构建请求体
+                // 构建请求体 - 使用正确的百度千帆搜索 API 格式
                 JSONObject requestBody = new JSONObject();
-                requestBody.put("query", query);
-                requestBody.put("mode", mode);
-                requestBody.put("count", count);
+                JSONArray messages = new JSONArray();
+                JSONObject message = new JSONObject();
+                message.put("role", "user");
+                message.put("content", query);
+                messages.put(message);
+                requestBody.put("messages", messages);
+                requestBody.put("search_source", "baidu_search_v2");
+                
+                JSONArray resourceTypeFilter = new JSONArray();
+                JSONObject webFilter = new JSONObject();
+                webFilter.put("type", "web");
+                webFilter.put("top_k", count);
+                resourceTypeFilter.put(webFilter);
+                requestBody.put("resource_type_filter", resourceTypeFilter);
 
                 Request request = new Request.Builder()
                         .url(BASE_URL)
@@ -131,16 +142,19 @@ public class SearchWithBaiduTool implements Tool {
                 }
 
                 JSONObject data = new JSONObject(responseBody.string());
-                JSONArray results = data.optJSONArray("results");
-                if (results == null) results = new JSONArray();
+                JSONArray references = data.optJSONArray("references");
+                if (references == null) references = new JSONArray();
 
                 JSONArray formattedResults = new JSONArray();
-                for (int i = 0; i < results.length(); i++) {
-                    JSONObject item = results.getJSONObject(i);
+                for (int i = 0; i < references.length(); i++) {
+                    JSONObject item = references.getJSONObject(i);
                     JSONObject result = new JSONObject();
                     result.put("title", item.optString("title", ""));
                     result.put("url", item.optString("url", ""));
-                    result.put("snippet", item.optString("content", ""));
+                    result.put("snippet", item.optString("snippet", ""));
+                    result.put("content", item.optString("content", ""));
+                    result.put("date", item.optString("date", ""));
+                    result.put("website", item.optString("website", ""));
                     if (mode.equals("raw")) {
                         result.put("raw_data", item);
                     }
@@ -153,6 +167,8 @@ public class SearchWithBaiduTool implements Tool {
                 resultObj.put("mode", mode);
                 resultObj.put("query", query);
                 resultObj.put("engine", "baidu_search");
+                resultObj.put("total_count", formattedResults.length());
+                resultObj.put("request_id", data.optString("request_id", ""));
                 resultObj.put("processed_at", System.currentTimeMillis());
                 callback.onResult(resultObj);
             } catch (Exception e) {
