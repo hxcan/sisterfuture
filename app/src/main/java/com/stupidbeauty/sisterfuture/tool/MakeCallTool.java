@@ -14,6 +14,7 @@ import org.json.JSONObject;
 
 /**
  * 拨打电话工具 - 直接进入拨打状态
+ * 工具名：makeCall（驼峰风格，首字母小写）
  * 关键：使用 ACTION_CALL 而不是 ACTION_DIAL
  * ACTION_CALL: 直接拨出（需要 CALL_PHONE 权限）
  * ACTION_DIAL: 打开拨号界面（需要用户再点拨打）
@@ -29,14 +30,14 @@ public class MakeCallTool implements Tool {
 
     @Override
     public String getName() {
-        return "make_call";
+        return "makeCall";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "make_call");
+            functionDef.put("name", "makeCall");
             functionDef.put("description", "直接拨打电话（不是打开拨号界面），一键进入通话中状态。需要 CALL_PHONE 权限。");
 
             JSONObject parameters = new JSONObject();
@@ -148,6 +149,6 @@ public class MakeCallTool implements Tool {
                "- '打给警长李宇坤'\n" +
                "- '打给配偶'\n" +
                "- '打 120 急救'\n\n" +
-               "使用 get_contact_list 工具可以查询联系人信息，然后 make_call 拨打电话。";
+               "使用 get_contact_list 工具可以查询联系人信息，然后 makeCall 拨打电话。";
     }
 }
