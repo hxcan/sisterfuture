@@ -1,10 +1,13 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import androidx.core.content.ContextCompat;
 import org.json.JSONObject;
@@ -17,6 +20,7 @@ import org.json.JSONObject;
  */
 public class MakeCallTool implements Tool {
     private static final String TAG = "MakeCallTool";
+    private static final int REQUEST_CODE_CALL_PHONE = 9001;
     private final Context context;
 
     public MakeCallTool(Context context) {
@@ -33,7 +37,7 @@ public class MakeCallTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "make_call");
-            functionDef.put("description", "直接拨打电话（不是打开拨号界面），一键进入通话中状态。");
+            functionDef.put("description", "直接拨打电话（不是打开拨号界面），一键进入通话中状态。需要 CALL_PHONE 权限。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -78,15 +82,40 @@ public class MakeCallTool implements Tool {
         // 检查权限
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE)
                 != PackageManager.PERMISSION_GRANTED) {
-            JSONObject result = new JSONObject();
-            result.put("status", "permission_required");
-            result.put("message", "需要 CALL_PHONE 权限才能直接拨打电话。请先授权后重试。");
-            result.put("permission", Manifest.permission.CALL_PHONE);
-            result.put("phone_number", phoneNumber);
-            return result;
+            // 权限未授予，尝试申请
+            if (context instanceof Activity) {
+                Activity activity = (Activity) context;
+                // 必须在 UI 线程调用 requestPermissions
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    Log.d(TAG, "准备申请 CALL_PHONE 权限");
+                    try {
+                        activity.requestPermissions(
+                            new String[]{Manifest.permission.CALL_PHONE},
+                            REQUEST_CODE_CALL_PHONE
+                        );
+                        Log.d(TAG, "已发起 CALL_PHONE 权限申请");
+                    } catch (Exception e) {
+                        Log.e(TAG, "申请权限失败", e);
+                    }
+                });
+                JSONObject result = new JSONObject();
+                result.put("status", "permission_requested");
+                result.put("message", "已发起 CALL_PHONE 权限申请，请授权后重试。");
+                result.put("permission", Manifest.permission.CALL_PHONE);
+                result.put("phone_number", phoneNumber);
+                return result;
+            } else {
+                // Context 不是 Activity，无法申请权限
+                JSONObject result = new JSONObject();
+                result.put("status", "permission_required");
+                result.put("message", "需要 CALL_PHONE 权限才能直接拨打电话，但当前 Context 不是 Activity，无法自动申请。请手动在系统设置中授权后重试。");
+                result.put("permission", Manifest.permission.CALL_PHONE);
+                result.put("phone_number", phoneNumber);
+                return result;
+            }
         }
 
-        // 构造 ACTION_CALL Intent
+        // 有权限，直接拨号
         Intent callIntent = new Intent(Intent.ACTION_CALL);
         callIntent.setData(Uri.parse("tel:" + phoneNumber));
         callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -112,6 +141,13 @@ public class MakeCallTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "当用户需要打电话时调用此工具。直接拨打电话（不是打开拨号界面），用户一点击就能直接通话。注意：需要 CALL_PHONE 权限。如果没有权限，会提示用户授权。\n\n典型使用场景：\n- '打 12333 咨询社保'\n- '打给警长李宇坤'\n- '打给配偶'\n- '打 120 急救'\n\n使用 get_contact_list 工具可以查询联系人信息。";
+        return "当用户需要打电话时调用此工具。直接拨打电话（不是打开拨号界面），用户一点击就能直接通话。\n\n" +
+               "权限处理：需要 CALL_PHONE 权限（运行时危险权限）。如果没有权限，工具会自动调用 Android 系统权限申请对话框，提示用户授权。授权后用户再次说\"打电话\"即可正常拨打。\n\n" +
+               "典型使用场景：\n" +
+               "- '打 12333 咨询社保'\n" +
+               "- '打给警长李宇坤'\n" +
+               "- '打给配偶'\n" +
+               "- '打 120 急救'\n\n" +
+               "使用 get_contact_list 工具可以查询联系人信息，然后 make_call 拨打电话。";
     }
 }
