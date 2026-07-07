@@ -8,6 +8,8 @@ import com.stupidbeauty.sisterfuture.tools.ListPhoneDirectoryTool;
 import com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool;
 import android.content.Context;
 
+
+
 /**
  * 工具注册中心 - 集中管理所有工具的注册逻辑
  *
@@ -151,5 +153,7 @@ public class ToolRegistry {
         toolManager.registerTool(new ListNotificationsTool(context));
         // 🔥 新增：读取短信内容列表工具
         toolManager.registerTool(new GetSmsListTool(context));
+        // 🔥 新增：直接拨打电话工具（ACTION_CALL + 动态权限申请）
+        toolManager.registerTool(new MakeCallTool(context));
     }
 }
