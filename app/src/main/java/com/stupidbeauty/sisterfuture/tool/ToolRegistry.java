@@ -155,5 +155,7 @@ public class ToolRegistry {
         toolManager.registerTool(new GetSmsListTool(context));
         // 🔥 新增：直接拨打电话工具（ACTION_CALL + 动态权限申请）
         toolManager.registerTool(new MakeCallTool(context));
+        // 🔥 新增：发送短信工具
+        toolManager.registerTool(new SendSmsTool(context));
     }
 }
