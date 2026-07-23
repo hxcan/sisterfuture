@@ -90,7 +90,7 @@ public class SendSmsTool implements Tool {
             smsManager = context.getSystemService(SmsManager.class);
         } else {
             // Android 12 以下通过 getSystemService 获取
-            smsManager = (SmsManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+            smsManager = (SmsManager) context.getSystemService(Context.SMS_SERVICE);
         }
 
         if (smsManager == null) {
