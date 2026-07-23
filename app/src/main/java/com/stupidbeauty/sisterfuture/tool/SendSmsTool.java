@@ -133,7 +133,7 @@ public class SendSmsTool implements Tool {
                         FileLogger.i(TAG, "  - 网络类型: " + tm.getNetworkType());
                     }
                 } catch (Exception e) {
-                    FileLogger.w(TAG, "获取网络类型失败", e);
+                    FileLogger.e(TAG, "获取网络类型失败", e);
                 }
             } else {
                 FileLogger.e(TAG, "TelephonyManager 为 null");
@@ -177,8 +177,8 @@ public class SendSmsTool implements Tool {
 
                 if (defaultSmsSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
                     try {
-                        FileLogger.i(TAG, "尝试使用 SubscriptionManager.getSmsManagerForSubscriptionId(" + defaultSmsSubId + ")");
-                        smsManager = subscriptionManager.getSmsManagerForSubscriptionId(defaultSmsSubId);
+                        FileLogger.i(TAG, "尝试使用 SmsManager.getSmsManagerForSubscriptionId(" + defaultSmsSubId + ")");
+                        smsManager = SmsManager.getSmsManagerForSubscriptionId(defaultSmsSubId);
                         FileLogger.i(TAG, "getSmsManagerForSubscriptionId 成功");
                     } catch (Exception e) {
                         FileLogger.e(TAG, "getSmsManagerForSubscriptionId 失败", e);
