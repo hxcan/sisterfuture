@@ -5,6 +5,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.telephony.SmsManager;
+import android.telephony.SubscriptionManager;
 import android.util.Log;
 import org.json.JSONObject;
 
@@ -82,8 +83,26 @@ public class SendSmsTool implements Tool {
             throw new IllegalArgumentException("短信内容不能为空");
         }
 
-        // 获取 SmsManager（Android 官方推荐使用 getDefault() 静态工厂方法，跨 Android 4.4+ 一致）
-        SmsManager smsManager = SmsManager.getDefault();
+        // 获取 SmsManager（兼容 Android 10+ 和双卡设备）
+        // 修复 getGroupIdLevel1 异常：显式指定默认 SMS 订阅 ID
+        SmsManager smsManager;
+        try {
+            SubscriptionManager subscriptionManager = (SubscriptionManager) context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+            int defaultSmsSubId = (subscriptionManager != null)
+                ? subscriptionManager.getDefaultSmsSubscriptionId()
+                : SubscriptionManager.getDefaultSmsSubscriptionId();
+
+            if (defaultSmsSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                // 双卡/多卡场景：绑定到默认 SMS 订阅
+                smsManager = SmsManager.getSmsManagerForSubscriptionId(defaultSmsSubId);
+            } else {
+                // 单卡场景或无法获取订阅时，使用默认实例
+                smsManager = SmsManager.getDefault();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to get SmsManager via SubscriptionManager, falling back to default", e);
+            smsManager = SmsManager.getDefault();
+        }
 
         if (smsManager == null) {
             throw new Exception("无法获取 SmsManager，可能是因为不在手机上运行");
