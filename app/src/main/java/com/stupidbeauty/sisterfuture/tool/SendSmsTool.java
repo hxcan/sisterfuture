@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 import android.telephony.SmsManager;
 import android.util.Log;
 import org.json.JSONObject;
@@ -83,15 +82,8 @@ public class SendSmsTool implements Tool {
             throw new IllegalArgumentException("短信内容不能为空");
         }
 
-        // 获取 SmsManager
-        SmsManager smsManager;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Android 12+ 通过 getSystemService 获取
-            smsManager = context.getSystemService(SmsManager.class);
-        } else {
-            // Android 12 以下通过 getSystemService 获取
-            smsManager = (SmsManager) context.getSystemService(Context.SMS_SERVICE);
-        }
+        // 获取 SmsManager（Android 官方推荐使用 getDefault() 静态工厂方法，跨 Android 4.4+ 一致）
+        SmsManager smsManager = SmsManager.getDefault();
 
         if (smsManager == null) {
             throw new Exception("无法获取 SmsManager，可能是因为不在手机上运行");
