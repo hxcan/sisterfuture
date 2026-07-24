@@ -128,6 +128,22 @@ public class SendSmsTool implements Tool {
                 FileLogger.i(TAG, "  - SIM 状态: " + tm.getSimState());
                 FileLogger.i(TAG, "  - 网络运营商: " + tm.getNetworkOperatorName());
                 FileLogger.i(TAG, "  - 数据状态: " + tm.getDataState());
+        // 🔥 关键修复：检查 READ_PHONE_STATE 权限（divideMessage 内部需要 getGroupIdLevel1）
+        int phoneStatePermission = context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE);
+        FileLogger.i(TAG, "READ_PHONE_STATE 权限状态: " + (phoneStatePermission == android.content.pm.PackageManager.PERMISSION_GRANTED ? "已授权" : "未授权"));
+        if (phoneStatePermission != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            FileLogger.w(TAG, "缺少 READ_PHONE_STATE 权限，尝试动态申请");
+            if (context instanceof android.app.Activity) {
+                androidx.core.app.ActivityCompat.requestPermissions((android.app.Activity) context, new String[]{Manifest.permission.READ_PHONE_STATE}, 1002);
+                JSONObject r = new JSONObject();
+                r.put("status", "permission_required");
+                r.put("permission", "android.permission.READ_PHONE_STATE");
+                r.put("error", "need READ_PHONE_STATE for divideMessage");
+                return r;
+            }
+            throw new SecurityException("缺少 READ_PHONE_STATE 权限");
+        }
+
                 try {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                         FileLogger.i(TAG, "  - 网络类型: " + tm.getNetworkType());
