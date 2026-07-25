@@ -4,6 +4,7 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import okhttp3.*;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
@@ -95,9 +96,19 @@ public class SearchWithBaiduTool implements Tool {
                     // 降级：从备注中读取（使用 Tool 接口提供的 getNote 方法）
                     String noteJson = getNote(context);
                     if (!noteJson.isEmpty()) {
-                        JSONObject noteObj = new JSONObject(noteJson);
-                        if (noteObj.has("baidu_api_key")) {
-                            apiKey = noteObj.getString("baidu_api_key");
+                        // ✅ 容忍备注内容不是合法 JSON 的情况
+                        // 如果备注直接是 API Key（如 "bce-v3/ALTAK-..."），应识别为纯文本 Key
+                        // 如果备注是 JSON，则尝试解析其中的 baidu_api_key 字段
+                        try {
+                            JSONObject noteObj = new JSONObject(noteJson);
+                            if (noteObj.has("baidu_api_key")) {
+                                apiKey = noteObj.getString("baidu_api_key");
+                            }
+                        } catch (JSONException je) {
+                            // 备注内容不是合法 JSON，直接当作 API Key 使用
+                            // 兼容形如 "bce-v3/ALTAK-..." 这种纯文本 Key
+                            android.util.Log.w(TAG, "备注内容不是合法 JSON，尝试作为纯文本 API Key 使用: " + je.getMessage());
+                            apiKey = noteJson.trim();
                         }
                     }
                 }
@@ -115,7 +126,7 @@ public class SearchWithBaiduTool implements Tool {
                 messages.put(message);
                 requestBody.put("messages", messages);
                 requestBody.put("search_source", "baidu_search_v2");
-                
+
                 JSONArray resourceTypeFilter = new JSONArray();
                 JSONObject webFilter = new JSONObject();
                 webFilter.put("type", "web");
