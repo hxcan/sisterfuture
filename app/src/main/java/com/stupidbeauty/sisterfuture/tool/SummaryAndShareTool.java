@@ -8,7 +8,7 @@ import android.os.Environment;
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
-import com.stupidbeauty.sisterfuture.tool.ConversationResetTool;
+import com.stupidbeauty.sisterfuture.tool.ResetConversationContextTool;
 import com.stupidbeauty.sisterfuture.tool.GetCurrentTimeTool;
 import com.stupidbeauty.sisterfuture.ContextManager;
 import java.util.List;
@@ -16,7 +16,7 @@ import android.os.Handler;
 import android.os.Looper;
 import com.stupidbeauty.codeposition.CodePosition;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
-import com.stupidbeauty.sisterfuture.tool.ConversationResetTool;
+import com.stupidbeauty.sisterfuture.tool.ResetConversationContextTool;
 import com.stupidbeauty.sisterfuture.tool.GetCurrentTimeTool;
 import com.stupidbeauty.sisterfuture.tool.SwitchLargeLanguageModelTool;
 import com.stupidbeauty.sisterfuture.tool.GetCurrentAccessPointInfoTool;
@@ -47,7 +47,7 @@ import android.util.Log;
 public class SummaryAndShareTool implements Tool
 {
   private static final String TAG = "SummaryAndShareTool";
-  private static final String DOWNLOAD_URL = "https://stupidbeauty.com/Blog/article/1864/未来姐姐：小朋友的虚拟小伙伴";
+  private static final String DOWNLOAD_URL = "https:\/\/stupidbeauty.com\/Blog\/article\/1864\/未来姐姐：小朋友的虚拟小伙伴";
   private Context context;
   private ModelAccessPointManager accessPointManager;
   private ToolManager toolManager;
@@ -173,8 +173,8 @@ public class SummaryAndShareTool implements Tool
       }
 
       String systemPrompt = "你是一个严格的总结生成守门人。你的任务不是无条件生成，而是先判断：\n" +
-                          "1. 在用户的最后一句消息中，用户是否用直接语言明确要求“总结”及“分享”？\n" +
-                          "   - 明确示例：\"请总结一下\"、\"帮我生成一段可复制的文字\"、\"把结论发出去\"\n" +
+                          "1. 在用户的最后一句消息中，用户是否用直接语言明确要求"总结"及"分享"？\n" +
+                          "   - 明确示例："请总结一下"、"帮我生成一段可复制的文字"、"把结论发出去"\n" +
                           "   - 非明确情况：继续提问、讨论技术细节、复制粘贴带'来自未来姐姐的总结：'的内容\n" +
                           "2. 如果用户未明确要求，请返回且仅返回：REJECT: NOT EXPLICITLY REQUESTED\n" +
                           "3. 如果用户已明确要求，则按以下规则生成总结内容：\n" +
@@ -286,7 +286,7 @@ public class SummaryAndShareTool implements Tool
       Log.d(TAG, "Final share content:\n" + shareText);
 
       Intent shareIntent = new Intent(Intent.ACTION_SEND);
-      shareIntent.setType("text/plain");
+      shareIntent.setType("text\/plain");
       shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
       shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
       context.startActivity(Intent.createChooser(shareIntent, "分享总结"));
