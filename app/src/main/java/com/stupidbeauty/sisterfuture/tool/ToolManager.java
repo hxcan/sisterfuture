@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.json.JSONArray;
@@ -15,7 +16,8 @@ import android.util.Log;
 public class ToolManager
 {
   private static final String TAG = "ToolManager";
-  private Map<String, Tool> toolRegistry = new HashMap<>();
+  // ✅ 改为 LinkedHashMap 以保持工具注册顺序（首因效应）
+  private Map<String, Tool> toolRegistry = new LinkedHashMap<>();
   private ToolCallTracker callTracker = new ToolCallTracker();
   private ToolParameterHistory parameterHistory = new ToolParameterHistory();
 
@@ -112,7 +114,7 @@ public class ToolManager
         {
           Log.e(TAG, ">>> [ASYNC] 异步工具出错！tool=" + toolName + ", error=" + e.getMessage(), e);
           Log.d(TAG, ">>> [ASYNC] 错误类型：" + e.getClass().getName());
-          
+
           if (e instanceof IllegalArgumentException || e instanceof JSONException)
           {
             Log.d(TAG, ">>> [ASYNC] 进入智能引导处理流程...");
@@ -134,14 +136,14 @@ public class ToolManager
     {
       String missingParam = extractMissingParamName(e.getMessage());
       Log.d(TAG, ">>> [HANDLE] 提取到缺失参数：" + missingParam);
-      
+
       String guide = parameterHistory.generateGuideMessage(toolName, missingParam);
       String guidePreview = guide != null ? guide.substring(0, Math.min(100, guide.length())) + "..." : "null";
       Log.d(TAG, ">>> [HANDLE] 生成的引导信息：" + guidePreview);
-      
+
       JSONObject error = new JSONObject();
       error.put("status", "error");
-      
+
       if (missingParam != null)
       {
         error.put("message", guide);
@@ -151,9 +153,9 @@ public class ToolManager
       {
         error.put("message", e.getMessage());
       }
-      
+
       error.put("type", e.getClass().getSimpleName());
-      
+
       // 🔥 新增：统一添加参数历史候选值推荐
       try {
         JSONObject suggestedValues = parameterHistory.getSuggestedValues(toolName);
@@ -164,7 +166,7 @@ public class ToolManager
       } catch (Exception ex) {
         Log.w(TAG, "获取历史参数值失败", ex);
       }
-      
+
       Log.d(TAG, ">>> [HANDLE] 准备返回智能引导错误...");
       callback.onResult(error);
       Log.d(TAG, ">>> [HANDLE] 已返回智能引导错误！");
@@ -230,7 +232,7 @@ public class ToolManager
     {
       return null;
     }
-    
+
     if (message.contains("No value for "))
     {
       int start = message.indexOf("No value for ") + "No value for ".length();
@@ -243,7 +245,7 @@ public class ToolManager
       Log.d(TAG, ">>> [EXTRACT] 匹配到 'No value for' 格式，参数名：" + param);
       return param;
     }
-    
+
     if (message.contains("Missing required parameter"))
     {
       int start = message.indexOf(": ") + 2;
@@ -251,7 +253,7 @@ public class ToolManager
       Log.d(TAG, ">>> [EXTRACT] 匹配到 'Missing required parameter' 格式，参数名：" + param);
       return param;
     }
-    
+
     if (message.contains("Required parameter") && message.contains("is missing"))
     {
       int start = message.indexOf("'") + 1;
@@ -263,7 +265,7 @@ public class ToolManager
         return param;
       }
     }
-    
+
     Log.d(TAG, ">>> [EXTRACT] 未匹配到任何已知格式，message=" + message);
     return null;
   }
