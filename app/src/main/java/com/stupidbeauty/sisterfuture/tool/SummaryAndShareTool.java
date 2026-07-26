@@ -47,7 +47,7 @@ import android.util.Log;
 public class SummaryAndShareTool implements Tool
 {
   private static final String TAG = "SummaryAndShareTool";
-  private static final String DOWNLOAD_URL = "https:\/\/stupidbeauty.com\/Blog\/article\/1864\/未来姐姐：小朋友的虚拟小伙伴";
+  private static final String DOWNLOAD_URL = "https://stupidbeauty.com/Blog/article/1864/未来姐姐：小朋友的虚拟小伙伴";
   private Context context;
   private ModelAccessPointManager accessPointManager;
   private ToolManager toolManager;
@@ -286,7 +286,7 @@ public class SummaryAndShareTool implements Tool
       Log.d(TAG, "Final share content:\n" + shareText);
 
       Intent shareIntent = new Intent(Intent.ACTION_SEND);
-      shareIntent.setType("text\/plain");
+      shareIntent.setType("text/plain");
       shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
       shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
       context.startActivity(Intent.createChooser(shareIntent, "分享总结"));
