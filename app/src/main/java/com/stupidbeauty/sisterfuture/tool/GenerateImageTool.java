@@ -2,6 +2,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.os.Environment;
+import android.util.Base64;
 import androidx.annotation.NonNull;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import okhttp3.MediaType;
@@ -17,7 +18,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Base64;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -413,6 +413,7 @@ public class GenerateImageTool implements Tool {
 
     /**
      * 保存 base64 图片到本地
+     * 使用 android.util.Base64（API 1+）替代 java.util.Base64（API 26+）以兼容更低 API 级别
      */
     private String saveBase64Image(String b64Data, File targetDir, long timestamp, int index) throws IOException {
         String filename = String.format("minimax_image_%d_%d.png", timestamp, index);
@@ -420,7 +421,7 @@ public class GenerateImageTool implements Tool {
 
         FileLogger.d(TAG, "保存 base64 图片 -> " + targetFile.getAbsolutePath());
 
-        byte[] imageBytes = Base64.getDecoder().decode(b64Data);
+        byte[] imageBytes = Base64.decode(b64Data, Base64.DEFAULT);
         try (FileOutputStream fos = new FileOutputStream(targetFile)) {
             fos.write(imageBytes);
         }
