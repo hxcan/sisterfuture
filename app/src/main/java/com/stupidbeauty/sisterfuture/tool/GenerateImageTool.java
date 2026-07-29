@@ -444,11 +444,11 @@ public class GenerateImageTool implements Tool {
         } catch (Exception ignore) {}
 
         JSONObject errorResult = new JSONObject();
-        errorResult.put("status", "error");
-        errorResult.put("status_code", code);
-        errorResult.put("error", "HTTP " + code + ": " + errorDetail);
-
         try {
+            errorResult.put("status", "error");
+            errorResult.put("status_code", code);
+
+            // 根据状态码设置错误类型
             if (code == 401 || code == 403) {
                 errorResult.put("error_type", "invalid_api_key");
                 errorResult.put("error", "API Key 无效或已过期: " + errorDetail);
@@ -457,10 +457,14 @@ public class GenerateImageTool implements Tool {
                 errorResult.put("error", "触发限流，请稍后再试: " + errorDetail);
             } else if (code >= 500) {
                 errorResult.put("error_type", "server_error");
+                errorResult.put("error", "服务器错误 HTTP " + code + ": " + errorDetail);
             } else {
                 errorResult.put("error_type", "http_error");
+                errorResult.put("error", "HTTP " + code + ": " + errorDetail);
             }
-        } catch (Exception ignore) {}
+        } catch (Exception e) {
+            FileLogger.e(TAG, "Failed to build error result", e);
+        }
 
         callback.onResult(errorResult);
     }
