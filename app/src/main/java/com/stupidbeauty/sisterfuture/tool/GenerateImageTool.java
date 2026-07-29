@@ -413,7 +413,7 @@ public class GenerateImageTool implements Tool {
 
     /**
      * 保存 base64 图片到本地
-     * 使用 android.util.Base64（API 1+）替代 java.util.Base64（API 26+）以兼容更低 API 级别
+     * 使用 android.util.Base64（API 1+ 兼容），不用 java.util.Base64（API 26+）
      */
     private String saveBase64Image(String b64Data, File targetDir, long timestamp, int index) throws IOException {
         String filename = String.format("minimax_image_%d_%d.png", timestamp, index);
@@ -421,6 +421,7 @@ public class GenerateImageTool implements Tool {
 
         FileLogger.d(TAG, "保存 base64 图片 -> " + targetFile.getAbsolutePath());
 
+        // 使用 android.util.Base64（API 1+ 兼容）
         byte[] imageBytes = Base64.decode(b64Data, Base64.DEFAULT);
         try (FileOutputStream fos = new FileOutputStream(targetFile)) {
             fos.write(imageBytes);
