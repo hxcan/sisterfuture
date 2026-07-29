@@ -72,6 +72,10 @@ public class ToolRegistry {
         // === 网络请求工具 ===
         toolManager.registerTool(new BasicWebRequestTool(context));
         toolManager.registerTool(new GenericWebRequestTool(context));
+        // 🆕 MiniMax 图像生成工具（异步，调用 image-01 模型）
+        // 关联任务：Redmine #853237970757
+        // API Key 配置：在工具备注中设置 minimax_image_api_key=sk-cp-xxx
+        toolManager.registerTool(new GenerateImageTool(context));
 
         // === 系统工具 ===
         toolManager.registerTool(new GetContactListTool(context));
