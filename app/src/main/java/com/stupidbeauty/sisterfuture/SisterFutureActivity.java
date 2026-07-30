@@ -15,6 +15,8 @@ import java.io.FileDescriptor;
 import android.os.Build;
 import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
+import com.stupidbeauty.sisterfuture.bean.Attachment;
+import com.stupidbeauty.sisterfuture.bean.AttachmentMetadata;
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -345,7 +347,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       String role = msg.optString("role");
       Object contentObj = msg.opt("content");
       String toolCallId = msg.optString("tool_call_id");
-      String messageId = msg.optString("id"); // 🆕 #821166321034 从数据源读取 messageId
+      String messageId = msg.optString("id"); // #821166321034 从数据源读取 messageId
       JSONArray toolCalls = msg.optJSONArray("tool_calls");
 
       if ("tool".equals(role) && !toolCallId.isEmpty())
@@ -355,7 +357,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
         MessageItem item = new MessageItem(displayText, MessageType.TOOL_CALL_RESULT);
         if (messageId != null && !messageId.isEmpty()) {
-          item.setMessageId(messageId); // 🆕 设置正确的 messageId
+          item.setMessageId(messageId); // 设置正确的 messageId
         }
         messageAdapter.addMessage(item);
       }
@@ -405,7 +407,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
           if (messageId != null && !messageId.isEmpty()) {
-            item.setMessageId(messageId); // 🆕 设置正确的 messageId
+            item.setMessageId(messageId);
           }
           messageAdapter.addMessage(item);
         }
@@ -416,7 +418,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           {
             MessageItem item = new MessageItem(content, MessageType.USER);
             if (messageId != null && !messageId.isEmpty()) {
-              item.setMessageId(messageId); // 🆕 设置正确的 messageId
+              item.setMessageId(messageId);
             }
             messageAdapter.addMessage(item);
           }
@@ -446,7 +448,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           }
           MessageItem item = new MessageItem(callText.toString(), MessageType.AI);
           if (messageId != null && !messageId.isEmpty()) {
-            item.setMessageId(messageId); // 🆕 设置正确的 messageId
+            item.setMessageId(messageId);
           }
           messageAdapter.addMessage(item);
         }
@@ -454,7 +456,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
           MessageItem item = new MessageItem(msg.optString("content"), MessageType.AI);
           if (messageId != null && !messageId.isEmpty()) {
-            item.setMessageId(messageId); // 🆕 设置正确的 messageId
+            item.setMessageId(messageId);
           }
           messageAdapter.addMessage(item);
         }
@@ -837,7 +839,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
 
-      // 🔍 #5030【救援模式】遍历消息列表，检查所有 tool_call 的 arguments
+      // #5030【救援模式】遍历消息列表，检查所有 tool_call 的 arguments
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 开始检查消息列表中的 tool_call arguments | 消息总数：" + messagesArray.length());
       
       boolean hasImageInContext = false;
@@ -934,7 +936,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
       
-      // 🔗 生成预留消息 ID
+      // 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();
       FileLogger.i(TAG, "🔗 [RESERVE_ID] 已生成预留消息 ID | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
 
@@ -968,7 +970,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           FileLogger.e(TAG, "请求出错：" + errorType + " - " + errorMsg);
           hideThinkingOverlay();
           
-          // 🆕 #11 审核意见修复：恢复通知栏更新
+          // #11 审核意见修复：恢复通知栏更新
           SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "请求出错，请重试");
 
           boolean isAccessPointUnavailable = false;
@@ -1359,7 +1361,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           
           boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
           
-          // 🆕 审核意见修复：恢复原有逻辑 - 删除 !hasToolCalls 条件
           if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
               EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
               handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
@@ -1432,12 +1433,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
           contextManager.addToolMessage(id, name, result.toString());
           FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
-          messageAdapter.addMessage(
-            new MessageItem(
-              "🛠️ 工具调用结果：" + name + "\n" + result.toString(), 
-              MessageType.TOOL_CALL_RESULT
-            )
+
+          // 🔥 新增：解析 attachments 字段（如果存在）
+          List<Attachment> attachments = parseAttachments(result);
+
+          MessageItem messageItem = new MessageItem(
+            "🛠️ 工具调用结果：" + name + "\n" + result.toString(),
+            MessageType.TOOL_CALL_RESULT
           );
+
+          if (attachments != null && !attachments.isEmpty())
+          {
+            messageItem.setAttachments(attachments);
+            FileLogger.i(TAG, "🔥 [ATTACHMENT] 工具结果包含 " + attachments.size() + " 个附件 | toolName=" + name);
+          }
+
+          messageAdapter.addMessage(messageItem);
         }
 
         clearAccumulatedToolCalls();
@@ -1741,16 +1752,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
     articleListmyRecyclerView.setAdapter(messageAdapter);
 
-    // 🆕 #821166321034 设置数据源引用（用于刷新）
+    // #821166321034 设置数据源引用（用于刷新）
     messageAdapter.setContextManager(contextManager);
     
-    // 🗑️ #821166321034 设置删除消息监听器 - 正确的MVC架构
+    // #821166321034 设置删除消息监听器 - 正确的MVC架构
     messageAdapter.setOnMessageDeleteListener(new MessageAdapter.OnMessageDeleteListener() {
       @Override
       public void onMessageDeleted(MessageItem message, int position, String messageId) {
         FileLogger.i(TAG, "🗑️ 收到删除消息回调 | position=" + position + " | messageId=" + messageId);
         
-        // ✅ 正确的架构：先从数据源删除，再刷新Adapter
         if (messageId != null && !messageId.isEmpty()) {
           contextManager.removeMessageById(messageId);
           FileLogger.i(TAG, "🗑️ 已从数据源删除 | messageId=" + messageId);
@@ -1759,7 +1769,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           contextManager.removeMessage(position);
         }
         
-        // ✅ 从数据源刷新Adapter
         messageAdapter.refreshFromDataSource();
         FileLogger.i(TAG, "🗑️ 已刷新Adapter");
       }
@@ -1938,6 +1947,87 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
     {
       handleSelectedImage(data);
+    }
+  }
+
+  /**
+   * 🔥 新增：从工具结果 JSONObject 中解析 attachments 字段
+   * @param result 工具返回的结果 JSON
+   * @return List<Attachment> 附件列表，没有则返回 null
+   */
+  private List<Attachment> parseAttachments(JSONObject result)
+  {
+    try
+    {
+      if (result == null || !result.has("attachments"))
+      {
+        return null;
+      }
+      
+      JSONArray attachmentsArray = result.optJSONArray("attachments");
+      if (attachmentsArray == null || attachmentsArray.length() == 0)
+      {
+        return null;
+      }
+      
+      List<Attachment> attachments = new ArrayList<>();
+      
+      for (int i = 0; i < attachmentsArray.length(); i++)
+      {
+        try
+        {
+          JSONObject attachmentJson = attachmentsArray.getJSONObject(i);
+          
+          Attachment attachment = new Attachment();
+          attachment.setType(attachmentJson.optString("type", ""));
+          attachment.setUrl(attachmentJson.optString("url", ""));
+          
+          // 解析 metadata
+          JSONObject metadataJson = attachmentJson.optJSONObject("metadata");
+          if (metadataJson != null)
+          {
+            AttachmentMetadata metadata = new AttachmentMetadata();
+            
+            if (metadataJson.has("width"))
+            {
+              metadata.setWidth(metadataJson.optInt("width"));
+            }
+            if (metadataJson.has("height"))
+            {
+              metadata.setHeight(metadataJson.optInt("height"));
+            }
+            if (metadataJson.has("size"))
+            {
+              metadata.setSize(metadataJson.optLong("size"));
+            }
+            if (metadataJson.has("duration"))
+            {
+              metadata.setDuration(metadataJson.optLong("duration"));
+            }
+            if (metadataJson.has("mimeType"))
+            {
+              metadata.setMimeType(metadataJson.optString("mimeType"));
+            }
+            
+            attachment.setMetadata(metadata);
+          }
+          
+          attachments.add(attachment);
+          FileLogger.d(TAG, "  [parseAttachments] 已解析附件 #" + i + " | type=" + attachment.getType() + " | url=" + attachment.getUrl());
+        }
+        catch (Exception e)
+        {
+          FileLogger.e(TAG, "  [parseAttachments] 解析单个附件失败 | index=" + i, e);
+        }
+      }
+      
+      FileLogger.i(TAG, " [parseAttachments] 共解析 " + attachments.size() + " 个附件");
+      return attachments;
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, " [parseAttachments] 解析 attachments 失败", e);
+      return null;
     }
   }
 }

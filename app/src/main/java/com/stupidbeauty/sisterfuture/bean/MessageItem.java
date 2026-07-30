@@ -1,6 +1,7 @@
 // MessageItem.java
 package com.stupidbeauty.sisterfuture.bean;
 
+import java.util.List;
 import java.util.UUID;
 
 public class MessageItem {
@@ -8,6 +9,7 @@ public class MessageItem {
     private MessageType type;
     public String imageUrl; // 🖼️ 新增：存储图片的 Base64 数据（如果有）
     private String messageId; // 🔗 新增：消息唯一 ID，用于 UI 与上下文关联
+    private List<Attachment> attachments; // 🔥 新增：工具生成的多媒体附件
 
     public MessageItem(String text, MessageType type) {
         this.text = text;
@@ -56,6 +58,16 @@ public class MessageItem {
     // 🔗 新增：设置消息 ID
     public void setMessageId(String messageId) {
         this.messageId = messageId;
+    }
+
+    // 🔥 新增：获取附件列表
+    public List<Attachment> getAttachments() {
+        return attachments;
+    }
+
+    // 🔥 新增：设置附件列表
+    public void setAttachments(List<Attachment> attachments) {
+        this.attachments = attachments;
     }
 
     // 🔗 生成唯一消息 ID（时间戳 + 随机数）
