@@ -15,6 +15,9 @@ import java.io.FileDescriptor;
 import android.os.Build;
 import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
+import com.stupidbeauty.sisterfuture.bean.Attachment;
+import com.stupidbeauty.sisterfuture.bean.AttachmentMetadata;
+
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -1424,9 +1427,24 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
           
           if (isDuplicate)
-          {
+          FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
+
+          // 🔥 新增：解析 attachments 字段（如果存在）
+          List<Attachment> attachments = parseAttachments(result);
+
+          MessageItem messageItem = new MessageItem(
+            "🛠️ 工具调用结果：" + name + "\n" + result.toString(),
+            MessageType.TOOL_CALL_RESULT
+          );
+
             FileLogger.w(TAG, "⚠️ [DUPLICATE] 发现重复工具 | id=" + id + " | name=" + name + " | 说明已处理过，跳过本次请求触发");
-            return;
+          if (attachments != null && !attachments.isEmpty())
+          {
+            messageItem.setAttachments(attachments);
+            FileLogger.i(TAG, "🔥 [ATTACHMENT] 工具结果包含 " + attachments.size() + " 个附件 | toolName=" + name);
+          }
+
+          messageAdapter.addMessage(messageItem);
           }
           
           FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
@@ -1925,7 +1943,88 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
       Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
+  /**
+   * 🔥 新增：从工具结果 JSONObject 中解析 attachments 字段
+   * @param result 工具返回的结果 JSON
+   * @return List<Attachment> 附件列表，没有则返回 null
+   */
+  private List<Attachment> parseAttachments(JSONObject result)
+  {
+    try
+    {
+      if (result == null || !result.has("attachments"))
+      {
+        return null;
+      }
+      
+      JSONArray attachmentsArray = result.optJSONArray("attachments");
+      if (attachmentsArray == null || attachmentsArray.length() == 0)
+      {
+        return null;
+      }
+      
+      List<Attachment> attachments = new ArrayList<>();
+      
+      for (int i = 0; i < attachmentsArray.length(); i++)
+      {
+        try
+        {
+          JSONObject attachmentJson = attachmentsArray.getJSONObject(i);
+          
+          Attachment attachment = new Attachment();
+          attachment.setType(attachmentJson.optString("type", ""));
+          attachment.setUrl(attachmentJson.optString("url", ""));
+          
+          // 解析 metadata
+          JSONObject metadataJson = attachmentJson.optJSONObject("metadata");
+          if (metadataJson != null)
+          {
+            AttachmentMetadata metadata = new AttachmentMetadata();
+            
+            if (metadataJson.has("width"))
+            {
+              metadata.setWidth(metadataJson.optInt("width"));
+            }
+            if (metadataJson.has("height"))
+            {
+              metadata.setHeight(metadataJson.optInt("height"));
+            }
+            if (metadataJson.has("size"))
+            {
+              metadata.setSize(metadataJson.optLong("size"));
+            }
+            if (metadataJson.has("duration"))
+            {
+              metadata.setDuration(metadataJson.optLong("duration"));
+            }
+            if (metadataJson.has("mimeType"))
+            {
+              metadata.setMimeType(metadataJson.optString("mimeType"));
+            }
+            
+            attachment.setMetadata(metadata);
+          }
+          
+          attachments.add(attachment);
+          FileLogger.d(TAG, "  [parseAttachments] 已解析附件 #" + i + " | type=" + attachment.getType() + " | url=" + attachment.getUrl());
+        }
+        catch (Exception e)
+        {
+          FileLogger.e(TAG, "  [parseAttachments] 解析单个附件失败 | index=" + i, e);
+        }
+      }
+      
+      FileLogger.i(TAG, "🔥 [parseAttachments] 共解析 " + attachments.size() + " 个附件");
+      return attachments;
     }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "❌ [parseAttachments] 解析 attachments 失败", e);
+      return null;
+    }
+  }
+}
+
   }
 
   @Override
