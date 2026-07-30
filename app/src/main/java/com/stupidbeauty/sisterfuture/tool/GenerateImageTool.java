@@ -25,23 +25,11 @@ import java.util.concurrent.TimeUnit;
 /**
  * MiniMax 图像生成工具
  *
- * 调用 MiniMax image-01 模型生成图片，支持中英文 prompt、批量生成、自动下载到手机。
- *
- * API 信息：
- * - 端点：https://api.minimaxi.com/v1/image_generation（不是 api.minimax.io）
- * - 模型：image-01
- * - 认证：Bearer Token（sk-cp- 前缀）
- * - 尺寸：512-2048，必须是 8 的倍数
- * - 批量：1-9 张/次
- * - 限流：10 请求/分钟
- *
- * API Key 配置：
- * - 用户可在工具备注中设置 minimax_image_api_key=sk-cp-xxx
- * - 或调用时通过 apiKey 参数传入
- *
- * 响应格式（兼容两种）：
- * - 新格式：{"image_urls": ["url1", "url2", ...]}
- * - 旧格式：{"data": [{"url": "url1"}, {"url": "url2"}, ...]}
+ * 响应格式（兼容 4 种）：
+ * - A（新·嵌套）：{"data": {"image_urls": ["url1", ...]}, "base_resp": {...}}
+ * - B（新·扁平）：{"image_urls": ["url1", "url2", ...]}
+ * - C（旧·对象数组）：{"data": [{"url": "url1"}, {"url": "url2"}]}
+ * - D（旧·字符串数组）：{"data": ["url1", "url2"]}
  *
  * @author 未来姐姐
  * @date 2026-07-30
@@ -49,38 +37,18 @@ import java.util.concurrent.TimeUnit;
 public class GenerateImageTool implements Tool {
     private static final String TAG = "GenerateImageTool";
 
-    /** API 端点（注意：不是 api.minimax.io） */
     private static final String API_ENDPOINT = "https://api.minimaxi.com/v1/image_generation";
-
-    /** 模型名称 */
     private static final String MODEL_NAME = "image-01";
-
-    /** 最小尺寸 */
     private static final int MIN_SIZE = 512;
-
-    /** 最大尺寸 */
     private static final int MAX_SIZE = 2048;
-
-    /** 尺寸必须是 8 的倍数 */
     private static final int SIZE_MULTIPLE = 8;
-
-    /** 默认超时（秒） */
     private static final int DEFAULT_TIMEOUT_SEC = 60;
-
-    /** 工具备注中存储 API Key 的键名 */
     private static final String NOTE_KEY_API_KEY = "minimax_image_api_key";
-
-    /** 工具备注中存储默认尺寸的键名（格式：widthxheight） */
     private static final String NOTE_KEY_DEFAULT_SIZE = "minimax_image_default_size";
 
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    /**
-     * OkHttpClient 单例（修复 Bug 3：避免每次 new 客户端导致连接池失效）
-     * 使用静态内部类 Holder 模式实现：线程安全 + 延迟加载
-     * 完整超时配置（修复 Bug 1：补全 connect/read/write/call timeout）
-     */
     private static class ClientHolder {
         private static final OkHttpClient INSTANCE = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -225,7 +193,6 @@ public class GenerateImageTool implements Tool {
                 requestBody.put("prompt_optimizer", promptOptimizer);
 
                 FileLogger.d(TAG, "[4/10] 请求体构建完成 - 大小: " + requestBody.toString().length() + " 字节，耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
-                FileLogger.d(TAG, "  请求体内容: " + requestBody.toString());
 
                 MediaType mediaType = MediaType.parse("application/json; charset=utf-8");
                 RequestBody body = RequestBody.create(mediaType, requestBody.toString());
@@ -238,7 +205,6 @@ public class GenerateImageTool implements Tool {
                         .build();
 
                 FileLogger.i(TAG, "[5/10] 发送请求到: " + API_ENDPOINT);
-                FileLogger.i(TAG, "  使用 OkHttpClient 单例，超时配置: connect=30s, read=120s, write=60s, call=180s");
 
                 long requestStartTime = System.currentTimeMillis();
 
@@ -259,6 +225,7 @@ public class GenerateImageTool implements Tool {
 
                 long requestDurationMs = System.currentTimeMillis() - requestStartTime;
                 FileLogger.i(TAG, "  HTTP 请求总耗时: " + requestDurationMs + "ms");
+                FileLogger.d(TAG, "  响应内容: " + responseBody);
 
                 if (responseCode < 200 || responseCode >= 300) {
                     handleHttpError(responseCode, responseBody, callback);
@@ -280,14 +247,11 @@ public class GenerateImageTool implements Tool {
                     return;
                 }
 
-                // 兼容两种响应格式：
-                // 新格式：{"image_urls": ["url1", "url2", ...]}
-                // 旧格式：{"data": [{"url": "url1"}, {"url": "url2"}, ...]}
                 JSONArray urlArray = extractImageUrls(jsonResponse);
                 if (urlArray == null || urlArray.length() == 0) {
                     JSONObject errorResult = new JSONObject();
                     errorResult.put("status", "error");
-                    errorResult.put("error", "响应中找不到图片 URL（既没有 image_urls 也没有 data.url）");
+                    errorResult.put("error", "响应中找不到图片 URL（已尝试 image_urls、data.image_urls、data[].url）");
                     errorResult.put("raw_response", responseBody);
                     callback.onResult(errorResult);
                     return;
@@ -349,48 +313,45 @@ public class GenerateImageTool implements Tool {
         });
     }
 
-    /**
-     * 从 JSON 响应中提取图片 URL 数组
-     * 兼容两种格式：
-     * - 新格式：{"image_urls": ["url1", "url2"]}
-     * - 旧格式：{"data": [{"url": "url1"}, {"url": "url2"}]}
-     */
     private JSONArray extractImageUrls(JSONObject jsonResponse) {
-        // 优先尝试新格式：image_urls
-        if (jsonResponse.has("image_urls") && !jsonResponse.isNull("image_urls")) {
-            try {
-                Object value = jsonResponse.get("image_urls");
-                if (value instanceof JSONArray) {
-                    FileLogger.i(TAG, "  检测到新格式: image_urls 数组");
-                    return (JSONArray) value;
-                }
-            } catch (Exception e) {
-                FileLogger.w(TAG, "解析 image_urls 失败: " + e.getMessage());
-            }
+        JSONArray result = tryGetArray(jsonResponse, "image_urls");
+        if (result != null) {
+            FileLogger.i(TAG, "  格式 B: 根对象 image_urls 数组");
+            return result;
         }
 
-        // 兼容旧格式：data[].url 或 data[].b64_json
         if (jsonResponse.has("data") && !jsonResponse.isNull("data")) {
             try {
                 Object dataValue = jsonResponse.get("data");
-                if (dataValue instanceof JSONArray) {
-                    FileLogger.i(TAG, "  检测到旧格式: data 数组，转换为 URL 数组");
+                if (dataValue instanceof JSONObject) {
+                    JSONObject dataObj = (JSONObject) dataValue;
+                    result = tryGetArray(dataObj, "image_urls");
+                    if (result != null) {
+                        FileLogger.i(TAG, "  格式 A: data.image_urls 数组");
+                        return result;
+                    }
+                    FileLogger.w(TAG, "  data 是对象但没有 image_urls 字段，data 内容: " + dataObj.toString());
+                } else if (dataValue instanceof JSONArray) {
                     JSONArray dataArray = (JSONArray) dataValue;
-                    JSONArray urlArray = new JSONArray();
+                    result = new JSONArray();
                     for (int i = 0; i < dataArray.length(); i++) {
                         Object item = dataArray.get(i);
                         if (item instanceof JSONObject) {
                             JSONObject itemObj = (JSONObject) item;
                             if (itemObj.has("url")) {
-                                urlArray.put(itemObj.getString("url"));
+                                result.put(itemObj.getString("url"));
+                            } else if (itemObj.has("image_url")) {
+                                result.put(itemObj.getString("image_url"));
+                            } else if (itemObj.has("b64_json")) {
+                                FileLogger.w(TAG, "  发现 b64_json 字段，暂不处理");
                             }
                         } else if (item instanceof String) {
-                            // data 数组直接就是字符串数组的情况
-                            urlArray.put((String) item);
+                            result.put((String) item);
                         }
                     }
-                    if (urlArray.length() > 0) {
-                        return urlArray;
+                    if (result.length() > 0) {
+                        FileLogger.i(TAG, "  格式 C/D: data 数组，提取到 " + result.length() + " 个 URL");
+                        return result;
                     }
                 }
             } catch (Exception e) {
@@ -398,6 +359,20 @@ public class GenerateImageTool implements Tool {
             }
         }
 
+        return null;
+    }
+
+    private JSONArray tryGetArray(JSONObject obj, String key) {
+        if (obj.has(key) && !obj.isNull(key)) {
+            try {
+                Object value = obj.get(key);
+                if (value instanceof JSONArray) {
+                    return (JSONArray) value;
+                }
+            } catch (Exception e) {
+                FileLogger.w(TAG, "获取 " + key + " 失败: " + e.getMessage());
+            }
+        }
         return null;
     }
 
