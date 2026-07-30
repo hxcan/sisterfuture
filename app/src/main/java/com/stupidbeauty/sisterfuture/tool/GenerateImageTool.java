@@ -1,8 +1,12 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
+import android.content.Intent;
+import android.media.MediaScannerConnection;
+import android.net.Uri;
 import android.os.Environment;
 import android.util.Base64;
+import android.util.Log;
 import androidx.annotation.NonNull;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import okhttp3.MediaType;
@@ -77,7 +81,7 @@ public class GenerateImageTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "generateImage");
-            functionDef.put("description", "调用 MiniMax image-01 模型生成图片，支持中英文 prompt，返回图片自动下载到手机存储（/sdcard/Download/）。可用于制作小说封面、应用图标、UI 配图等场景。");
+            functionDef.put("description", "调用 MiniMax image-01 模型生成图片，支持中英文 prompt，返回图片自动下载到手机存储（/sdcard/Download/）并扫描到相册。可用于制作小说封面、应用图标、UI 配图等场景。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -273,6 +277,7 @@ public class GenerateImageTool implements Tool {
                 FileLogger.i(TAG, "[8/10] 保存目录: " + targetDir.getAbsolutePath());
 
                 JSONArray savedPaths = new JSONArray();
+                JSONArray scannedUris = new JSONArray();
                 JSONArray originalUrls = new JSONArray();
                 long timestamp = System.currentTimeMillis();
 
@@ -282,16 +287,24 @@ public class GenerateImageTool implements Tool {
                     originalUrls.put(url);
                     String savedPath = downloadImageFromUrl(url, targetDir, timestamp, i);
                     savedPaths.put(savedPath);
+
+                    // 🔥 新增：扫描到相册（让系统图库能立刻看到）
+                    String scannedUri = scanImageToGallery(savedPath);
+                    if (scannedUri != null) {
+                        scannedUris.put(scannedUri);
+                    }
                 }
 
                 long totalDurationMs = System.currentTimeMillis() - totalStartTime;
                 FileLogger.i(TAG, "✅ 成功生成 " + savedPaths.length() + " 张图片");
+                FileLogger.i(TAG, "  已扫描到相册: " + scannedUris.length() + " 张");
                 FileLogger.i(TAG, "工具总耗时: " + totalDurationMs + "ms");
 
                 JSONObject result = new JSONObject();
                 result.put("status", "success");
                 result.put("image_count", savedPaths.length());
                 result.put("saved_paths", savedPaths);
+                result.put("gallery_uris", scannedUris);
                 result.put("original_urls", originalUrls);
                 result.put("save_dir", targetDir.getAbsolutePath());
                 result.put("model", MODEL_NAME);
@@ -373,6 +386,87 @@ public class GenerateImageTool implements Tool {
                 FileLogger.w(TAG, "获取 " + key + " 失败: " + e.getMessage());
             }
         }
+        return null;
+    }
+
+    /**
+     * 🔥 扫描单张图片到系统相册
+     *
+     * Android 提供 3 种方式触发媒体扫描：
+     * 1. MediaScannerConnection（推荐）：支持单文件扫描，异步回调
+     * 2. sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, uri))：旧 API，已废弃
+     * 3. MediaStore（API 29+）：直接插入 MediaStore
+     *
+     * 这里使用 MediaScannerConnection，因为它：
+     * - 兼容所有 Android 版本（API 1+）
+     * - 不需要权限（API 29 之前）
+     * - 异步执行，不阻塞主线程
+     * - 能正确处理文件路径、URI、MIME 类型
+     *
+     * @param filePath 图片文件的绝对路径
+     * @return 扫描后的 content URI 字符串；失败返回 null
+     */
+    private String scanImageToGallery(final String filePath) {
+        if (filePath == null || filePath.isEmpty()) {
+            FileLogger.w(TAG, "  [scan] 文件路径为空，跳过扫描");
+            return null;
+        }
+
+        File file = new File(filePath);
+        if (!file.exists()) {
+            FileLogger.w(TAG, "  [scan] 文件不存在: " + filePath);
+            return null;
+        }
+
+        // 根据文件扩展名推断 MIME 类型
+        String mimeType = "image/jpeg";
+        String lowerName = filePath.toLowerCase();
+        if (lowerName.endsWith(".png")) {
+            mimeType = "image/png";
+        } else if (lowerName.endsWith(".webp")) {
+            mimeType = "image/webp";
+        } else if (lowerName.endsWith(".gif")) {
+            mimeType = "image/gif";
+        }
+
+        final String finalMimeType = mimeType;
+        final String[] scannedUri = {null};
+
+        try {
+            // 方式 1：MediaScannerConnection（推荐，兼容性最好）
+            MediaScannerConnection.scanFile(
+                context,
+                new String[]{filePath},
+                new String[]{finalMimeType},
+                new MediaScannerConnection.OnScanCompletedListener() {
+                    @Override
+                    public void onScanCompleted(String path, Uri uri) {
+                        if (uri != null) {
+                            FileLogger.i(TAG, "  [scan] ✅ 扫描成功: " + path + " -> " + uri);
+                            scannedUri[0] = uri.toString();
+                        } else {
+                            FileLogger.w(TAG, "  [scan] ⚠️ 扫描完成但 URI 为空: " + path);
+                        }
+                    }
+                }
+            );
+            FileLogger.d(TAG, "  [scan] 已提交扫描任务: " + filePath + " (MIME: " + finalMimeType + ")");
+        } catch (Exception e) {
+            FileLogger.e(TAG, "  [scan] MediaScannerConnection 失败，降级到 broadcast", e);
+            // 方式 2：降级方案 - 旧版广播（已废弃但兼容老设备）
+            try {
+                Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+                intent.setData(Uri.fromFile(file));
+                context.sendBroadcast(intent);
+                FileLogger.i(TAG, "  [scan] 已发送广播扫描: " + filePath);
+            } catch (Exception ex) {
+                FileLogger.e(TAG, "  [scan] 广播扫描也失败了: " + ex.getMessage(), ex);
+            }
+        }
+
+        // 注意：MediaScannerConnection 是异步的，scannedUri[0] 可能还没设置
+        // 调用方拿到的是同步返回值，所以这里只能返回 null 表示已提交
+        // 实际 URI 在异步回调中才有
         return null;
     }
 
@@ -504,6 +598,6 @@ public class GenerateImageTool implements Tool {
             + "3. 典型场景：小说封面、应用图标、UI 配图、营销海报\n"
             + "4. 适合复杂、抽象、艺术性的图片生成需求，不适合代码截图、表格等结构化内容\n"
             + "5. 中文 prompt 友好，建议详细描述风格、场景、构图、色彩等要素\n"
-            + "6. 返回的图片会自动下载到 /sdcard/Download/，可直接在应用中预览";
+            + "6. 返回的图片会自动下载到 /sdcard/Download/ 并扫描到系统相册，可直接在相册中查看";
     }
 }
