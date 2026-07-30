@@ -279,6 +279,7 @@ public class GenerateImageTool implements Tool {
                 JSONArray savedPaths = new JSONArray();
                 JSONArray scannedUris = new JSONArray();
                 JSONArray originalUrls = new JSONArray();
+                JSONArray attachmentsArray = new JSONArray(); // 🔥 新增：附件数组
                 long timestamp = System.currentTimeMillis();
 
                 for (int i = 0; i < urlArray.length(); i++) {
@@ -293,11 +294,16 @@ public class GenerateImageTool implements Tool {
                     if (scannedUri != null) {
                         scannedUris.put(scannedUri);
                     }
+
+                    // 🔥 新增：构建 attachment 对象
+                    JSONObject attachment = buildImageAttachment(savedPath, width, height);
+                    attachmentsArray.put(attachment);
                 }
 
                 long totalDurationMs = System.currentTimeMillis() - totalStartTime;
                 FileLogger.i(TAG, "✅ 成功生成 " + savedPaths.length() + " 张图片");
                 FileLogger.i(TAG, "  已扫描到相册: " + scannedUris.length() + " 张");
+                FileLogger.i(TAG, "  已构建附件: " + attachmentsArray.length() + " 个");
                 FileLogger.i(TAG, "工具总耗时: " + totalDurationMs + "ms");
 
                 JSONObject result = new JSONObject();
@@ -313,6 +319,7 @@ public class GenerateImageTool implements Tool {
                 result.put("duration_ms", requestDurationMs);
                 result.put("total_duration_ms", totalDurationMs);
                 result.put("timestamp", timestamp);
+                result.put("attachments", attachmentsArray); // 🔥 新增：附件列表
 
                 callback.onResult(result);
 
@@ -324,6 +331,57 @@ public class GenerateImageTool implements Tool {
                 callback.onError(e);
             }
         });
+    }
+
+    /**
+     * 🔥 新增：构建图片附件对象
+     * @param savedPath 本地保存的图片绝对路径
+     * @param width 图片宽度
+     * @param height 图片高度
+     * @return JSONObject 附件对象，包含 type/url/metadata
+     */
+    private JSONObject buildImageAttachment(String savedPath, int width, int height) {
+        try {
+            JSONObject attachment = new JSONObject();
+
+            // type: 图片类型
+            attachment.put("type", "image");
+
+            // url: file:// 前缀的本地路径
+            attachment.put("url", "file://" + savedPath);
+
+            // metadata: 元数据
+            JSONObject metadata = new JSONObject();
+            metadata.put("width", width);
+            metadata.put("height", height);
+
+            // 文件大小
+            File file = new File(savedPath);
+            if (file.exists()) {
+                metadata.put("size", file.length());
+            }
+
+            // MIME 类型（根据扩展名推断）
+            String mimeType = "image/jpeg";
+            String lowerPath = savedPath.toLowerCase();
+            if (lowerPath.endsWith(".png")) {
+                mimeType = "image/png";
+            } else if (lowerPath.endsWith(".webp")) {
+                mimeType = "image/webp";
+            } else if (lowerPath.endsWith(".gif")) {
+                mimeType = "image/gif";
+            }
+            metadata.put("mimeType", mimeType);
+
+            attachment.put("metadata", metadata);
+
+            FileLogger.d(TAG, "  [attachment] 构建附件 | url=" + attachment.getString("url") + " | size=" + (file.exists() ? file.length() : "N/A") + " bytes");
+
+            return attachment;
+        } catch (Exception e) {
+            FileLogger.e(TAG, "  [attachment] 构建附件失败", e);
+            return new JSONObject();
+        }
     }
 
     private JSONArray extractImageUrls(JSONObject jsonResponse) {
