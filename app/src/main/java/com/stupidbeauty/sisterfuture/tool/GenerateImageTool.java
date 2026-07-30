@@ -71,9 +71,25 @@ public class GenerateImageTool implements Tool {
 
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final OkHttpClient client = new OkHttpClient.Builder()
-            .callTimeout(DEFAULT_TIMEOUT_SEC, TimeUnit.SECONDS)
-            .build();
+
+    /**
+     * OkHttpClient 单例（修复 Bug 3：避免每次 new 客户端导致连接池失效）
+     * 使用静态内部类 Holder 模式实现：线程安全 + 延迟加载
+     * 完整超时配置（修复 Bug 1：补全 connect/read/write/call timeout）
+     */
+    private static class ClientHolder {
+        private static final OkHttpClient INSTANCE = new OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
+                .writeTimeout(60, TimeUnit.SECONDS)
+                .callTimeout(180, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .build();
+    }
+
+    private static OkHttpClient getClient() {
+        return ClientHolder.INSTANCE;
+    }
 
     public GenerateImageTool(Context context) {
         this.context = context;
@@ -95,47 +111,40 @@ public class GenerateImageTool implements Tool {
             parameters.put("type", "object");
             JSONObject properties = new JSONObject();
 
-            // 提示词（必填）
             JSONObject promptParam = new JSONObject();
             promptParam.put("type", "string");
             promptParam.put("description", "文本提示词，描述想生成的图片内容。中文友好，建议尽可能详细描述风格、场景、构图等。");
             properties.put("prompt", promptParam);
 
-            // API Key（可选，优先从工具备注读取）
             JSONObject apiKeyParam = new JSONObject();
             apiKeyParam.put("type", "string");
             apiKeyParam.put("description", "MiniMax API Key（sk-cp- 前缀）。如果未传入，会自动从工具备注 minimax_image_api_key 读取。");
             properties.put("apiKey", apiKeyParam);
 
-            // 宽度（可选）
             JSONObject widthParam = new JSONObject();
             widthParam.put("type", "integer");
             widthParam.put("default", 1024);
             widthParam.put("description", "图片宽度（512-2048，必须是 8 的倍数，默认 1024）");
             properties.put("width", widthParam);
 
-            // 高度（可选）
             JSONObject heightParam = new JSONObject();
             heightParam.put("type", "integer");
             heightParam.put("default", 1024);
             heightParam.put("description", "图片高度（512-2048，必须是 8 的倍数，默认 1024）");
             properties.put("height", heightParam);
 
-            // 数量（可选）
             JSONObject nParam = new JSONObject();
             nParam.put("type", "integer");
             nParam.put("default", 1);
             nParam.put("description", "生成数量（1-9，默认 1）");
             properties.put("n", nParam);
 
-            // 是否优化 prompt（可选）
             JSONObject optimizerParam = new JSONObject();
             optimizerParam.put("type", "boolean");
             optimizerParam.put("default", true);
             optimizerParam.put("description", "是否启用 prompt 自动优化（默认 true，对中文友好）");
             properties.put("promptOptimizer", optimizerParam);
 
-            // 保存到手机的目录（可选）
             JSONObject saveDirParam = new JSONObject();
             saveDirParam.put("type", "string");
             saveDirParam.put("description", "图片保存目录（默认 /sdcard/Download/）");
@@ -166,15 +175,19 @@ public class GenerateImageTool implements Tool {
 
     @Override
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
+        long totalStartTime = System.currentTimeMillis();
         executor.execute(() -> {
             try {
-                // 1. 解析参数
+                FileLogger.i(TAG, "========== generateImage 工具开始执行 ==========");
+
+                long stepStart = System.currentTimeMillis();
                 String prompt = arguments.optString("prompt", null);
                 if (prompt == null || prompt.trim().isEmpty()) {
                     throw new IllegalArgumentException("prompt 不能为空");
                 }
+                FileLogger.d(TAG, "[1/10] 解析参数完成 - prompt 长度: " + prompt.length() + "，耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
 
-                // 2. 获取 API Key（优先从参数，其次从工具备注）
+                stepStart = System.currentTimeMillis();
                 String apiKey = arguments.optString("apiKey", null);
                 if (apiKey == null || apiKey.trim().isEmpty()) {
                     apiKey = getApiKeyFromNote();
@@ -186,6 +199,7 @@ public class GenerateImageTool implements Tool {
                         );
                     }
                 }
+                FileLogger.i(TAG, "[2/10] 获取 API Key 完成（掩码: " + maskApiKey(apiKey) + "），耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
 
                 int width = arguments.optInt("width", 1024);
                 int height = arguments.optInt("height", 1024);
@@ -193,14 +207,11 @@ public class GenerateImageTool implements Tool {
                 boolean promptOptimizer = arguments.optBoolean("promptOptimizer", true);
                 String saveDir = arguments.optString("saveDir", null);
 
-                FileLogger.i(TAG, "==== generateImage 工具开始执行 ====");
-                FileLogger.i(TAG, "prompt 长度: " + prompt.length());
-                FileLogger.i(TAG, "尺寸: " + width + "x" + height + ", 数量: " + n);
-
-                // 3. 参数校验
+                stepStart = System.currentTimeMillis();
                 validateParams(width, height, n);
+                FileLogger.i(TAG, "[3/10] 参数校验通过 - 尺寸: " + width + "x" + height + "，数量: " + n + "，optimizer: " + promptOptimizer + "，耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
 
-                // 4. 构建请求体
+                stepStart = System.currentTimeMillis();
                 JSONObject requestBody = new JSONObject();
                 requestBody.put("model", MODEL_NAME);
                 requestBody.put("prompt", prompt);
@@ -209,9 +220,9 @@ public class GenerateImageTool implements Tool {
                 requestBody.put("height", height);
                 requestBody.put("prompt_optimizer", promptOptimizer);
 
-                FileLogger.d(TAG, "请求体: " + requestBody.toString());
+                FileLogger.d(TAG, "[4/10] 请求体构建完成 - 大小: " + requestBody.toString().length() + " 字节，耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
+                FileLogger.d(TAG, "  请求体内容: " + requestBody.toString());
 
-                // 5. 发送 HTTP 请求
                 MediaType mediaType = MediaType.parse("application/json; charset=utf-8");
                 RequestBody body = RequestBody.create(mediaType, requestBody.toString());
 
@@ -222,24 +233,36 @@ public class GenerateImageTool implements Tool {
                         .header("Authorization", "Bearer " + apiKey)
                         .build();
 
-                FileLogger.i(TAG, "发送请求到: " + API_ENDPOINT);
+                FileLogger.i(TAG, "[5/10] 发送请求到: " + API_ENDPOINT);
+                FileLogger.i(TAG, "  使用 OkHttpClient 单例，超时配置: connect=30s, read=120s, write=60s, call=180s");
 
-                long startTime = System.currentTimeMillis();
-                Response response = client.newCall(request).execute();
-                String responseBody = response.body() != null ? response.body().string() : "";
-                long durationMs = System.currentTimeMillis() - startTime;
+                long requestStartTime = System.currentTimeMillis();
 
-                FileLogger.i(TAG, "响应耗时: " + durationMs + "ms, 状态码: " + response.code());
+                String responseBody;
+                int responseCode;
+                try (Response response = getClient().newCall(request).execute()) {
+                    responseCode = response.code();
+                    FileLogger.i(TAG, "[6/10] HTTP 响应到达 - 耗时: " + (System.currentTimeMillis() - requestStartTime) + "ms");
+                    FileLogger.i(TAG, "  状态码: " + responseCode);
 
-                // 6. 处理响应
-                if (!response.isSuccessful()) {
-                    handleHttpError(response.code(), responseBody, callback);
+                    ResponseBody respBody = response.body();
+                    if (respBody == null) {
+                        throw new IOException("响应体为空");
+                    }
+                    responseBody = respBody.string();
+                    FileLogger.i(TAG, "  响应体大小: " + responseBody.length() + " 字节");
+                }
+
+                long requestDurationMs = System.currentTimeMillis() - requestStartTime;
+                FileLogger.i(TAG, "  HTTP 请求总耗时: " + requestDurationMs + "ms");
+
+                if (responseCode < 200 || responseCode >= 300) {
+                    handleHttpError(responseCode, responseBody, callback);
                     return;
                 }
 
                 JSONObject jsonResponse = new JSONObject(responseBody);
 
-                // 检查错误字段
                 if (jsonResponse.has("error") && !jsonResponse.isNull("error")) {
                     JSONObject errorObj = jsonResponse.getJSONObject("error");
                     String errorMsg = errorObj.optString("message", "未知错误");
@@ -248,12 +271,11 @@ public class GenerateImageTool implements Tool {
                     errorResult.put("status", "error");
                     errorResult.put("error", "API 返回错误: " + errorMsg);
                     errorResult.put("error_type", "api_error");
-                    errorResult.put("status_code", response.code());
+                    errorResult.put("status_code", responseCode);
                     callback.onResult(errorResult);
                     return;
                 }
 
-                // 7. 解析图片数据
                 if (!jsonResponse.has("data")) {
                     JSONObject errorResult = new JSONObject();
                     errorResult.put("status", "error");
@@ -272,7 +294,8 @@ public class GenerateImageTool implements Tool {
                     return;
                 }
 
-                // 8. 确定保存目录
+                FileLogger.i(TAG, "[7/10] 解析到 " + dataArray.length() + " 张图片");
+
                 File targetDir;
                 if (saveDir != null && !saveDir.trim().isEmpty()) {
                     targetDir = new File(saveDir);
@@ -284,14 +307,14 @@ public class GenerateImageTool implements Tool {
                 if (!targetDir.exists()) {
                     targetDir.mkdirs();
                 }
-                FileLogger.i(TAG, "保存目录: " + targetDir.getAbsolutePath());
+                FileLogger.i(TAG, "[8/10] 保存目录: " + targetDir.getAbsolutePath());
 
-                // 9. 下载图片到本地
                 JSONArray savedPaths = new JSONArray();
                 JSONArray originalUrls = new JSONArray();
                 long timestamp = System.currentTimeMillis();
 
                 for (int i = 0; i < dataArray.length(); i++) {
+                    FileLogger.i(TAG, "[9/10] 处理第 " + (i + 1) + "/" + dataArray.length() + " 张图片");
                     JSONObject item = dataArray.getJSONObject(i);
 
                     if (item.has("url")) {
@@ -307,9 +330,10 @@ public class GenerateImageTool implements Tool {
                     }
                 }
 
+                long totalDurationMs = System.currentTimeMillis() - totalStartTime;
                 FileLogger.i(TAG, "✅ 成功生成 " + savedPaths.length() + " 张图片");
+                FileLogger.i(TAG, "工具总耗时: " + totalDurationMs + "ms");
 
-                // 10. 返回结果
                 JSONObject result = new JSONObject();
                 result.put("status", "success");
                 result.put("image_count", savedPaths.length());
@@ -319,21 +343,29 @@ public class GenerateImageTool implements Tool {
                 result.put("model", MODEL_NAME);
                 result.put("width", width);
                 result.put("height", height);
-                result.put("duration_ms", durationMs);
+                result.put("duration_ms", requestDurationMs);
+                result.put("total_duration_ms", totalDurationMs);
                 result.put("timestamp", timestamp);
 
                 callback.onResult(result);
 
             } catch (Exception e) {
-                FileLogger.e(TAG, "❌ executeAsync 出错", e);
+                long totalDurationMs = System.currentTimeMillis() - totalStartTime;
+                FileLogger.e(TAG, "❌ executeAsync 出错 - 总耗时: " + totalDurationMs + "ms", e);
+                FileLogger.e(TAG, "  异常类型: " + e.getClass().getName());
+                FileLogger.e(TAG, "  异常信息: " + e.getMessage());
                 callback.onError(e);
             }
         });
     }
 
-    /**
-     * 参数校验
-     */
+    private String maskApiKey(String apiKey) {
+        if (apiKey == null || apiKey.length() < 8) {
+            return "***";
+        }
+        return apiKey.substring(0, 4) + "***" + apiKey.substring(apiKey.length() - 4);
+    }
+
     private void validateParams(int width, int height, int n) throws IllegalArgumentException {
         if (width < MIN_SIZE || width > MAX_SIZE || width % SIZE_MULTIPLE != 0) {
             throw new IllegalArgumentException(
@@ -352,17 +384,12 @@ public class GenerateImageTool implements Tool {
         }
     }
 
-    /**
-     * 从工具备注中读取 API Key
-     * 备注格式示例："minimax_image_api_key=sk-cp-xxx\nminimax_image_default_size=1024x1024"
-     */
     private String getApiKeyFromNote() {
         String note = getNote(context);
         if (note == null || note.isEmpty()) {
             return null;
         }
 
-        // 按行解析
         String[] lines = note.split("\\n");
         for (String line : lines) {
             line = line.trim();
@@ -377,33 +404,35 @@ public class GenerateImageTool implements Tool {
         return null;
     }
 
-    /**
-     * 从 URL 下载图片到本地
-     */
     private String downloadImageFromUrl(String imageUrl, File targetDir, long timestamp, int index) throws IOException {
         String filename = String.format("minimax_image_%d_%d.png", timestamp, index);
         File targetFile = new File(targetDir, filename);
 
-        FileLogger.d(TAG, "下载图片: " + imageUrl + " -> " + targetFile.getAbsolutePath());
+        long startTime = System.currentTimeMillis();
+        FileLogger.d(TAG, "  下载图片: " + imageUrl + " -> " + targetFile.getAbsolutePath());
 
         Request request = new Request.Builder().url(imageUrl).build();
-        Response response = client.newCall(request).execute();
 
-        if (!response.isSuccessful()) {
-            throw new IOException("下载图片失败: HTTP " + response.code());
-        }
+        try (Response response = getClient().newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("下载图片失败: HTTP " + response.code());
+            }
 
-        ResponseBody body = response.body();
-        if (body == null) {
-            throw new IOException("响应体为空");
-        }
+            ResponseBody body = response.body();
+            if (body == null) {
+                throw new IOException("响应体为空");
+            }
 
-        try (InputStream in = body.byteStream();
-             FileOutputStream fos = new FileOutputStream(targetFile)) {
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = in.read(buffer)) != -1) {
-                fos.write(buffer, 0, bytesRead);
+            try (InputStream in = body.byteStream();
+                 FileOutputStream fos = new FileOutputStream(targetFile)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                long totalBytes = 0;
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    fos.write(buffer, 0, bytesRead);
+                    totalBytes += bytesRead;
+                }
+                FileLogger.d(TAG, "  下载完成: " + totalBytes + " 字节，耗时: " + (System.currentTimeMillis() - startTime) + "ms");
             }
         }
 
@@ -411,17 +440,12 @@ public class GenerateImageTool implements Tool {
         return targetFile.getAbsolutePath();
     }
 
-    /**
-     * 保存 base64 图片到本地
-     * 使用 android.util.Base64（API 1+ 兼容），不用 java.util.Base64（API 26+）
-     */
     private String saveBase64Image(String b64Data, File targetDir, long timestamp, int index) throws IOException {
         String filename = String.format("minimax_image_%d_%d.png", timestamp, index);
         File targetFile = new File(targetDir, filename);
 
-        FileLogger.d(TAG, "保存 base64 图片 -> " + targetFile.getAbsolutePath());
+        FileLogger.d(TAG, "  保存 base64 图片 -> " + targetFile.getAbsolutePath());
 
-        // 使用 android.util.Base64（API 1+ 兼容）
         byte[] imageBytes = Base64.decode(b64Data, Base64.DEFAULT);
         try (FileOutputStream fos = new FileOutputStream(targetFile)) {
             fos.write(imageBytes);
@@ -431,9 +455,6 @@ public class GenerateImageTool implements Tool {
         return targetFile.getAbsolutePath();
     }
 
-    /**
-     * 处理 HTTP 错误
-     */
     private void handleHttpError(int code, String body, OnResultCallback callback) {
         String errorDetail = "";
         try {
@@ -450,7 +471,6 @@ public class GenerateImageTool implements Tool {
             errorResult.put("status", "error");
             errorResult.put("status_code", code);
 
-            // 根据状态码设置错误类型
             if (code == 401 || code == 403) {
                 errorResult.put("error_type", "invalid_api_key");
                 errorResult.put("error", "API Key 无效或已过期: " + errorDetail);
