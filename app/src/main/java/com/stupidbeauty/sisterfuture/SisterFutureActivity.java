@@ -300,8 +300,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     if (!setParam())
     {
+    }
       return;
-    ret = mIat.startListening(mRecognizerListener);
+    }
 
     if (ret != ErrorCode.SUCCESS)
     {
