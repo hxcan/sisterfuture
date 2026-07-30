@@ -39,8 +39,12 @@ import java.util.concurrent.TimeUnit;
  * - 用户可在工具备注中设置 minimax_image_api_key=sk-cp-xxx
  * - 或调用时通过 apiKey 参数传入
  *
+ * 响应格式（兼容两种）：
+ * - 新格式：{"image_urls": ["url1", "url2", ...]}
+ * - 旧格式：{"data": [{"url": "url1"}, {"url": "url2"}, ...]}
+ *
  * @author 未来姐姐
- * @date 2026-07-29
+ * @date 2026-07-30
  */
 public class GenerateImageTool implements Tool {
     private static final String TAG = "GenerateImageTool";
@@ -276,25 +280,20 @@ public class GenerateImageTool implements Tool {
                     return;
                 }
 
-                if (!jsonResponse.has("data")) {
+                // 兼容两种响应格式：
+                // 新格式：{"image_urls": ["url1", "url2", ...]}
+                // 旧格式：{"data": [{"url": "url1"}, {"url": "url2"}, ...]}
+                JSONArray urlArray = extractImageUrls(jsonResponse);
+                if (urlArray == null || urlArray.length() == 0) {
                     JSONObject errorResult = new JSONObject();
                     errorResult.put("status", "error");
-                    errorResult.put("error", "响应中没有 data 字段");
+                    errorResult.put("error", "响应中找不到图片 URL（既没有 image_urls 也没有 data.url）");
                     errorResult.put("raw_response", responseBody);
                     callback.onResult(errorResult);
                     return;
                 }
 
-                JSONArray dataArray = jsonResponse.getJSONArray("data");
-                if (dataArray.length() == 0) {
-                    JSONObject errorResult = new JSONObject();
-                    errorResult.put("status", "error");
-                    errorResult.put("error", "响应中 data 数组为空");
-                    callback.onResult(errorResult);
-                    return;
-                }
-
-                FileLogger.i(TAG, "[7/10] 解析到 " + dataArray.length() + " 张图片");
+                FileLogger.i(TAG, "[7/10] 解析到 " + urlArray.length() + " 张图片 URL");
 
                 File targetDir;
                 if (saveDir != null && !saveDir.trim().isEmpty()) {
@@ -313,21 +312,12 @@ public class GenerateImageTool implements Tool {
                 JSONArray originalUrls = new JSONArray();
                 long timestamp = System.currentTimeMillis();
 
-                for (int i = 0; i < dataArray.length(); i++) {
-                    FileLogger.i(TAG, "[9/10] 处理第 " + (i + 1) + "/" + dataArray.length() + " 张图片");
-                    JSONObject item = dataArray.getJSONObject(i);
-
-                    if (item.has("url")) {
-                        String url = item.getString("url");
-                        originalUrls.put(url);
-                        String savedPath = downloadImageFromUrl(url, targetDir, timestamp, i);
-                        savedPaths.put(savedPath);
-                    } else if (item.has("b64_json")) {
-                        String b64Data = item.getString("b64_json");
-                        originalUrls.put("base64:image");
-                        String savedPath = saveBase64Image(b64Data, targetDir, timestamp, i);
-                        savedPaths.put(savedPath);
-                    }
+                for (int i = 0; i < urlArray.length(); i++) {
+                    FileLogger.i(TAG, "[9/10] 处理第 " + (i + 1) + "/" + urlArray.length() + " 张图片");
+                    String url = urlArray.getString(i);
+                    originalUrls.put(url);
+                    String savedPath = downloadImageFromUrl(url, targetDir, timestamp, i);
+                    savedPaths.put(savedPath);
                 }
 
                 long totalDurationMs = System.currentTimeMillis() - totalStartTime;
@@ -357,6 +347,58 @@ public class GenerateImageTool implements Tool {
                 callback.onError(e);
             }
         });
+    }
+
+    /**
+     * 从 JSON 响应中提取图片 URL 数组
+     * 兼容两种格式：
+     * - 新格式：{"image_urls": ["url1", "url2"]}
+     * - 旧格式：{"data": [{"url": "url1"}, {"url": "url2"}]}
+     */
+    private JSONArray extractImageUrls(JSONObject jsonResponse) {
+        // 优先尝试新格式：image_urls
+        if (jsonResponse.has("image_urls") && !jsonResponse.isNull("image_urls")) {
+            try {
+                Object value = jsonResponse.get("image_urls");
+                if (value instanceof JSONArray) {
+                    FileLogger.i(TAG, "  检测到新格式: image_urls 数组");
+                    return (JSONArray) value;
+                }
+            } catch (Exception e) {
+                FileLogger.w(TAG, "解析 image_urls 失败: " + e.getMessage());
+            }
+        }
+
+        // 兼容旧格式：data[].url 或 data[].b64_json
+        if (jsonResponse.has("data") && !jsonResponse.isNull("data")) {
+            try {
+                Object dataValue = jsonResponse.get("data");
+                if (dataValue instanceof JSONArray) {
+                    FileLogger.i(TAG, "  检测到旧格式: data 数组，转换为 URL 数组");
+                    JSONArray dataArray = (JSONArray) dataValue;
+                    JSONArray urlArray = new JSONArray();
+                    for (int i = 0; i < dataArray.length(); i++) {
+                        Object item = dataArray.get(i);
+                        if (item instanceof JSONObject) {
+                            JSONObject itemObj = (JSONObject) item;
+                            if (itemObj.has("url")) {
+                                urlArray.put(itemObj.getString("url"));
+                            }
+                        } else if (item instanceof String) {
+                            // data 数组直接就是字符串数组的情况
+                            urlArray.put((String) item);
+                        }
+                    }
+                    if (urlArray.length() > 0) {
+                        return urlArray;
+                    }
+                }
+            } catch (Exception e) {
+                FileLogger.w(TAG, "解析 data 失败: " + e.getMessage());
+            }
+        }
+
+        return null;
     }
 
     private String maskApiKey(String apiKey) {
@@ -405,7 +447,7 @@ public class GenerateImageTool implements Tool {
     }
 
     private String downloadImageFromUrl(String imageUrl, File targetDir, long timestamp, int index) throws IOException {
-        String filename = String.format("minimax_image_%d_%d.png", timestamp, index);
+        String filename = String.format("minimax_image_%d_%d.jpg", timestamp, index);
         File targetFile = new File(targetDir, filename);
 
         long startTime = System.currentTimeMillis();
@@ -440,21 +482,6 @@ public class GenerateImageTool implements Tool {
         return targetFile.getAbsolutePath();
     }
 
-    private String saveBase64Image(String b64Data, File targetDir, long timestamp, int index) throws IOException {
-        String filename = String.format("minimax_image_%d_%d.png", timestamp, index);
-        File targetFile = new File(targetDir, filename);
-
-        FileLogger.d(TAG, "  保存 base64 图片 -> " + targetFile.getAbsolutePath());
-
-        byte[] imageBytes = Base64.decode(b64Data, Base64.DEFAULT);
-        try (FileOutputStream fos = new FileOutputStream(targetFile)) {
-            fos.write(imageBytes);
-        }
-
-        FileLogger.i(TAG, "✅ base64 图片已保存: " + targetFile.getAbsolutePath());
-        return targetFile.getAbsolutePath();
-    }
-
     private void handleHttpError(int code, String body, OnResultCallback callback) {
         String errorDetail = "";
         try {
@@ -462,6 +489,9 @@ public class GenerateImageTool implements Tool {
                 JSONObject errorJson = new JSONObject(body);
                 if (errorJson.has("error")) {
                     errorDetail = errorJson.getJSONObject("error").optString("message", "");
+                } else if (errorJson.has("base_resp")) {
+                    JSONObject baseResp = errorJson.getJSONObject("base_resp");
+                    errorDetail = baseResp.optString("status_msg", "");
                 }
             }
         } catch (Exception ignore) {}
