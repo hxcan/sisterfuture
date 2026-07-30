@@ -17,7 +17,6 @@ import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
 import com.stupidbeauty.sisterfuture.bean.Attachment;
 import com.stupidbeauty.sisterfuture.bean.AttachmentMetadata;
-
 import com.stupidbeauty.sisterfuture.bean.Delta;
 import com.stupidbeauty.sisterfuture.bean.Choice;
 import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
@@ -1427,6 +1426,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
           
           if (isDuplicate)
+          {
+            FileLogger.w(TAG, "⚠️ [DUPLICATE] 发现重复工具 | id=" + id + " | name=" + name + " | 说明已处理过，跳过本次请求触发");
+            return;
+          }
+          
+          FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
+          FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
+          contextManager.addToolMessage(id, name, result.toString());
           FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
 
           // 🔥 新增：解析 attachments 字段（如果存在）
@@ -1437,7 +1444,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             MessageType.TOOL_CALL_RESULT
           );
 
-            FileLogger.w(TAG, "⚠️ [DUPLICATE] 发现重复工具 | id=" + id + " | name=" + name + " | 说明已处理过，跳过本次请求触发");
           if (attachments != null && !attachments.isEmpty())
           {
             messageItem.setAttachments(attachments);
@@ -1445,10 +1451,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           }
 
           messageAdapter.addMessage(messageItem);
-          }
-          
-          FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
-          contextManager.addToolMessage(id, name, result.toString());
           FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
           messageAdapter.addMessage(
             new MessageItem(
@@ -1939,10 +1941,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       startActivityForResult(pickIntent, 1001);
       FileLogger.d(TAG, "📷 [IMAGE_PICKER] 已打开图片选择器");
     }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
-      Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
+  }
+
   /**
    * 🔥 新增：从工具结果 JSONObject 中解析 attachments 字段
    * @param result 工具返回的结果 JSON
@@ -2014,17 +2014,21 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
       }
       
-      FileLogger.i(TAG, "🔥 [parseAttachments] 共解析 " + attachments.size() + " 个附件");
+      FileLogger.i(TAG, " [parseAttachments] 共解析 " + attachments.size() + " 个附件");
       return attachments;
     }
     catch (Exception e)
     {
-      FileLogger.e(TAG, "❌ [parseAttachments] 解析 attachments 失败", e);
+      FileLogger.e(TAG, " [parseAttachments] 解析 attachments 失败", e);
       return null;
     }
   }
 }
-
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
+      Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
+    }
   }
 
   @Override
