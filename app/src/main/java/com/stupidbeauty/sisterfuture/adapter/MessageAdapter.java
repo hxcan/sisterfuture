@@ -631,6 +631,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         // 🆕 渲染附件图片（多个 attachment 在 tool_call_result_images_container 容器中横向排列）
+        // 🆕 支持三种 URL 格式：data:image/...;base64,xxx、纯 Base64、file:///绝对路径
         private void renderAttachments(MessageItem message) {
             try {
                 java.util.List<Attachment> attachments = message.getAttachments();
@@ -666,34 +667,61 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                             base64Data = base64Data.substring(commaIndex + 1);
                         }
                     }
-                    // 去除可能的 file:// 前缀（这是本地路径，需要先读取）
+                    Bitmap bitmap = null;
+                    // 🆕 分支1：file:// 本地路径（GenerateImageTool 实际产物）
                     if (base64Data.startsWith("file://")) {
-                        FileLogger.w(TAG, "⚠️ [FILE_URL] 不支持 file:// URL 渲染: " + base64Data);
-                        continue;
+                        String localPath = base64Data.substring("file://".length());
+                        FileLogger.d(TAG, "📂 [FILE_PATH] 读取本地图片: " + localPath);
+                        try {
+                            bitmap = BitmapFactory.decodeFile(localPath);
+                        } catch (Exception fileEx) {
+                            FileLogger.w(TAG, "⚠️ [FILE_DECODE_FAIL] " + fileEx.getMessage());
+                        }
+                        // 兜底：file:// 失败时尝试 ContentResolver（兼容 content://）
+                        if (bitmap == null) {
+                            try {
+                                java.io.InputStream is = ctx.getContentResolver().openInputStream(android.net.Uri.parse(base64Data));
+                                if (is != null) {
+                                    bitmap = BitmapFactory.decodeStream(is);
+                                    is.close();
+                                }
+                            } catch (Exception uriEx) {
+                                FileLogger.w(TAG, "⚠️ [URI_DECODE_FAIL] " + uriEx.getMessage());
+                            }
+                        }
+                        if (bitmap == null) {
+                            FileLogger.e(TAG, "❌ [FILE_BMP_NULL] 无法读取本地图片: " + localPath);
+                            continue;
+                        }
+                        FileLogger.d(TAG, "✅ [FILE_DECODED] 本地图片尺寸: " + bitmap.getWidth() + "x" + bitmap.getHeight());
                     }
-                    try {
-                        byte[] decodedBytes = Base64.decode(base64Data, Base64.NO_WRAP);
-                        Bitmap bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
+                    // 分支2：纯 Base64 数据
+                    else {
+                        try {
+                            byte[] decodedBytes = Base64.decode(base64Data, Base64.NO_WRAP);
+                            bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
+                        } catch (Exception e) {
+                            FileLogger.e(TAG, "❌ [ATTACHMENT_DECODE_ERROR] 附件 #" + i + " 解码失败", e);
+                            continue;
+                        }
                         if (bitmap == null) {
                             FileLogger.e(TAG, "❌ [BITMAP_NULL] 解码失败，跳过附件 #" + i);
                             continue;
                         }
                         FileLogger.d(TAG, "✅ [IMAGE_DECODED] 附件 #" + i + " 尺寸: " + bitmap.getWidth() + "x" + bitmap.getHeight());
-                        // 创建 ImageView 并设置图片
-                        ImageView imageView = new ImageView(ctx);
-                        int sizeInPx = (int) (200 * ctx.getResources().getDisplayMetrics().density);
-                        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
-                            sizeInPx, sizeInPx);
-                        lp.setMargins(0, 0, 8, 0);
-                        imageView.setLayoutParams(lp);
-                        imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                        imageView.setImageBitmap(bitmap);
-                        imageView.setAdjustViewBounds(true);
-                        container.addView(imageView);
-                        imageCount++;
-                    } catch (Exception e) {
-                        FileLogger.e(TAG, "❌ [ATTACHMENT_DECODE_ERROR] 附件 #" + i + " 解码失败", e);
                     }
+                    // 创建 ImageView 并设置图片
+                    ImageView imageView = new ImageView(ctx);
+                    int sizeInPx = (int) (200 * ctx.getResources().getDisplayMetrics().density);
+                    android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                        sizeInPx, sizeInPx);
+                    lp.setMargins(0, 0, 8, 0);
+                    imageView.setLayoutParams(lp);
+                    imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    imageView.setImageBitmap(bitmap);
+                    imageView.setAdjustViewBounds(true);
+                    container.addView(imageView);
+                    imageCount++;
                 }
                 if (imageCount > 0) {
                     container.setVisibility(android.view.View.VISIBLE);
