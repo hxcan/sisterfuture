@@ -630,8 +630,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             renderAttachments(message);
         }
 
-        // 🆕 渲染附件图片（多个 attachment 在 tool_call_result_images_container 容器中横向排列）
+        // 🆕 渲染附件图片（多个 attachment 在 tool_call_result_images_container 容器中等宽显示，保持宽高比）
         // 🆕 支持三种 URL 格式：data:image/...;base64,xxx、纯 Base64、file:///绝对路径
+        // 🆕 布局：图片宽度 = 容器宽度（MATCH_PARENT），高度按 bitmap 宽高比自动计算
         private void renderAttachments(MessageItem message) {
             try {
                 java.util.List<Attachment> attachments = message.getAttachments();
@@ -710,22 +711,46 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                         }
                         FileLogger.d(TAG, "✅ [IMAGE_DECODED] 附件 #" + i + " 尺寸: " + bitmap.getWidth() + "x" + bitmap.getHeight());
                     }
-                    // 创建 ImageView 并设置图片
+                    
+                    // 🆕 等宽 + 保持宽高比布局
                     ImageView imageView = new ImageView(ctx);
-                    int sizeInPx = (int) (200 * ctx.getResources().getDisplayMetrics().density);
+                    
+                    // 容器宽度（与上面文字消息等宽）
+                    int containerWidth = container.getWidth();
+                    if (containerWidth <= 0) {
+                        // 容器还没 layout，用屏幕宽度估算
+                        containerWidth = ctx.getResources().getDisplayMetrics().widthPixels 
+                            - (int)(32 * ctx.getResources().getDisplayMetrics().density); // 减去外层 padding 16dp*2
+                    }
+                    
+                    int bitmapWidth = bitmap.getWidth();
+                    int bitmapHeight = bitmap.getHeight();
+                    
+                    // 按比例计算高度
+                    int targetHeight = containerWidth * bitmapHeight / bitmapWidth;
+                    
+                    FileLogger.d(TAG, "📐 [IMAGE_LAYOUT] 原图 " + bitmapWidth + "x" + bitmapHeight 
+                        + " → 渲染 " + containerWidth + "x" + targetHeight 
+                        + " (宽高比 " + String.format("%.2f", (float)bitmapWidth / bitmapHeight) + ")");
+                    
+                    // MATCH_PARENT 宽度，wrap_content 高度（按比例）
                     android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
-                        sizeInPx, sizeInPx);
-                    lp.setMargins(0, 0, 8, 0);
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        targetHeight);
+                    if (imageCount > 0) {
+                        lp.topMargin = (int)(8 * ctx.getResources().getDisplayMetrics().density);
+                    }
                     imageView.setLayoutParams(lp);
-                    imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    // FIT_CENTER 保持比例完整显示，不裁剪
+                    imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
                     imageView.setImageBitmap(bitmap);
-                    imageView.setAdjustViewBounds(true);
+                    imageView.setAdjustViewBounds(false);
                     container.addView(imageView);
                     imageCount++;
                 }
                 if (imageCount > 0) {
                     container.setVisibility(android.view.View.VISIBLE);
-                    FileLogger.i(TAG, "🖼️ [ATTACHMENTS_RENDERED] 成功渲染 " + imageCount + " 张图片");
+                    FileLogger.i(TAG, "🖼️ [ATTACHMENTS_RENDERED] 成功渲染 " + imageCount + " 张图片（等宽+保持比例）");
                 } else {
                     container.setVisibility(android.view.View.GONE);
                 }
