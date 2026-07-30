@@ -301,9 +301,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     if (!setParam())
     {
       return;
-    }
+    ret = mIat.startListening(mRecognizerListener);
 
-    ret = mIat.startListening(mIat);
     if (ret != ErrorCode.SUCCESS)
     {
       if (ret == ErrorCode.ERROR_COMPONENT_NOT_INSTALLED)
@@ -1637,10 +1636,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 		{
       commandRecognizebutton2.setVisibility(View.VISIBLE);
       commandRecognizebutton2.setEnabled(true);
-      progressBar.setVisibility(View.INVISIBLE);
-      String errorText=speechRecognizeResult.getErrorDescription();
+      String errorText=speechError.getErrorDescription();
 
-      recognizeResulttextView.setText(errorText+",error code:"+speechError.getErrorCode());
 		}
 
 		@Override
