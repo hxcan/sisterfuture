@@ -152,6 +152,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private ActivityResultLauncher<Intent> imagePickerLauncher;
   private String currentImageBase64 = null;
+  private String currentImagePath = null;  // 新增：图片本地缓存路径，供 wanxiangImage 等需要路径的工具使用
   @BindView(R.id.uploadImageButton) Button uploadImageButton;
 
   private TongYiClient tongYiClient;
@@ -537,10 +538,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         userMessage.put("content", contentArray);
         
         contextManager.addRawMessage(userMessage);
-        
+
+        // 新增：把图片本地路径作为独立文本消息追加（供 wanxiangImage 等工具使用）
+        if (currentImagePath != null)
+        {
+          contextManager.addUserMessage(currentImagePath);
+        }
+
         messageAdapter.addMessage(new MessageItem(message != null ? message : "", MessageType.USER, hasImage ? currentImageBase64 : null));
         
         currentImageBase64 = null;
+        currentImagePath = null;
         
         scrollToBottom();
         
@@ -745,7 +753,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void handleContextLengthError(String errorMessage, final boolean isRetry)
   {
-    runOnUiThread(() ->
+    runOnUiThread(() =>
     {
       String displayMessage = errorMessage + "\n⚠️ 上下文超长，自动缩短后重试";
       messageAdapter.addMessage(new MessageItem(displayMessage, MessageType.AI));
@@ -1061,7 +1069,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     
     int delayMs = 1000 * (1 << rateLimitRetryCount);
     
-    new Handler(Looper.getMainLooper()).postDelayed(() -> 
+    new Handler(Looper.getMainLooper()).postDelayed(() => 
     {
       rateLimitRetryCount++;
       sendChatRequestTongYi();
@@ -1100,7 +1108,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
         else
         {
-          runOnUiThread(() ->
+          runOnUiThread(() =>
           {
             messageAdapter.addMessage(new MessageItem(errorMessage, MessageType.AI));
             scrollToBottom();
@@ -1127,7 +1135,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       if ("tool_calls".equals(choice.getFinishReason()))
       {
-        runOnUiThread(() ->
+        runOnUiThread(() =>
         {
           try
           {
@@ -1302,7 +1310,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             contextManager.addRawMessage(assistantMessage);
             contextManager.increaseMaxRounds();
 
-            runOnUiThread(() ->
+            runOnUiThread(() =>
             {
               StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
               for (ToolCall call : finalCalls)
@@ -1338,7 +1346,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       if (isNewMessage)
       {
-        runOnUiThread(() ->
+        runOnUiThread(() =>
         {
           messageAdapter.addMessage(new MessageItem(accumulatedAnswer.toString(), MessageType.AI));
         });
@@ -1346,7 +1354,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       else
       {
         int lastPosition = messageAdapter.getItemCount() -1;
-        runOnUiThread(() ->
+        runOnUiThread(() =>
         {
           messageAdapter.updateAiMessage(lastPosition, accumulatedAnswer.toString());
           scrollToBottom();
@@ -1355,7 +1363,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       if (!response.getChoices().isEmpty() && "stop".equals(response.getChoices().get(0).getFinishReason()))
       {
-        runOnUiThread(() ->
+        runOnUiThread(() =>
         {
           String fullAnswer = accumulatedAnswer.toString();
           
@@ -1403,7 +1411,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     FileLogger.d(TAG, "🔧 [POST_PROCESS_ENTER] 进入 postProcessToolResults | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
     
-    runOnUiThread(() ->
+    runOnUiThread(() =>
     {
       try
       {
@@ -1491,7 +1499,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void ttsByFindroidTts(String text)
   {
-    ThreadPoolManager.getInstance().execute(() ->
+    ThreadPoolManager.getInstance().execute(() =>
     {
       float speed = 1.0F;
 
@@ -1903,7 +1911,24 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       
       byte[] imageBytes = byteArrayOutputStream.toByteArray();
       currentImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
-      
+
+      // 新增：复制图片到应用私有缓存目录（系统会自动清理，节省存储空间）
+      try
+      {
+        String fileName = "temp_image_" + System.currentTimeMillis() + ".jpg";
+        File cacheFile = new File(getCacheDir(), fileName);
+        FileOutputStream fos = new FileOutputStream(cacheFile);
+        fos.write(imageBytes);
+        fos.close();
+        currentImagePath = cacheFile.getAbsolutePath();
+        FileLogger.i(TAG, "✅ [CACHE_FILE] 图片已缓存 | path=" + currentImagePath);
+      }
+      catch (Exception cacheEx)
+      {
+        FileLogger.e(TAG, "⚠️ [CACHE_FILE_ERROR] 缓存图片失败，但不影响 base64 流程", cacheEx);
+        currentImagePath = null;
+      }
+
       runOnUiThread(() -> {
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
       });
@@ -1947,87 +1972,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
     {
       handleSelectedImage(data);
-    }
-  }
-
-  /**
-   * 🔥 新增：从工具结果 JSONObject 中解析 attachments 字段
-   * @param result 工具返回的结果 JSON
-   * @return List<Attachment> 附件列表，没有则返回 null
-   */
-  private List<Attachment> parseAttachments(JSONObject result)
-  {
-    try
-    {
-      if (result == null || !result.has("attachments"))
-      {
-        return null;
-      }
-      
-      JSONArray attachmentsArray = result.optJSONArray("attachments");
-      if (attachmentsArray == null || attachmentsArray.length() == 0)
-      {
-        return null;
-      }
-      
-      List<Attachment> attachments = new ArrayList<>();
-      
-      for (int i = 0; i < attachmentsArray.length(); i++)
-      {
-        try
-        {
-          JSONObject attachmentJson = attachmentsArray.getJSONObject(i);
-          
-          Attachment attachment = new Attachment();
-          attachment.setType(attachmentJson.optString("type", ""));
-          attachment.setUrl(attachmentJson.optString("url", ""));
-          
-          // 解析 metadata
-          JSONObject metadataJson = attachmentJson.optJSONObject("metadata");
-          if (metadataJson != null)
-          {
-            AttachmentMetadata metadata = new AttachmentMetadata();
-            
-            if (metadataJson.has("width"))
-            {
-              metadata.setWidth(metadataJson.optInt("width"));
-            }
-            if (metadataJson.has("height"))
-            {
-              metadata.setHeight(metadataJson.optInt("height"));
-            }
-            if (metadataJson.has("size"))
-            {
-              metadata.setSize(metadataJson.optLong("size"));
-            }
-            if (metadataJson.has("duration"))
-            {
-              metadata.setDuration(metadataJson.optLong("duration"));
-            }
-            if (metadataJson.has("mimeType"))
-            {
-              metadata.setMimeType(metadataJson.optString("mimeType"));
-            }
-            
-            attachment.setMetadata(metadata);
-          }
-          
-          attachments.add(attachment);
-          FileLogger.d(TAG, "  [parseAttachments] 已解析附件 #" + i + " | type=" + attachment.getType() + " | url=" + attachment.getUrl());
-        }
-        catch (Exception e)
-        {
-          FileLogger.e(TAG, "  [parseAttachments] 解析单个附件失败 | index=" + i, e);
-        }
-      }
-      
-      FileLogger.i(TAG, " [parseAttachments] 共解析 " + attachments.size() + " 个附件");
-      return attachments;
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, " [parseAttachments] 解析 attachments 失败", e);
-      return null;
     }
   }
 }
