@@ -76,6 +76,11 @@ public class ToolRegistry {
         // 关联任务：Redmine #853237970757
         // API Key 配置：在工具备注中设置 minimax_image_api_key=sk-cp-xxx
         toolManager.registerTool(new GenerateImageTool(context));
+        // 🆕 阿里云百炼通义万相图像生成工具（异步，调用 wan2.5-i2i-preview 模型）
+        // 关联任务：Redmine #854576683341
+        // API Key 配置：在工具备注中设置 dashscope_api_key=sk-xxx
+        // 支持文生图 + 图生图（参考图风格迁移）
+        toolManager.registerTool(new WanxiangTool(context));
 
         // === 系统工具 ===
         toolManager.registerTool(new GetContactListTool(context));
