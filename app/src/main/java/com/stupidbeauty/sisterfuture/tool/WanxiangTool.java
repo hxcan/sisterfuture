@@ -86,14 +86,14 @@ public class WanxiangTool implements Tool {
 
     @Override
     public String getName() {
-        return "万相";
+        return "wanxiangImage";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "万相");
+            functionDef.put("name", "wanxiangImage");
             functionDef.put("description", "调用阿里云百炼通义万相（wan2.5-i2i-preview）生成或编辑图片。支持文生图、图生图、风格迁移。需要传入参考图（本地路径或公网 URL）时，会自动转 base64 上传。返回图片自动下载到手机存储并扫描到相册。典型场景：照片转动漫/油画/水彩、商品图、头像、插画。");
 
             JSONObject parameters = new JSONObject();
@@ -166,7 +166,7 @@ public class WanxiangTool implements Tool {
         long totalStartTime = System.currentTimeMillis();
         executor.execute(() -> {
             try {
-                FileLogger.i(TAG, "========== 万相工具开始执行 ==========");
+                FileLogger.i(TAG, "========== wanxiangImage 工具开始执行 ==========");
 
                 long stepStart = System.currentTimeMillis();
                 String prompt = arguments.optString("prompt", null);
@@ -654,12 +654,12 @@ public class WanxiangTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "调用 万相 工具时：\n"
+        return "调用 wanxiangImage 工具时：\n"
             + "1. 必传参数：prompt（描述图片内容/风格）\n"
             + "2. 可选参数：referenceImage（图生图时必传，支持本地路径或公网 URL）、size（如 '1024*1024'）、n（1-4）、model（默认 wan2.5-i2i-preview）\n"
             + "3. API Key：优先用调用时传入的 apiKey，否则从工具备注 dashscope_api_key 读取\n"
             + "4. 典型场景：照片转动漫/油画/水彩风格、商品图生成、头像定制、插画创作\n"
-            + "5. 与 generateImage 工具的差异：万相支持图生图和风格迁移，但需要主人已有 Token Plan 订阅\n"
+            + "5. 与 generateImage 工具的差异：wanxiangImage 支持图生图和风格迁移，但需要主人已有 Token Plan 订阅\n"
             + "6. 中文 prompt 友好，建议详细描述想要的风格、场景、变换效果\n"
             + "7. 返回的图片会自动下载到 /sdcard/Download/ 并扫描到系统相册\n"
             + "8. 注意：通义万相速度比 MiniMax 慢，n 建议不超过 2";
