@@ -45,7 +45,7 @@ public class WanxiangTool implements Tool {
      * 阿里云百炼 API 端点（OpenAI 兼容模式）
      * Token Plan 模式下，使用北京地域专属 base_url
      */
-    private static final String API_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+    private static final String API_ENDPOINT = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/services/aigc/multimodal-generation/generation";
 
     /**
      * 默认模型：通义万相图生图预览版
