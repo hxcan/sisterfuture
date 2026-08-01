@@ -16,6 +16,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -35,6 +36,8 @@ import java.util.concurrent.TimeUnit;
  * - 接受本地图片路径或公网 URL
  * - 本地图片自动转 base64 上传
  *
+ * 调用方式：异步任务（提交任务 + 轮询结果）
+ *
  * @author 未来姐姐
  * @date 2026-07-31
  */
@@ -42,23 +45,24 @@ public class WanxiangTool implements Tool {
     private static final String TAG = "WanxiangTool";
 
     /**
-     * 阿里云百炼 API 端点（OpenAI 兼容模式）
-     * Token Plan 模式下，使用北京地域专属 base_url
+     * 阿里云百炼 API 提交任务端点（Token Plan 异步）
      */
-    private static final String API_ENDPOINT = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/services/aigc/multimodal-generation/generation";
+    private static final String SUBMIT_ENDPOINT = "https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/image-generation/generation";
 
     /**
-     * 默认模型：通义万相图生图预览版
-     * 支持图生图 + 风格迁移
-     * 如需更高质量可改为 wan2.7-image-pro
+     * 阿里云百炼 API 轮询任务端点（Task ID 前缀）
      */
-    private static final String MODEL_NAME = "wan2.5-i2i-preview";
+    private static final String POLL_ENDPOINT_PREFIX = "https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1/tasks/";
 
-    private static final int MIN_SIZE = 512;
-    private static final int MAX_SIZE = 2048;
-    private static final int SIZE_MULTIPLE = 8;
+    /**
+     * 默认模型：通义万相图生图
+     */
+    private static final String MODEL_NAME = "wan2.7-image";
+
     private static final int DEFAULT_TIMEOUT_SEC = 120;
     private static final int MAX_IMAGE_SIZE_MB = 10;
+    private static final int POLL_INTERVAL_MS = 2000;
+    private static final int POLL_MAX_ATTEMPTS = 60; // 最多等 120 秒
 
     private static final String NOTE_KEY_API_KEY = "dashscope_api_key";
     private static final String NOTE_KEY_DEFAULT_MODEL = "wanxiang_default_model";
@@ -94,7 +98,7 @@ public class WanxiangTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "wanxiangImage");
-            functionDef.put("description", "调用阿里云百炼通义万相（wan2.5-i2i-preview）生成或编辑图片。支持文生图、图生图、风格迁移。需要传入参考图（本地路径或公网 URL）时，会自动转 base64 上传。返回图片自动下载到手机存储并扫描到相册。典型场景：照片转动漫/油画/水彩、商品图、头像、插画。");
+            functionDef.put("description", "调用阿里云百炼通义万相（wan2.7-image）生成或编辑图片。支持文生图、图生图、风格迁移。需要传入参考图（本地路径或公网 URL）时，会自动转 base64 上传。返回图片自动下载到手机存储并扫描到相册。典型场景：照片转动漫/油画/水彩、商品图、头像、插画。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -117,8 +121,8 @@ public class WanxiangTool implements Tool {
 
             JSONObject sizeParam = new JSONObject();
             sizeParam.put("type", "string");
-            sizeParam.put("default", "1024*1024");
-            sizeParam.put("description", "图片尺寸（如 '1024*1024'、'1280*720'），范围 512-2048，8 的倍数");
+            sizeParam.put("default", "2K");
+            sizeParam.put("description", "图片尺寸，支持 '1K'、'2K'、'1024*1024'、'1280*720' 等");
             properties.put("size", sizeParam);
 
             JSONObject nParam = new JSONObject();
@@ -129,8 +133,8 @@ public class WanxiangTool implements Tool {
 
             JSONObject modelParam = new JSONObject();
             modelParam.put("type", "string");
-            modelParam.put("default", "wan2.5-i2i-preview");
-            modelParam.put("description", "模型名称。可选：wan2.5-i2i-preview（图生图）、qwen-image-2.0、qwen-image-2.0-pro、wan2.7-image、wan2.7-image-pro。默认从工具备注 wanxiang_default_model 读取");
+            modelParam.put("default", "wan2.7-image");
+            modelParam.put("description", "模型名称。常用：wan2.7-image、wan2.7-image-pro。默认从工具备注 wanxiang_default_model 读取");
             properties.put("model", modelParam);
 
             JSONObject saveDirParam = new JSONObject();
@@ -168,22 +172,16 @@ public class WanxiangTool implements Tool {
             try {
                 FileLogger.i(TAG, "========== wanxiangImage 工具开始执行 ==========");
 
-                long stepStart = System.currentTimeMillis();
                 String prompt = arguments.optString("prompt", null);
                 if (prompt == null || prompt.trim().isEmpty()) {
                     throw new IllegalArgumentException("prompt 不能为空");
                 }
                 String referenceImage = arguments.optString("referenceImage", null);
-                String size = arguments.optString("size", "1024*1024");
+                String size = arguments.optString("size", "2K");
                 int n = arguments.optInt("n", 1);
                 String saveDir = arguments.optString("saveDir", null);
                 String modelOverride = arguments.optString("model", null);
 
-                FileLogger.d(TAG, "[1/10] 解析参数完成 - prompt 长度: " + prompt.length()
-                        + "，参考图: " + (referenceImage != null ? "有" : "无")
-                        + "，尺寸: " + size + "，数量: " + n);
-
-                stepStart = System.currentTimeMillis();
                 String apiKey = arguments.optString("apiKey", null);
                 if (apiKey == null || apiKey.trim().isEmpty()) {
                     apiKey = getApiKeyFromNote();
@@ -195,7 +193,7 @@ public class WanxiangTool implements Tool {
                         );
                     }
                 }
-                FileLogger.i(TAG, "[2/10] 获取 API Key 完成（掩码: " + maskApiKey(apiKey) + "），耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
+                FileLogger.i(TAG, "[1/10] 获取 API Key 完成（掩码: " + maskApiKey(apiKey) + "）");
 
                 String modelName = modelOverride;
                 if (modelName == null || modelName.trim().isEmpty()) {
@@ -206,20 +204,16 @@ public class WanxiangTool implements Tool {
                 }
                 FileLogger.i(TAG, "  使用模型: " + modelName);
 
-                stepStart = System.currentTimeMillis();
                 validateParams(n);
-                FileLogger.i(TAG, "[3/10] 参数校验通过 - 耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
 
-                stepStart = System.currentTimeMillis();
                 String imageContent = null;
                 if (referenceImage != null && !referenceImage.trim().isEmpty()) {
                     imageContent = processReferenceImage(referenceImage);
-                    FileLogger.i(TAG, "  参考图处理完成，长度: " + imageContent.length() + " 字符，耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
+                    FileLogger.i(TAG, "[2/10] 参考图处理完成，长度: " + imageContent.length() + " 字符");
                 } else {
-                    FileLogger.d(TAG, "  无参考图，纯文生图模式");
+                    FileLogger.i(TAG, "[2/10] 无参考图，纯文生图模式");
                 }
 
-                stepStart = System.currentTimeMillis();
                 JSONObject requestBody = new JSONObject();
                 requestBody.put("model", modelName);
 
@@ -244,64 +238,57 @@ public class WanxiangTool implements Tool {
                 messages.put(message);
                 input.put("messages", messages);
 
-                JSONObject parameters2 = new JSONObject();
-                parameters2.put("size", size);
-                parameters2.put("n", n);
-                input.put("parameters", parameters2);
+                requestBody.put("input", input);
 
-                requestBody.put("input", parameters2);
+                JSONObject params = new JSONObject();
+                params.put("size", size);
+                params.put("n", n);
+                params.put("watermark", false);
+                requestBody.put("parameters", params);
 
-                FileLogger.d(TAG, "[4/10] 请求体构建完成 - 大小: " + requestBody.toString().length() + " 字节，耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
+                FileLogger.i(TAG, "[3/10] 请求体构建完成");
 
                 MediaType mediaType = MediaType.parse("application/json; charset=utf-8");
                 RequestBody body = RequestBody.create(mediaType, requestBody.toString());
 
                 Request request = new Request.Builder()
-                        .url(API_ENDPOINT)
+                        .url(SUBMIT_ENDPOINT)
                         .post(body)
                         .header("Content-Type", "application/json")
                         .header("Authorization", "Bearer " + apiKey)
+                        .header("X-DashScope-Async", "enable")
                         .build();
 
-                FileLogger.i(TAG, "[5/10] 发送请求到: " + API_ENDPOINT);
+                FileLogger.i(TAG, "[4/10] 提交异步任务到: " + SUBMIT_ENDPOINT);
 
-                long requestStartTime = System.currentTimeMillis();
-
-                String responseBody;
-                int responseCode;
+                String taskId;
+                long submitTime = System.currentTimeMillis();
                 try (Response response = getClient().newCall(request).execute()) {
-                    responseCode = response.code();
-                    FileLogger.i(TAG, "[6/10] HTTP 响应到达 - 耗时: " + (System.currentTimeMillis() - requestStartTime) + "ms");
-                    FileLogger.i(TAG, "  状态码: " + responseCode);
-
                     ResponseBody respBody = response.body();
                     if (respBody == null) {
                         throw new IOException("响应体为空");
                     }
-                    responseBody = respBody.string();
-                    FileLogger.i(TAG, "  响应体大小: " + responseBody.length() + " 字节");
+                    String respStr = respBody.string();
+                    FileLogger.i(TAG, "  提交响应: " + respStr);
+
+                    if (response.code() < 200 || response.code() >= 300) {
+                        handleHttpError(response.code(), respStr, callback);
+                        return;
+                    }
+
+                    JSONObject jsonResp = new JSONObject(respStr);
+                    taskId = jsonResp.getJSONObject("output").getString("task_id");
+                    FileLogger.i(TAG, "  获取到 task_id: " + taskId);
                 }
 
-                long requestDurationMs = System.currentTimeMillis() - requestStartTime;
-                FileLogger.i(TAG, "  HTTP 请求总耗时: " + requestDurationMs + "ms");
-                FileLogger.d(TAG, "  响应内容: " + responseBody);
+                FileLogger.i(TAG, "[5/10] 开始轮询任务状态");
 
-                if (responseCode < 200 || responseCode >= 300) {
-                    handleHttpError(responseCode, responseBody, callback);
-                    return;
+                String imageUrl = pollTaskResult(taskId, apiKey);
+
+                if (imageUrl == null) {
+                    throw new IOException("任务未返回图片 URL");
                 }
-
-                JSONObject jsonResponse = new JSONObject(responseBody);
-                JSONArray urlArray = extractImageUrls(jsonResponse);
-                if (urlArray == null || urlArray.length() == 0) {
-                    JSONObject errorResult = new JSONObject();
-                    errorResult.put("status", "error");
-                    errorResult.put("error", "响应中找不到图片 URL。响应: " + responseBody);
-                    callback.onResult(errorResult);
-                    return;
-                }
-
-                FileLogger.i(TAG, "[7/10] 解析到 " + urlArray.length() + " 张图片 URL");
+                FileLogger.i(TAG, "[6/10] 获取到图片 URL: " + imageUrl);
 
                 File targetDir;
                 if (saveDir != null && !saveDir.trim().isEmpty()) {
@@ -314,60 +301,58 @@ public class WanxiangTool implements Tool {
                 if (!targetDir.exists()) {
                     targetDir.mkdirs();
                 }
-                FileLogger.i(TAG, "[8/10] 保存目录: " + targetDir.getAbsolutePath());
 
                 JSONArray savedPaths = new JSONArray();
                 JSONArray attachmentsArray = new JSONArray();
                 long timestamp = System.currentTimeMillis();
 
-                String[] sizeParts = size.split("\\*");
-                int imgWidth = sizeParts.length > 0 ? Integer.parseInt(sizeParts[0]) : 1024;
-                int imgHeight = sizeParts.length > 1 ? Integer.parseInt(sizeParts[1]) : 1024;
+                String filename = String.format("wanxiang_image_%d.png", timestamp);
+                File targetFile = new File(targetDir, filename);
+                String savedPath = downloadImageFromUrl(imageUrl, targetFile);
+                savedPaths.put(savedPath);
+                scanImageToGallery(savedPath);
 
-                for (int i = 0; i < urlArray.length(); i++) {
-                    FileLogger.i(TAG, "[9/10] 处理第 " + (i + 1) + "/" + urlArray.length() + " 张图片");
-                    String url = urlArray.getString(i);
-                    String savedPath = downloadImageFromUrl(url, targetDir, timestamp, i);
-                    savedPaths.put(savedPath);
-                    scanImageToGallery(savedPath);
-
-                    JSONObject attachment = new JSONObject();
-                    attachment.put("type", "image");
-                    attachment.put("url", "file://" + savedPath);
-                    JSONObject metadata = new JSONObject();
-                    metadata.put("width", imgWidth);
-                    metadata.put("height", imgHeight);
-                    File file = new File(savedPath);
-                    if (file.exists()) {
-                        metadata.put("size", file.length());
-                    }
-                    metadata.put("mimeType", "image/jpeg");
-                    attachment.put("metadata", metadata);
-                    attachmentsArray.put(attachment);
+                String[] sizeParts = size.replace("K", "").replace("k", "").split("\\*");
+                int imgWidth = 1024, imgHeight = 1024;
+                if (sizeParts.length == 2) {
+                    try {
+                        imgWidth = Integer.parseInt(sizeParts[0]);
+                        imgHeight = Integer.parseInt(sizeParts[1]);
+                    } catch (Exception ignore) {}
+                } else if ("2K".equalsIgnoreCase(size)) {
+                    imgWidth = imgHeight = 2048;
+                } else if ("1K".equalsIgnoreCase(size)) {
+                    imgWidth = imgHeight = 1024;
                 }
 
+                JSONObject attachment = new JSONObject();
+                attachment.put("type", "image");
+                attachment.put("url", "file://" + savedPath);
+                JSONObject metadata = new JSONObject();
+                metadata.put("width", imgWidth);
+                metadata.put("height", imgHeight);
+                File file = new File(savedPath);
+                if (file.exists()) {
+                    metadata.put("size", file.length());
+                }
+                metadata.put("mimeType", "image/png");
+                attachment.put("metadata", metadata);
+                attachmentsArray.put(attachment);
+
                 long totalDurationMs = System.currentTimeMillis() - totalStartTime;
-                FileLogger.i(TAG, "✅ 成功生成 " + savedPaths.length() + " 张图片");
-                FileLogger.i(TAG, "  工具总耗时: " + totalDurationMs + "ms");
+                FileLogger.i(TAG, "✅ 成功生成图片，总耗时: " + totalDurationMs + "ms");
 
                 JSONObject result = new JSONObject();
                 result.put("status", "success");
-                result.put("image_count", savedPaths.length());
+                result.put("image_count", 1);
                 result.put("saved_paths", savedPaths);
                 result.put("save_dir", targetDir.getAbsolutePath());
                 result.put("model", modelName);
                 result.put("size", size);
-                result.put("duration_ms", requestDurationMs);
+                result.put("task_id", taskId);
                 result.put("total_duration_ms", totalDurationMs);
                 result.put("timestamp", timestamp);
                 result.put("attachments", attachmentsArray);
-
-                if (jsonResponse.has("usage")) {
-                    result.put("usage", jsonResponse.getJSONObject("usage"));
-                }
-                if (jsonResponse.has("request_id")) {
-                    result.put("request_id", jsonResponse.getString("request_id"));
-                }
 
                 callback.onResult(result);
 
@@ -379,6 +364,63 @@ public class WanxiangTool implements Tool {
                 callback.onError(e);
             }
         });
+    }
+
+    /**
+     * 轮询任务结果
+     */
+    private String pollTaskResult(String taskId, String apiKey) throws IOException, InterruptedException, JSONException {
+        String pollUrl = POLL_ENDPOINT_PREFIX + taskId;
+        FileLogger.i(TAG, "  轮询端点: " + pollUrl);
+
+        for (int attempt = 1; attempt <= POLL_MAX_ATTEMPTS; attempt++) {
+            Thread.sleep(POLL_INTERVAL_MS);
+
+            Request pollRequest = new Request.Builder()
+                    .url(pollUrl)
+                    .get()
+                    .header("Authorization", "Bearer " + apiKey)
+                    .build();
+
+            try (Response response = getClient().newCall(pollRequest).execute()) {
+                ResponseBody respBody = response.body();
+                if (respBody == null) {
+                    throw new IOException("响应体为空");
+                }
+                String respStr = respBody.string();
+
+                if (response.code() < 200 || response.code() >= 300) {
+                    FileLogger.e(TAG, "  轮询失败 (尝试 " + attempt + "/" + POLL_MAX_ATTEMPTS + "): HTTP " + response.code());
+                    continue;
+                }
+
+                JSONObject jsonResp = new JSONObject(respStr);
+                JSONObject output = jsonResp.getJSONObject("output");
+                String status = output.getString("task_status");
+                FileLogger.d(TAG, "  轮询状态 (尝试 " + attempt + "/" + POLL_MAX_ATTEMPTS + "): " + status);
+
+                if ("SUCCEEDED".equals(status)) {
+                    JSONArray choices = output.getJSONArray("choices");
+                    if (choices.length() > 0) {
+                        JSONArray content = choices.getJSONObject(0).getJSONObject("message").getJSONArray("content");
+                        for (int i = 0; i < content.length(); i++) {
+                            JSONObject item = content.getJSONObject(i);
+                            if ("image".equals(item.optString("type"))) {
+                                return item.getString("image");
+                            }
+                        }
+                    }
+                    throw new IOException("任务成功但未返回图片: " + respStr);
+                } else if ("FAILED".equals(status)) {
+                    String code = output.optString("code", "");
+                    String message = output.optString("message", "");
+                    throw new IOException("任务失败: " + code + " - " + message);
+                } else if ("CANCELED".equals(status)) {
+                    throw new IOException("任务被取消");
+                }
+            }
+        }
+        throw new IOException("任务超时（等待 " + (POLL_MAX_ATTEMPTS * POLL_INTERVAL_MS / 1000) + " 秒）");
     }
 
     /**
@@ -421,65 +463,6 @@ public class WanxiangTool implements Tool {
         }
         FileLogger.d(TAG, "  [ref] 已转 base64，MIME: " + mimeType);
         return "data:" + mimeType + ";base64," + base64;
-    }
-
-    private JSONArray extractImageUrls(JSONObject jsonResponse) {
-        if (jsonResponse.has("output")) {
-            try {
-                JSONObject output = jsonResponse.getJSONObject("output");
-                if (output.has("results")) {
-                    JSONArray results = output.getJSONArray("results");
-                    JSONArray urls = new JSONArray();
-                    for (int i = 0; i < results.length(); i++) {
-                        JSONObject item = results.getJSONObject(i);
-                        if (item.has("url")) {
-                            urls.put(item.getString("url"));
-                        }
-                    }
-                    if (urls.length() > 0) {
-                        FileLogger.i(TAG, "  格式 A: output.results[].url");
-                        return urls;
-                    }
-                }
-                if (output.has("image_url")) {
-                    FileLogger.i(TAG, "  格式 B: output.image_url");
-                    JSONArray urls = new JSONArray();
-                    urls.put(output.getString("image_url"));
-                    return urls;
-                }
-            } catch (Exception e) {
-                FileLogger.w(TAG, "解析 output 失败: " + e.getMessage());
-            }
-        }
-
-        if (jsonResponse.has("data")) {
-            try {
-                Object dataValue = jsonResponse.get("data");
-                if (dataValue instanceof JSONArray) {
-                    JSONArray dataArray = (JSONArray) dataValue;
-                    JSONArray urls = new JSONArray();
-                    for (int i = 0; i < dataArray.length(); i++) {
-                        Object item = dataArray.get(i);
-                        if (item instanceof JSONObject) {
-                            JSONObject itemObj = (JSONObject) item;
-                            if (itemObj.has("url")) {
-                                urls.put(itemObj.getString("url"));
-                            } else if (itemObj.has("b64_json")) {
-                                FileLogger.w(TAG, "  发现 b64_json 字段，暂不处理（建议用 URL）");
-                            }
-                        }
-                    }
-                    if (urls.length() > 0) {
-                        FileLogger.i(TAG, "  格式 C: data[].url");
-                        return urls;
-                    }
-                }
-            } catch (Exception e) {
-                FileLogger.w(TAG, "解析 data 失败: " + e.getMessage());
-            }
-        }
-
-        return null;
     }
 
     private void validateParams(int n) throws IllegalArgumentException {
@@ -525,10 +508,7 @@ public class WanxiangTool implements Tool {
         return null;
     }
 
-    private String downloadImageFromUrl(String imageUrl, File targetDir, long timestamp, int index) throws IOException {
-        String filename = String.format("wanxiang_image_%d_%d.jpg", timestamp, index);
-        File targetFile = new File(targetDir, filename);
-
+    private String downloadImageFromUrl(String imageUrl, File targetFile) throws IOException {
         long startTime = System.currentTimeMillis();
         FileLogger.d(TAG, "  下载图片: " + imageUrl + " -> " + targetFile.getAbsolutePath());
 
@@ -570,20 +550,12 @@ public class WanxiangTool implements Tool {
             return;
         }
 
-        String mimeType = "image/jpeg";
-        String lowerName = filePath.toLowerCase();
-        if (lowerName.endsWith(".png")) {
-            mimeType = "image/png";
-        } else if (lowerName.endsWith(".webp")) {
-            mimeType = "image/webp";
-        }
-
-        final String finalMimeType = mimeType;
+        String mimeType = "image/png";
         try {
             MediaScannerConnection.scanFile(
                 context,
                 new String[]{filePath},
-                new String[]{finalMimeType},
+                new String[]{mimeType},
                 null
             );
             FileLogger.d(TAG, "  [scan] 已提交扫描任务: " + filePath);
@@ -656,12 +628,13 @@ public class WanxiangTool implements Tool {
     public String getDefaultSystemPromptEnhancement() {
         return "调用 wanxiangImage 工具时：\n"
             + "1. 必传参数：prompt（描述图片内容/风格）\n"
-            + "2. 可选参数：referenceImage（图生图时必传，支持本地路径或公网 URL）、size（如 '1024*1024'）、n（1-4）、model（默认 wan2.5-i2i-preview）\n"
+            + "2. 可选参数：referenceImage（图生图时必传，支持本地路径或公网 URL）、size（如 '2K'/'1024*1024'）、n（1-4）、model（默认 wan2.7-image）\n"
             + "3. API Key：优先用调用时传入的 apiKey，否则从工具备注 dashscope_api_key 读取\n"
             + "4. 典型场景：照片转动漫/油画/水彩风格、商品图生成、头像定制、插画创作\n"
             + "5. 与 generateImage 工具的差异：wanxiangImage 支持图生图和风格迁移，但需要主人已有 Token Plan 订阅\n"
             + "6. 中文 prompt 友好，建议详细描述想要的风格、场景、变换效果\n"
             + "7. 返回的图片会自动下载到 /sdcard/Download/ 并扫描到系统相册\n"
-            + "8. 注意：通义万相速度比 MiniMax 慢，n 建议不超过 2";
+            + "8. 注意：通义万相速度比 MiniMax 慢，n 建议不超过 2\n"
+            + "9. 该工具使用异步调用，提交任务后会自动轮询直到完成";
     }
 }
