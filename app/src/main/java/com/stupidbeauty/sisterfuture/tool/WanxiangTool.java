@@ -16,6 +16,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -368,7 +369,7 @@ public class WanxiangTool implements Tool {
     /**
      * 轮询任务结果
      */
-    private String pollTaskResult(String taskId, String apiKey) throws IOException, InterruptedException {
+    private String pollTaskResult(String taskId, String apiKey) throws IOException, InterruptedException, JSONException {
         String pollUrl = POLL_ENDPOINT_PREFIX + taskId;
         FileLogger.i(TAG, "  轮询端点: " + pollUrl);
 
