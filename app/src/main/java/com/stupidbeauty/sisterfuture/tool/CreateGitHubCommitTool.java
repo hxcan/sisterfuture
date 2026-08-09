@@ -76,7 +76,7 @@ public class CreateGitHubCommitTool implements Tool
             "path",
             new JSONObject()
               .put("type", "string")
-              .put("description", "要修改的文件路径（支持嵌套目录，如 .github/workflows/ci.yml）")
+              .put("description", "要修改的文件路径（支持嵌套目录，如 .github\/workflows\/ci.yml）")
           )
           .put
           (
@@ -90,7 +90,7 @@ public class CreateGitHubCommitTool implements Tool
             "encoding",
             new JSONObject()
               .put("type", "string")
-              .put("description", "返回模式：\"text\"（默认，UTF-8 编码，适用于代码/配置文件）或 \"base64\"（保留原始 Base64 字符串，适用于 .keystore/.png/.apk 等二进制文件）")
+              .put("description", "返回模式：\"text\"（默认，UTF-8 编码，适用于代码\/配置文件）或 \"base64\"（保留原始 Base64 字符串，适用于 .keystore\/.png\/.apk 等二进制文件）")
           )
           .put
           (
@@ -152,10 +152,10 @@ public class CreateGitHubCommitTool implements Tool
     return true;
   }
 
-  
+
   /**
     * 兼容 API 24+ 的文件读取方法
-    */
+    **/
   private byte[] readAllBytesCompat(String filePath) throws IOException
   {
     File file = new File(filePath);
@@ -210,7 +210,7 @@ public class CreateGitHubCommitTool implements Tool
           boolean deleteFile = arguments.optBoolean("delete", false);
 
           String content = "";
-                
+
           // 处理删除文件的逻辑
           if (deleteFile)
           {
@@ -237,7 +237,7 @@ public class CreateGitHubCommitTool implements Tool
             OkHttpClient client = new OkHttpClient();
 
             // 第一步：获取文件的 sha
-            HttpUrl getContentUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path)
+            HttpUrl getContentUrl = HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/contents\/" + path)
               .newBuilder()
               .addQueryParameter("ref", branch)
               .build();
@@ -245,11 +245,11 @@ public class CreateGitHubCommitTool implements Tool
             Request getContentRequest = new Request.Builder()
               .url(getContentUrl)
               .header("Authorization", "Bearer " + token)
-              .header("Accept", "application/vnd.github.v3+json")
+              .header("Accept", "application\/vnd.github.v3+json")
               .build();
 
             Response getContentResponse = client.newCall(getContentRequest).execute();
-                    
+
             if (!getContentResponse.isSuccessful())
             {
               if (getContentResponse.code() == 404)
@@ -261,7 +261,7 @@ public class CreateGitHubCommitTool implements Tool
 
             JSONObject fileInfo = new JSONObject(getContentResponse.body().string());
             String fileSha = fileInfo.getString("sha");
-                    
+
             FileLogger.d(TAG, "CreateGitHubCommit: 获取到文件 sha=" + fileSha);
 
             // 第二步：调用 DELETE API 删除文件
@@ -271,20 +271,20 @@ public class CreateGitHubCommitTool implements Tool
             deleteBody.put("branch", branch);
 
             RequestBody requestBody = RequestBody.create
-              (
-                deleteBody.toString(),
-                MediaType.get("application/json; charset=utf-8")
-              );
+            (
+              deleteBody.toString(),
+              MediaType.get("application\/json; charset=utf-8")
+            );
 
             Request deleteRequest = new Request.Builder()
-              .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path))
+              .url(HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/contents\/" + path))
               .delete(requestBody)
               .header("Authorization", "Bearer " + token)
-              .header("Accept", "application/vnd.github.v3+json")
+              .header("Accept", "application\/vnd.github.v3+json")
               .build();
 
             Response deleteResponse = client.newCall(deleteRequest).execute();
-                    
+
             if (!deleteResponse.isSuccessful())
             {
               throw new IOException("删除文件失败：" + deleteResponse.code() + " " + deleteResponse.message());
@@ -312,7 +312,7 @@ public class CreateGitHubCommitTool implements Tool
               .put("branch", branch)
               .put("delete", deleteFile));
             debugInfo.put("verification_status", "OK");
-                    
+
             result.put("debug_info", debugInfo);
 
             callback.onResult(result);
@@ -326,16 +326,16 @@ public class CreateGitHubCommitTool implements Tool
             {
               throw new IllegalArgumentException("Missing required parameter: phone_path");
             }
-                    
+
             File phoneFile = new File(phonePath);
             if (!phoneFile.exists())
             {
               throw new IOException("手机文件不存在：" + phonePath);
             }
-                    
+
             // 使用兼容方法读取文件
             byte[] fileBytes = readAllBytesCompat(phonePath);
-                    
+
             // 自动判断文件类型
             String lowerPath = phonePath.toLowerCase();
             boolean isBinary = lowerPath.endsWith(".jar") || lowerPath.endsWith(".apk") ||
@@ -343,7 +343,7 @@ public class CreateGitHubCommitTool implements Tool
               lowerPath.endsWith(".gif") || lowerPath.endsWith(".pdf") ||
               lowerPath.endsWith(".zip") || lowerPath.endsWith(".keystore") ||
               lowerPath.endsWith(".jks");
-                    
+
             if (isBinary)
             {
               // 二进制文件：使用 Base64 编码
@@ -375,7 +375,7 @@ public class CreateGitHubCommitTool implements Tool
           int contentLength = content.length();
           FileLogger.d(TAG, "CreateGitHubCommit DEBUG: Received content length: " + contentLength + " chars");
           FileLogger.d(TAG, "CreateGitHubCommit DEBUG: Encoding type: " + encoding);
-                
+
           if (token.isEmpty())
           {
             String noteJson = getNote(context);
@@ -396,7 +396,7 @@ public class CreateGitHubCommitTool implements Tool
 
           OkHttpClient client = new OkHttpClient();
 
-          HttpUrl getContentUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path)
+          HttpUrl getContentUrl = HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/contents\/" + path)
             .newBuilder()
             .addQueryParameter("ref", branch)
             .build();
@@ -404,7 +404,7 @@ public class CreateGitHubCommitTool implements Tool
           Request getContentRequest = new Request.Builder()
             .url(getContentUrl)
             .header("Authorization", "Bearer " + token)
-            .header("Accept", "application/vnd.github.v3+json")
+            .header("Accept", "application\/vnd.github.v3+json")
             .build();
 
           Response getContentResponse = client.newCall(getContentRequest).execute();
@@ -425,10 +425,10 @@ public class CreateGitHubCommitTool implements Tool
           blobBody.put("encoding", encoding);
 
           Request createBlobRequest = new Request.Builder()
-            .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/blobs"))
-            .post(RequestBody.create(blobBody.toString(), MediaType.get("application/json; charset=utf-8")))
+            .url(HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/blobs"))
+            .post(RequestBody.create(blobBody.toString(), MediaType.get("application\/json; charset=utf-8")))
             .header("Authorization", "Bearer " + token)
-            .header("Accept", "application/vnd.github.v3+json")
+            .header("Accept", "application\/vnd.github.v3+json")
             .build();
 
           Response createBlobResponse = client.newCall(createBlobRequest).execute();
@@ -440,11 +440,11 @@ public class CreateGitHubCommitTool implements Tool
           JSONObject blobInfo = new JSONObject(createBlobResponse.body().string());
           String blobSha = blobInfo.getString("sha");
 
-          HttpUrl getRefUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/refs/heads/" + branch);
+          HttpUrl getRefUrl = HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/refs\/heads\/" + branch);
           Request getRefRequest = new Request.Builder()
             .url(getRefUrl)
             .header("Authorization", "Bearer " + token)
-            .header("Accept", "application/vnd.github.v3+json")
+            .header("Accept", "application\/vnd.github.v3+json")
             .build();
 
           Response getRefResponse = client.newCall(getRefRequest).execute();
@@ -459,9 +459,9 @@ public class CreateGitHubCommitTool implements Tool
                 "2️⃣ **分支保护**：主分支可能开启了保护规则，需要管理员权限或通过 Pull Request 合并\n" +
                 "3️⃣ **Token 权限不足**：请检查 Token 是否有该仓库的写入权限\n\n" +
                 "解决方案：\n" +
-                "- 使用 get_github_file 工具先确认分支是否存在\n" +
+                "- 使用 getGitHubFile 工具先确认分支是否存在\n" +
                 "- 如需修改受保护的分支，请先创建新分支再提交 PR\n" +
-                "- 或使用 create_git_branch 工具创建新分支";
+                "- 或使用 createGitBranch 工具创建新分支";
             }
             throw new IOException(errorMessage);
           }
@@ -469,11 +469,11 @@ public class CreateGitHubCommitTool implements Tool
           JSONObject refInfo = new JSONObject(getRefResponse.body().string());
           String latestCommitSha = refInfo.getJSONObject("object").getString("sha");
 
-          HttpUrl getCommitUrl = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/commits/" + latestCommitSha);
+          HttpUrl getCommitUrl = HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/commits\/" + latestCommitSha);
           Request getCommitRequest = new Request.Builder()
             .url(getCommitUrl)
             .header("Authorization", "Bearer " + token)
-            .header("Accept", "application/vnd.github.v3+json")
+            .header("Accept", "application\/vnd.github.v3+json")
             .build();
 
           Response getCommitResponse = client.newCall(getCommitRequest).execute();
@@ -486,7 +486,7 @@ public class CreateGitHubCommitTool implements Tool
           String currentTreeSha = commitInfo.getJSONObject("tree").getString("sha");
 
           String newTreeSha;
-          if (path.contains("/"))
+          if (path.contains("\/"))
           {
             newTreeSha = createNestedTree(client, token, owner, repo, currentTreeSha, path, blobSha);
           }
@@ -503,12 +503,12 @@ public class CreateGitHubCommitTool implements Tool
             JSONObject createTreeBody = new JSONObject();
             createTreeBody.put("base_tree", currentTreeSha);
             createTreeBody.put("tree", treeArray);
-                    
+
             Request createTreeRequest = new Request.Builder()
-              .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
-              .post(RequestBody.create(createTreeBody.toString(), MediaType.get("application/json; charset=utf-8")))
+              .url(HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/trees"))
+              .post(RequestBody.create(createTreeBody.toString(), MediaType.get("application\/json; charset=utf-8")))
               .header("Authorization", "Bearer " + token)
-              .header("Accept", "application/vnd.github.v3+json")
+              .header("Accept", "application\/vnd.github.v3+json")
               .build();
 
             Response createTreeResponse = client.newCall(createTreeRequest).execute();
@@ -529,10 +529,10 @@ public class CreateGitHubCommitTool implements Tool
           createCommitBody.put("tree", newTreeSha);
           createCommitBody.put("parents", parentArray);
           Request createCommitRequest = new Request.Builder()
-            .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/commits"))
-            .post(RequestBody.create(createCommitBody.toString(), MediaType.get("application/json; charset=utf-8")))
+            .url(HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/commits"))
+            .post(RequestBody.create(createCommitBody.toString(), MediaType.get("application\/json; charset=utf-8")))
             .header("Authorization", "Bearer " + token)
-            .header("Accept", "application/vnd.github.v3+json")
+            .header("Accept", "application\/vnd.github.v3+json")
             .build();
 
           Response createCommitResponse = client.newCall(createCommitRequest).execute();
@@ -549,10 +549,10 @@ public class CreateGitHubCommitTool implements Tool
           updateRefBody.put("force", false);
 
           Request updateRefRequest = new Request.Builder()
-            .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/refs/heads/" + branch))
-            .patch(RequestBody.create(updateRefBody.toString(), MediaType.get("application/json; charset=utf-8")))
+            .url(HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/refs\/heads\/" + branch))
+            .patch(RequestBody.create(updateRefBody.toString(), MediaType.get("application\/json; charset=utf-8")))
             .header("Authorization", "Bearer " + token)
-            .header("Accept", "application/vnd.github.v3+json")
+            .header("Accept", "application\/vnd.github.v3+json")
             .build();
 
           Response updateRefResponse = client.newCall(updateRefRequest).execute();
@@ -567,9 +567,9 @@ public class CreateGitHubCommitTool implements Tool
                 "2️⃣ **分支保护**：主分支可能开启了保护规则，需要管理员权限或通过 Pull Request 合并\n" +
                 "3️⃣ **Token 权限不足**：请检查 Token 是否有该仓库的写入权限\n\n" +
                 "解决方案：\n" +
-                "- 使用 get_github_file 工具先确认分支是否存在\n" +
+                "- 使用 getGitHubFile 工具先确认分支是否存在\n" +
                 "- 如需修改受保护的分支，请先创建新分支再提交 PR\n" +
-                "- 或使用 create_git_branch 工具创建新分支";
+                "- 或使用 createGitBranch 工具创建新分支";
             }
             throw new IOException(errorMessage);
           }
@@ -594,7 +594,7 @@ public class CreateGitHubCommitTool implements Tool
             .put("read_from_phone", readFromPhone));
           debugInfo.put("content_received_length", contentLength);
           debugInfo.put("verification_status", "OK");
-                
+
           result.put("debug_info", debugInfo);
 
           callback.onResult(result);
@@ -610,41 +610,41 @@ public class CreateGitHubCommitTool implements Tool
     );
   }
 
-  
+
   /**
     * v18 修复：从内向外创建嵌套目录树，正确保留每一级的现有内容
-    */
+    **/
   private String createNestedTree(OkHttpClient client, String token, String owner, String repo,
     String baseTreeSha, String fullPath, String blobSha)
     throws IOException, org.json.JSONException
   {
-        
+
     FileLogger.d(TAG, "[NestedTree v18] ========== 开始创建嵌套目录树 (v18 修复版) ==========");
     FileLogger.d(TAG, "[NestedTree v18] 完整路径：" + fullPath);
     FileLogger.d(TAG, "[NestedTree v18] 基础 Tree SHA: " + baseTreeSha.substring(0, 10) + "...");
 
-    int lastSlashIndex = fullPath.lastIndexOf('/');
+    int lastSlashIndex = fullPath.lastIndexOf('\/');
     String fileName = fullPath.substring(lastSlashIndex + 1);
     String dirPath = fullPath.substring(0, lastSlashIndex);
 
     FileLogger.d(TAG, "[NestedTree v18] 目录路径：" + dirPath);
     FileLogger.d(TAG, "[NestedTree v18] 文件名：" + fileName);
-        
-    String[] dirParts = dirPath.split("/");
+
+    String[] dirParts = dirPath.split("\/");
 
     FileLogger.d(TAG, "[NestedTree v18] 目录层级数：" + dirParts.length);
 
     // ========== 第一步：从外向内遍历，收集每一级的现有 tree SHA ==========
     String[] parentTreeShas = new String[dirParts.length];
     String currentCheckTreeSha = baseTreeSha;
-        
+
     for (int i = 0; i < dirParts.length; i++)
     {
       String currentDirName = dirParts[i];
       FileLogger.d(TAG, "[NestedTree v18] 第 " + i + " 层：在 Tree (" + currentCheckTreeSha.substring(0, 10) + "...) 中查找 '" + currentDirName + "'");
 
       String existingDirSha = findExistingDirectory(client, token, owner, repo, currentCheckTreeSha, currentDirName);
-            
+
       if (existingDirSha != null)
       {
         FileLogger.d(TAG, "[NestedTree v18]   ✓ 找到目录 '" + currentDirName + "' (SHA: " + existingDirSha.substring(0, 10) + "...)");
@@ -661,11 +661,11 @@ public class CreateGitHubCommitTool implements Tool
         break;
       }
     }
-        
+
     // ========== 第二步：从内向外创建 tree，合并现有内容 ==========
     String currentTreeSha = blobSha;
     String currentType = "blob";
-        
+
     for (int i = dirParts.length - 1; i >= 0; i--)
     {
       String currentDirName = dirParts[i];
@@ -681,13 +681,13 @@ public class CreateGitHubCommitTool implements Tool
 
         JSONArray existingEntries = getTreeEntries(client, token, owner, repo, existingDirSha);
         FileLogger.d(TAG, "[NestedTree v18]   现有目录包含 " + existingEntries.length() + " 个条目");
-                
+
         for (int j = 0; j < existingEntries.length(); j++)
         {
           JSONObject entry = existingEntries.getJSONObject(j);
           // Deleted: FileLogger.d(TAG, "[NestedTree v18]   现有条目 [" + j + "]: " + entry.getString("path") + " (" + entry.getString("type") + ")");
         }
-                
+
         boolean found = false;
         for (int j = 0; j < existingEntries.length(); j++)
         {
@@ -702,7 +702,7 @@ public class CreateGitHubCommitTool implements Tool
             break;
           }
         }
-                
+
         if (!found)
         {
           FileLogger.d(TAG, "[NestedTree v18]   ✗ 添加新子条目 '" + childName + "'");
@@ -713,23 +713,23 @@ public class CreateGitHubCommitTool implements Tool
           newEntry.put("sha", currentTreeSha);
           existingEntries.put(newEntry);
         }
-                
+
         JSONObject treeBody = new JSONObject();
         treeBody.put("tree", existingEntries);
-                
+
         Request createTreeRequest = new Request.Builder()
-          .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
-          .post(RequestBody.create(treeBody.toString(), MediaType.get("application/json; charset=utf-8")))
+          .url(HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/trees"))
+          .post(RequestBody.create(treeBody.toString(), MediaType.get("application\/json; charset=utf-8")))
           .header("Authorization", "Bearer " + token)
-          .header("Accept", "application/vnd.github.v3+json")
+          .header("Accept", "application\/vnd.github.v3+json")
           .build();
-                
+
         Response createTreeResponse = client.newCall(createTreeRequest).execute();
         if (!createTreeResponse.isSuccessful())
         {
           throw new IOException("创建合并 Tree 失败：" + createTreeResponse.code() + " " + createTreeResponse.message());
         }
-                
+
         JSONObject treeInfo = new JSONObject(createTreeResponse.body().string());
         currentTreeSha = treeInfo.getString("sha");
         currentType = "tree";
@@ -752,20 +752,20 @@ public class CreateGitHubCommitTool implements Tool
 
         JSONObject treeBody = new JSONObject();
         treeBody.put("tree", treeArray);
-                
+
         Request createTreeRequest = new Request.Builder()
-          .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
-          .post(RequestBody.create(treeBody.toString(), MediaType.get("application/json; charset=utf-8")))
+          .url(HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/trees"))
+          .post(RequestBody.create(treeBody.toString(), MediaType.get("application\/json; charset=utf-8")))
           .header("Authorization", "Bearer " + token)
-          .header("Accept", "application/vnd.github.v3+json")
+          .header("Accept", "application\/vnd.github.v3+json")
           .build();
-                
+
         Response createTreeResponse = client.newCall(createTreeRequest).execute();
         if (!createTreeResponse.isSuccessful())
         {
           throw new IOException("创建目录 Tree 失败：" + createTreeResponse.code() + " " + createTreeResponse.message());
         }
-                
+
         JSONObject treeInfo = new JSONObject(createTreeResponse.body().string());
         currentTreeSha = treeInfo.getString("sha");
         currentType = "tree";
@@ -773,7 +773,7 @@ public class CreateGitHubCommitTool implements Tool
         FileLogger.d(TAG, "[NestedTree v18]   ✓ 创建新目录 Tree SHA: " + currentTreeSha.substring(0, 10) + "...");
       }
     }
-        
+
     FileLogger.d(TAG, "[NestedTree v18] 所有目录层级处理完成，最终 currentTreeSha: " + currentTreeSha.substring(0, 10) + "...");
 
     // ========== 第三步：合并最外层目录到基础 Tree ==========
@@ -794,7 +794,7 @@ public class CreateGitHubCommitTool implements Tool
         break;
       }
     }
-        
+
     if (!found)
     {
       FileLogger.d(TAG, "[NestedTree v18] ✗ 基础 Tree 中不存在最外层目录，添加新条目");
@@ -805,24 +805,24 @@ public class CreateGitHubCommitTool implements Tool
       outermostEntry.put("sha", currentTreeSha);
       finalTreeArray.put(outermostEntry);
     }
-        
+
     JSONObject finalTreeBody = new JSONObject();
     finalTreeBody.put("base_tree", baseTreeSha);
     finalTreeBody.put("tree", finalTreeArray);
-        
+
     Request createFinalTreeRequest = new Request.Builder()
-      .url(HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees"))
-      .post(RequestBody.create(finalTreeBody.toString(), MediaType.get("application/json; charset=utf-8")))
+      .url(HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/trees"))
+      .post(RequestBody.create(finalTreeBody.toString(), MediaType.get("application\/json; charset=utf-8")))
       .header("Authorization", "Bearer " + token)
-      .header("Accept", "application/vnd.github.v3+json")
+      .header("Accept", "application\/vnd.github.v3+json")
       .build();
-        
+
     Response createFinalTreeResponse = client.newCall(createFinalTreeRequest).execute();
     if (!createFinalTreeResponse.isSuccessful())
     {
       throw new IOException("创建最终 Tree 失败：" + createFinalTreeResponse.code() + " " + createFinalTreeResponse.message());
     }
-        
+
     JSONObject finalTreeInfo = new JSONObject(createFinalTreeResponse.body().string());
     String finalTreeSha = finalTreeInfo.getString("sha");
     FileLogger.d(TAG, "[NestedTree v18] ✓ 创建最终 Tree SHA: " + finalTreeSha.substring(0, 10) + "...");
@@ -837,13 +837,13 @@ public class CreateGitHubCommitTool implements Tool
 
     JSONArray entries = getTreeEntries(client, token, owner, repo, treeSha);
     FileLogger.d(TAG, "[FindDir] Tree 包含 " + entries.length() + " 个条目");
-        
+
     for (int i = 0; i < entries.length(); i++)
     {
       JSONObject entry = entries.getJSONObject(i);
       String path = entry.getString("path");
       String type = entry.getString("type");
-            
+
       if (path.equals(dirName) && "tree".equals(type))
       {
         String sha = entry.getString("sha");
@@ -851,7 +851,7 @@ public class CreateGitHubCommitTool implements Tool
         return sha;
       }
     }
-        
+
     FileLogger.d(TAG, "[FindDir] ✗ 未找到目录 '" + dirName + "'");
     return null;
   }
@@ -859,20 +859,20 @@ public class CreateGitHubCommitTool implements Tool
   private JSONArray getTreeEntries(OkHttpClient client, String token, String owner, String repo, String treeSha) throws IOException, org.json.JSONException
   {
     FileLogger.d(TAG, "[GetTree] 获取 Tree 条目：" + treeSha.substring(0, 10) + "...");
-        
-    HttpUrl url = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees/" + treeSha);
+
+    HttpUrl url = HttpUrl.parse("https:\/\/api.github.com\/repos\/" + owner + "\/" + repo + "\/git\/trees\/" + treeSha);
     Request request = new Request.Builder()
       .url(url)
       .header("Authorization", "Bearer " + token)
-      .header("Accept", "application/vnd.github.v3+json")
+      .header("Accept", "application\/vnd.github.v3+json")
       .build();
-        
+
       Response response = client.newCall(request).execute();
       if (!response.isSuccessful())
       {
         throw new IOException("获取 Tree 条目失败：" + response.code() + " " + response.message());
       }
-        
+
       JSONObject treeInfo = new JSONObject(response.body().string());
       JSONArray entries = treeInfo.getJSONArray("tree");
       FileLogger.d(TAG, "[GetTree] ✓ 获取到 " + entries.length() + " 个条目");
