@@ -76,7 +76,7 @@ public class CreateGitHubCommitTool implements Tool
             "path",
             new JSONObject()
               .put("type", "string")
-              .put("description", "要修改的文件路径（支持嵌套目录，如 .github\/workflows\/ci.yml）")
+              .put("description", "要修改的文件路径（支持嵌套目录，如 .github/workflows/ci.yml）")
           )
           .put
           (
@@ -90,7 +90,7 @@ public class CreateGitHubCommitTool implements Tool
             "encoding",
             new JSONObject()
               .put("type", "string")
-              .put("description", "返回模式：\"text\"（默认，UTF-8 编码，适用于代码\/配置文件）或 \"base64\"（保留原始 Base64 字符串，适用于 .keystore\/.png\/.apk 等二进制文件）")
+              .put("description", "返回模式：\"text\"（默认，UTF-8 编码，适用于代码/配置文件）或 \"base64\"（保留原始 Base64 字符串，适用于 .keystore/.png/.apk 等二进制文件）")
           )
           .put
           (
