@@ -37,7 +37,7 @@ public class ListPhoneDirectoryTool implements Tool
     @Override
     public String getName()
     {
-        return "list_phone_directory";
+        return "listPhoneDirectory";
     }
 
     @Override
@@ -46,7 +46,7 @@ public class ListPhoneDirectoryTool implements Tool
         try
         {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "list_phone_directory");
+            functionDef.put("name", "listPhoneDirectory");
             functionDef.put("description", "扫描手机外置存储目录，返回文件列表。支持递归扫描和文件过滤（扩展名、修改时间、关键词）");
 
             JSONObject parameters = new JSONObject();
