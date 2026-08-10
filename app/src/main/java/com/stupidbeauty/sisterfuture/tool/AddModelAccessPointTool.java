@@ -28,7 +28,7 @@ public class AddModelAccessPointTool implements Tool
   @Override
   public String getName() 
   {
-    return "add_model_access_point";
+    return "addModelAccessPoint";
   }
 
   @Override
@@ -37,7 +37,7 @@ public class AddModelAccessPointTool implements Tool
     try 
     {
       JSONObject functionDef = new JSONObject();
-      functionDef.put("name", "add_model_access_point");
+      functionDef.put("name", "addModelAccessPoint");
       functionDef.put("description", "动态添加新的模型接入点，支持智能默认值。仅 API 密钥为必填项，其余参数自动使用阿里云百炼平台 OpenAI 兼容接口的默认值。新增：apiKey 字段用于独立认证管理。");
 
       JSONObject parameters = new JSONObject();
@@ -46,25 +46,25 @@ public class AddModelAccessPointTool implements Tool
       JSONObject properties = new JSONObject();
       
       // apiKey 是必填字段
-      properties.put("api_key", new JSONObject()
+      properties.put("apiKey", new JSONObject()
         .put("type", "string")
         .put("description", "API 密钥，唯一必填参数（用于 AccessPoint 独立认证）"));
         
       properties.put("name", new JSONObject()
         .put("type", "string")
         .put("description", "接入点名称，可选，不填则自动生成"));
-      properties.put("base_url", new JSONObject()
+      properties.put("baseUrl", new JSONObject()
         .put("type", "string")
         .put("description", "基础 URL，可选，不填则使用阿里云百炼默认值"));
       properties.put("endpoint", new JSONObject()
         .put("type", "string")
         .put("description", "API 端点路径，可选，不填则使用阿里云百炼默认值"));
-      properties.put("model_name", new JSONObject()
+      properties.put("modelName", new JSONObject()
         .put("type", "string")
         .put("description", "模型名称，可选，不填则使用默认值 qwen3-30b-a3b-instruct-2507"));
 
       parameters.put("properties", properties);
-      parameters.put("required", new JSONArray().put("api_key")); // 只有 api_key 是必填的
+      parameters.put("required", new JSONArray().put("apiKey")); // 只有 apiKey 是必填的
 
       functionDef.put("parameters", parameters);
       return new JSONObject().put("type", "function").put("function", functionDef);
@@ -94,16 +94,16 @@ public class AddModelAccessPointTool implements Tool
     try 
     {
       // ✅ 唯一必填参数
-      String apiKey = arguments.getString("api_key");
+      String apiKey = arguments.getString("apiKey");
       
       // ✅ 智能默认值逻辑
       String name = arguments.optString("name", "Aliyun Qwen3-30B"); // 默认名称
-      String baseUrl = arguments.optString("base_url", ALIYUN_BASE_URL); // 默认 URL
+      String baseUrl = arguments.optString("baseUrl", ALIYUN_BASE_URL); // 默认 URL
       String endpoint = arguments.optString("endpoint", ALIYUN_ENDPOINT); // 默认端点
-      String modelName = arguments.optString("model_name", DEFAULT_MODEL_NAME); // 默认模型名
+      String modelName = arguments.optString("modelName", DEFAULT_MODEL_NAME); // 默认模型名
 
-      // 如果用户只提供了 api_key，使用最简化的默认配置
-      if (!arguments.has("name") && !arguments.has("base_url") && !arguments.has("endpoint") && !arguments.has("model_name")) {
+      // 如果用户只提供了 apiKey，使用最简化的默认配置
+      if (!arguments.has("name") && !arguments.has("baseUrl") && !arguments.has("endpoint") && !arguments.has("modelName")) {
         name = "Quick Access Point"; // 极简模式下的名称
       }
 
@@ -149,8 +149,8 @@ public class AddModelAccessPointTool implements Tool
   @Override
   public String getDefaultSystemPromptEnhancement() 
   {
-    return "智能模型接入点添加工具。仅需提供 api_key 即可完成配置。" +
-      "如果只提供 api_key，则自动使用阿里云百炼平台的 OpenAI 兼容接口：" +
+    return "智能模型接入点添加工具。仅需提供 apiKey 即可完成配置。" +
+      "如果只提供 apiKey，则自动使用阿里云百炼平台的 OpenAI 兼容接口：" +
       "基础 URL=https://dashscope.aliyuncs.com，端点=/compatible-mode/v1/chat/completions，" +
       "模型名=qwen3-30b-a3b-instruct-2507。" +
       "所有其他参数都是可选的，会自动填充默认值。" +
