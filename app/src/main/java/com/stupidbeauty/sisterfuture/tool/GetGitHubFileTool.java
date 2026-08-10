@@ -191,7 +191,7 @@ public class GetGitHubFileTool implements Tool
                                 "1. 文件路径 (path) 不正确 - 请确认文件确实存在于仓库中\n" +
                                 "2. 分支 (branch) 错误 - 当前仓库默认分支是 master，不是 main\n" +
                                 "3. owner/repo 错误 - 请确认仓库所有者和服务名称正确\n" +
-                                "建议：可以使用 list_ftp_directory 工具查看仓库目录结构，或请用户确认正确的文件路径。\n\n" +
+                                "建议：可以使用 listFtpDirectory 工具查看仓库目录结构，或请用户确认正确的文件路径。\n\n" +
                                 "原始错误信息：" + response.message());
                         }
                         else
