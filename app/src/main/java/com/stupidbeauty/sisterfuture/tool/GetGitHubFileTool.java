@@ -41,35 +41,43 @@ public class GetGitHubFileTool implements Tool
         {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "getGitHubFile");
-            functionDef.put("description", "从 GitHub API 读取指定仓库的文件内容。");
+            functionDef.put("description", "通过 GitHub API 读取指定仓库的文件内容。支持认证访问私有仓库。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()
-                    .put("owner", new JSONObject()
-                            .put("type", "string")
-                            .put("description", "仓库所有者"))
-                    .put("repo", new JSONObject()
-                            .put("type", "string")
-                            .put("description", "仓库名称"))
-                    .put("path", new JSONObject()
-                            .put("type", "string")
-                            .put("description", "文件路径"))
-                    .put("branch", new JSONObject()
-                            .put("type", "string")
-                            .put("description", "分支，默认为 master"))
-                    .put("token", new JSONObject()
-                            .put("type", "string")
-                            .put("description", "GitHub 令牌（PAT），用于认证"))
-                    .put("encoding", new JSONObject()
-                            .put("type", "string")
-                            .put("description", "返回模式：\"text\"（自动解码 Base64，默认）或 \"base64\"（原始 Base64 字符串）。可用值：text、base64。keystore、.apk、.png、.jpg 等二进制文件必须用 encoding=\"base64\"。"))
-                    .put("save_to_phone", new JSONObject()
-                            .put("type", "boolean")
-                            .put("description", "是否保存到手机本地目录（/sdcard/Download/文件名）。仅在 encoding=\"text\" 或二进制文件（keystore、.apk、.png、.jpg）时有效；其他情况（音频、视频、.key、.pem 等）建议保存为临时副本。"))
-                    .put("phone_path", new JSONObject()
-                            .put("type", "string")
-                            .put("description", "手机本地保存路径（/sdcard/Download/文件名），留空使用默认目录")));
+                .put("owner", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "仓库所有者"))
+
+                .put("repo", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "仓库名称"))
+
+                .put("path", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "要读取的文件路径"))
+
+                .put("branch", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "目标分支，默认为 master"))
+
+                .put("token", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "GitHub 个人访问令牌 (PAT)，用于认证"))
+
+                .put("encoding", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "返回模式：\"text\"（自动解码 Base64，默认）或 \"base64\"（保留原始编码）"))
+
+                .put("save_to_phone", new JSONObject()
+                    .put("type", "boolean")
+                    .put("description", "是否将文件保存到手机存储（适用于大文件，避免返回内容撑爆上下文）"))
+
+                .put("phone_path", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "手机保存路径，默认 /sdcard/Download/文件名"))
+            );
 
             parameters.put("required", new JSONArray(new String[]{"owner", "repo", "path"}));
 
@@ -103,7 +111,7 @@ public class GetGitHubFileTool implements Tool
         {
             try
             {
-                // 1. 从 arguments 中获取 string 参数，转换为 JSONObjectException
+                // 1. 获取参数 - 让 getString 自然抛出 JSONException
                 String owner = arguments.getString("owner");
                 String repo = arguments.getString("repo");
                 String path = arguments.getString("path");
@@ -111,11 +119,11 @@ public class GetGitHubFileTool implements Tool
                 String token = arguments.optString("token", "").trim();
                 String encoding = arguments.optString("encoding", "text");
 
-                // 可选参数
+                // 新增参数
                 boolean saveToPhone = arguments.optBoolean("save_to_phone", false);
                 String phonePath = arguments.optString("phone_path", "");
 
-                // 2. 如果token为空，从note中查找token
+                // 2. 尝试从备注恢复默认值
                 if (token.isEmpty())
                 {
                     String noteJson = getNote(context);
@@ -131,30 +139,30 @@ public class GetGitHubFileTool implements Tool
                         }
                         catch (Exception ignored)
                         {
-                            // 解析失败时忽略，使用空token继续
+                            // 备注解析失败，忽略并继续，后续会抛出标准参数缺失错误
                             Log.w(TAG, "Failed to parse tool remark for token, ignoring.");
                         }
                     }
                 }
 
-                // 3. 如果token仍为空，抛出异常
+                // 3. 验证必要参数
                 if (token.isEmpty())
                 {
                     throw new IllegalArgumentException("Missing required parameter: token");
                 }
 
-                // 4. 构造请求地址
+                // 4. 构建请求
                 OkHttpClient client = new OkHttpClient();
                 HttpUrl url = HttpUrl.parse("https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path)
-                        .newBuilder()
-                        .addQueryParameter("ref", branch)
-                        .build();
+                    .newBuilder()
+                    .addQueryParameter("ref", branch)
+                    .build();
 
                 Request request = new Request.Builder()
-                        .url(url)
-                        .header("Authorization", "Bearer " + token)
-                        .header("Accept", "application/vnd.github.v3+json")
-                        .build();
+                    .url(url)
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .build();
 
                 Response response = client.newCall(request).execute();
 
@@ -170,26 +178,25 @@ public class GetGitHubFileTool implements Tool
                         if (arguments != null)
                         {
                             error.put("request_params", new JSONObject()
-                                    .put("owner", arguments.optString("owner", ""))
-                                    .put("repo", arguments.optString("repo", ""))
-                                    .put("path", arguments.optString("path", ""))
-                                    .put("branch", arguments.optString("branch", "master")));
+                                .put("owner", arguments.optString("owner", ""))
+                                .put("repo", arguments.optString("repo", ""))
+                                .put("path", arguments.optString("path", ""))
+                                .put("branch", arguments.optString("branch", "master")));
                         }
 
-                        // 提示用 LLM 调用其他工具时不要混淆同名工具
+                        // 针对 404 错误，引导 LLM 检查参数
                         if (response.code() == 404)
                         {
                             error.put("sister_future_note", "⚠️ 404 错误可能原因：\n" +
-                                    "1. 文件路径 (path) 不正确 - 请确认文件确实存在于仓库中\n" +
-                                    "2. 分支 (branch) 错误 - 当前仓库默认分支是 master，不是 main\n" +
-                                    "3. owner/repo 错误 - 请确认仓库所有者和服务名称正确\n" +
-                                    "建议：可以使用 listFtpDirectory 工具查看仓库目录结构，或请用户确认正确的文件路径。\n\n" +
-                                    "原始错误信息：" + response.message());
+                                "1. 文件路径 (path) 不正确 - 请确认文件确实存在于仓库中\n" +
+                                "2. 分支 (branch) 错误 - 当前仓库默认分支是 master，不是 main\n" +
+                                "3. owner/repo 错误 - 请确认仓库所有者和服务名称正确\n" +
+                                "建议：可以使用 listFtpDirectory 工具查看仓库目录结构，或请用户确认正确的文件路径。\n\n" +
+                                "原始错误信息：" + response.message());
                         }
                         else
                         {
-                            error.put("sister_future_note", "请求失败，建议先尝试：\"master\"（而不是 \"main\"）分支。\n" +
-                                    "原始错误信息：" + response.message());
+                            error.put("sister_future_note", "请检查分支参数是否正确，当前仓库使用的是 \"master\" 分支而非 \"main\" 分支。\n原错误信息：" + response.message());
                         }
 
                         callback.onResult(error);
@@ -202,13 +209,13 @@ public class GetGitHubFileTool implements Tool
                 ResponseBody body = response.body();
                 if (body == null)
                 {
-                    throw new IOException("响应体为空");
+                    throw new IOException("返回体为空");
                 }
 
                 String resultStr = body.string();
                 JSONObject resultJson = new JSONObject(resultStr);
 
-                // 根据encoding参数决定返回内容格式
+                // 处理保存到手机的功能
                 if (saveToPhone && resultJson.has("content"))
                 {
                     String encodedContent = resultJson.getString("content");
@@ -223,14 +230,14 @@ public class GetGitHubFileTool implements Tool
                         decodedBytes = android.util.Base64.decode(encodedContent, android.util.Base64.DEFAULT);
                     }
 
-                    // 取文件名
+                    // 确定保存路径
                     String fileName = path.substring(path.lastIndexOf('/') + 1);
                     if (phonePath.isEmpty())
                     {
-                        phonePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/" + fileName;
+                        phonePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getAbsolutePath() + "/" + fileName;
                     }
 
-                    // 写文件
+                    // 保存文件
                     File outputFile = new File(phonePath);
                     File parentDir = outputFile.getParentFile();
                     if (parentDir != null && !parentDir.exists())
@@ -243,7 +250,7 @@ public class GetGitHubFileTool implements Tool
                         fos.write(decodedBytes);
                     }
 
-                    // 返回保存结果
+                    // 返回保存成功信息
                     resultJson = new JSONObject();
                     resultJson.put("file_saved", true);
                     resultJson.put("phone_path", phonePath);
@@ -253,12 +260,12 @@ public class GetGitHubFileTool implements Tool
                     return;
                 }
 
-                // 如果不保存但要返回 Base64 解码内容
+                // 正常的返回逻辑（不解码 Base64）
                 if (resultJson.has("content") && resultJson.getString("encoding").equals("base64"))
                 {
                     String encodedContent = resultJson.getString("content");
 
-                    // 传 encoding="base64" 时不动，但 Base64 可用
+                    // 如果 encoding="base64"，跳过解码，保留原始内容
                     if (!"base64".equalsIgnoreCase(encoding))
                     {
                         encodedContent = encodedContent.replaceAll("\\s+", "");
@@ -291,17 +298,17 @@ public class GetGitHubFileTool implements Tool
             }
             catch (Exception e)
             {
-                Log.e(TAG, "姐姐遇到了问题", e);
-                // 告诉 LLM 说 PAT 错误，让它去 ToolManager 里换正确的
+                Log.e(TAG, "执行出错", e);
+                // ✅ 方案 A：完全交给 ToolManager 处理智能引导
                 callback.onError(e);
             }
         });
     }
 
-    // ----- 关于工具描述的辅助方法 -----
+    // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "使用场景：从 GitHub 仓库读取文件内容或二进制文件。调用前必须确保 owner、repo、path、branch 参数正确。当 GitHub 返回的原始响应大小超过 2500 个字符时，自动改用 Base64 编码；可通过指定 encoding=\"base64\" 强制使用 Base64 编码以保留 keystone、.apk、.png、.jpg 等二进制文件。检索二进制文件时（.keystore、.apk、.png 等），请使用 encoding=\"base64\"。";
+        return "必须在用户明确要求读取 GitHub 文件时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 github_token 等配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。增强要求：在返回结果中包含完整的请求参数信息（owner, repo, path, branch），以便于调试 404 等错误情况。\n\n新增功能：\n- 支持通过参数 encoding=\"base64\" 可选返回 Base64 编码的原始文件内容（不自动解码）\n- 对于二进制文件（.keystore, .png, .jpg 等），建议默认使用 base64 模式以避免数据损坏\n- 支持 save_to_phone 参数：将文件直接保存到手机存储，避免大文件返回撑爆上下文\n- 支持 phone_path 参数：指定手机保存路径\n- 适用场景建议：\n - 二进制文件（.keystore, .apk, .png 等）必须使用 encoding=\"base64\"\n - 大文件建议使用 save_to_phone=true 直接保存到手机";
     }
 }
