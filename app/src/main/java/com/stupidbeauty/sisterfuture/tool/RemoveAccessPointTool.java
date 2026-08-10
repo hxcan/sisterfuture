@@ -19,14 +19,14 @@ public class RemoveAccessPointTool implements Tool {
 
     @Override
     public String getName() {
-        return "remove_access_point";
+        return "removeAccessPoint";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "remove_access_point");
+            functionDef.put("name", "removeAccessPoint");
             functionDef.put("description", "从系统中删除指定索引的模型接入点。此操作将永久移除该接入点配置，需谨慎使用。");
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -98,7 +98,7 @@ public class RemoveAccessPointTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "删除指定索引的模型接入点。调用前必须通过 list_access_points 工具确认目标接入点的索引。" + 
+        return "删除指定索引的模型接入点。调用前必须通过 listAccessPoints 工具确认目标接入点的索引。" + 
                "删除后，系统将自动更新接入点列表，但不会影响当前正在使用的接入点。";
     }
 }
