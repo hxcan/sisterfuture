@@ -22,7 +22,7 @@ public class RemoveMemoryTool implements Tool
   @Override
   public String getName() 
   {
-    return "remove_memory";
+    return "removeMemory";
   }
 
   @Override
@@ -31,7 +31,7 @@ public class RemoveMemoryTool implements Tool
     try 
     {
       JSONObject functionDef = new JSONObject();
-      functionDef.put("name", "remove_memory");
+      functionDef.put("name", "removeMemory");
       functionDef.put("description", "删除长期记忆条目。用于清理过期或错误的记忆，支持根据记忆的唯一键（key）进行删除。");
 
       JSONObject parameters = new JSONObject();
