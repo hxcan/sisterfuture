@@ -28,7 +28,7 @@ public class QueryToolEnhancementTool implements Tool
   @Override
   public String getName()
   {
-    return "query_tool_enhancement";
+    return "queryToolEnhancement";
   }
 
   @Override
@@ -37,18 +37,18 @@ public class QueryToolEnhancementTool implements Tool
     try
     {
       JSONObject functionDef = new JSONObject();
-      functionDef.put("name", "query_tool_enhancement");
+      functionDef.put("name", "queryToolEnhancement");
       functionDef.put("description", "查询特定工具的系统增强提示词，用于指导大模型如何根据用户要求融合增强提示词。如果工具没有提供增强提示词，则返回空字符串。");
 
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
       parameters.put("properties", new JSONObject()
-        .put("tool_name", new JSONObject()
+        .put("toolName", new JSONObject()
           .put("type", "string")
           .put("description", "要查询的工具名称")
         )
       );
-      parameters.put("required", new JSONArray().put("tool_name"));
+      parameters.put("required", new JSONArray().put("toolName"));
 
       functionDef.put("parameters", parameters);
 
@@ -77,10 +77,10 @@ public class QueryToolEnhancementTool implements Tool
   @Override
   public JSONObject execute(JSONObject arguments) throws Exception
   {
-    String toolName = arguments.optString("tool_name", "").trim();
+    String toolName = arguments.optString("toolName", "").trim();
     if (toolName.isEmpty())
     {
-      throw new IllegalArgumentException("tool_name 参数不能为空。目前这个工具本身仍然在调试中，遇到本错误之后，妳可以向用户报告之后，忽略它，继续根据聊天消息流来进行逻辑对话。");
+      throw new IllegalArgumentException("toolName 参数不能为空。目前这个工具本身仍然在调试中，遇到本错误之后，妳可以向用户报告之后，忽略它，继续根据聊天消息流来进行逻辑对话。");
     }
 
     Tool tool = toolManager.getTool(toolName);
@@ -96,7 +96,7 @@ public class QueryToolEnhancementTool implements Tool
     }
 
     JSONObject result = new JSONObject();
-    result.put("tool_name", toolName);
+    result.put("toolName", toolName);
     result.put("enhancement", enhancement);
     result.put("has_enhancement", !enhancement.isEmpty());
 
