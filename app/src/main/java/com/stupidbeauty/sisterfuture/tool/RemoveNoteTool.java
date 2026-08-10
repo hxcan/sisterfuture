@@ -23,13 +23,13 @@ public class RemoveNoteTool implements Tool {
     }
     @Override
     public String getName() {
-        return "remove_note";
+        return "removeNote";
     }
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "remove_note");
+            functionDef.put("name", "removeNote");
             functionDef.put("description", "根据id删除指定记事");
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
