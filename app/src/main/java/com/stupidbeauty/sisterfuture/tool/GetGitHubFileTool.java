@@ -227,7 +227,7 @@ public class GetGitHubFileTool implements Tool
                     String fileName = path.substring(path.lastIndexOf('/') + 1);
                     if (phonePath.isEmpty())
                     {
-                        phonePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS). + + "/" + fileName;
+                        phonePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/" + fileName;
                     }
 
                     // 写文件
