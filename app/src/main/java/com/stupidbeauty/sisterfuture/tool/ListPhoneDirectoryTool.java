@@ -1,5 +1,5 @@
-// com.stupidbeauty.sisterfuture.tools.ListPhoneDirectoryTool.java
-package com.stupidbeauty.sisterfuture.tools;
+// com.stupidbeauty.sisterfuture.tool.ListPhoneDirectoryTool.java
+package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.content.Intent;

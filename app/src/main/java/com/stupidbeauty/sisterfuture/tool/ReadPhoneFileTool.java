@@ -1,5 +1,5 @@
-// com.stupidbeauty.sisterfuture.tools.ReadPhoneFileTool.java
-package com.stupidbeauty.sisterfuture.tools;
+// com.stupidbeauty.sisterfuture.tool.ReadPhoneFileTool.java
+package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Base64;
