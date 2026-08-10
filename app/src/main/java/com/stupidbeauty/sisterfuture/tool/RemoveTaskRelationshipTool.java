@@ -35,18 +35,18 @@ public class RemoveTaskRelationshipTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "removeTaskRelationship");
-            functionDef.put("description", "删除 Redmine 任务之间的阻塞关系。支持通过 relation_id 删除指定关系，或批量删除某任务的所有阻塞关系。");
+            functionDef.put("description", "删除 Redmine 任务之间的阻塞关系。支持通过 relationId 删除指定关系，或批量删除某任务的所有阻塞关系。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             JSONObject props = new JSONObject();
-            props.put("task_id", new JSONObject().put("type", "long").put("description", "目标任务的 ID（支持长整型，如 JoyMan 生成的 750160066086）"));
-            props.put("relation_id", new JSONObject().put("type", "long").put("description", "要删除的关系 ID（可选）"));
-            props.put("redmine_url", new JSONObject().put("type", "string").put("description", "Redmine 实例 URL"));
+            props.put("taskId", new JSONObject().put("type", "long").put("description", "目标任务的 ID（支持长整型，如 JoyMan 生成的 750160066086）"));
+            props.put("relationId", new JSONObject().put("type", "long").put("description", "要删除的关系 ID（可选）"));
+            props.put("redmineUrl", new JSONObject().put("type", "string").put("description", "Redmine 实例 URL"));
             props.put("username", new JSONObject().put("type", "string").put("description", "用户名"));
             props.put("password", new JSONObject().put("type", "string").put("description", "密码"));
             parameters.put("properties", props);
-            parameters.put("required", new JSONArray().put("task_id"));
+            parameters.put("required", new JSONArray().put("taskId"));
 
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
@@ -65,10 +65,10 @@ public class RemoveTaskRelationshipTool implements Tool {
     public void executeAsync(@NonNull JSONObject args, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
             try {
-                // ✅ 修复：使用 long 类型处理 task_id（JoyMan 生成的任务 ID 是长整型）
-                long taskId = args.getLong("task_id");
-                long relationId = args.optLong("relation_id", -1);
-                String redmineUrl = args.optString("redmine_url", "").trim();
+                // ✅ 修复：使用 long 类型处理 taskId（JoyMan 生成的任务 ID 是长整型）
+                long taskId = args.getLong("taskId");
+                long relationId = args.optLong("relationId", -1);
+                String redmineUrl = args.optString("redmineUrl", "").trim();
                 String username = args.optString("username", "").trim();
                 String password = args.optString("password", "").trim();
 
@@ -136,6 +136,6 @@ public class RemoveTaskRelationshipTool implements Tool {
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求删除 Redmine 任务之间的阻塞关系时才调用此工具。需要提供 task_id 参数（支持长整型，如 JoyMan 生成的 750160066086），以及 redmine_url, username, password 等认证参数。";
+        return "必须在用户明确要求删除 Redmine 任务之间的阻塞关系时才调用此工具。需要提供 taskId 参数（支持长整型，如 JoyMan 生成的 750160066086），以及 redmineUrl, username, password 等认证参数。";
     }
 }
