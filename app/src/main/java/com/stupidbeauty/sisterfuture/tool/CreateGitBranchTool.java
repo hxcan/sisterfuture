@@ -23,15 +23,15 @@ public class CreateGitBranchTool implements Tool {
 
   @Override
   public String getName() {
-    return "create_git_branch";
+    return "createGitBranch";
   }
 
   @Override
   public JSONObject getDefinition() {
     try {
       JSONObject functionDef = new JSONObject();
-      functionDef.put("name", "create_git_branch");
-      functionDef.put("description", "为未来姐姐项目开发一个专用工具 `create_git_branch`，用于自动化创建 Git 分支。\n\n## 功能要求：\n- 支持创建新分支（如 `release`、`feature/x`）\n- 支持指定上游分支作为基线（如 `main`）\n- 支持自动推送至远程仓库（GitHub）\n- 提供错误处理与冲突检测机制（如分支已存在）\n- 返回成功/失败状态及详细日志");
+      functionDef.put("name", "createGitBranch");
+      functionDef.put("description", "为未来姐姐项目开发一个专用工具 `createGitBranch`，用于自动化创建 Git 分支。\n\n## 功能要求：\n- 支持创建新分支（如 `release`、`feature/x`）\n- 支持指定上游分支作为基线（如 `main`）\n- 支持自动推送至远程仓库（GitHub）\n- 提供错误处理与冲突检测机制（如分支已存在）\n- 返回成功/失败状态及详细日志");
 
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
@@ -94,7 +94,7 @@ public class CreateGitBranchTool implements Tool {
           }
         }
 
-        // 3. 验證必要參數
+        // 3. 驗証必要參數
         if (token.isEmpty()) {
           throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
         }
