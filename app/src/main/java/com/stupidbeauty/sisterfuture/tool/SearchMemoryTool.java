@@ -33,14 +33,14 @@ public class SearchMemoryTool implements Tool {
 
     @Override
     public String getName() {
-        return "search_memory";
+        return "searchMemory";
     }
 
     @Override
     public JSONObject getDefinition() {
         try {
             JSONObject functionDef = new JSONObject();
-            functionDef.put("name", "search_memory");
+            functionDef.put("name", "searchMemory");
             functionDef.put("description", "搜索长期记忆。用于让未来姐姐在长期记忆中搜索可能与当前所聊的上下文有关的东西，帮助补全一些缺失的上下文，避免用户需要在不同次的会话中一次次地重复说明。");
 
             JSONObject parameters = new JSONObject();
