@@ -81,6 +81,11 @@ public class ToolRegistry {
         // API Key 配置：在工具备注中设置 dashscope_api_key=sk-xxx
         // 支持文生图 + 图生图（参考图风格迁移）
         toolManager.registerTool(new WanxiangTool(context));
+        // 🔥 新增：可灵 (Kling) 视频生成工具（异步，调用 kling-3.0-turbo 模型）
+        // 关联任务：Redmine #864266322146
+        // API Key 配置：在工具备注中设置 kling_api_key=xxx
+        // 异步任务，自动轮询到完成并下载视频
+        toolManager.registerTool(new KlingVideoGenerationTool(context));
 
         // === 系统工具 ===
         toolManager.registerTool(new GetContactListTool(context));
