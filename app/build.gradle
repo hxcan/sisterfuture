@@ -63,10 +63,13 @@ dependencies
   // 文档：https://help.aliyun.com/document_detail/32008.html
   // #865316300466 修复：保留排除 httpcomponents（避免与 jsch 等 jar 冲突），
   // 但显式引入兼容的 httpclient 版本，提供缺失的 DefaultHostnameVerifier 类
+  // #865366531088 进一步修复：降到 httpclient 4.4.1，避免 AllowAllHostnameVerifier
+  // 与系统 framework 中的同名类冲突（4.5.x 后该类改成了单例 INSTANCE 字段，
+  // 系统旧版本没有此字段，导致 NoSuchFieldError）
   implementation('com.aliyun.oss:aliyun-sdk-oss:3.17.4') {
     exclude group: 'org.apache.httpcomponents'
   }
-  implementation 'org.apache.httpcomponents:httpclient:4.5.14'
+  implementation 'org.apache.httpcomponents:httpclient:4.4.1'
 }
 
 android
