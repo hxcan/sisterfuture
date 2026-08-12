@@ -58,6 +58,10 @@ dependencies
 
   // 🆕 Android Crash Detector - Global exception handler with crash logging to external storage
   implementation 'com.github.hxcan:android-crash-detector:2026.4.8'
+
+  // 🆕 阿里云 OSS Java SDK（用于 OSS 上传/下载工具）
+  // 文档：https://help.aliyun.com/document_detail/32008.html
+  implementation 'com.aliyun.oss:aliyun-sdk-oss:3.17.4'
 }
 
 android
