@@ -1,57 +1,97 @@
-// SisterFutureActivity.java
 package com.stupidbeauty.sisterfuture;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import com.stupidbeauty.sisterfuture.tool.ToolRegistry;
-import com.stupidbeauty.sisterfuture.tool.ToolManager;
-import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
-import com.stupidbeauty.sisterfuture.manager.MemoryManager;
-import com.stupidbeauty.sisterfuture.ContextManager;
-import com.stupidbeauty.sisterfuture.manager.SystemPromptManager;
-import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
-import android.os.Handler;
-import android.os.Looper;
-import java.io.FileDescriptor;
-import android.os.Build;
+import android.app.StatusBarManager;
+import com.stupidbeauty.hxlauncher.callback.AddQuickSettingsResultCallback;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import android.graphics.drawable.Icon;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import android.graphics.drawable.Icon;
+import android.content.ComponentName;
+import android.content.Context;
+import android.graphics.drawable.Icon;
+import android.content.ComponentName;
+import android.content.Context;
+import com.stupidbeauty.codeposition.CodePosition;
+import android.os.ParcelFileDescriptor;
+import com.stupidbeauty.dynamicwallpaper.service.MyLiveWallpaperService.MyEngine;
+import android.annotation.SuppressLint;
+import android.app.Application;
+import android.content.Context;
+import com.stupidbeauty.dynamicwallpaper.service.MyLiveWallpaperService;
+import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
+import com.bumptech.glide.Glide;
+import java.util.Random;
+import android.widget.ImageView;
+import java.util.Random;
+import android.widget.ImageView;
+import androidx.fragment.app.Fragment;
+import butterknife.OnClick;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.BaseColumns;
+import android.util.Log;
+import android.view.KeyEvent;
+import android.provider.MediaStore;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+import android.util.Log;
 import com.stupidbeauty.sisterfuture.bean.MessageItem;
-import com.stupidbeauty.sisterfuture.bean.MessageType;
-import com.stupidbeauty.sisterfuture.bean.Attachment;
-import com.stupidbeauty.sisterfuture.bean.AttachmentMetadata;
-import com.stupidbeauty.sisterfuture.bean.Delta;
-import com.stupidbeauty.sisterfuture.bean.Choice;
-import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
-import com.stupidbeauty.sisterfuture.tool.Tool;
-import com.stupidbeauty.sisterfuture.bean.ToolCall;
-import com.stupidbeauty.sisterfuture.bean.Function;
-import com.stupidbeauty.sisterfuture.R;
+import androidx.recyclerview.widget.RecyclerView;
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import android.provider.Settings;
+import android.content.Intent;
+import android.os.Environment;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.LauncherApps;
+import com.stupidbeauty.sisterfuture.R; // Make sure to import the correct R class
 import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
 import java.util.List;
 import android.text.TextUtils;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.RadioGroup;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import net.tatans.tensorflowtts.utils.ThreadPoolManager;
+// import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+// import net.tatans.tensorflowtts.tts.TtsManager;
+import org.json.JSONObject;
+import org.json.JSONArray;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Map;
-import androidx.activity.result.ActivityResultLauncher;
-import android.net.Uri;
-import java.io.InputStream;
-import java.io.ByteArrayOutputStream;
-import android.util.Base64;
-import androidx.activity.result.contract.ActivityResultContracts;
+import java.util.List;
+// import com.stupidbeauty.codeposition.CodePosition;
+import java.io.FileDescriptor;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.LocaleList;
+import android.os.PowerManager;
+// import com.stupidbeauty.codeposition.CodePosition;
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.app.WallpaperManager;
 import android.media.MediaScannerConnection;
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -61,10 +101,10 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.LocaleList;
-import android.os.PowerManager;
 import android.os.Vibrator;
 import android.speech.tts.TextToSpeech;
+// import android.support.v4.content.LocalBroadcastManager;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
@@ -72,1988 +112,1056 @@ import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
-import com.stupidbeauty.builtinftp.BuiltinFtpServer;
-import com.stupidbeauty.sisterfuture.listener.BuiltinFtpServerErrorListener;
-import java.util.Timer;
-import java.util.TimerTask;
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.VolleyError;
+// import android.widget.Switch;
+import android.widget.Switch;
+// import com.android.volley.Request;
+// import com.android.volley.RequestQueue;
+// import com.android.volley.Response;
+// import com.android.volley.VolleyError;
+// import com.google.gson.Gson;
 import com.stupidbeauty.msclearnfootball.VoiceRecognizeResult;
-import com.iflytek.cloud.ErrorCode;
-import com.iflytek.cloud.RecognizerListener;
-import com.iflytek.cloud.RecognizerResult;
-import com.iflytek.cloud.SpeechConstant;
-import com.iflytek.cloud.SpeechError;
-import com.iflytek.cloud.SpeechUtility;
-import com.stupidbeauty.sisterfuture.network.TongYiClient;
-import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
-import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
-import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
-import com.stupidbeauty.sisterfuture.manager.GuideManager;
-import com.stupidbeauty.sisterfuture.manager.PermissionManager;
-import com.stupidbeauty.sisterfuture.manager.RepeatDetectionManager;
-import com.stupidbeauty.sisterfuture.manager.EmptyDeltaDetectionManager;
-import com.stupidbeauty.sisterfuture.utils.FileLogger;
-import com.google.gson.Gson;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
+// import com.iflytek.cloud.ErrorCode;
+// import com.iflytek.cloud.RecognizerListener;
+// import com.iflytek.cloud.RecognizerResult;
+// import com.iflytek.cloud.SpeechConstant;
+// import com.iflytek.cloud.SpeechError;
+// import com.iflytek.cloud.SpeechRecognizer;
+// import com.iflytek.cloud.SpeechUtility;
+// import com.stupidbeauty.sisterfuture.network.TongYiClient;
 import java.io.IOException;
-import com.google.gson.JsonSyntaxException;
-import com.stupidbeauty.sisterfuture.SisterFutureApplication;
-import com.stupidbeauty.lanime.Constants;
-import com.stupidbeauty.lanime.callback.CommitTextCallback;
-import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
-import com.koushikdutta.async.http.server.AsyncHttpServer;
-import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
-import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
-import com.koushikdutta.async.http.server.HttpServerRequestCallback;
-import com.stupidbeauty.lanime.network.volley.MapUtils;
-import com.stupidbeauty.sisterfuture.tool.Tool;
-import androidx.recyclerview.widget.RecyclerView;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import android.util.Log;
-import butterknife.OnClick;
-import com.iflytek.cloud.SpeechRecognizer;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
+// import butterknife.Bind;
 import butterknife.ButterKnife;
-import butterknife.BindView;
-import com.stupidbeauty.sisterfuture.bean.Delta;
-import com.stupidbeauty.sisterfuture.bean.Choice;
-import com.stupidbeauty.sisterfuture.bean.TongYiResponse;
-import com.stupidbeauty.sisterfuture.bean.ToolCall;
-import com.stupidbeauty.sisterfuture.bean.Function;
-import net.tatans.tensorflowtts.utils.ThreadPoolManager;
-import net.tatans.tensorflowtts.tts.TtsManager;
+// import tv.xiaoqiu.paperred.network.VolleyManager;
+// import com.stupidbeauty.sisterfuture.network.TongYiClient.OnResponseListener;
+// import com.koushikdutta.async.http.server.AsyncHttpServer;
+// import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
+// import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
+// import com.koushikdutta.async.http.server.HttpServerRequestCallback;
+import com.stupidbeauty.lanime.network.volley.MapUtils;
+import com.stupidbeauty.sisterfuture.SisterFutureApplication;
+import com.stupidbeauty.ugmate.common.LogHelper;
+// import com.stupidbeauty.ugmate.network.volley.GsonRequest;
+import com.stupidbeauty.x2app.BossResponse;
+import com.stupidbeauty.lanime.Constants;
+// import com.stupidbeauty.lanime.callback.CommitTextCallback;
+// import com.stupidbeauty.lanime.callback.PhoneInformationCallback;
+// import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 
+/**
+ * An example full-screen activity that shows and hides the system UI (i.e.
+ * status bar and navigation/system bar) with user interaction.
+ *
+ */
 public class SisterFutureActivity extends Activity implements TextToSpeech.OnInitListener
 {
-  private GuideManager guideManager ;
+@BindView(R.id.add_quick_settings_button)
+Button addQuickSettingsButton;
 
-  private JSONObject firstToolCallDelta = null;
-  private boolean isFirstToolCallProcessed = false;
-  private ModelAccessPointManager modelAccessPointManager;
-  private ToolManager toolManager;
-  private MemoryManager memoryManager;
-  private RepeatDetectionManager repeatDetectionManager;
+// private MessageAdapter messageAdapter;
+  // RecyclerView articleListmyRecyclerView;
+@BindView(R.id.articleListmy_recycler_view) RecyclerView articleListmyRecyclerView; //!< Message list.
 
-  private Map<Integer, String> indexToOriginalIdMap = new HashMap<>();
-  private Map<String, Function> partialToolArgs = new HashMap<>();
+@BindView(R.id.set_wallpaper_button)
+Button setWallpaperButton;
 
-  private static final Gson gson = new Gson();
+@BindView(R.id.refresh_wallpaper_button)
+Button refreshWallpaperButton;
 
-  private ContextManager contextManager;
-  private MessageAdapter messageAdapter;
-  @BindView(R.id.articleListmy_recycler_view) RecyclerView articleListmyRecyclerView;
-  private static final String DEFAULT_INPUT_TEXT = "君不见，黄河之水天上来，奔流到海不复回，君不见，高堂明镜悲白发，朝如青丝暮成雪，人生得意须尽欢，莫使金樽空对月";
+// 🔴 钉住壁纸开关（新增）
+@BindView(R.id.pin_wallpaper_switch)
+Switch pinWallpaperSwitch;
 
-  private StringBuilder accumulatedAnswer = new StringBuilder();
-
-  private ActivityResultLauncher<Intent> imagePickerLauncher;
-  private String currentImageBase64 = null;
-  private String currentImagePath = null;  // WanxiangImage 工具支持参考图片：图片本地缓存路径
-  @BindView(R.id.uploadImageButton) Button uploadImageButton;
-
-  private TongYiClient tongYiClient;
-  private boolean isTtsSpeaking = false;
-
-  private MediaPlayer mediaPlayer;
-  private boolean voiceEndDetected=false;
-
-  private TextToSpeech mTts;
-
-  private PermissionManager permissionManager;
-
-  private static final int LanServicePort =10471;
-  private String voiceRecognizeResultString;
-  private Vibrator vibrator;
-  @BindView(R.id.sendButtonn2) Button sendButtonn2;
-  @BindView(R.id.commandRecognizebutton2) Button commandRecognizebutton2;
-  @BindView(R.id.thinking_overlay) TextView thinking_overlay;
-  @BindView(R.id.progressBar) ProgressBar progressBar;
-  int ret = 0;
-  private static final String TAG="SisterFutureActivity";
-
-  private SpeechRecognizer mIat;
+private static final String PIN_PREF_NAME = "dynamic_wallpaper"; //!< 与壁纸服务共享的 SharedPreferences
+private static final String PIN_PREF_KEY = "wallpaper_pinned"; //!< 钉住状态的 key
 
 
-	@BindView(R.id.volumeIndicatorprogressBar) ProgressBar volumeIndicatorprogressBar;
-	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView;
+    
+    private static final String DEFAULT_INPUT_TEXT = "君不见,黄河之水天上来,奔流到海不复回,君不见,高堂明镜悲白发,朝如青丝暮成雪,人生得意须尽欢,莫使金樽空对月";
+// 在Activity中添加一个StringBuilder来存储累积的回答文本
+private StringBuilder accumulatedAnswer = new StringBuilder();
 
-  private boolean isDeadlockRescueMode = false;
+  private static final int PERMISSIONS_REQUEST = 1; //!<权限请求标识
+    // 假设这是您的通义千问客户端
+    // private TongYiClient tongYiClient;
+// 在Activity中添加一个变量用于追踪是否正在合成语音
+private boolean isTtsSpeaking = false;
 
-  private int rateLimitRetryCount = 0;
-  private static final int MAX_RATE_LIMIT_RETRIES = 3;
+  private static final String PERMISSION_STORAGE = Manifest.permission.WRITE_EXTERNAL_STORAGE;
+  private static final String PERMISSION_RECORD_AUDIO = Manifest.permission.RECORD_AUDIO; //!<录音权限。
+  private static final String PERMISSION_FINE_LOCATIN = Manifest.permission.ACCESS_FINE_LOCATION; //!<位置权限
+  private static final String PERMISSION_INSTALL_PACKAGE = Manifest.permission.REQUEST_INSTALL_PACKAGES; //!< 安装应用程序权限
+    private MediaPlayer mediaPlayer;
+    private boolean voiceEndDetected=false; //!<是否已经探测到用户声音结束。
+    private String textTitle;
 
-  private volatile long currentRequestId = 0;
-  private volatile long lastSuccessRequestId = 0;
-  private static final int FTP_SERVER_PORT = 2123;
-  private BuiltinFtpServer builtinFtpServer = null;
-  private BuiltinFtpServerErrorListener builtinFtpServerErrorListener = null;
+    private TextToSpeech mTts;
+
+    private static final int LanServicePort = 10471;
+
+    private String voiceRecognizeResultString; //!<语音识别结果。
+    // private RequestQueue mQueue; //!<Volley请求队列。
+
+    private Vibrator vibrator;
+    
+    @BindView(R.id.commandRecognizebutton2) Button commandRecognizebutton2; //!<开始识别的按钮。
+    
+    @BindView(R.id.progressBar) ProgressBar progressBar; //!<进度条。
+    int ret = 0;
+    private static final String TAG="SisterFutureActivity"; //!<输出调试信息时使用的标记。
+    @BindView(R.id.speakerVerifyRegisterPasswordtextView) TextView speakerVerifyRegisterPasswordtextView; //!<声纹注册密码文本标签。
+
+	// private SpeechRecognizer mIat; //!<语言识别器。
 
 
-	@Override
-	public void onInit(int arg0)
+
+	@BindView(R.id.statustextView)
+	TextView statustextView; //!<用来显示状态的文字标签。
+
+	@BindView(R.id.volumeIndicatorprogressBar)
+	ProgressBar volumeIndicatorprogressBar; //!<用来显示音量的进度条。
+
+	@BindView(R.id.recognizeResulttextView) EditText recognizeResulttextView; //!<识别结果。
+
+@OnClick(R.id.add_quick_settings_button)
+public void onAddQuickSettingsClicked() {
+    StatusBarManager statusBarManager = (StatusBarManager) getSystemService(Context.STATUS_BAR_SERVICE);
+
+    if (statusBarManager == null) {
+        Toast.makeText(this, "不支持快捷方式", Toast.LENGTH_SHORT).show();
+        return;
+    }
+
+    ExecutorService executor = Executors.newFixedThreadPool(1);
+
+    Icon icon = Icon.createWithResource(this, R.drawable.ic_refresh);
+    CharSequence label = getText(R.string.wallpaper_refresh_tile);
+
+    ComponentName componentName = new ComponentName(
+        getPackageName(),
+        "com.stupidbeauty.dynamicwallpaper.service.WallpaperRefreshTileService"
+    );
+
+    AddQuickSettingsResultCallback callback = new AddQuickSettingsResultCallback();
+
+    statusBarManager.requestAddTileService(componentName, label, icon, executor, callback);
+}
+
+	// 在 setWallpaperButton 之后添加点击事件
+@OnClick(R.id.set_wallpaper_button)
+public void onSetWallpaperClicked() {
+    Intent intent = new Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER);
+    intent.putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, new ComponentName(
+        getPackageName(),
+        MyLiveWallpaperService.class.getName()
+    ));
+    startActivityForResult(intent, 1001);
+}
+
+    @Override
+    public void onInit(int arg0) {
+        // TODO 自动生成的方法存根
+
+    }
+
+@OnClick(R.id.refresh_wallpaper_button)
+public void onRefreshWallpaperClicked() {
+        com.stupidbeauty.dynamicwallpaper.utils.FileLogger.i("RefreshBtn", "=== onRefreshWallpaperClicked START ===");
+    // 1. 通知壁纸服务 Engine 重新加载图片
+    SisterFutureApplication app = (SisterFutureApplication) getApplication();
+        com.stupidbeauty.dynamicwallpaper.utils.FileLogger.i("RefreshBtn", "app=" + app);
+    MyEngine engine = app.getMyEngine();
+        com.stupidbeauty.dynamicwallpaper.utils.FileLogger.i("RefreshBtn", "engine=" + engine);
+    if (engine != null) {
+            com.stupidbeauty.dynamicwallpaper.utils.FileLogger.i("RefreshBtn", "engine != null, calling reloadWallpaper(false)");
+        engine.reloadWallpaper(false);
+    }
+
+    // 2. 预览也显示与壁纸服务一致的图片（从 SharedPreferences 读取）
+        com.stupidbeauty.dynamicwallpaper.utils.FileLogger.i("RefreshBtn", "calling loadCurrentWallpaperPreview");
+    loadCurrentWallpaperPreview();
+}
+
+
+    /**
+     * 停止录音。
+     */
+    public void stopRecordbutton2()
+    {
+        vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
+        vibrator.vibrate( 100);
+
+        volumeIndicatorprogressBar.setIndeterminate(true); //处于未决状态，以表示正在识别。
+        volumeIndicatorprogressBar.setProgress(0); //进度归零。
+
+        volumeIndicatorprogressBar.setVisibility(View.INVISIBLE); //停止录音，则不再显示音量。
+
+        progressBar.setVisibility(View.VISIBLE); //显示进度条。
+
+        commandRecognizebutton2.setEnabled(false); //禁用按钮。
+        commandRecognizebutton2.setVisibility(View.INVISIBLE); //隐藏按钮。
+    } //public void stopRecordbutton2()
+
+	/**
+	 * 在线命令词识别。
+	 */
+  public void commandRecognizebutton2()
 	{
+	    voiceEndDetected=false; //重置状态，未探测到用户的声音结束。
 
-  }
+        vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
+        vibrator.vibrate( 100);
 
-  private void accumulateToolCalls(List<ToolCall> calls)
-  {
-    for (ToolCall call : calls)
-    {
-      if (call == null || call.getFunction() == null) continue;
-
-      int index = call.getIndex();
-
-      if (call.getId() != null && !call.getId().trim().isEmpty())
-      {
-        indexToOriginalIdMap.put(index, call.getId());
-      }
-
-      String originalId = indexToOriginalIdMap.get(index);
-      if (originalId == null)
-      {
-        originalId = "fallback_" + index + "_" + (call.getFunction().getName() != null ? call.getFunction().getName() : "");
-        indexToOriginalIdMap.put(index, originalId);
-      }
-
-      Function func = call.getFunction();
-      Function existing = partialToolArgs.get(originalId);
-
-      if (existing == null)
-      {
-        existing = new Function();
-        existing.setName(func.getName());
-        existing.setArguments("");
-      }
-
-      String newChunk = func.getArguments() != null ? func.getArguments() : "";
-      existing.setArguments(existing.getArguments() + newChunk);
-      partialToolArgs.put(originalId, existing);
-    }
-  }
-
-  private List<ToolCall> getFinalToolCalls()
-  {
-    List<ToolCall> result = new ArrayList<>();
-    for (Map.Entry<String, Function> entry : partialToolArgs.entrySet())
-    {
-      int index = -1;
-      for (Map.Entry<Integer, String> mapEntry : indexToOriginalIdMap.entrySet())
-      {
-        if (mapEntry.getValue().equals(entry.getKey()))
+        if (!setParam()) //参数设置失败。
         {
-          index = mapEntry.getKey();
-          break;
+            statustextView.setText("请先构建语法。");
+
+            return;
+        } //if (!setParam()) //参数设置失败。
+
+        volumeIndicatorprogressBar.setIndeterminate(false); //处于决定状态，以表示音量值。
+        progressBar.setVisibility(View.INVISIBLE); //隐藏显示进度条。
+        recognizeResulttextView.setText(R.string.empty); //显示空白内容。
+	} //public void commandRecognizebutton2()
+
+@Override
+protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == 1001) {
+        if (resultCode == RESULT_OK) {
+            Toast.makeText(this, "已成功设置为动态壁纸", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "设置失败", Toast.LENGTH_SHORT).show();
         }
-      }
-
-      ToolCall call = new ToolCall();
-      call.setId(entry.getKey());
-      call.setType("function");
-      call.setIndex(index);
-      call.setFunction(entry.getValue());
-      result.add(call);
     }
-    return result;
-  }
+}
 
-  private void clearAccumulatedToolCalls()
-  {
-    partialToolArgs.clear();
-  }
-
-  public void stopRecordbutton2()
-  {
-    vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
-    vibrator.vibrate( 100);
-
-    if (voiceEndDetected)
-    {}
-    else
+    /**
+     * 参数设置
+     *
+     * @return 是否设置成功。
+     */
+    public boolean setParam()
     {
-      mIat.stopListening();
+        LogHelper.d(TAG, "setParam.190"); //Debug.
+        boolean result = false;
+        // 设置识别引擎
+
+        return result;
     }
 
-    volumeIndicatorprogressBar.setIndeterminate(true);
-    volumeIndicatorprogressBar.setProgress(0);
-
-    volumeIndicatorprogressBar.setVisibility(View.INVISIBLE);
-
-    progressBar.setVisibility(View.VISIBLE);
-
-    commandRecognizebutton2.setEnabled(false);
-    commandRecognizebutton2.setVisibility(View.INVISIBLE);
-  }
-
-  public void commandRecognizebutton2startRecognize()
-  {
-    voiceEndDetected=false;
-
-    vibrator = (Vibrator) this.getSystemService(VIBRATOR_SERVICE);
-    vibrator.vibrate( 100);
-    if (mIat==null)
+    /**
+     * 计算签名字符串。
+     * @param map 参数映射。
+     * @return 计算出来的签名字符串。
+     */
+    private String calculateSign(Map<String, String> map)
     {
-      mIat=SpeechRecognizer.createRecognizer(this,null);
-    }
+        String rawUrl=""; //#原始网址内容。
 
-    if (!setParam())
-    {
-      return;
-    }
-
-    ret = mIat.startListening(mRecognizerListener);
-    if (ret != ErrorCode.SUCCESS)
-    {
-      if (ret == ErrorCode.ERROR_COMPONENT_NOT_INSTALLED)
-      {
-      }
-      else
-      {
-      }
-    }
-    volumeIndicatorprogressBar.setIndeterminate(false);
-    progressBar.setVisibility(View.INVISIBLE);
-    recognizeResulttextView.setText(R.string.empty);
-  }
-
-  public boolean setParam()
-  {
-    boolean result = false;
-    String mEngineType = SpeechConstant.TYPE_CLOUD;
-    mIat.setParameter(SpeechConstant.ENGINE_TYPE, mEngineType);
-    mIat.setParameter(SpeechConstant.RESULT_TYPE, "json");
-
-    if ("cloud".equalsIgnoreCase(mEngineType))
-    {
-      mIat.setParameter(SpeechConstant.DOMAIN,"iat");
-      mIat.setParameter(SpeechConstant.LANGUAGE,"zh_cn");
-      mIat.setParameter(SpeechConstant.ACCENT, "mandarin");
-      result = true;
-    }
-
-    mIat.setParameter(SpeechConstant.AUDIO_FORMAT, "wav");
-    mIat.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
-
-    return result;
-  }
-
-  private void displayExistingContext()
-  {
-    List<JSONObject> history = contextManager.getHistory();
-    for (JSONObject msg : history)
-    {
-      String role = msg.optString("role");
-      Object contentObj = msg.opt("content");
-      String toolCallId = msg.optString("tool_call_id");
-      String messageId = msg.optString("id"); // #821166321034 从数据源读取 messageId
-      JSONArray toolCalls = msg.optJSONArray("tool_calls");
-
-      if ("tool".equals(role) && !toolCallId.isEmpty())
-      {
-        String toolName = msg.optString("name", "unknown_tool");
-        String content = msg.optString("content");
-        String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
-        MessageItem item = new MessageItem(displayText, MessageType.TOOL_CALL_RESULT);
-        if (messageId != null && !messageId.isEmpty()) {
-          item.setMessageId(messageId); // 设置正确的 messageId
-        }
-        messageAdapter.addMessage(item);
-      }
-      else if ("user".equals(role))
-      {
-        if (contentObj instanceof JSONArray)
-        {
-          JSONArray contentArray = (JSONArray) contentObj;
-          StringBuilder textBuilder = new StringBuilder();
-          String imageUrl = null;
-
-          for (int i = 0; i < contentArray.length(); i++)
-          {
-            try
-            {
-              JSONObject item = contentArray.optJSONObject(i);
-              if (item == null) continue;
-
-              String type = item.optString("type");
-              if ("text".equals(type))
-              {
-                textBuilder.append(item.optString("text"));
-              }
-              else if ("image_url".equals(type))
-              {
-                JSONObject imageUrlObj = item.optJSONObject("image_url");
-                if (imageUrlObj != null)
-                {
-                  String url = imageUrlObj.optString("url");
-                  if (url != null && url.startsWith("data:image/jpeg;base64,"))
-                  {
-                    int commaIndex = url.lastIndexOf(',');
-                    if (commaIndex > 0) {
-                      imageUrl = url.substring(commaIndex + 1);
-                    } else {
-                      imageUrl = url;
-                    }
-                  }
-                }
-              }
-            }
-            catch (Exception e)
-            {
-              Log.e(TAG, "解析多模态消息失败", e);
-            }
-          }
-
-          MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
-          if (messageId != null && !messageId.isEmpty()) {
-            item.setMessageId(messageId);
-          }
-          messageAdapter.addMessage(item);
-        }
-        else
-        {
-          String content = msg.optString("content");
-          if (!content.isEmpty())
-          {
-            MessageItem item = new MessageItem(content, MessageType.USER);
-            if (messageId != null && !messageId.isEmpty()) {
-              item.setMessageId(messageId);
-            }
-            messageAdapter.addMessage(item);
-          }
-        }
-      }
-      else if ("assistant".equals(role))
-      {
-        if (toolCalls != null && toolCalls.length() > 0)
-        {
-          StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
-          for (int i = 0; i < toolCalls.length(); i++)
-          {
-            try
-            {
-              JSONObject toolCall = toolCalls.getJSONObject(i);
-              JSONObject func = toolCall.optJSONObject("function");
-              if (func != null)
-              {
-                String toolName = func.optString("name", "unknown");
-                callText.append("- `").append(toolName).append("`").append("\n");
-              }
-            }
-            catch (JSONException e)
-            {
-              Log.e(TAG, "解析工具调用失败", e);
-            }
-          }
-          MessageItem item = new MessageItem(callText.toString(), MessageType.AI);
-          if (messageId != null && !messageId.isEmpty()) {
-            item.setMessageId(messageId);
-          }
-          messageAdapter.addMessage(item);
-        }
-        else if (!msg.optString("content").isEmpty())
-        {
-          MessageItem item = new MessageItem(msg.optString("content"), MessageType.AI);
-          if (messageId != null && !messageId.isEmpty()) {
-            item.setMessageId(messageId);
-          }
-          messageAdapter.addMessage(item);
-        }
-      }
-    }
-
-    checkAndResumeLastMessage();
-  }
-
-  private void checkAndResumeLastMessage()
-  {
-    List<JSONObject> history = contextManager.getHistory();
-    if (history == null || history.isEmpty())
-    {
-      return;
-    }
-
-    JSONObject lastMsg = history.get(history.size() - 1);
-    String role = lastMsg.optString("role", "");
-    String toolCallId = lastMsg.optString("tool_call_id", "");
-
-    boolean shouldResume = false;
-
-    if ("user".equals(role))
-    {
-      shouldResume = true;
-    }
-    else if ("tool".equals(role) && !toolCallId.isEmpty())
-    {
-      shouldResume = true;
-    }
-
-    if (shouldResume)
-    {
-      new Handler(Looper.getMainLooper()).postDelayed(() ->
-      {
-        sendChatRequestTongYi();
-      }, 500);
-    }
-  }
-
-  public void sendMessageToSister(String message)
-  {
-    if (message == null || message.trim().isEmpty())
-    {
-      if (currentImageBase64 == null || currentImageBase64.isEmpty())
-      {
-        return;
-      }
-    }
-
-    boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
-
-    if (hasImage)
-    {
-      try
-      {
-        JSONArray contentArray = new JSONArray();
-
-        if (message != null && !message.trim().isEmpty())
-        {
-          JSONObject textContent = new JSONObject();
-          textContent.put("type", "text");
-          textContent.put("text", message);
-          contentArray.put(textContent);
-        }
-
-        JSONObject imageContent = new JSONObject();
-        imageContent.put("type", "image_url");
-
-        JSONObject imageUrl = new JSONObject();
-        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
-        imageContent.put("image_url", imageUrl);
-        contentArray.put(imageContent);
-
-        JSONObject userMessage = new JSONObject();
-        userMessage.put("role", "user");
-        userMessage.put("content", contentArray);
-
-        contextManager.addRawMessage(userMessage);
-
-        messageAdapter.addMessage(new MessageItem(message != null ? message : "", MessageType.USER, hasImage ? currentImageBase64 : null));
-
-        // 🔥 新增：把图片本地路径作为独立文本消息追加（供 wanxiangImage 等工具使用）
-        if (currentImagePath != null)
-        {
-          contextManager.addUserMessage(currentImagePath);
-        }
-
-        currentImageBase64 = null;
-        currentImagePath = null;
-
-        scrollToBottom();
-
-        if (isDeadlockRescueMode) {
-          return;
-        }
-
-        if (guideManager != null && guideManager.isEmptyAccessPointList())
-        {
-          guideManager.processWithGuideLogic(message != null ? message : "", new GuideManager.ChatCallback()
-          {
-            @Override
-            public void onResponse(String response) {
-              runOnUiThread(() -> {
-                messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
-                scrollToBottom();
-                ttsSayReply(response);
-                if (response.contains("✅")) {
-                  FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
-                  isDeadlockRescueMode = false;
-                  modelAccessPointManager.resetFailureCount();
-                }
-              });
-            }
-
-            @Override
-            public void onError(String error) {
-              runOnUiThread(() -> {
-                messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-                scrollToBottom();
-              });
-            }
-          });
-          return;
-        }
-
-        sendChatRequestTongYi();
-      }
-      catch (JSONException e)
-      {
-        runOnUiThread(() -> {
-          Toast.makeText(SisterFutureActivity.this, "❌ 构建消息失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
-        });
-      }
-    }
-    else
-    {
-      messageAdapter.addMessage(new MessageItem(message, MessageType.USER));
-      contextManager.addUserMessage(message);
-
-      if (isDeadlockRescueMode) {
-        guideManager.handleDeadlockRescueApiKey(message, new GuideManager.ChatCallback() {
-          @Override
-          public void onResponse(String response) {
-            runOnUiThread(() -> {
-              messageAdapter.addMessage(new MessageItem(response, MessageType.AI));
-              scrollToBottom();
-              ttsSayReply(response);
-              if (response.contains("✅")) {
-                FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
-                isDeadlockRescueMode = false;
-                modelAccessPointManager.resetFailureCount();
-              }
-            });
-          }
-
-          @Override
-          public void onError(String error) {
-            runOnUiThread(() -> {
-              messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-              scrollToBottom();
-            });
-          }
-        });
-        return;
-      }
-
-      if (guideManager != null && guideManager.isEmptyAccessPointList())
-      {
-        guideManager.processWithGuideLogic(message, new GuideManager.ChatCallback()
-        {
-          @Override
-          public void onResponse(String message)
-          {
-            runOnUiThread(() ->
-            {
-              messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
-              scrollToBottom();
-              ttsSayReply(message);
-            });
-          }
-
-          @Override
-          public void onError(String error)
-          {
-            runOnUiThread(() ->
-            {
-              messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-              scrollToBottom();
-            });
-          }
-        });
-        return;
-      }
-
-      sendChatRequestTongYi();
-    }
-  }
-
-  @OnClick(R.id.sendButtonn2)
-  public void sendButtonn2()
-  {
-    voiceRecognizeResultString = recognizeResulttextView.getText().toString();
-    sendMessageToSister(voiceRecognizeResultString);
-    recognizeResulttextView.setText("");
-  }
-
-  @OnClick(R.id.uploadImageButton)
-  public void onUploadImageButton()
-  {
-    if (currentImageBase64 != null)
-    {
-      currentImageBase64 = null;
-    }
-    openImagePicker();
-  }
-
-  private void sendChatRequest()
-  {
-    recognizeResulttextView.setText("");
-
-    if (guideManager != null && guideManager.isEmptyAccessPointList())
-    {
-      guideManager.processWithGuideLogic(voiceRecognizeResultString, new GuideManager.ChatCallback()
-      {
-        @Override
-        public void onResponse(String message)
-        {
-          runOnUiThread(() ->
-          {
-            messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
-            scrollToBottom();
-            ttsSayReply(message);
-          });
-        }
-
-        @Override
-        public void onError(String error)
-        {
-          runOnUiThread(() ->
-          {
-            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-            scrollToBottom();
-          });
-        }
-      });
-      return;
-    }
-
-    sendChatRequestTongYi();
-  }
-
-  protected void reportOperationFail(String string)
-  {
-    Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();
-  }
-
-  private void showThinkingOverlay()
-  {
-    runOnUiThread(new Runnable()
-    {
-      @Override
-      public void run()
-      {
-        ModelAccessPoint currentAp = modelAccessPointManager.getCurrentAccessPoint();
-        thinking_overlay.setText(currentAp.getName() + " is thinking...");
-
-        thinking_overlay.setVisibility(View.VISIBLE);
-        recognizeResulttextView.setEnabled(false);
-        sendButtonn2.setEnabled(false);
-        commandRecognizebutton2.setEnabled(false);
-
-        SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在思考中...");
-      }
-    });
-  }
-
-  private void hideThinkingOverlay()
-  {
-    runOnUiThread(new Runnable()
-    {
-      @Override
-      public void run()
-      {
-        thinking_overlay.setVisibility(View.GONE);
-        recognizeResulttextView.setEnabled(true);
-        sendButtonn2.setEnabled(true);
-        commandRecognizebutton2.setEnabled(true);
-      }
-    });
-  }
-
-  private void handleContextLengthError(String errorMessage, final boolean isRetry)
-  {
-    runOnUiThread(() ->
-    {
-      String displayMessage = errorMessage + "\n⚠️ 上下文超长，自动缩短后重试";
-      messageAdapter.addMessage(new MessageItem(displayMessage, MessageType.AI));
-      scrollToBottom();
-      ttsSayReply("上下文超长，自动缩短后重试");
-
-      contextManager.addAssistantMessage("⚠️ 上下文超长，已自动缩短");
-      contextManager.decreaseMaxRounds();
-
-      if (isRetry)
-      {
-        sendChatRequestTongYi();
-      }
-    });
-  }
-
-  private void sendChatRequestTongYi()
-  {
-    final long requestId = System.currentTimeMillis();
-    currentRequestId = requestId;
-
-    SisterFutureService.updateNotificationStatus(this, "正在发送请求...");
-
-    if (modelAccessPointManager.checkFailureThreshold()) {
-      isDeadlockRescueMode = true;
-      runOnUiThread(() -> {
-        Toast.makeText(SisterFutureActivity.this,
-          "⚠️ 所有接入点连续失败，正在启动备用接入点配置向导...",
-          Toast.LENGTH_LONG).show();
-
-        guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
-          @Override
-          public void onResponse(String message) {
-            messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
-            scrollToBottom();
-            ttsSayReply(message);
-            if (message.contains("✅")) {
-              FileLogger.i(TAG, "✅ [BACKUP_AP_CREATED] 备用接入点配置成功，退出救援模式");
-              isDeadlockRescueMode = false;
-              modelAccessPointManager.resetFailureCount();
-            }
-          }
-
-          @Override
-          public void onError(String error) {
-            messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
-            scrollToBottom();
-          }
-        });
-      });
-      return;
-    }
-
-    if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty())
-    {
-      accumulatedAnswer.setLength(0);
-      showThinkingOverlay();
-
-      List<JSONObject> history = contextManager.getHistory();
-      List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
-      JSONArray historyArray = new JSONArray(cleanedHistory);
-      JSONArray messagesArray = new JSONArray();
-
-      try
-      {
-        JSONObject systemMsg = new JSONObject();
-        systemMsg.put("role", "system");
-        String enhancedSystemPrompt = buildEnhancedSystemPrompt(toolManager, this);
-        systemMsg.put("content", enhancedSystemPrompt);
-        messagesArray.put(systemMsg);
-
-        for (int i = 0; i < historyArray.length(); i++)
-        {
-          messagesArray.put(historyArray.getJSONObject(i));
-        }
-      }
-      catch (Exception e)
-      {
-        e.printStackTrace();
+        String url;
 
         try
         {
-          messagesArray = new JSONArray();
-          String enhancedSystemPrompt = buildEnhancedSystemPrompt(toolManager, this);
 
-          messagesArray.put(new JSONObject().put("role", "system").put("content", enhancedSystemPrompt));
-          messagesArray.put(new JSONObject().put("role", "user").put("content", voiceRecognizeResultString));
+            rawUrl="app_id="+map.get("app_id");
+        rawUrl=rawUrl+"&"+"nonce_str="+map.get("nonce_str");
+
+        String question=map.get("question");
+
+        String questionEncoded=URLEncoder.encode(question, "UTF-8");
+
+        rawUrl=rawUrl+"&"+"question="+  questionEncoded;
+        rawUrl=rawUrl+"&"+"session="+map.get("session");
+        rawUrl=rawUrl+"&"+"time_stamp="+map.get("time_stamp");
+        rawUrl=rawUrl+"&"+"app_key="+map.get("app_key");
+
+
+
+        LogHelper.d(TAG,rawUrl); //#Debug.
+
+
+//            url= URLEncoder.encode(rawUrl, "UTF-8"); //#编码。
+
         }
-        catch (Exception ignored)
+        catch (UnsupportedEncodingException e)
         {
-        }
-      }
 
-      // #5030【救援模式】遍历消息列表，检查所有 tool_call 的 arguments
-      FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 开始检查消息列表中的 tool_call arguments | 消息总数：" + messagesArray.length());
+        } //catch (UnsupportedEncodingException e)
 
-      boolean hasImageInContext = false;
-      int imageMessageIndex = -1;
+        url=rawUrl; //记录网址。
 
-      for (int i = 0; i < messagesArray.length(); i++)
-      {
+
+        LogHelper.d(TAG,url); //#Debug.
+
+        MessageDigest md=null;
+
         try
         {
-          JSONObject msg = messagesArray.getJSONObject(i);
-          String role = msg.optString("role", "unknown");
+            md=MessageDigest.getInstance("MD5");
 
-          if ("user".equals(role)) {
-            Object contentObj = msg.opt("content");
-            if (contentObj instanceof JSONArray) {
-              JSONArray contentArray = (JSONArray) contentObj;
-              for (int j = 0; j < contentArray.length(); j++) {
-                JSONObject item = contentArray.optJSONObject(j);
-                if (item != null && "image_url".equals(item.optString("type"))) {
-                  hasImageInContext = true;
-                  imageMessageIndex = i;
-
-                  JSONObject imageUrl = item.optJSONObject("image_url");
-                  if (imageUrl != null) {
-                    String url = imageUrl.optString("url", "");
-                    if (url.startsWith("data:image/jpeg;base64,")) {
-                      int commaIndex = url.lastIndexOf(',');
-                      String base64 = (commaIndex > 0) ? url.substring(commaIndex + 1) : url;
-                      String preview = base64.length() > 50 ? base64.substring(0, 50) + "..." : base64;
-                      FileLogger.i(TAG, "🖼️ [IMAGE_IN_CONTEXT] 检测到图片消息 | 位置=" + i + " | Base64 长度=" + base64.length() + " | 前 50 字符：" + preview);
-                    }
-                  }
-                  break;
-                }
-              }
-            }
-          }
-
-          if ("tool".equals(role))
-          {
-            String toolCallId = msg.optString("tool_call_id", "unknown");
-            String toolName = msg.optString("name", "unknown_tool");
-            String content = msg.optString("content", "");
-
-            try
-            {
-              new JSONObject(content);
-            }
-            catch (JSONException e)
-            {
-            }
-          }
-
-          if ("assistant".equals(role))
-          {
-            JSONArray toolCalls = msg.optJSONArray("tool_calls");
-            if (toolCalls != null && toolCalls.length() > 0)
-            {
-              for (int j = 0; j < toolCalls.length(); j++)
-              {
-                JSONObject toolCall = toolCalls.getJSONObject(j);
-                String id = toolCall.optString("id", "unknown");
-                JSONObject func = toolCall.optJSONObject("function");
-
-                if (func != null)
-                {
-                  String funcName = func.optString("name", "unknown_function");
-                  String args = func.optString("arguments", "");
-
-                  try
-                  {
-                    new JSONObject(args);
-                  }
-                  catch (JSONException e)
-                  {
-                    FileLogger.e(TAG, "      ❌ [JSON_INVALID] 解析失败：" + e.getMessage());
-                  }
-                }
-              }
-            }
-          }
         }
-        catch (JSONException e)
+        catch (NoSuchAlgorithmException e)
         {
-          FileLogger.e(TAG, "❌ [PARSE_ERROR] 解析消息 #" + i + " 失败", e);
+
         }
-      }
 
-      if (hasImageInContext) {
-        FileLogger.i(TAG, "✅ [IMAGE_CONFIRMED] 图片消息已确认存在于上下文中 | 总消息数=" + messagesArray.length());
-      } else {
-        FileLogger.w(TAG, "⚠️ [IMAGE_MISSING] 上下文中未检测到图片消息 | 总消息数=" + messagesArray.length());
-      }
+        md.update(url.getBytes());
+        byte byteData[]=md.digest();
 
-      FileLogger.i(TAG, "🔍 [RESCUE_DEBUG] 消息列表检查完成");
+        StringBuilder hexString= new StringBuilder();
+        for (byte aByteData : byteData) {
+            String hex = Integer.toHexString(0xff & aByteData);
 
-      // 生成预留消息 ID
-      String currentReservedMessageId = contextManager.reserveMessageId();
-      FileLogger.i(TAG, "🔗 [RESERVE_ID] 已生成预留消息 ID | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
+            if (hex.length() == 1) {
+                hexString.append('0');
+//                hexString.append(hex);
+            }
 
-      tongYiClient.sendChatRequest(messagesArray, true, new OnResponseListener()
+            hexString.append(hex);
+        }
+
+        String urlHexDigest=hexString.toString();
+
+        String sign=urlHexDigest.toUpperCase();
+
+        LogHelper.d(TAG,"sign: "+sign); //#Debug.
+
+            return sign;
+
+
+    } //private String calculateSign(Map<String, String> map)
+    
+    /**
+    * Send chat request to qq chat service.
+    */
+    private void sendChatRequestQqChat()
+    {
+      Map<String,String> map = new HashMap<>();
+
+      String serialNumber="welcome_logon.getText().toString()"; //获取验证码。
+      map.put("validCode", serialNumber); //添加参数，验证码。
+
+      LogHelper.d(TAG,"sendValidationCode,序列号："+serialNumber); //Debug.
+
+      String userFullName="passwordEditText1.getText().toString()"; //获取密码。
+      map.put("password", userFullName); //添加参数，用户名字。
+
+      String app_id="2107629525";
+
+      long time_stamp= System.currentTimeMillis()/1000; //时间戳整数。秒。
+      String timeStampString=String.valueOf(time_stamp); //时间戳字符串。
+      String nonce_str=String.valueOf(time_stamp); //#随机字符串。
+      String session=nonce_str; //#会话编号。
+      String question=voiceRecognizeResultString; //#问题。
+      //        question="妳都是什么时候接客啊？"; //#问题。
+      String app_key="EjjAfr2pidPcaIQ2"; //#应用密钥。
+
+      map.put("app_id", app_id);
+      map.put("nonce_str", nonce_str);
+      map.put("question", question);
+      map.put("session", session);
+      map.put("time_stamp", timeStampString);
+      map.put("app_key", app_key);
+
+      String sign= calculateSign(map);
+      map.put("sign", sign);
+    } // private void sendChatRequestQqChat()
+    
+    /**
+    * Send by button.
+    */
+    @OnClick(R.id.sendButtonn2)
+    public void sendButtonn2()
+    {
+      voiceRecognizeResultString = recognizeResulttextView.getText().toString(); // Get the content.
+                    // 创建新的用户消息条目
+        // messageAdapter.addMessage(new MessageItem(voiceRecognizeResultString, false));
+
+      sendChatRequest(); // Send the request.
+    } // public void sendButtonn2()
+
+    /**
+     * 发送闲聊请求。
+     */
+    private void sendChatRequest()
+    {
+      recognizeResulttextView.setText(""); // Clear the recognize result or input content.
+
+      // sendChatRequestQqChat();
+
+      sendChatRequestTongYi(); // Send chat reqeuswt to tong yi.
+    } //private void sendChatRequest()
+
+    /**
+     * Report that the operation has failed.
+     * @param string 服务器回复的结果说明文字。
+     */
+    protected void reportOperationFail(String string)
+    {
+      Toast.makeText(SisterFutureApplication.getAppContext(), string, Toast.LENGTH_LONG).show();   //做一个提示，Failed adding address ,please retry.
+    } //protected void reportOperationFail()
+
+    /**
+     * 向通义千问发送请求并处理回复。
+     */
+    private void sendChatRequestTongYi() 
+    {
+        if (voiceRecognizeResultString != null && !voiceRecognizeResultString.isEmpty()) 
+        {
+        accumulatedAnswer.setLength(0); // clear the last incremental result.
+        }
+        else 
+        {
+            Log.w(TAG, "Voice recognition result is empty or null.");
+        }
+    }
+    
+    /**
+    * 解析提交问题的结果。
+    * @param jsonString JSON格式的回答内容。
+    */
+    protected void parseTongYiResponse(String jsonString) 
+    {
+      LogHelper.d(TAG, "JSON Answer: " + jsonString); // Debug.
+
+      try 
       {
-        @Override
-        public void onResponse(String response)
+        // 尝试解析 JSON 字符串
+        JSONObject jsonResponse = new JSONObject(jsonString);
+        JSONObject output = jsonResponse.getJSONObject("output");
+        JSONArray choices = output.getJSONArray("choices");
+        
+        for (int i = 0; i < choices.length(); i++) 
         {
-          hideThinkingOverlay();
-          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
+            JSONObject choice = choices.getJSONObject(i);
+            JSONObject message = choice.getJSONObject("message");
+            String answerIncrement = message.getString("content");
 
-          lastSuccessRequestId = requestId;
+            // 检查是否需要创建新的消息条目
+            boolean isNewMessage = accumulatedAnswer.length() == 0;
 
-          parseTongYiResponse(response);
-        }
+            // 更新StringBuilder以累积答案
+            accumulatedAnswer.append(answerIncrement);
 
-        @Override
-        public void onError(Exception error)
-        {
-          FileLogger.d(TAG, "❌ [ERROR_CHECK] 请求 #" + requestId + " 错误 | lastSuccessRequestId=" + lastSuccessRequestId + " | 忽略=" + (requestId < lastSuccessRequestId));
 
-          if (requestId < lastSuccessRequestId) {
-            FileLogger.w(TAG, "⚠️ [IGNORED] 忽略旧请求 #" + requestId + " 的错误回调（lastSuccessRequestId=" + lastSuccessRequestId + "）");
-            return;
-          }
-
-          String errorType = error.getClass().getSimpleName();
-          String errorMsg = error.getMessage();
-          FileLogger.e(TAG, "❌ [AI_ERROR] AI 响应错误 | 错误类型=" + errorType + " | 错误信息=" + errorMsg);
-
-          FileLogger.e(TAG, "请求出错：" + errorType + " - " + errorMsg);
-          hideThinkingOverlay();
-
-          // #11 审核意见修复：恢复通知栏更新
-          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "请求出错，请重试");
-
-          boolean isAccessPointUnavailable = false;
-
-          if (error instanceof TongYiClient.AccessPointUnavailableException)
-          {
-            FileLogger.d(TAG, "接入点不可用异常，准备切换");
-            isAccessPointUnavailable = true;
-          }
-          else if (error instanceof TongYiClient.RateLimitException) {
-            FileLogger.w(TAG, "⚠️ [RATE_LIMIT] 限流错误，等待后重试 #" + rateLimitRetryCount);
-            handleRateLimitError();
-            return;
-          }
-          else if (error instanceof TongYiClient.ResponseException)
-          {
-            TongYiClient.ResponseException responseException = (TongYiClient.ResponseException) error;
-            Response response = responseException.getResponse();
-            if (response != null) {
-              int statusCode = response.code();
-              FileLogger.d(TAG, "HTTP 响应异常，状态码：" + statusCode);
-
-              if (statusCode == 401 || statusCode == 403 || statusCode == 500 || statusCode == 503) {
-                FileLogger.d(TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换");
-                isAccessPointUnavailable = true;
-              }
-              else if (statusCode == 400) {
-                String errorBody = responseException.getCustomMessage();
-                if (ContextLengthUtils.isContextLengthError(errorBody)) {
-                  handleContextLengthError(errorBody, true);
-                  return;
+            if (isNewMessage) {
+                // 创建新的AI消息条目
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                // messageAdapter.addMessage(new MessageItem(accumulatedAnswer.toString(), true));
                 }
-              }
-            }
-
-            String errorBody = responseException.getCustomMessage();
-            FileLogger.e(TAG, "HTTP " + (response != null ? response.code() : 0) + ": " + errorBody);
-
-            if (isHtmlResponse(errorBody))
-            {
-              FileLogger.e(TAG, "API 返回 HTML 页面，防止崩溃");
-              runOnUiThread(() ->
-              {
-                messageAdapter.addMessage(new MessageItem("API 返回 HTML 页面", MessageType.AI));
+            });
+            } else {
+                // 更新现有AI消息的内容
+                // int lastPosition = messageAdapter.getItemCount() - 1;
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                // messageAdapter.updateAiMessage(lastPosition, accumulatedAnswer.toString());
+                
                 scrollToBottom();
-              });
-              return;
+                }
+            });
             }
-          }
-          else
-          {
-            FileLogger.e(TAG, "未知异常，不触发切换：" + error.getMessage());
-          }
-
-          if (isAccessPointUnavailable)
-          {
-            int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
-            FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 接入点不可用，计数器递增：" + failures);
-
-            sendChatRequestTongYi();
-          }
-          else
-          {
-            modelAccessPointManager.resetFailureCount();
-          }
         }
-      },
-      () ->
-      {
-      },
-      currentReservedMessageId);
-    }
-  }
 
-  private void handleRateLimitError()
-  {
-    if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES)
-    {
-      FileLogger.e(TAG, "❌ [RATE_LIMIT] 限流重试次数过多（" + rateLimitRetryCount + " >= " + MAX_RATE_LIMIT_RETRIES + "），切换接入点");
-      rateLimitRetryCount = 0;
-
-      int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
-      FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 限流导致接入点标记为不可用，计数器：" + failures);
-
-      sendChatRequestTongYi();
-      return;
-    }
-
-    int delayMs = 1000 * (1 << rateLimitRetryCount);
-
-    new Handler(Looper.getMainLooper()).postDelayed(() ->
-    {
-      rateLimitRetryCount++;
-      sendChatRequestTongYi();
-    }, delayMs);
-  }
-
-  private boolean isHtmlResponse(String content)
-  {
-    if (content == null || content.isEmpty())
-    {
-      return false;
-    }
-
-    String trimmedContent = content.trim();
-    return trimmedContent.startsWith("<!DOCTYPE html") ||
-           trimmedContent.startsWith("<html") ||
-           trimmedContent.startsWith("<HTML") ||
-           trimmedContent.contains("<title") ||
-           trimmedContent.contains("<TITLE");
-  }
-
-  protected void parseTongYiResponse(String jsonString)
-  {
-    try
-    {
-      TongYiResponse response = new Gson().fromJson(jsonString, TongYiResponse.class);
-
-      if (response != null && response.getError() != null)
-      {
-        String errorMessage = response.getError().getMessage();
-        boolean isContextTooLong = ContextLengthUtils.isContextLengthError(errorMessage);
-
-        if (isContextTooLong)
-        {
-          handleContextLengthError(errorMessage, true);
+        // 检查是否完成接收
+        if (output.getJSONArray("choices").getJSONObject(0).getString("finish_reason").equals("stop")) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    String fullAnswer = accumulatedAnswer.toString();
+                    
+                    // 语音合成完整的答案
+                    ttsSayReply(fullAnswer);
+                }
+            });
         }
-        else
+
+    } catch (Exception e) {
+        // 如果解析 JSON 出现错误，则打印异常
+        LogHelper.e(TAG, "Error parsing JSON response: " + e.getMessage());
+    }
+}
+
+
+private void scrollToBottom() {
+    // 移动到列表的最后一个可见项
+    // articleListmyRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+}
+
+    /**
+     * 解析提交密码信息的结果。
+     * @param weatherInfo 结果对象。
+     */
+    protected void parseSubmitPasswordResponse(BossResponse weatherInfo)
+    {
+      String answer=weatherInfo.getData().getAnswer();
+      LogHelper.d(TAG,"Answer: "+answer); //Debug.
+
+      statustextView.setText(answer); //显示结果。
+
+      ttsSayReply(answer); //语音合成回复结果。
+    } //protected void parseSubmitPasswordResponse(PhoneRegisterResponse weatherInfo)
+
+    @Override
+    public void onBackPressed()
+    {
+        if (null!=mTts) //TTS引擎还在。
         {
-          runOnUiThread(() ->
-          {
-            messageAdapter.addMessage(new MessageItem(errorMessage, MessageType.AI));
-            scrollToBottom();
-            ttsSayReply(errorMessage);
-            contextManager.addAssistantMessage(errorMessage);
-          });
+            mTts.shutdown(); //关闭。
+        } //if (null!=mTts) //TTS引擎还在。
+
+        super.onBackPressed();
+    } //public void onBackPressed()
+
+    /**
+     * 使用系统自带的TTS接口。
+     * @param answer 要发声的内容。
+     */
+    private void ttsByAndroidSystemTts(String answer)
+    {
+        try
+        {
+            HashMap<String, String> params = new HashMap<>();
+            params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, textTitle);
+            mTts.speak(answer, TextToSpeech.QUEUE_FLUSH, params);
+
+        } //try
+        catch(Exception e)
+        {
+            e.printStackTrace(); //Debug.
+        } //catch(Exception e)
+
+
+    } //private void ttsByAndroidSystemTts(String answer)
+
+    /*!
+     * \brief SearchEngineManager::constructGoogleSearchUrl 构造谷歌的搜索网址。
+     * \param searchKeyWord 搜索关键字。
+     * \return 针对谷歌的搜索网址。
+     */
+    private String constructBiaobeiTtsUrl(String searchKeyWord)
+    {
+        String biaobeiServiceUrl="http://39.104.162.93:8005/tts"; //!<XiaoINuance服务地址。
+        int speed=5; //!<语音合成的语速。
+
+
+        String searchEnginePrefix=biaobeiServiceUrl; //!<AI引擎的网址前缀。
+
+        String searchUrlString=searchEnginePrefix; //!<构造搜索路径字符串。
+        String searchUrl=searchUrlString; //!<构造URL。
+
+        Map<String, String> srchQry=new HashMap<>(); //!<查询对象。
+        String srchKyWrdPcntEcd=(searchKeyWord); //!<转换成百分号编码。
+        srchQry.put("text", srchKyWrdPcntEcd); //!<设置查询条件。
+        srchQry.put("user_id", "speech");
+        srchQry.put("domain", "1");
+        srchQry.put("language", "zh");
+        srchQry.put("rate", "4"); //!<设置会话编号。
+        srchQry.put("volume", "5"); //!<设置会话编号。
+        srchQry.put("speed", String.valueOf(speed)); //!<设置语速。
+
+        searchUrl=searchUrl+"?"+ MapUtils.toUrlGetString(srchQry);
+
+        return searchUrl;
+    } //QUrl SearchEngineManager::constructGoogleSearchUrl(QString searchKeyWord)
+
+
+    /**
+     * 使用标贝语音来发声。
+     * @param answer 要发声的内容。
+     */
+    private void ttsByBiaoBei(String answer)
+    {
+        try
+        {
+            String AudioURL=constructBiaobeiTtsUrl(answer); //构造整个网址。
+            LogHelper.d(TAG, "ttsByBiaoBei, audio url: "+ AudioURL); //Debug.
+
+            mediaPlayer.reset(); //重置。
+
+            mediaPlayer.setDataSource(AudioURL);
+            mediaPlayer.prepare();
+
         }
-        return;
-      }
-
-      if (response == null || response.getChoices() == null || response.getChoices().isEmpty())
-      {
-        FileLogger.e(TAG, "响应为空或 choices 为空");
-        return;
-      }
-
-      Choice choice = response.getChoices().get(0);
-      Delta delta = choice.getDelta();
-
-      if (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty())
-      {
-        accumulateToolCalls(delta.getToolCalls());
-      }
-
-      if ("tool_calls".equals(choice.getFinishReason()))
-      {
-        runOnUiThread(() ->
+        catch (IllegalArgumentException e)
         {
-          try
-          {
-            List<ToolCall> finalCalls = getFinalToolCalls();
 
-            if (finalCalls == null || finalCalls.isEmpty())
-            {
-              FileLogger.w(TAG, "没有有效的工具调用，跳过执行");
-              return;
-            }
+        }
+        catch (SecurityException e)
+        {
 
-            JSONObject assistantMessage = new JSONObject();
-            assistantMessage.put("role", "assistant");
+        }
+        catch (IllegalStateException e)
+        {
 
-            JSONArray toolCallsArray = new JSONArray();
-            java.util.Map<String, JSONObject> pendingResults = new java.util.HashMap<>();
+        }
+        catch (IOException e)
+        {
 
-            for (ToolCall call : finalCalls)
-            {
-              if (call == null || call.getFunction() == null) continue;
+        }
 
-              String toolName = call.getFunction().getName();
-              String argsJsonStr = call.getFunction().getArguments();
-              String toolCallId = call.getId();
+        mediaPlayer.start();
+    } //private void ttsByBiaoBei(String answer)
+    
+    // 修改ttsSayReply方法
+private void ttsSayReply(final String text) 
+{
+    // 直接开始语音合成
+    // tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utteranceId");
+       // ttsByAndroidSystemTts(text); //使用系统自带的TTS接口。
+            // ttsByBiaoBei(text); //使用标贝语音来发声。
+       ttsByFindroidTts(text); // 使用 findroid 介绍的 TTS接口。
+}
 
-              if (toolName == null || toolCallId == null)
-              {
-                FileLogger.w(TAG, "工具调用无效：name 或 id 为空");
-                continue;
-              }
+/**
+*  使用 findroid 介绍的 TTS接口。
+* https://github.com/tatans-coder/TensorflowTTS_chinese/blob/master/app/src/main/java/net/tatans/tensorflowtts/MainActivity.java
+*/
+private void        ttsByFindroidTts(String text)
+{
+          ThreadPoolManager.getInstance().execute(() -> {
+                    float speed = 1.0F;
 
-              if (argsJsonStr == null || argsJsonStr.trim().isEmpty())
-              {
-                argsJsonStr = "{}";
-              }
-
-              JSONObject args;
-              try
-              {
-                args = new JSONObject(argsJsonStr);
-              }
-              catch (JSONException e)
-              {
-                FileLogger.e(TAG, "❌ [TOOL_CALL_JSON_ERROR] 工具调用参数 JSON 格式错误，已跳过 | toolName=" + toolName + ", toolCallId=" + toolCallId, e);
-                continue;
-              }
-
-              JSONObject toolCallObject = new JSONObject();
-              toolCallObject.put("id", toolCallId);
-              toolCallObject.put("type", "function");
-
-              JSONObject functionObject = new JSONObject();
-              functionObject.put("name", toolName);
-              functionObject.put("arguments", argsJsonStr);
-              toolCallObject.put("function", functionObject);
-              toolCallsArray.put(toolCallObject);
-
-              if (toolManager.isToolAsync(toolName))
-              {
-                SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在执行：" + toolName);
-
-                FileLogger.d(TAG, "🔧 [TOOL_EXEC_START] 执行异步工具 | id=" + toolCallId + " | name=" + toolName);
-
-                toolManager.executeToolAsync(toolCallId, toolName, args, new Tool.OnResultCallback()
-                {
-                  @Override
-                  public void onResult(JSONObject result)
-                  {
-                    FileLogger.d(TAG, "🔧 [TOOL_ASYNC_RESULT] 异步工具成功 | id=" + toolCallId + " | name=" + toolName);
-
-                    synchronized (pendingResults)
-                    {
-                      try
-                      {
-                        JSONObject wrapper = new JSONObject();
-                        wrapper.put("id", toolCallId);
-                        wrapper.put("name", toolName);
-                        wrapper.put("result", result);
-                        pendingResults.put(toolCallId, wrapper);
-                        FileLogger.d(TAG, "🔧 [TOOL_PENDING_UPDATE] pendingResults 大小：" + pendingResults.size() + " / total=" + toolCallsArray.length());
-                      }
-                      catch (Exception e)
-                      {
-                        FileLogger.e(TAG, "封装异步结果失败", e);
-                      }
-
-                      if (pendingResults.size() == toolCallsArray.length())
-                      {
-                        FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成，准备调用 postProcessToolResults");
-                        postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
-                      }
+                    String inputText = text;
+                    if (TextUtils.isEmpty(inputText)) {
+                        inputText = DEFAULT_INPUT_TEXT;
                     }
-                  }
-
-                  @Override
-                  public void onError(Exception e)
-                  {
-                    FileLogger.e(TAG, "❌ [TOOL_ASYNC_ERROR] 异步工具失败 | id=" + toolCallId + " | name=" + toolName + " | error=" + e.getMessage());
-
-                    synchronized (pendingResults)
-                    {
-                      try
-                      {
-                        JSONObject errorResult = new JSONObject();
-                        errorResult.put("error", e.getMessage());
-                        errorResult.put("error_type", e.getClass().getSimpleName());
-                        errorResult.put("tool_name", toolName);
-
-                        JSONObject wrapper = new JSONObject();
-                        wrapper.put("id", toolCallId);
-                        wrapper.put("name", toolName);
-                        wrapper.put("result", errorResult);
-                        pendingResults.put(toolCallId, wrapper);
-
-                        FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发 | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
-
-                        if (pendingResults.size() == toolCallsArray.length())
-                        {
-                          FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成（含错误），准备调用 postProcessToolResults");
-                          postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
-                        }
-                      }
-                      catch (Exception ex)
-                      {
-                        FileLogger.e(TAG, "❌ [TOOL_ERROR_WRAPPER_FAIL] 封装错误结果失败", ex);
-                      }
-                    }
-                  }
+                    // TtsManager.getInstance().speak(inputText, speed, true);
                 });
-              }
-              else
-              {
-                FileLogger.d(TAG, "🔧 [TOOL_SYNC_EXEC] 执行同步工具 | id=" + toolCallId + " | name=" + toolName);
 
-                JSONObject toolResult = new JSONObject();
+} // private void        ttsByFindroidTts(String text)
 
-                try
+    private final View.OnTouchListener commandRecognizeButtonTouchListener=new View.OnTouchListener()
+    {
+        @SuppressLint("ClickableViewAccessibility")
+        @Override
+        public boolean onTouch(View v, MotionEvent event)
+        {
+            switch (event.getAction()) //根据不同事件进行处理。
                 {
-                  toolResult = toolManager.executeTool(toolName, args);
-                  FileLogger.d(TAG, "🔧 [TOOL_SYNC_SUCCESS] 同步工具成功 | id=" + toolCallId + " | name=" + toolName);
-                  FileLogger.d(TAG, "🔧 [TOOL_RESULT] toolResult: " + (toolResult != null ? toolResult.toString() : "null"));
-                }
-                catch (IllegalArgumentException e)
-                {
-                  FileLogger.e(TAG, "❌ [TOOL_SYNC_ILLEGAL_ARG] 同步工具参数错误 | id=" + toolCallId + " | name=" + toolName, e);
-                  JSONObject errorResult = new JSONObject();
-                  errorResult.put("error", e.getMessage());
-                  errorResult.put("tool_name", toolName);
-                  errorResult.put("request", args.toString());
-                  toolResult = errorResult;
-                }
-                catch (Exception e)
-                {
-                  FileLogger.e(TAG, "❌ [TOOL_SYNC_ERROR] 同步工具执行出错 | id=" + toolCallId + " | name=" + toolName, e);
-                  JSONObject errorResult = new JSONObject();
-                  errorResult.put("error", "工具执行出错：" + e.getMessage());
-                  errorResult.put("tool_name", toolName);
-                  errorResult.put("request", args.toString());
-                  errorResult.put("stack_trace", android.util.Log.getStackTraceString(e));
-                  toolResult = errorResult;
-                }
+                case MotionEvent.ACTION_DOWN: //按下。
+                    commandRecognizebutton2(); //开始识别。
 
-                JSONObject wrapper = new JSONObject();
-                wrapper.put("id", toolCallId);
-                wrapper.put("name", toolName);
-                wrapper.put("result", toolResult);
-                pendingResults.put(toolCallId, wrapper);
-              }
-            }
+                    break; //跳出。
 
-            assistantMessage.put("tool_calls", toolCallsArray);
-            contextManager.addRawMessage(assistantMessage);
-            contextManager.increaseMaxRounds();
+                case MotionEvent.ACTION_UP: //松开。
+                    stopRecordbutton2(); //停止识别。
 
-            runOnUiThread(() ->
-            {
-              StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
-              for (ToolCall call : finalCalls)
-              {
-                if (call != null && call.getFunction() != null)
-                {
-                  String toolName = call.getFunction().getName();
-                  callText.append("- `").append(toolName).append("`").append("\n");
-                }
-              }
+                    break; //跳出。
+            } //switch (event.getAction()) //根据不同事件进行处理。
 
-              messageAdapter.addMessage(new MessageItem(callText.toString(), MessageType.AI));
-              scrollToBottom();
-            });
+            return true;
+        } //public boolean onTouch(View v, MotionEvent event)
+    };
 
-            if (pendingResults.size() == toolCallsArray.length())
-            {
-              FileLogger.d(TAG, "🔧 [TOOL_SYNC_ALL_COMPLETE] 同步工具全部完成，准备调用 postProcessToolResults");
-              postProcessToolResults(pendingResults, assistantMessage, toolCallsArray);
-            }
-          }
-          catch (Exception e)
-          {
-            FileLogger.e(TAG, "处理工具调用失败", e);
-          }
-        });
+    /**
+     * 连接信号信号槽。
+     */
+    private void connectSignals()
+    {
+        commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener); //设置触摸事件监听器。
+    } //private void connectSignals()
+
+// 在类内部添加：图片加载工具方法
+private void loadRandomWallpaper() {
+    adjustPreviewImageAspectRatio();
+    // 获取图片 URI 列表
+    List<Uri> imageUris = queryImages(this);
+
+    if (imageUris.isEmpty()) {
+        Log.w("DynamicWallpaper", "No images found in media store");
         return;
-      }
-
-      String answerIncrement = (delta != null && delta.getContent() != null) ? delta.getContent() : "";
-      boolean isNewMessage = (accumulatedAnswer.length() == 0 && !answerIncrement.isEmpty());
-      accumulatedAnswer.append(answerIncrement);
-
-      if (isNewMessage)
-      {
-        runOnUiThread(() ->
-        {
-          messageAdapter.addMessage(new MessageItem(accumulatedAnswer.toString(), MessageType.AI));
-        });
-      }
-      else
-      {
-        int lastPosition = messageAdapter.getItemCount() -1;
-        runOnUiThread(() ->
-        {
-          messageAdapter.updateAiMessage(lastPosition, accumulatedAnswer.toString());
-          scrollToBottom();
-        });
-      }
-
-      if (!response.getChoices().isEmpty() && "stop".equals(response.getChoices().get(0).getFinishReason()))
-      {
-        runOnUiThread(() ->
-        {
-          String fullAnswer = accumulatedAnswer.toString();
-
-          boolean hasToolCalls = (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty());
-
-          if (EmptyDeltaDetectionManager.getInstance().checkAndRecordResponse(fullAnswer, hasToolCalls, contextManager.getHistory().size())) {
-              EmptyDeltaDetectionManager.getInstance().acknowledgeTrigger();
-              handleContextLengthError("检测到连续空响应，判定为上下文超长", true);
-              return;
-          }
-
-          if (!hasToolCalls && repeatDetectionManager != null && repeatDetectionManager.recordAndCheck(fullAnswer))
-          {
-            FileLogger.e(TAG, "🚨 [REPEAT_THRESHOLD_REACHED] 检测到连续 3 次相同回复，触发接入点切换！");
-
-            int failures = modelAccessPointManager.reportCurrentAccessPointUnavailable();
-            FileLogger.w(TAG, "🔥 [FAILURE_COUNT] 重复回复导致接入点标记为不可用，计数器：" + failures);
-
-            repeatDetectionManager.reset();
-
-            sendChatRequestTongYi();
-            return;
-          }
-
-          ttsSayReply(fullAnswer);
-          contextManager.addAssistantMessage(fullAnswer);
-          contextManager.increaseMaxRounds();
-
-          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "回复完成");
-
-          modelAccessPointManager.resetFailureCount();
-          rateLimitRetryCount = 0;
-        });
-      }
     }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "解析 JSON 响应失败：" + e.getMessage());
-    }
-  }
 
-  private void postProcessToolResults(java.util.Map<String, JSONObject> pendingResults,
-                                    JSONObject assistantMessage,
-                                    JSONArray toolCallsArray)
-  {
-    FileLogger.d(TAG, "🔧 [POST_PROCESS_ENTER] 进入 postProcessToolResults | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
+    // 随机选择一张
+    Uri randomUri = imageUris.get(new Random().nextInt(imageUris.size()));
 
-    runOnUiThread(() ->
-    {
-      try
-      {
-        for (int i = 0; i < toolCallsArray.length(); i++)
-        {
-          JSONObject call = toolCallsArray.getJSONObject(i);
-          String id = call.getString("id");
-          JSONObject wrapper = pendingResults.get(id);
+    // 获取 ImageView
+    ImageView imageView = findViewById(R.id.preview_image);
 
-          if (wrapper == null)
-          {
-            FileLogger.w(TAG, "⚠️ [SKIP] 工具结果不存在 | id=" + id);
-            continue;
-          }
+    // 使用 Glide 加载图片
+    Glide.with(this)
+        .load(randomUri)
+        .centerCrop()
+        .placeholder(R.color.gray)
+        .error(R.drawable.placeholder_image)
+        .into(imageView);
+}
 
-          String name = wrapper.getString("name");
-          JSONObject result = wrapper.getJSONObject("result");
+// 查询系统图片（支持 JPEG/PNG/WebP）
+private List<Uri> queryImages(Context context) {
+    List<Uri> imageUris = new ArrayList<>();
 
-          boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
+    String[] projection = {
+        MediaStore.Images.Media._ID,
+        MediaStore.Images.Media.DISPLAY_NAME,
+        MediaStore.Images.Media.DATA,
+        MediaStore.Images.Media.DATE_ADDED
+    };
 
-          if (isDuplicate)
-          {
-            FileLogger.w(TAG, "⚠️ [DUPLICATE] 发现重复工具 | id=" + id + " | name=" + name + " | 说明已处理过，跳过本次请求触发");
-            return;
-          }
+    String selection = MediaStore.Images.Media.MIME_TYPE + " = ? OR " +
+                       MediaStore.Images.Media.MIME_TYPE + " = ? OR " +
+                       MediaStore.Images.Media.MIME_TYPE + " = ?";
 
-          FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
-          contextManager.addToolMessage(id, name, result.toString());
-          FileLogger.d(TAG, "工具消息已添加：ID=" + id + ", Name=" + name);
+    String[] selectionArgs = {"image/jpeg", "image/png", "image/webp"};
 
-          // 🔥 新增：解析 attachments 字段（如果存在）
-          List<Attachment> attachments = parseAttachments(result);
+    String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
 
-          MessageItem messageItem = new MessageItem(
-            "🛠️ 工具调用结果：" + name + "\n" + result.toString(),
-            MessageType.TOOL_CALL_RESULT
-          );
+    try (Cursor cursor = context.getContentResolver().query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            selection,
+            selectionArgs,
+            sortOrder)) {
 
-          if (attachments != null && !attachments.isEmpty())
-          {
-            messageItem.setAttachments(attachments);
-            FileLogger.i(TAG, "🔥 [ATTACHMENT] 工具结果包含 " + attachments.size() + " 个附件 | toolName=" + name);
-          }
-
-          messageAdapter.addMessage(messageItem);
+        if (cursor != null && cursor.moveToFirst()) {
+            do {
+                long id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID));
+                Uri uri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                imageUris.add(uri);
+            } while (cursor.moveToNext());
         }
-
-        clearAccumulatedToolCalls();
-
-        FileLogger.i(TAG, "🚀 [TRIGGER] 准备触发新请求 | toolCallsCount=" + toolCallsArray.length());
-        sendChatRequestTongYi();
-      }
-      catch (Exception e)
-      {
-        FileLogger.e(TAG, "postProcessToolResults 出错", e);
-      }
-    });
-  }
-
-  private void scrollToBottom()
-  {
-    if (messageAdapter.getItemCount() > 0)
-    {
-      articleListmyRecyclerView.post(() -> {
-        articleListmyRecyclerView.scrollToPosition(messageAdapter.getItemCount() - 1);
-      });
-    }
-  }
-
-  @Override
-  public void onBackPressed()
-  {
-    if (null!=mTts)
-    {
-      mTts.shutdown();
+    } catch (Exception e) {
+        Log.e("DynamicWallpaper", "Error querying images: " + e.getMessage(), e);
     }
 
-    super.onBackPressed();
-  }
+    Log.i("DynamicWallpaper", "Found " + imageUris.size() + " images");
+    return imageUris;
+}
 
-  private void ttsSayReply(final String text)
-  {
-    ttsByFindroidTts(text);
-  }
 
-  private void ttsByFindroidTts(String text)
-  {
-    ThreadPoolManager.getInstance().execute(() ->
-    {
-      float speed = 1.0F;
-
-      String inputText = text;
-      if (TextUtils.isEmpty(inputText))
-      {
-        inputText = DEFAULT_INPUT_TEXT;
-      }
-      TtsManager.getInstance().speak(inputText, speed, true);
-    });
-  }
-
-  private final RecognizerListener mRecognizerListener=new RecognizerListener()
-	{
-		@Override
-		public void onVolumeChanged(int i, byte[] bytes)
-    {
-      volumeIndicatorprogressBar.setProgress(i);
-		}
-
-		@Override
-		public void onBeginOfSpeech()
-    {
-      voiceRecognizeResultString="";
-      volumeIndicatorprogressBar.setVisibility(View.VISIBLE);
-		}
-
-		@Override
-		public void onEndOfSpeech()
-    {
-      volumeIndicatorprogressBar.setVisibility(View.INVISIBLE);
-      voiceEndDetected=true;
-		}
-
-		@Override
-		public void onResult(RecognizerResult recognizerResult, boolean b)
-    {
-      progressBar.setVisibility(View.INVISIBLE);
-      commandRecognizebutton2.setVisibility(View.VISIBLE);
-      commandRecognizebutton2.setEnabled(true);
-      String text=recognizerResult.getResultString();
-
-      Gson gson=new Gson();
-      VoiceRecognizeResult voiceRecognizeResult=gson.fromJson(text, VoiceRecognizeResult.class);
-      String saidText=voiceRecognizeResult.getSaidText();
-
-      recognizeResulttextView.append(saidText);
-      voiceRecognizeResultString=voiceRecognizeResultString+saidText;
-
-      boolean isLast=voiceRecognizeResult.isLs();
-
-      if (isLast)
-      {
-        sendMessageToSister(voiceRecognizeResultString);
-        recognizeResulttextView.setText("");
-      }
+// 调整预览图片尺寸与屏幕比例一致
+private void adjustPreviewImageAspectRatio() {
+    ImageView imageView = findViewById(R.id.preview_image);
+    if (imageView == null) {
+        return;
     }
+    // 获取屏幕真实尺寸（包括状态栏和导航栏）
+    android.util.DisplayMetrics displayMetrics = new android.util.DisplayMetrics();
+    getWindowManager().getDefaultDisplay().getRealMetrics(displayMetrics);
+    int screenWidth = displayMetrics.widthPixels;
+    int screenHeight = displayMetrics.heightPixels;
+    // 计算屏幕宽高比
+    float aspectRatio = (float) screenWidth / (float) screenHeight;
+    // 设置 ImageView 的宽高与屏幕比例一致
+    android.view.ViewGroup.LayoutParams params = imageView.getLayoutParams();
+    params.width = screenWidth;
+    params.height = (int) (screenWidth / aspectRatio);
+    imageView.setLayoutParams(params);
+    // 同时调整 scaleType 使图片按比例显示
+    imageView.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+}
 
-    @Override
-		public void onError(SpeechError speechError)
-		{
-      commandRecognizebutton2.setVisibility(View.VISIBLE);
-      commandRecognizebutton2.setEnabled(true);
-      progressBar.setVisibility(View.INVISIBLE);
-      String errorText=speechError.getErrorDescription();
 
-      recognizeResulttextView.setText(errorText+",error code:"+speechError.getErrorCode());
-		}
-
-		@Override
-		public void onEvent(int i, int i1, int arg2, Bundle bundle)
-    {
+// 读取当前壁纸 URI 并显示在预览上（与壁纸服务保持一致）
+private void loadCurrentWallpaperPreview() {
+    ImageView imageView = findViewById(R.id.preview_image);
+    if (imageView == null) {
+        return;
     }
-	};
-
-  private final View.OnTouchListener commandRecognizeButtonTouchListener=new View.OnTouchListener()
-  {
-    @SuppressLint("ClickableViewAccessibility")
-    @Override
-    public boolean onTouch(View v, MotionEvent event)
-    {
-      switch (event.getAction())
-      {
-        case MotionEvent.ACTION_DOWN:
-          commandRecognizebutton2startRecognize();
-          break;
-
-        case MotionEvent.ACTION_UP:
-          stopRecordbutton2();
-          break;
-      }
-      return true;
-   }
-  };
-
-  private void connectSignals()
-  {
-    commandRecognizebutton2.setOnTouchListener(commandRecognizeButtonTouchListener);
-  }
-
-  private void startHttpServer()
-  {
-    AsyncHttpServer server=new AsyncHttpServer();
-    CommitTextCallback commitTextCallback=new CommitTextCallback();
-    server.get("/commitText/", commitTextCallback);
-    PhoneInformationCallback phoneInformationCallback=new PhoneInformationCallback();
-    server.get("/phoneInformation/", phoneInformationCallback);
-    server.listen(LanServicePort);
-  }
-
-  private static String buildEnhancedSystemPrompt(ToolManager toolManager, Context context)
-  {
-    SystemPromptManager promptManager = SystemPromptManager.getInstance(context);
-
-    StringBuilder promptBuilder = new StringBuilder();
-
-    promptBuilder.append(promptManager.getCurrentPrompt());
-    promptBuilder.append("\n\n");
-
-    List<Tool> tools = toolManager.getRegisteredTools();
-    if (!tools.isEmpty())
-    {
-      promptBuilder.append("你可以使用以下工具来获取实时信息，请在需要时调用，不要自行编造：\n");
-
-      for (Tool tool : tools)
-      {
-        if (!tool.shouldInclude()) continue;
-
-        String name = tool.getName();
-        String description = "（无描述）";
-
-        try
-        {
-          JSONObject definition = tool.getDefinition();
-          if (definition.has("function"))
-          {
-            JSONObject funcDef = definition.getJSONObject("function");
-            if (funcDef.has("description") && !funcDef.isNull("description"))
-            {
-              description = funcDef.getString("description");
+    // 1. 优先读取 SharedPreferences 中壁纸服务保存的当前 URI
+    android.content.SharedPreferences prefs = getSharedPreferences("dynamic_wallpaper", MODE_PRIVATE);
+    String savedUri = prefs.getString("current_wallpaper_uri", null);
+    com.stupidbeauty.dynamicwallpaper.utils.FileLogger.i("RefreshBtn", "=== loadCurrentWallpaperPreview START, savedUri=" + savedUri);
+    if (savedUri != null) {
+        // 应用已被设为壁纸服务，显示壁纸服务当前显示的图片
+        Uri currentUri = Uri.parse(savedUri);
+        com.bumptech.glide.Glide.with(this)
+            .load(currentUri)
+            .centerCrop()
+            .placeholder(R.color.gray)
+            .error(R.drawable.placeholder_image)
+            .into(imageView);
+    } else {
+        // 2. 应用未被设为壁纸服务，显示系统当前壁纸
+        try {
+            WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
+            android.graphics.drawable.Drawable wallpaperDrawable = wallpaperManager.getDrawable();
+            if (wallpaperDrawable != null) {
+                imageView.setImageDrawable(wallpaperDrawable);
             }
-          }
+        } catch (Exception e) {
+            Log.e("DynamicWallpaper", "Failed to get system wallpaper: " + e.getMessage(), e);
         }
-        catch (Exception e)
-        {
-          FileLogger.e("SisterFutureActivity", "提取工具描述失败：" + name, e);
-        }
-
-        promptBuilder.append("- ").append(name).append(":").append(description).append("\n");
-      }
-
-      for (Tool tool : tools)
-      {
-        String enhancement = tool.getSystemPromptEnhancement(context);
-        if (enhancement != null && !enhancement.trim().isEmpty())
-        {
-          promptBuilder.append("\n【").append(tool.getName()).append(" 特别约束】")
-                      .append(enhancement).append("\n");
-        }
-      }
-
-      promptBuilder.append("\n/no_think\n");
     }
-    return promptBuilder.toString();
-  }
-
-  @Override
-	protected void onCreate(Bundle savedInstanceState)
+}
+	/*
+	  此活动正在被创建。
+	 */
+	protected void onCreate(Bundle savedInstanceState) 
 	{
-		super.onCreate(savedInstanceState);
-		requestWindowFeature(Window.FEATURE_NO_TITLE);
-		setContentView(R.layout.sister_future);
+		super.onCreate(savedInstanceState); //超类创建。
 
-    initServices();
-    initData();
-    initImagePicker();
-    initTools();
-    initView();
-    connectSignals();
-    displayExistingContext();
+		requestWindowFeature(Window.FEATURE_NO_TITLE); //不显示标题栏。
+		
+		setContentView(R.layout.sister_future); //显示界面。
 
-    scheduleStartBuiltinFtpServer();
+        // 延迟再次加载预览，确保壁纸服务完成初始化（只读，不写入）
+        new android.os.Handler(getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                loadCurrentWallpaperPreview();
+            }
+        }, 500);
 
-    SisterFutureService.startForegroundService(this);
+        // 显示与壁纸服务一致的当前壁纸
+        loadCurrentWallpaperPreview();
 
-    if (savedInstanceState == null)
-    {
-      articleListmyRecyclerView.post(() -> {
-        scrollToBottom();
-      });
-    }
-	}
+        // 调整预览图片尺寸与屏幕比例一致
+        adjustPreviewImageAspectRatio();
 
-  private void initServices()
-  {
-    TtsManager.getInstance().init(this);
-    mTts=new TextToSpeech(this,this);
-    registerBroadcastReceiver();
-    startHttpServer();
-    mediaPlayer = new MediaPlayer();
+	        // TtsManager.getInstance().init(this);
+
+    mTts=new TextToSpeech(this,this); //创建TTS对象。
+
+    LogHelper.initLocalLogUtil();// after set the context to utils then //
+
+    registerBroadcastReceiver(); //注册广播事件接收器。
+
+    // startHttpServer(); //启动HTTP服务器
+
+    // mQueue= VolleyManager.shareInstance().getRequestQueue(); //Get the request queue.
+
+    mediaPlayer=new MediaPlayer();
     mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
 
-    permissionManager = new PermissionManager(this, new PermissionManager.PermissionCallback() {
-      @Override
-      public void onAllPermissionsGranted() {
-        FileLogger.d(TAG, "All permissions granted");
-      }
+    ButterKnife.bind(this); //视图注入。
 
-      @Override
-      public void onPermissionDenied(String permission) {
-        FileLogger.w(TAG, "Permission denied: " + permission);
-      }
+        // 初始化通义千问客户端
+        // tongYiClient = new TongYiClient();
 
-      @Override
-      public void onNotificationPermissionDenied() {
-        FileLogger.w(TAG, "Notification permission denied");
-      }
+        checkPermission(); //检查权限。
 
-      @Override
-      public void onNotificationPermissionPermanentlyDenied() {
-        FileLogger.w(TAG, "Notification permission permanently denied, need to go to settings");
-        permissionManager.showPermissionPermanentlyDeniedDialog();
-      }
-    });
 
-    if (permissionManager != null) {
-      permissionManager.checkPermission();
-      permissionManager.requestNotificationPermission();
-    }
-  }
+		connectSignals(); //连接信号信号槽。
 
-  private void initData()
-  {
-    contextManager = new ContextManager(this);
-    modelAccessPointManager = new ModelAccessPointManager(this);
-    memoryManager = new MemoryManager(this);
-    repeatDetectionManager = new RepeatDetectionManager();
-  }
-
-  private void initTools()
-  {
-    toolManager = new ToolManager();
-
-    ToolRegistry.registerAll(
-      toolManager,
-      contextManager,
-      modelAccessPointManager,
-      memoryManager,
-      this
-    );
-  }
-
-  private void initView()
-  {
-    ButterKnife.bind(this);
-    initializeMsc();
-    messageAdapter = new MessageAdapter();
+        // 🔴 初始化"钉住壁纸"开关（新增）
+        initPinWallpaperSwitch();
+		
+		    // messageAdapter = new MessageAdapter();
     articleListmyRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-    articleListmyRecyclerView.setAdapter(messageAdapter);
+    // articleListmyRecyclerView.setAdapter(messageAdapter);
 
-    // #821166321034 设置数据源引用（用于刷新）
-    messageAdapter.setContextManager(contextManager);
+            recognizeResulttextView.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_SEND) {
+                voiceRecognizeResultString = recognizeResulttextView.getText().toString(); // Get the input text.
+                    sendChatRequest();
+                    return true; // 消耗事件
+                }
+                return false;
+            }
+        });
 
-    // #821166321034 设置删除消息监听器 - 正确的MVC架构
-    messageAdapter.setOnMessageDeleteListener(new MessageAdapter.OnMessageDeleteListener() {
-      @Override
-      public void onMessageDeleted(MessageItem message, int position, String messageId) {
-        FileLogger.i(TAG, "🗑️ 收到删除消息回调 | position=" + position + " | messageId=" + messageId);
+	} //protected void onCreate(Bundle savedInstanceState)
 
-        if (messageId != null && !messageId.isEmpty()) {
-          contextManager.removeMessageById(messageId);
-          FileLogger.i(TAG, "🗑️ 已从数据源删除 | messageId=" + messageId);
-        } else {
-          FileLogger.w(TAG, "⚠️ messageId 为空，使用下标删除 | position=" + position);
-          contextManager.removeMessage(position);
-        }
+    // 🔴 初始化"钉住壁纸"开关（新增）
+    private void initPinWallpaperSwitch() {
+        // 1. 从 SharedPreferences 读取当前状态
+        android.content.SharedPreferences prefs = getSharedPreferences(PIN_PREF_NAME, MODE_PRIVATE);
+        boolean isPinned = prefs.getBoolean(PIN_PREF_KEY, false);
+        pinWallpaperSwitch.setChecked(isPinned);
+        com.stupidbeauty.dynamicwallpaper.utils.FileLogger.i("PinSwitch", "initPinWallpaperSwitch: isPinned=" + isPinned);
 
-        messageAdapter.refreshFromDataSource();
-        FileLogger.i(TAG, "🗑️ 已刷新Adapter");
-      }
-    });
+        // 2. 监听变化，保存到 SharedPreferences
+        pinWallpaperSwitch.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
+                android.content.SharedPreferences.Editor editor = getSharedPreferences(PIN_PREF_NAME, MODE_PRIVATE).edit();
+                editor.putBoolean(PIN_PREF_KEY, isChecked);
+                editor.apply();
+                com.stupidbeauty.dynamicwallpaper.utils.FileLogger.i("PinSwitch", "onCheckedChanged: isChecked=" + isChecked);
 
-    recognizeResulttextView.setOnEditorActionListener(new TextView.OnEditorActionListener()
-    {
-      @Override
-      public boolean onEditorAction(TextView v, int actionId, KeyEvent event)
-      {
-        if (actionId == EditorInfo.IME_ACTION_SEND)
-        {
-          voiceRecognizeResultString = recognizeResulttextView.getText().toString();
-          sendChatRequest();
-          return true;
-        }
-        return false;
-      }
-    });
-
-    tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
-    guideManager = new GuideManager(this, modelAccessPointManager, toolManager);
-
-    String question = getIntent().getStringExtra("question");
-    if (question != null)
-    {
-      sendMessageToSister(question);
+                // 3. 给用户清晰的反馈
+                if (isChecked) {
+                    Toast.makeText(SisterFutureActivity.this, "📌 已钉住当前壁纸，将不会自动换图", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(SisterFutureActivity.this, "已取消钉住，31分钟后会自动换图", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
     }
-  }
 
-  @Override
-  public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-    if (permissionManager != null) {
-      permissionManager.onRequestPermissionsResult(requestCode, permissions, grantResults);
-    }
-  }
-
-  private void registerBroadcastReceiver()
-  {
-    IntentFilter filter = new IntentFilter();
-
-    filter.addAction(Constants.Operation.CommitText);
-    filter.addAction(Constants.NativeMessage.NOTIFY_CALLBACK_IP);
-    filter.addAction(Constants.Operation.HideKeyboard);
-
-    LocalBroadcastManager localBroadcastManager=LocalBroadcastManager.getInstance(this);
-    localBroadcastManager.registerReceiver(mBroadcastReceiver, filter);
-  }
-
-  private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
-  {
     @Override
-    public void onReceive(Context context, Intent intent)
-    {
-      String action = intent.getAction();
-
-      if (Constants.Operation.CommitText.equals(action))
-      {
-        Bundle extras=intent.getExtras();
-        voiceRecognizeResultString= extras.getString("text");
-        recognizeResulttextView.setText(voiceRecognizeResultString);
-        sendChatRequest();
-        startFriendShutDownAt2100Service();
-      }
+    protected void onResume() {
+        super.onResume();
+        // 🔴 每次回到界面，刷新开关状态（保证 Service 修改后能看到）
+        if (pinWallpaperSwitch != null) {
+            android.content.SharedPreferences prefs = getSharedPreferences(PIN_PREF_NAME, MODE_PRIVATE);
+            boolean isPinned = prefs.getBoolean(PIN_PREF_KEY, false);
+            // 避免触发 OnCheckedChangeListener
+            pinWallpaperSwitch.setOnCheckedChangeListener(null);
+            pinWallpaperSwitch.setChecked(isPinned);
+            // 重新绑定监听器
+            pinWallpaperSwitch.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
+                    android.content.SharedPreferences.Editor editor = getSharedPreferences(PIN_PREF_NAME, MODE_PRIVATE).edit();
+                    editor.putBoolean(PIN_PREF_KEY, isChecked);
+                    editor.apply();
+                    com.stupidbeauty.dynamicwallpaper.utils.FileLogger.i("PinSwitch", "onCheckedChanged (rebound): isChecked=" + isChecked);
+                    if (isChecked) {
+                        Toast.makeText(SisterFutureActivity.this, "📌 已钉住当前壁纸，将不会自动换图", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(SisterFutureActivity.this, "已取消钉住，31分钟后会自动换图", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
     }
-  };
 
-  protected void startFriendShutDownAt2100Service()
-  {
-    Intent intent = new Intent();
-    intent.setComponent(new ComponentName("com.stupidbeauty.shutdownat2100androidnative", "com.stupidbeauty.shutdownat2100androidnative.TimeCheckService"));
-    startService(intent);
-  }
-
-  private void initializeMsc()
-  {
-    SpeechUtility.createUtility(this, SpeechConstant.APPID+"=56e142d3");
-    mIat= SpeechRecognizer.createRecognizer(this, null);
-  }
-
-  private void startBuiltinFtpServer()
-  {
-    File rootDir = getFilesDir();
-    File parentDir = rootDir.getParentFile();
-
-    builtinFtpServer = new BuiltinFtpServer(this);
-    builtinFtpServerErrorListener = new BuiltinFtpServerErrorListener();
-
-    builtinFtpServer.setPort(FTP_SERVER_PORT);
-    builtinFtpServer.setAllowActiveMode(false);
-    builtinFtpServer.setErrorListener(builtinFtpServerErrorListener);
-    builtinFtpServer.start();
-
-    FileLogger.d(TAG, "🚀 [FTP_DEBUG] 内置 FTP 服务器已启动，端口：" + FTP_SERVER_PORT);
-  }
-
-  private void scheduleStartBuiltinFtpServer() {
-    Timer timerObj = new Timer();
-    TimerTask timerTaskObj = new TimerTask() {
-      public void run() {
-        startBuiltinFtpServer();
-      }
-    };
-    timerObj.schedule(timerTaskObj, 2000);
-  }
-
-  private void initImagePicker()
-  {
-    FileLogger.d(TAG, "📷 [IMAGE_PICKER_INIT] 图片选择器已初始化");
-  }
-
-  private void handleSelectedImage(Intent data)
-  {
-    try
+    private boolean hasPermission()
     {
-      Uri imageUri = data.getData();
-      if (imageUri == null) return;
+      boolean result=false; //结果。
 
-      InputStream inputStream = getContentResolver().openInputStream(imageUri);
-      if (inputStream == null) return;
-
-      ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-      byte[] buffer = new byte[4096];
-      int bytesRead;
-      while ((bytesRead = inputStream.read(buffer)) != -1)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //安卓6.
       {
-        byteArrayOutputStream.write(buffer, 0, bytesRead);
-      }
-      inputStream.close();
-
-      byte[] imageBytes = byteArrayOutputStream.toByteArray();
-      currentImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
-
-      // 🔥 新增：复制图片到应用私有缓存目录（系统会自动清理，节省存储空间）
-      try
-      {
-        String fileName = "temp_image_" + System.currentTimeMillis() + ".jpg";
-        File cacheFile = new File(getCacheDir(), fileName);
-        FileOutputStream fos = new FileOutputStream(cacheFile);
-        fos.write(imageBytes);
-        fos.close();
-        currentImagePath = cacheFile.getAbsolutePath();
-        FileLogger.i(TAG, "✅ [CACHE_FILE] 图片已缓存 | path=" + currentImagePath);
-      }
-      catch (Exception cacheEx)
-      {
-        FileLogger.e(TAG, "⚠️ [CACHE_FILE_ERROR] 缓存图片失败，但不影响 base64 流程", cacheEx);
-        currentImagePath = null;
-      }
-
-      runOnUiThread(() -> {
-        Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
-      });
-
-      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [IMAGE_ERROR] 加载图片失败", e);
-      runOnUiThread(() -> {
-        Toast.makeText(this, "❌ 图片加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
-      });
-    }
-  }
-
-  private void openImagePicker()
-  {
-    FileLogger.d(TAG, "📂 [PICKER] 准备打开相册选择器...");
-
-    Intent pickIntent = new Intent(Intent.ACTION_PICK);
-    pickIntent.setType("image/*");
-    try
-    {
-      startActivityForResult(pickIntent, 1001);
-      FileLogger.d(TAG, "📷 [IMAGE_PICKER] 已打开图片选择器");
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [IMAGE_PICKER_ERROR] 打开图片选择器失败", e);
-      Toast.makeText(this, "❌ 无法打开相册：" + e.getMessage(), Toast.LENGTH_LONG).show();
-    }
-  }
-
-  @Override
-  protected void onActivityResult(int requestCode, int resultCode, Intent data)
-  {
-    super.onActivityResult(requestCode, resultCode, data);
-
-    FileLogger.d(TAG, "🔄 [RESULT] 收到相册返回结果 | requestCode=" + requestCode + " | resultCode=" + resultCode);
-
-    if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
-    {
-      handleSelectedImage(data);
-    }
-  }
-
-  /**
-   * 🔥 新增：从工具结果 JSONObject 中解析 attachments 字段
-   * @param result 工具返回的结果 JSON
-   * @return List<Attachment> 附件列表，没有则返回 null
-   */
-  private List<Attachment> parseAttachments(JSONObject result)
-  {
-    try
-    {
-      if (result == null || !result.has("attachments"))
-      {
-        return null;
-      }
-
-      JSONArray attachmentsArray = result.optJSONArray("attachments");
-      if (attachmentsArray == null || attachmentsArray.length() == 0)
-      {
-        return null;
-      }
-
-      List<Attachment> attachments = new ArrayList<>();
-
-      for (int i = 0; i < attachmentsArray.length(); i++)
-      {
-        try
+        ArrayList<String> articleInfoArrayList = new ArrayList<>(); // 权限列表。
+        
+        articleInfoArrayList.add(PERMISSION_STORAGE);
+        articleInfoArrayList.add(PERMISSION_RECORD_AUDIO);
+        articleInfoArrayList.add(PERMISSION_FINE_LOCATIN);
+        // articleInfoArrayList.add(PERMISSION_INSTALL_PACKAGE); // 安装应用程序的权限。
+        
+        for(String permissionString: articleInfoArrayList) // 一个个检查
         {
-          JSONObject attachmentJson = attachmentsArray.getJSONObject(i);
-
-          Attachment attachment = new Attachment();
-          attachment.setType(attachmentJson.optString("type", ""));
-          attachment.setUrl(attachmentJson.optString("url", ""));
-
-          // 解析 metadata
-          JSONObject metadataJson = attachmentJson.optJSONObject("metadata");
-          if (metadataJson != null)
+          // Log.d(TAG, CodePosition.newInstance().toString() + ", permission: " + permissionString); // Debug.
+          result=(checkSelfPermission(permissionString) == PackageManager.PERMISSION_GRANTED); //录音权限。
+          
+          if (!result) // 没有权限
           {
-            AttachmentMetadata metadata = new AttachmentMetadata();
+            // Log.d(TAG, CodePosition.newInstance().toString() + ", permission: " + permissionString + ", no permission"); // Debug.
+            break; // 没有权限。
+          } // if (!result) // 没有权限
+        } // for(String permissionString: articleInfoArrayList) // 一个个检查
+      } //if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //安卓6.
+      else //旧版本。
+      {
+        result=true; //有权限。
+      } //else //旧版本。
 
-            if (metadataJson.has("width"))
-            {
-              metadata.setWidth(metadataJson.optInt("width"));
-            }
-            if (metadataJson.has("height"))
-            {
-              metadata.setHeight(metadataJson.optInt("height"));
-            }
-            if (metadataJson.has("size"))
-            {
-              metadata.setSize(metadataJson.optLong("size"));
-            }
-            if (metadataJson.has("duration"))
-            {
-              metadata.setDuration(metadataJson.optLong("duration"));
-            }
-            if (metadataJson.has("mimeType"))
-            {
-              metadata.setMimeType(metadataJson.optString("mimeType"));
-            }
+      return result;
+    } //private boolean hasPermission()
 
-            attachment.setMetadata(metadata);
-          }
-
-          attachments.add(attachment);
-          FileLogger.d(TAG, "  [parseAttachments] 已解析附件 #" + i + " | type=" + attachment.getType() + " | url=" + attachment.getUrl());
-        }
-        catch (Exception e)
-        {
-          FileLogger.e(TAG, "  [parseAttachments] 解析单个附件失败 | index=" + i, e);
-        }
-      }
-
-      FileLogger.i(TAG, " [parseAttachments] 共解析 " + attachments.size() + " 个附件");
-      return attachments;
-    }
-    catch (Exception e)
+    /**
+     * 请求获取权限
+     */
+    private void requestPermission()
     {
-      FileLogger.e(TAG, " [parseAttachments] 解析 attachments 失败", e);
-      return null;
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //动态权限
+      {
+        if ( shouldShowRequestPermissionRationale(PERMISSION_STORAGE)  || shouldShowRequestPermissionRationale(PERMISSION_RECORD_AUDIO) || shouldShowRequestPermissionRationale(PERMISSION_FINE_LOCATIN)  || shouldShowRequestPermissionRationale(PERMISSION_INSTALL_PACKAGE)) //应当告知原因。
+        {
+          Toast.makeText(this, "Camera AND storage permission are required for this demo", Toast.LENGTH_LONG).show();
+        } //if ( shouldShowRequestPermissionRationale(PERMISSION_STORAGE)  || shouldShowRequestPermissionRationale(PERMISSION_RECORD_AUDIO)) //应当告知原因。
+        // Log.d(TAG, CodePosition.newInstance().toString() ); // Debug.
+
+        // requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN, PERMISSION_INSTALL_PACKAGE}, PERMISSIONS_REQUEST);
+        requestPermissions(new String[] {PERMISSION_STORAGE, PERMISSION_RECORD_AUDIO, PERMISSION_FINE_LOCATIN}, PERMISSIONS_REQUEST);
+
+        } //if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) //动态权限
+    } //private void requestPermission()
+
+
+    
+    /**
+     * 检查权限。
+     */
+    private void checkPermission()
+    {
+      if (hasPermission()) 
+      {
+      }
+      else 
+      {
+        requestPermission();
+      }
+    } //private void checkPermission()
+
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        boolean allGranted = true;
+        for (int grantResult : grantResults) {
+            if (grantResult != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                allGranted = false;
+                break;
+            }
+        }
+        if (allGranted) {
+            loadRandomWallpaper(); // 权限授予后自动加载壁纸到预览
+        }
     }
-  }
+
+    /**
+     * 注册广播事件接收器。
+     */
+    private void registerBroadcastReceiver()
+    {
+        IntentFilter filter = new IntentFilter();
+
+        filter.addAction(Constants.Operation.CommitText); //提交文本内容。
+        filter.addAction(Constants.Operation.CommitControlCharacter); //提交控制字符。
+        filter.addAction(Constants.NativeMessage.NOTIFY_CALLBACK_IP); //报告回调IP。
+        filter.addAction(Constants.Operation.HideKeyboard);
+        filter.addAction("com.stupidbeauty.dynamicwallpaper.WALLPAPER_CHANGED"); //隐藏软键盘。
+
+        // LocalBroadcastManager localBroadcastManager=LocalBroadcastManager.getInstance(this); //Get the local broadcast manager instance.
+        registerReceiver(mBroadcastReceiver, filter); //注册接收器。
+
+
+    } //private void registerBroadcastReceiver()
+
+    /**
+     * 广播接收器。
+     */
+    private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
+    {
+        @Override
+        /*
+          接收到广播。
+         */
+        public void onReceive(Context context, Intent intent)
+        {
+            String action = intent.getAction(); //获取广播中带的动作字符串。
+
+            if ("com.stupidbeauty.dynamicwallpaper.WALLPAPER_CHANGED".equals(action)) {
+                loadCurrentWallpaperPreview();
+            } else if (Constants.Operation.CommitText.equals(action)) {
+                Bundle extras=intent.getExtras(); //获取参数包。
+
+                voiceRecognizeResultString= extras.getString("text"); //记录识别结果。
+
+
+                recognizeResulttextView.setText(voiceRecognizeResultString); //显示结果。
+
+                sendChatRequest(); //发送闲聊请求。
+
+
+                startFriendShutDownAt2100Service(); //启动友军"21点关机"的服务。
+            }
+        } //public void onReceive(Context context, Intent intent)
+    }; //private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver()
+
+    /**
+     * 启动友军"21点关机"的服务。
+     */
+    protected void startFriendShutDownAt2100Service()
+    {
+        Intent intent = new Intent();
+        intent.setComponent(new ComponentName("com.stupidbeauty.shutdownat2100androidnative", "com.stupidbeauty.shutdownat2100androidnative.TimeCheckService")); //设置组件。
+        startService(intent); //启动服务。
+
+    } //protected void startFriendShutDownAt2100Service()
 }
