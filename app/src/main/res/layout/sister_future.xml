@@ -1,99 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-                xmlns:tools="http://schemas.android.com/tools"
-                android:layout_width="fill_parent"
-                android:layout_height="fill_parent"
-                android:background="@color/loadingbgcolor"
-                android:orientation="vertical"
-                tools:ignore="Overdraw">
-
-  <androidx.recyclerview.widget.RecyclerView
-    android:id="@+id/articleListmy_recycler_view"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" android:layout_width="fill_parent" android:layout_height="fill_parent" android:background="@color/loadingbgcolor" android:orientation="vertical" tools:ignore="Overdraw">
+  <androidx.recyclerview.widget.RecyclerView android:id="@+id/articleListmy_recycler_view" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_above="@+id/recognizeResulttextView" android:layout_alignParentStart="false" android:layout_alignParentLeft="false" android:layout_alignParentTop="true" android:scrollbars="vertical"/>
+  <!-- 添加在 RecyclerView 之后，Button 之前 -->
+  <ImageView android:id="@+id/preview_image" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="16dp" android:scaleType="centerCrop" android:background="@color/gray" android:layout_above="@+id/recognizeResulttextView" android:layout_alignParentStart="true" android:layout_alignParentLeft="true" android:layout_alignParentTop="true" android:visibility="visible"/>
+  <ProgressBar style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="2dp" android:id="@+id/volumeIndicatorprogressBar" android:layout_alignParentLeft="true" android:layout_alignParentStart="false" android:max="30" android:progress="0" android:layout_margin="4dp" android:visibility="invisible" android:progressDrawable="@drawable/progress_horizontal1"/>
+  <Button android:layout_width="48dp" android:layout_height="48dp" android:id="@+id/commandRecognizebutton2" android:layout_margin="5dp" android:background="@drawable/microphone" android:layout_alignParentBottom="true" android:layout_alignParentRight="true"/>
+  <Button android:layout_width="48dp" android:layout_height="48dp" android:id="@+id/sendButtonn2" android:layout_margin="5dp" android:background="@drawable/sendicon2048x1841gjc8zxl8512" android:layout_alignParentBottom="true" android:layout_toLeftOf="@+id/commandRecognizebutton2"/>
+  <TextView android:id="@+id/statustextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentLeft="false" android:layout_alignParentStart="false" android:layout_below="@+id/recognizeResulttextView" android:textColor="@color/yellow" android:textSize="28sp"/>
+<!-- 在 RecyclerView 和 EditText 之间添加一个 LinearLayout -->
+<LinearLayout
+    android:id="@+id/button_container"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_above="@+id/recognizeResulttextView"
-    android:layout_alignParentStart="false"
-    android:layout_alignParentLeft="false"
-    android:layout_alignParentTop="true"
-    android:scrollbars="vertical" />
-
-  <!-- 进度条移动到输入框上方 -->
-  <ProgressBar
-    style="?android:attr/progressBarStyleHorizontal"
-    android:layout_width="match_parent"
-    android:layout_height="2dp"
-    android:id="@+id/volumeIndicatorprogressBar"
-    android:layout_above="@+id/recognizeResulttextView"
+    android:layout_alignParentBottom="true"
+    android:layout_alignParentStart="true"
     android:layout_alignParentLeft="true"
-    android:layout_alignParentStart="false"
-    android:max="30"
-    android:progress="0"
-    android:layout_margin="1dp"
-    android:visibility="invisible"
-    android:progressDrawable="@drawable/progress_horizontal1" />
+    android:orientation="horizontal"
+    android:padding="8dp">
 
-  <!-- 思考状态遮罩层 -->
-  <TextView
-    android:id="@+id/thinking_overlay"
-    android:layout_width="match_parent"
-    android:layout_height="56dp"
-    android:layout_alignParentBottom="true"
-    android:background="#80000000"
-    android:textColor="@android:color/white"
-    android:textSize="14sp"
-    android:gravity="center"
-    android:padding="8dp"
-    android:visibility="gone"
-    android:text="accesspoint name is thinking..."
-    android:elevation="10dp" />
+    <Button
+        android:id="@+id/set_wallpaper_button"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginEnd="4dp"
+        android:text="设为壁纸"
+        android:textSize="14sp" />
 
-  <Button
-    android:layout_width="48dp"
-    android:layout_height="48dp"
-    android:id="@+id/commandRecognizebutton2"
-    android:layout_margin="5dp"
-    android:background="@drawable/microphone"
-    android:layout_alignParentBottom="true"
-    android:layout_alignParentRight="true" />
+    <Button
+        android:id="@+id/refresh_wallpaper_button"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginEnd="4dp"
+        android:text="换一张"
+        android:textSize="14sp" />
 
-  <Button
-    android:layout_width="48dp"
-    android:layout_height="48dp"
-    android:id="@+id/sendButtonn2"
-    android:layout_margin="5dp"
-    android:background="@drawable/sendicon2048x1841gjc8zxl8512"
-    android:layout_alignParentBottom="true"
-    android:layout_toLeftOf="@+id/commandRecognizebutton2" />
+    <Button
+        android:id="@+id/add_quick_settings_button"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="添加快捷"
+        android:textSize="14sp" />
 
-  <!-- 🆕 图片上传按钮 -->
-  <Button
-    android:layout_width="48dp"
-    android:layout_height="48dp"
-    android:id="@+id/uploadImageButton"
-    android:layout_margin="5dp"
-    android:background="@drawable/ic_image"
-    android:layout_alignParentBottom="true"
-    android:layout_toLeftOf="@+id/sendButtonn2"
-    android:contentDescription="上传图片" />
+</LinearLayout>
 
-  <EditText
+<!-- 🔴 钉住壁纸开关（新增） -->
+<Switch
+    android:id="@+id/pin_wallpaper_switch"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:id="@+id/recognizeResulttextView"
-    android:layout_alignParentBottom="true"
+    android:layout_above="@+id/button_container"
+    android:layout_alignParentStart="true"
     android:layout_alignParentLeft="true"
-    android:layout_toLeftOf="@+id/uploadImageButton"
-    android:inputType="textMultiLine"
-    android:imeOptions="actionSend"
-    android:maxLines="3" />
+    android:layout_marginStart="16dp"
+    android:layout_marginBottom="8dp"
+    android:text="📌 钉住当前壁纸（避免自动换图）"
+    android:textSize="14sp"
+    android:checked="false" />
 
-  <ProgressBar
-    style="?android:attr/progressBarStyleHorizontal"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:id="@+id/progressBar"
-    android:layout_margin="4dp"
-    android:indeterminate="true"
-    android:progressDrawable="@drawable/progress_horizontal1"
-    android:visibility="invisible" />
-  </RelativeLayout>
+  <EditText android:layout_width="wrap_content" android:layout_height="wrap_content" android:id="@+id/recognizeResulttextView" android:visibility="gone" android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" android:layout_toLeftOf="@+id/sendButtonn2" android:inputType="text" android:imeOptions="actionSend" android:maxLines="3"/>
+  <TextView android:id="@+id/speakerVerifyRegisterPasswordtextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_below="@+id/statustextView" android:textAppearance="?android:attr/textAppearanceLarge"/>
+  <ProgressBar style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:id="@+id/progressBar" android:layout_margin="4dp" android:indeterminate="true" android:progressDrawable="@drawable/progress_horizontal1" android:visibility="invisible"/>
+</RelativeLayout>
