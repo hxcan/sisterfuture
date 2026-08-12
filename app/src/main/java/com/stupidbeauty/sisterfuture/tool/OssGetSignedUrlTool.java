@@ -7,7 +7,6 @@ import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.common.auth.CredentialsProvider;
 import com.aliyun.oss.common.auth.DefaultCredentialProvider;
 import com.aliyun.oss.model.GeneratePresignedUrlRequest;
-import com.aliyun.oss.model.HttpMethod;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -149,7 +148,7 @@ public class OssGetSignedUrlTool implements Tool {
 
                 GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, objectKey);
                 request.setExpiration(expiration);
-                request.setMethod(HttpMethod.GET);
+                // 默认生成 GET 签名 URL
 
                 String signedUrl = oss.generatePresignedUrl(request).toString();
 
