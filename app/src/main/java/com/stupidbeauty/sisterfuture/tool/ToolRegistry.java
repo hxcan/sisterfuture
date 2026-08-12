@@ -87,6 +87,14 @@ public class ToolRegistry {
         // 异步任务，自动轮询到完成并下载视频
         toolManager.registerTool(new KlingVideoGenerationTool(context));
 
+        // === 阿里云 OSS 工具（跨设备文件传输） ===
+        // 凭证配置：在工具备注中设置 aliyun_oss_access_key_id / aliyun_oss_access_key_secret / aliyun_oss_bucket_name / aliyun_oss_endpoint
+        // 关联任务：Redmine #865165985046
+        toolManager.registerTool(new OssUploadTool(context));           // 上传手机文件到 OSS
+        toolManager.registerTool(new OssDownloadTool(context));         // 下载 OSS 文件到手机
+        toolManager.registerTool(new OssGetSignedUrlTool(context));     // 生成临时签名 URL
+        toolManager.registerTool(new OssListFilesTool(context));        // 列出 OSS 文件
+
         // === 系统工具 ===
         toolManager.registerTool(new GetContactListTool(context));
         toolManager.registerTool(new AddContactTool(context));
