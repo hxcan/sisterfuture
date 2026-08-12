@@ -2,13 +2,12 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import androidx.annotation.NonNull;
-import com.alibaba.cloud.oss.OSS;
-import com.alibaba.cloud.oss.OSSClientBuilder;
-import com.alibaba.cloud.oss.common.auth.CredentialsProvider;
-import com.alibaba.cloud.oss.common.auth.DefaultCredentialProvider;
-import com.alibaba.cloud.oss.model.GeneratePresignedUrlRequest;
-import com.alibaba.cloud.oss.model.ObjectListing;
-import com.alibaba.cloud.oss.model.OSSObjectSummary;
+import com.aliyun.oss.OSS;
+import com.aliyun.oss.OSSClientBuilder;
+import com.aliyun.oss.common.auth.CredentialsProvider;
+import com.aliyun.oss.common.auth.DefaultCredentialProvider;
+import com.aliyun.oss.model.GeneratePresignedUrlRequest;
+import com.aliyun.oss.model.HttpMethod;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -150,7 +149,7 @@ public class OssGetSignedUrlTool implements Tool {
 
                 GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, objectKey);
                 request.setExpiration(expiration);
-                request.setMethod(com.alibaba.cloud.oss.model.HttpMethod.GET);
+                request.setMethod(HttpMethod.GET);
 
                 String signedUrl = oss.generatePresignedUrl(request).toString();
 
