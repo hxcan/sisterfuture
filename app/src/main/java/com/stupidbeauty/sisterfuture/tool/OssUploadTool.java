@@ -6,31 +6,20 @@ import com.alibaba.sdk.android.oss.ClientConfiguration;
 import com.alibaba.sdk.android.oss.OSS;
 import com.alibaba.sdk.android.oss.OSSClient;
 import com.alibaba.sdk.android.oss.common.auth.OSSCredentialProvider;
-import com.alibaba.sdk.android.oss.common.auth.PlainTextAKSKCredentialProvider;
+import com.alibaba.sdk.android.oss.common.auth.OSSPlainTextAKSKCredentialProvider;
 import com.alibaba.sdk.android.oss.model.ObjectMetadata;
 import com.alibaba.sdk.android.oss.model.PutObjectRequest;
 import com.alibaba.sdk.android.oss.model.PutObjectResult;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
-import okhttp3.OkHttpClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Date;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * 阿里云 OSS 工具集（Android 专用 SDK 版本）
- *
- * 使用 com.aliyun.dpa:oss-android-sdk，避免与 Android 系统的 Apache HttpClient 冲突。
- * 修复了 #865421124929 - NoSuchFieldError: AllowAllHostnameVerifier.INSTANCE
- *
- * @author 未来姐姐
- * @date 2026-08-12
- */
 public class OssUploadTool implements Tool {
     private static final String TAG = "OssUploadTool";
 
@@ -56,9 +45,7 @@ public class OssUploadTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "ossUploadFile");
-            functionDef.put("description", "上传手机文件到阿里云 OSS。\n"
-                    + "凭证：优先从参数传入，其次从工具备注读取。");
-
+            functionDef.put("description", "上传手机文件到阿里云 OSS。");
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             JSONObject properties = new JSONObject();
@@ -70,7 +57,7 @@ public class OssUploadTool implements Tool {
 
             JSONObject objectKeyParam = new JSONObject();
             objectKeyParam.put("type", "string");
-            objectKeyParam.put("description", "OSS 对象存储 key");
+            objectKeyParam.put("description", "OSS 对象 key");
             properties.put("objectKey", objectKeyParam);
 
             JSONObject bucketNameParam = new JSONObject();
@@ -155,14 +142,13 @@ public class OssUploadTool implements Tool {
                     objectKey = "sisterfuture/" + timestamp + "_" + originalName;
                 }
 
-                // 使用 Android 专用 SDK
                 ClientConfiguration conf = new ClientConfiguration();
                 conf.setConnectionTimeout(15 * 1000);
                 conf.setSocketTimeout(15 * 1000);
                 conf.setMaxConcurrentRequest(5);
                 conf.setMaxErrorRetry(2);
 
-                OSSCredentialProvider credentialProvider = new PlainTextAKSKCredentialProvider(accessKeyId, accessKeySecret);
+                OSSCredentialProvider credentialProvider = new OSSPlainTextAKSKCredentialProvider(accessKeyId, accessKeySecret);
                 OSS oss = new OSSClient(context.getApplicationContext(), endpoint, credentialProvider, conf);
 
                 boolean publicRead = arguments.optBoolean("publicRead", false);
