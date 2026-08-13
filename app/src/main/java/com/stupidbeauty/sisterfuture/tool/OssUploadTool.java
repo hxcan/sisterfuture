@@ -164,8 +164,8 @@ public class OssUploadTool implements Tool {
                 PutObjectResult result = oss.putObject(put);
                 long uploadDuration = System.currentTimeMillis() - uploadStart;
 
+long oneHour = 3600;
 String signedUrl = oss.presignConstrainedObjectURL(bucketName, objectKey, oneHour).toString();
-                String signedUrl = oss.presignConstrainedObjectURL(bucketName, objectKey, expiration).toString();
 
                 long totalDuration = System.currentTimeMillis() - totalStartTime;
 
