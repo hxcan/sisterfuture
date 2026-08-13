@@ -137,9 +137,7 @@ public class OssGetSignedUrlTool implements Tool {
 
                 OSSCredentialProvider provider = new OSSPlainTextAKSKCredentialProvider(accessKeyId, accessKeySecret);
                 OSS oss = new OSSClient(context.getApplicationContext(), endpoint, provider, conf);
-
-                Date expiration = new Date(System.currentTimeMillis() + expiresInSeconds * 1000L);
-                String signedUrl = oss.presignConstrainedObjectURL(bucketName, objectKey, expiration).toString();
+String signedUrl = oss.presignConstrainedObjectURL(bucketName, objectKey, expiresInSeconds).toString();
 
                 FileLogger.i(TAG, "✅ 生成签名 URL: " + signedUrl);
 
