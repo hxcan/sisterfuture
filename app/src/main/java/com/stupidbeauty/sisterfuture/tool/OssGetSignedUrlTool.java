@@ -2,11 +2,12 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import androidx.annotation.NonNull;
-import com.aliyun.oss.OSS;
-import com.aliyun.oss.OSSClientBuilder;
-import com.aliyun.oss.common.auth.CredentialsProvider;
-import com.aliyun.oss.common.auth.DefaultCredentialProvider;
-import com.aliyun.oss.model.GeneratePresignedUrlRequest;
+import com.alibaba.sdk.android.oss.ClientConfiguration;
+import com.alibaba.sdk.android.oss.OSS;
+import com.alibaba.sdk.android.oss.OSSClient;
+import com.alibaba.sdk.android.oss.common.auth.OSSCredentialProvider;
+import com.alibaba.sdk.android.oss.common.auth.OSSPlainTextAKSKCredentialProvider;
+import com.alibaba.sdk.android.oss.model.GeneratePresignedUrlRequest;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -16,18 +17,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 阿里云 OSS 签名 URL 工具
+ * 阿里云 OSS 签名 URL 生成工具
  *
- * 生成 OSS 对象的临时访问签名 URL（带过期时间）。
- * 可用于：
- * - 跨设备分享文件（家里电脑生成 URL → 手机下载）
- * - 临时给第三方访问私有文件
- * - 嵌入到 HTML 中展示图片
- *
- * 凭证配置：同 OssUploadTool，从工具备注自动读取
+ * 不直接依赖 OssUploadTool，独立管理 OSS 客户端。
  *
  * @author 未来姐姐
- * @date 2026-08-12
+ * @date 2026-08-13
  */
 public class OssGetSignedUrlTool implements Tool {
     private static final String TAG = "OssGetSignedUrlTool";
@@ -54,9 +49,8 @@ public class OssGetSignedUrlTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "ossGetSignedUrl");
-            functionDef.put("description", "为 OSS 对象生成临时签名 URL。\n"
-                    + "签名 URL 在指定过期时间内可直接访问，无需 AccessKey。\n"
-                    + "典型场景：把家里电脑上传的文件 URL 发给手机，手机直接下载。");
+            functionDef.put("description", "生成阿里云 OSS 对象的临时签名 URL（用于跨设备访问）。\n"
+                    + "凭证：优先从参数传入，其次从工具备注读取。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -64,13 +58,12 @@ public class OssGetSignedUrlTool implements Tool {
 
             JSONObject objectKeyParam = new JSONObject();
             objectKeyParam.put("type", "string");
-            objectKeyParam.put("description", "OSS 对象 key（必填）");
+            objectKeyParam.put("description", "OSS 对象 key");
             properties.put("objectKey", objectKeyParam);
 
             JSONObject expiresInSecondsParam = new JSONObject();
             expiresInSecondsParam.put("type", "integer");
-            expiresInSecondsParam.put("default", 3600);
-            expiresInSecondsParam.put("description", "URL 有效期（秒），默认 1 小时，最大 7 天（604800 秒）");
+            expiresInSecondsParam.put("description", "URL 有效期（秒），默认 3600（1 小时）");
             properties.put("expiresInSeconds", expiresInSecondsParam);
 
             JSONObject bucketNameParam = new JSONObject();
@@ -80,12 +73,12 @@ public class OssGetSignedUrlTool implements Tool {
 
             JSONObject accessKeyIdParam = new JSONObject();
             accessKeyIdParam.put("type", "string");
-            accessKeyIdParam.put("description", "AccessKey ID");
+            accessKeyIdParam.put("description", "阿里云 AccessKey ID");
             properties.put("accessKeyId", accessKeyIdParam);
 
             JSONObject accessKeySecretParam = new JSONObject();
             accessKeySecretParam.put("type", "string");
-            accessKeySecretParam.put("description", "AccessKey Secret");
+            accessKeySecretParam.put("description", "阿里云 AccessKey Secret");
             properties.put("accessKeySecret", accessKeySecretParam);
 
             JSONObject endpointParam = new JSONObject();
@@ -128,9 +121,6 @@ public class OssGetSignedUrlTool implements Tool {
                 }
 
                 int expiresInSeconds = arguments.optInt("expiresInSeconds", 3600);
-                if (expiresInSeconds <= 0 || expiresInSeconds > 604800) {
-                    throw new IllegalArgumentException("expiresInSeconds 必须在 1-604800 之间（最大 7 天）");
-                }
 
                 String accessKeyId = getOrFromNote(arguments, "accessKeyId", NOTE_KEY_ACCESS_KEY_ID);
                 String accessKeySecret = getOrFromNote(arguments, "accessKeySecret", NOTE_KEY_ACCESS_KEY_SECRET);
@@ -138,27 +128,25 @@ public class OssGetSignedUrlTool implements Tool {
                 String endpoint = getOrFromNote(arguments, "endpoint", NOTE_KEY_ENDPOINT);
 
                 if (accessKeyId == null || accessKeySecret == null || bucketName == null || endpoint == null) {
-                    throw new IllegalArgumentException("凭证不完整。可通过参数传入或在工具备注中设置");
+                    throw new IllegalArgumentException("凭证不完整");
                 }
 
-                CredentialsProvider provider = new DefaultCredentialProvider(accessKeyId, accessKeySecret);
-                OSS oss = new OSSClientBuilder().build(endpoint, provider);
+                ClientConfiguration conf = new ClientConfiguration();
+                conf.setConnectionTimeout(15 * 1000);
+                conf.setSocketTimeout(15 * 1000);
 
-                Date expiration = new Date(System.currentTimeMillis() + expiresInSeconds * 1000L);
+                OSSCredentialProvider provider = new OSSPlainTextAKSKCredentialProvider(accessKeyId, accessKeySecret);
+                OSS oss = new OSSClient(context.getApplicationContext(), endpoint, provider, conf);
+String signedUrl = oss.presignConstrainedObjectURL(bucketName, objectKey, expiresInSeconds).toString();
 
-                GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, objectKey);
-                request.setExpiration(expiration);
-                // 默认生成 GET 签名 URL
-
-                String signedUrl = oss.generatePresignedUrl(request).toString();
-
-                FileLogger.i(TAG, "✅ 签名 URL 生成 - objectKey: " + objectKey + ", 有效期: " + expiresInSeconds + "秒");
+                FileLogger.i(TAG, "✅ 生成签名 URL: " + signedUrl);
 
                 JSONObject output = new JSONObject();
                 output.put("status", "success");
                 output.put("objectKey", objectKey);
+                output.put("bucketName", bucketName);
+                output.put("endpoint", endpoint);
                 output.put("signedUrl", signedUrl);
-                output.put("expiresAt", expiration.getTime() / 1000); // Unix timestamp in seconds
                 output.put("expiresInSeconds", expiresInSeconds);
 
                 callback.onResult(output);
@@ -181,7 +169,7 @@ public class OssGetSignedUrlTool implements Tool {
     private String getValueFromNote(String key) {
         String note = getNote(context);
         if (note == null || note.isEmpty()) return null;
-        String[] lines = note.split("\\n");
+        String[] lines = note.split("\n");
         for (String line : lines) {
             line = line.trim();
             if (line.startsWith(key + "=")) {
@@ -196,8 +184,10 @@ public class OssGetSignedUrlTool implements Tool {
     public String getDefaultSystemPromptEnhancement() {
         return "ossGetSignedUrl 工具说明：\n"
             + "1. 必传参数：objectKey\n"
-            + "2. 可选参数：expiresInSeconds（默认 3600 = 1 小时）\n"
-            + "3. 返回：signedUrl（可直接下载/访问）、expiresAt（Unix 时间戳）\n"
-            + "4. 典型用法：手机上传 PDF → 调用 ossGetSignedUrl 生成 URL → 把 URL 发给家里电脑 → 家里电脑用 wget/curl 下载";
+            + "2. 可选参数：expiresInSeconds（默认 3600）、bucketName、accessKeyId、accessKeySecret、endpoint\n"
+            + "3. 凭证优先级：参数传入 > 工具备注\n"
+            + "4. 默认有效期：3600 秒（1 小时）\n"
+            + "5. 返回：signedUrl、expiresInSeconds\n"
+            + "6. 典型场景：手机上传文件后，调用此工具生成临时 URL 给其他设备下载";
     }
 }

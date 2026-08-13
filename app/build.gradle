@@ -59,17 +59,10 @@ dependencies
   // 🆕 Android Crash Detector - Global exception handler with crash logging to external storage
   implementation 'com.github.hxcan:android-crash-detector:2026.4.8'
 
-  // 🆕 阿里云 OSS Java SDK（用于 OSS 上传/下载工具）
-  // 文档：https://help.aliyun.com/document_detail/32008.html
-  // #865316300466 修复：保留排除 httpcomponents（避免与 jsch 等 jar 冲突），
-  // 但显式引入兼容的 httpclient 版本，提供缺失的 DefaultHostnameVerifier 类
-  // #865366531088 进一步修复：降到 httpclient 4.4.1，避免 AllowAllHostnameVerifier
-  // 与系统 framework 中的同名类冲突（4.5.x 后该类改成了单例 INSTANCE 字段，
-  // 系统旧版本没有此字段，导致 NoSuchFieldError）
-  implementation('com.aliyun.oss:aliyun-sdk-oss:3.17.4') {
-    exclude group: 'org.apache.httpcomponents'
-  }
-  implementation 'org.apache.httpcomponents:httpclient:4.4.1'
+  // 🆕 阿里云 OSS Android 专用 SDK（#865421124929 - 修复 AllowAllHostnameVerifier 崩溃）
+  // 文档：https://github.com/aliyun/aliyun-oss-android-sdk
+  // 优势：基于 OkHttp 而非 HttpClient，兼容 Android 系统，不再有 NoSuchFieldError 问题
+  implementation 'com.aliyun.dpa:oss-android-sdk:2.9.17'
 }
 
 android
