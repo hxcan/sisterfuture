@@ -9,7 +9,7 @@ buildscript
   dependencies 
   {
     classpath 'com.android.tools.build:gradle:8.4.1'
-    classpath 'io.objectbox:objectbox-gradle-plugin:5.1.0' // 这个必须加！
+    classpath 'io.objectbox:objectbox-gradle-plugin:5.1.0' // 这个必覻加！
   }
 }
 
@@ -17,6 +17,7 @@ allprojects
 {
   repositories 
   {
+    maven { url "https://maven.aliyun.com/repository/public" }
     mavenCentral()
     maven { url "https://jitpack.io" }
     jcenter()
