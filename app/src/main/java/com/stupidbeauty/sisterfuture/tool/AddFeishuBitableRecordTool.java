@@ -25,13 +25,15 @@ import okhttp3.Response;
  *   fields: dict,                  # 字段值字典
  *   app_id: str = None,            # 可选，默认从工具备注读取
  *   app_secret: str = None,        # 可选，默认从工具备注读取
+ *   app_token: str = None,         # 可选，默认从工具备注读取
  *   user_id_type: str = "open_id"  # 默认 open_id
  * )
  *
  * 凭证配置（通过 setToolRemark 调用设置）：
  * {
  *   "feishu_app_id": "cli_xxx",
- *   "feishu_app_secret": "xxx"
+ *   "feishu_app_secret": "xxx",
+ *   "feishu_app_token": "DblBbSKDGaD8nOsEhSXcZpq0njg"
  * }
  *
  * 支持字段类型：
@@ -75,7 +77,7 @@ public class AddFeishuBitableRecordTool implements Tool
         "SingleSelect（单选，传选项名字符串）、" +
         "DateTime（日期，传毫秒时间戳或 ISO 8601 字符串）、" +
         "Text（文本）、Number（数字）。\n\n" +
-        "凭证配置：调用 setToolRemark 工具，设置 feishu_app_id 和 feishu_app_secret。");
+        "凭证配置：调用 setToolRemark 工具，设置 feishu_app_id、feishu_app_secret 和 feishu_app_token。");
 
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
@@ -100,6 +102,9 @@ public class AddFeishuBitableRecordTool implements Tool
         .put("app_secret", new JSONObject()
           .put("type", "string")
           .put("description", "飞书应用 App Secret（可选，默认从工具备注读取）"))
+        .put("app_token", new JSONObject()
+          .put("type", "string")
+          .put("description", "飞书多维表格的 app_token（可选，默认从工具备注读取）"))
         .put("user_id_type", new JSONObject()
           .put("type", "string")
           .put("description", "用户ID类型：open_id（默认）/ union_id / user_id"))
@@ -129,6 +134,48 @@ public class AddFeishuBitableRecordTool implements Tool
     return true;
   }
 
+  /**
+   * 从工具备注读取完整凭证（app_id / app_secret / app_token）
+   * @return String[]{app_id, app_secret, app_token}，缺失返回 null
+   */
+  private String[] loadCredentials()
+  {
+    try
+    {
+      String noteJson = context.getSharedPreferences("tool_enhancements", Context.MODE_PRIVATE)
+        .getString("note_addFeishuBitableRecord", "");
+
+      if (noteJson.isEmpty())
+      {
+        // 回退方案：尝试从共享的 feishu 凭证读取
+        noteJson = context.getSharedPreferences("tool_enhancements", Context.MODE_PRIVATE)
+          .getString("note_feishu_shared", "");
+      }
+
+      if (noteJson.isEmpty())
+      {
+        return null;
+      }
+
+      JSONObject saved = new JSONObject(noteJson);
+      String appId = saved.optString("feishu_app_id", "").trim();
+      String appSecret = saved.optString("feishu_app_secret", "").trim();
+      String appToken = saved.optString("feishu_app_token", "").trim();
+
+      if (appId.isEmpty() || appSecret.isEmpty() || appToken.isEmpty())
+      {
+        return null;
+      }
+
+      return new String[]{appId, appSecret, appToken};
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "读取飞书凭证失败", e);
+      return null;
+    }
+  }
+
   @Override
   public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback)
   {
@@ -141,6 +188,11 @@ public class AddFeishuBitableRecordTool implements Tool
         String tableId = arguments.optString("table_id", "").trim();
         JSONObject fields = arguments.getJSONObject("fields");
         String userIdType = arguments.optString("user_id_type", "open_id");
+
+        // 凭证：参数 > 备注
+        String paramAppId = arguments.optString("app_id", "").trim();
+        String paramAppSecret = arguments.optString("app_secret", "").trim();
+        String paramAppToken = arguments.optString("app_token", "").trim();
 
         if (tableName.isEmpty() && tableId.isEmpty())
         {
@@ -157,17 +209,30 @@ public class AddFeishuBitableRecordTool implements Tool
         FileLogger.d(TAG, "开始添加记录: table=" + (tableId.isEmpty() ? tableName : tableId) +
           ", fields_count=" + fields.length());
 
-        // 2. 获取 token
-        String token = authManager.getTenantAccessToken();
+        // 2. 读取凭证（参数 > 备注）
+        String[] credentials = loadCredentials();
+        if (credentials == null)
+        {
+          throw new IllegalArgumentException(
+            "缺少凭证配置。请先调用 setToolRemark 写入 feishu_app_id、feishu_app_secret 和 feishu_app_token。"
+          );
+        }
 
-        // 3. 如果只有 table_name，查询得到 table_id
+        String appId = paramAppId.isEmpty() ? credentials[0] : paramAppId;
+        String appSecret = paramAppSecret.isEmpty() ? credentials[1] : paramAppSecret;
+        String appToken = paramAppToken.isEmpty() ? credentials[2] : paramAppToken;
+
+        // 3. 获取 token（传入 app_id 和 app_secret）
+        String token = authManager.getTenantAccessToken(appId, appSecret);
+
+        // 4. 如果只有 table_name，查询得到 table_id
         if (tableId.isEmpty())
         {
-          tableId = resolveTableId(token, tableName);
+          tableId = resolveTableId(token, appToken, tableName);
           FileLogger.d(TAG, "表名解析: " + tableName + " -> " + tableId);
         }
 
-        // 4. 调用 API 添加记录
+        // 5. 调用 API 添加记录
         JSONObject recordBody = new JSONObject();
         recordBody.put("fields", fields);
 
@@ -175,10 +240,6 @@ public class AddFeishuBitableRecordTool implements Tool
           recordBody.toString(),
           MediaType.get("application/json; charset=utf-8")
         );
-
-        // 注意：app_token 是多维表格的标识
-        // 当前硬编码为已知的 app_token（应从备注或参数读取）
-        String appToken = "DblBbSKDGaD8nOsEhSXcZpq0njg"; // TODO: 从备注读取
 
         String url = "https://open.feishu.cn/open-apis/bitable/v1/apps/" +
           appToken + "/tables/" + tableId + "/records" +
@@ -201,7 +262,7 @@ public class AddFeishuBitableRecordTool implements Tool
           {
             FileLogger.d(TAG, "401 未授权，强制刷新 token 后重试");
             authManager.invalidateToken();
-            token = authManager.getTenantAccessToken();
+            token = authManager.getTenantAccessToken(appId, appSecret);
 
             Request retryRequest = new Request.Builder()
               .url(url)
@@ -233,7 +294,7 @@ public class AddFeishuBitableRecordTool implements Tool
             ", msg=" + result.optString("msg", ""));
         }
 
-        // 5. 返回成功结果
+        // 6. 返回成功结果
         JSONObject record = result.optJSONObject("data") != null
           ? result.getJSONObject("data").optJSONObject("record")
           : null;
@@ -261,12 +322,11 @@ public class AddFeishuBitableRecordTool implements Tool
   }
 
   /**
-   * 通过表名查询 table_id
+   * 通过表名查询 table_id（需要 app_token）
    */
-  private String resolveTableId(String token, String tableName) throws IOException, JSONException
+  private String resolveTableId(String token, String appToken, String tableName)
+    throws IOException, JSONException
   {
-    String appToken = "DblBbSKDGaD8nOsEhSXcZpq0njg"; // TODO: 从备注读取
-
     Request request = new Request.Builder()
       .url("https://open.feishu.cn/open-apis/bitable/v1/apps/" + appToken + "/tables")
       .get()
