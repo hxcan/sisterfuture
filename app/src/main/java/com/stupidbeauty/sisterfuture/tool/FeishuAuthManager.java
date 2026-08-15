@@ -1,17 +1,13 @@
 package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import androidx.annotation.NonNull;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -21,23 +17,25 @@ import okhttp3.Response;
 /**
  * 飞书 API 认证管理器
  *
+ * 重要原则：所有凭证（app_id / app_secret）必须在调用时显式传入，
+ * 不能依赖代码中硬编码的固定值。
+ *
  * 功能：
  * 1. 获取 tenant_access_token（自动缓存，避免重复请求）
  * 2. token 即将过期时自动刷新
- * 3. 从工具备注（getNote）读取 app_id / app_secret
+ * 3. 凭证由调用方传入（不要硬编码！）
  *
- * 凭证格式（写入 setNote 的 JSON）：
- * {
- *   "feishu_app_id": "cli_xxx",
- *   "feishu_app_secret": "xxx"
- * }
+ * 调用方传入凭证的两种方式：
+ * - 直接传值：getTenantAccessToken(appId, appSecret)
+ * - 从工具备注读取：getTenantAccessToken(noteKey)
  */
 public class FeishuAuthManager
 {
   private static final String TAG = "FeishuAuthManager";
 
-  // token 缓存
+  // token 缓存（按 appId 区分）
   private static volatile String cachedToken = null;
+  private static volatile String cachedAppId = null;
   private static volatile long tokenExpireTime = 0; // 单位：毫秒
 
   private final Context context;
@@ -52,31 +50,31 @@ public class FeishuAuthManager
   }
 
   /**
-   * 获取飞书 tenant_access_token，自动管理缓存
+   * 获取 token（凭证由调用方直接传入）
+   *
+   * @param appId 飞书应用 App ID（必填）
+   * @param appSecret 飞书应用 App Secret（必填）
+   * @return tenant_access_token
    */
-  public synchronized String getTenantAccessToken() throws IOException, JSONException
+  public synchronized String getTenantAccessToken(@NonNull String appId, @NonNull String appSecret)
+    throws IOException, JSONException
   {
+    if (appId.isEmpty() || appSecret.isEmpty())
+    {
+      throw new IllegalArgumentException(
+        "app_id 和 app_secret 不能为空。请通过 setToolRemark 配置或调用时传入。"
+      );
+    }
+
     long now = System.currentTimeMillis();
 
     // 缓存有效（提前5分钟刷新）
-    if (cachedToken != null && now < tokenExpireTime - 5 * 60 * 1000L)
+    if (cachedToken != null && appId.equals(cachedAppId) &&
+        now < tokenExpireTime - 5 * 60 * 1000L)
     {
       FileLogger.d(TAG, "使用缓存的 tenant_access_token");
       return cachedToken;
     }
-
-    // 读取凭证
-    String[] credentials = loadCredentials();
-    if (credentials == null)
-    {
-      throw new IllegalArgumentException(
-        "Missing feishu_app_id or feishu_app_secret in tool note. " +
-        "请先调用 setToolRemark 配置飞书应用凭证。"
-      );
-    }
-
-    String appId = credentials[0];
-    String appSecret = credentials[1];
 
     FileLogger.d(TAG, "请求新的 tenant_access_token，app_id=" + appId);
 
@@ -117,6 +115,7 @@ public class FeishuAuthManager
     }
 
     cachedToken = result.getString("tenant_access_token");
+    cachedAppId = appId;
     int expireSeconds = result.getInt("expire");
     tokenExpireTime = now + expireSeconds * 1000L;
 
@@ -126,23 +125,34 @@ public class FeishuAuthManager
   }
 
   /**
-   * 从工具备注读取飞书凭证
+   * 从工具备注读取凭证后获取 token
+   *
+   * @param noteKey 工具备注的 key（例如 "note_addFeishuBitableRecord"）
+   * @return tenant_access_token
+   */
+  public synchronized String getTenantAccessTokenFromNote(@NonNull String noteKey)
+    throws IOException, JSONException
+  {
+    String[] credentials = loadCredentialsFromNote(noteKey);
+    if (credentials == null)
+    {
+      throw new IllegalArgumentException(
+        "从工具备注 " + noteKey + " 读取凭证失败。请先调用 setToolRemark 配置。"
+      );
+    }
+    return getTenantAccessToken(credentials[0], credentials[1]);
+  }
+
+  /**
+   * 从指定 key 的工具备注读取凭证
    * @return [app_id, app_secret]，未找到返回 null
    */
-  private String[] loadCredentials()
+  private String[] loadCredentialsFromNote(String noteKey)
   {
     try
     {
-      // 尝试从一个标准工具名读取（用于多工具共享）
       String noteJson = context.getSharedPreferences("tool_enhancements", Context.MODE_PRIVATE)
-        .getString("note_feishu_shared", "");
-
-      if (noteJson.isEmpty())
-      {
-        // 回退方案：从 addFeishuBitableRecord 工具备注读取
-        noteJson = context.getSharedPreferences("tool_enhancements", Context.MODE_PRIVATE)
-          .getString("note_addFeishuBitableRecord", "");
-      }
+        .getString(noteKey, "");
 
       if (noteJson.isEmpty())
       {
@@ -173,6 +183,7 @@ public class FeishuAuthManager
   public synchronized void invalidateToken()
   {
     cachedToken = null;
+    cachedAppId = null;
     tokenExpireTime = 0;
     FileLogger.d(TAG, "token 缓存已清除");
   }
