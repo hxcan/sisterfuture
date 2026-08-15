@@ -108,5 +108,9 @@ public class ToolRegistry {
         toolManager.registerTool(new GetSmsListTool(context));
         toolManager.registerTool(new MakeCallTool(context));
         toolManager.registerTool(new SendSmsTool(context));
+
+        // 飞书工具组
+        toolManager.registerTool(new AddFeishuBitableRecordTool(context));
+        toolManager.registerTool(new GetFeishuUserIdByMobileTool(context));
     }
 }
