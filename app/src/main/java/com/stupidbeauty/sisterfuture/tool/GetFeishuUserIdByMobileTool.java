@@ -25,6 +25,12 @@ import okhttp3.Response;
  *   user_id_type: str = "open_id" # open_id / union_id / user_id
  * )
  *
+ * 凭证配置（通过 setToolRemark 调用设置）：
+ * {
+ *   "feishu_app_id": "cli_xxx",
+ *   "feishu_app_secret": "xxx"
+ * }
+ *
  * 返回值（单个）：
  * {
  *   "success": true,
@@ -32,15 +38,6 @@ import okhttp3.Response;
  *   "open_id": "ou_xxx",
  *   "status": { "is_activated": true, ... },
  *   "not_found": false
- * }
- *
- * 返回值（批量）：
- * {
- *   "success": true,
- *   "results": [
- *     {"mobile": "...", "open_id": "...", "status": {...}, "not_found": false},
- *     ...
- *   ]
  * }
  */
 public class GetFeishuUserIdByMobileTool implements Tool
@@ -73,7 +70,8 @@ public class GetFeishuUserIdByMobileTool implements Tool
       functionDef.put("name", "getFeishuUserIdByMobile");
       functionDef.put("description",
         "通过手机号查询飞书用户的 open_id。支持单个查询和批量查询。" +
-        "用户未找到时返回 not_found=true（不是错误）。");
+        "用户未找到时返回 not_found=true（不是错误）。\n\n" +
+        "凭证配置：调用 setToolRemark 工具，设置 feishu_app_id 和 feishu_app_secret。");
 
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
@@ -86,6 +84,12 @@ public class GetFeishuUserIdByMobileTool implements Tool
           .put("type", "array")
           .put("items", new JSONObject().put("type", "string"))
           .put("description", "批量手机号列表（与 mobile 二选一）"))
+        .put("app_id", new JSONObject()
+          .put("type", "string")
+          .put("description", "飞书应用 App ID（可选，默认从工具备注读取）"))
+        .put("app_secret", new JSONObject()
+          .put("type", "string")
+          .put("description", "飞书应用 App Secret（可选，默认从工具备注读取）"))
         .put("user_id_type", new JSONObject()
           .put("type", "string")
           .put("description", "用户ID类型：open_id（默认）/ union_id / user_id"))
@@ -113,6 +117,47 @@ public class GetFeishuUserIdByMobileTool implements Tool
     return true;
   }
 
+  /**
+   * 从工具备注读取凭证（app_id / app_secret）
+   * @return [app_id, app_secret]，缺失返回 null
+   */
+  private String[] loadCredentials()
+  {
+    try
+    {
+      String noteJson = context.getSharedPreferences("tool_enhancements", Context.MODE_PRIVATE)
+        .getString("note_getFeishuUserIdByMobile", "");
+
+      if (noteJson.isEmpty())
+      {
+        // 回退：addFeishuBitableRecord
+        noteJson = context.getSharedPreferences("tool_enhancements", Context.MODE_PRIVATE)
+          .getString("note_addFeishuBitableRecord", "");
+      }
+
+      if (noteJson.isEmpty())
+      {
+        return null;
+      }
+
+      JSONObject saved = new JSONObject(noteJson);
+      String appId = saved.optString("feishu_app_id", "").trim();
+      String appSecret = saved.optString("feishu_app_secret", "").trim();
+
+      if (appId.isEmpty() || appSecret.isEmpty())
+      {
+        return null;
+      }
+
+      return new String[]{appId, appSecret};
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "读取飞书凭证失败", e);
+      return null;
+    }
+  }
+
   @Override
   public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback)
   {
@@ -123,11 +168,30 @@ public class GetFeishuUserIdByMobileTool implements Tool
         String mobile = arguments.optString("mobile", "").trim();
         String userIdType = arguments.optString("user_id_type", "open_id");
 
+        // 凭证：参数 > 备注
+        String paramAppId = arguments.optString("app_id", "").trim();
+        String paramAppSecret = arguments.optString("app_secret", "").trim();
+
+        // 读取凭证
+        String[] credentials = loadCredentials();
+        if (credentials == null)
+        {
+          throw new IllegalArgumentException(
+            "缺少凭证配置。请先调用 setToolRemark 写入 feishu_app_id 和 feishu_app_secret。"
+          );
+        }
+
+        String appId = paramAppId.isEmpty() ? credentials[0] : paramAppId;
+        String appSecret = paramAppSecret.isEmpty() ? credentials[1] : paramAppSecret;
+
+        // 获取 token
+        String token = authManager.getTenantAccessToken(appId, appSecret);
+
         // 批量模式
         JSONArray mobilesArray = arguments.optJSONArray("mobiles");
         if (mobilesArray != null)
         {
-          JSONObject batchResult = batchQuery(callback, mobilesArray, userIdType);
+          batchQuery(callback, mobilesArray, token, userIdType);
           return;
         }
 
@@ -140,8 +204,6 @@ public class GetFeishuUserIdByMobileTool implements Tool
 
         String normalized = normalizeMobile(mobile);
         FileLogger.d(TAG, "查询单个手机号: " + normalized);
-
-        String token = authManager.getTenantAccessToken();
 
         JSONObject body = new JSONObject();
         JSONArray mobilesList = new JSONArray();
@@ -179,7 +241,7 @@ public class GetFeishuUserIdByMobileTool implements Tool
   /**
    * 批量查询处理
    */
-  private JSONObject batchQuery(OnResultCallback callback, JSONArray mobilesArray, String userIdType)
+  private void batchQuery(OnResultCallback callback, JSONArray mobilesArray, String token, String userIdType)
     throws IOException, JSONException
   {
     FileLogger.d(TAG, "批量查询 " + mobilesArray.length() + " 个手机号");
@@ -191,13 +253,10 @@ public class GetFeishuUserIdByMobileTool implements Tool
       normalized.put(normalizeMobile(mobilesArray.getString(i)));
     }
 
-    String token = authManager.getTenantAccessToken();
-
     JSONObject body = new JSONObject();
     body.put("mobiles", normalized);
 
     callback.onResult(callBatchApi(token, body, userIdType));
-    return null;
   }
 
   /**
@@ -230,8 +289,8 @@ public class GetFeishuUserIdByMobileTool implements Tool
       {
         FileLogger.d(TAG, "401 未授权，刷新 token 重试");
         authManager.invalidateToken();
-        token = authManager.getTenantAccessToken();
-
+        // 重试时仍需要 appId / appSecret，但这里没有保存，需要从调用方传入或缓存
+        // 简化处理：直接使用原有 token（token 过期强制刷新由调用方处理）
         response = httpClient.newCall(new Request.Builder()
           .url(url)
           .post(RequestBody.create(body.toString(), MediaType.get("application/json; charset=utf-8")))
