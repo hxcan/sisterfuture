@@ -194,45 +194,58 @@ public class AddFeishuBitableRecordTool implements Tool
         String paramAppSecret = arguments.optString("app_secret", "").trim();
         String paramAppToken = arguments.optString("app_token", "").trim();
 
+        // === Phase 1: 先校验业务参数 ===
         if (tableName.isEmpty() && tableId.isEmpty())
         {
           throw new IllegalArgumentException(
-            "Missing required parameter: 必须提供 table_name 或 table_id 之一");
+            "Missing required parameter: 必须提供 table_name 或 table_id 之一"
+          );
         }
 
         if (fields.length() == 0)
         {
           throw new IllegalArgumentException(
-            "Missing required parameter: fields 不能为空");
+            "Missing required parameter: fields 不能为空"
+          );
         }
 
         FileLogger.d(TAG, "开始添加记录: table=" + (tableId.isEmpty() ? tableName : tableId) +
           ", fields_count=" + fields.length());
 
-        // 2. 读取凭证（参数 > 备注）
-        String[] credentials = loadCredentials();
-        if (credentials == null)
+        // === Phase 2: 业务参数都通过后，才检查凭证 ===
+        String[] credentials = null;
+        // 只有当参数没传凭证时，才去读备注
+        if (paramAppId.isEmpty() || paramAppSecret.isEmpty() || paramAppToken.isEmpty())
+        {
+          credentials = loadCredentials();
+        }
+
+        if (credentials == null &&
+            (paramAppId.isEmpty() || paramAppSecret.isEmpty() || paramAppToken.isEmpty()))
         {
           throw new IllegalArgumentException(
-            "缺少凭证配置。请先调用 setToolRemark 写入 feishu_app_id、feishu_app_secret 和 feishu_app_token。"
+            "缺少凭证配置。请通过以下任一方式提供凭证：" +
+            "(1) 在参数中传入 app_id/app_secret/app_token；" +
+            "(2) 调用 setToolRemark 写入 feishu_app_id、feishu_app_secret 和 feishu_app_token。"
           );
         }
 
+        // 3. 决定最终凭证值（参数优先，缺失则用备注）
         String appId = paramAppId.isEmpty() ? credentials[0] : paramAppId;
         String appSecret = paramAppSecret.isEmpty() ? credentials[1] : paramAppSecret;
         String appToken = paramAppToken.isEmpty() ? credentials[2] : paramAppToken;
 
-        // 3. 获取 token（传入 app_id 和 app_secret）
+        // 4. 获取 token（传入 app_id 和 app_secret）
         String token = authManager.getTenantAccessToken(appId, appSecret);
 
-        // 4. 如果只有 table_name，查询得到 table_id
+        // 5. 如果只有 table_name，查询得到 table_id
         if (tableId.isEmpty())
         {
           tableId = resolveTableId(token, appToken, tableName);
           FileLogger.d(TAG, "表名解析: " + tableName + " -> " + tableId);
         }
 
-        // 5. 调用 API 添加记录
+        // 6. 调用 API 添加记录
         JSONObject recordBody = new JSONObject();
         recordBody.put("fields", fields);
 
@@ -294,7 +307,7 @@ public class AddFeishuBitableRecordTool implements Tool
             ", msg=" + result.optString("msg", ""));
         }
 
-        // 6. 返回成功结果
+        // 7. 返回成功结果
         JSONObject record = result.optJSONObject("data") != null
           ? result.getJSONObject("data").optJSONObject("record")
           : null;
