@@ -48,6 +48,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import java.io.FileInputStream;
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ActivityOptions;
 import android.app.WallpaperManager;
 import android.media.MediaScannerConnection;
@@ -155,6 +156,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private String currentImageBase64 = null;
   private String currentImagePath = null;  // WanxiangImage 工具支持参考图片：图片本地缓存路径
   @BindView(R.id.uploadImageButton) Button uploadImageButton;
+  @BindView(R.id.resetContextButton) Button resetContextButton;
 
   private TongYiClient tongYiClient;
   private boolean isTtsSpeaking = false;
@@ -665,6 +667,34 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     voiceRecognizeResultString = recognizeResulttextView.getText().toString();
     sendMessageToSister(voiceRecognizeResultString);
     recognizeResulttextView.setText("");
+  }
+
+  @OnClick(R.id.resetContextButton)
+  public void resetConversationContextFromUi()
+  {
+    new AlertDialog.Builder(this)
+      .setTitle("强制重置上下文")
+      .setMessage("将清空当前全部对话记录，此操作无法撤销。")
+      .setNegativeButton("取消", null)
+      .setPositiveButton("确认重置", (dialog, which) -> forceResetConversationContext())
+      .show();
+  }
+
+  private void forceResetConversationContext()
+  {
+    contextManager.clearHistory();
+    toolManager.clearTrackedCalls();
+    messageAdapter.refreshFromDataSource();
+
+    accumulatedAnswer.setLength(0);
+    partialToolArgs.clear();
+    indexToOriginalIdMap.clear();
+    currentImageBase64 = null;
+    currentImagePath = null;
+    uploadImageButton.setAlpha(1.0f);
+
+    Toast.makeText(this, "上下文已强制重置", Toast.LENGTH_SHORT).show();
+    FileLogger.i(TAG, "🧹 [FORCE_RESET] 用户通过界面强制重置了上下文");
   }
 
   @OnClick(R.id.uploadImageButton)
@@ -1975,7 +2005,6 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       handleSelectedImage(data);
     }
   }
-
   /**
    * 🔥 新增：从工具结果 JSONObject 中解析 attachments 字段
    * @param result 工具返回的结果 JSON

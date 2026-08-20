@@ -76,13 +76,26 @@
     android:layout_toLeftOf="@+id/sendButtonn2"
     android:contentDescription="上传图片" />
 
+  <!-- 手动兜底：不经过大模型，直接清空当前会话上下文 -->
+  <Button
+    android:id="@+id/resetContextButton"
+    android:layout_width="56dp"
+    android:layout_height="48dp"
+    android:layout_alignParentBottom="true"
+    android:layout_margin="5dp"
+    android:layout_toLeftOf="@+id/uploadImageButton"
+    android:contentDescription="强制重置对话上下文"
+    android:padding="0dp"
+    android:text="重置"
+    android:textSize="12sp" />
+
   <EditText
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:id="@+id/recognizeResulttextView"
     android:layout_alignParentBottom="true"
     android:layout_alignParentLeft="true"
-    android:layout_toLeftOf="@+id/uploadImageButton"
+    android:layout_toLeftOf="@+id/resetContextButton"
     android:inputType="textMultiLine"
     android:imeOptions="actionSend"
     android:maxLines="3" />
