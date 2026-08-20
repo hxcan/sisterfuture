@@ -1043,6 +1043,17 @@ public class ContextManager
     saveHistory(newHistory);
   }
 
+  /**
+   * 从内存和持久化存储中强制清空当前会话。
+   * 同时丢弃尚未确认的消息 ID，避免新会话复用旧请求的状态。
+   */
+  public void clearHistory()
+  {
+    reservedMessageIds.clear();
+    replaceHistory(new ArrayList<JSONObject>());
+    FileLogger.i(TAG, "🧹 [FORCE_RESET] 已清空全部对话上下文");
+  }
+
   // ✅ 内存同步更新 + 异步写入 JSON 文件 + SM 保持 max_rounds
   private void saveHistory(List<JSONObject> history)
   {
