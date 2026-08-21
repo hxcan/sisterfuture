@@ -167,9 +167,9 @@ public class GuideManager {
      **/
     private void createAccessPoints(String apiKey, ChatCallback callback, String nameSuffix) {
         try {
-            AddModelAccessPointTool addTool = (AddModelAccessPointTool) toolManager.getTool("add_model_access_point");
+            AddModelAccessPointTool addTool = (AddModelAccessPointTool) toolManager.getTool("addModelAccessPoint");
             if (addTool == null) {
-                callback.onError("❌ 工具未找到：add_model_access_point");
+                callback.onError("❌ 工具未找到：addModelAccessPoint");
                 return;
             }
 
@@ -202,15 +202,15 @@ public class GuideManager {
 
             // 异步执行：先创建百炼接入点
             // 🔥 #4790 修改：添加 null 作为 toolCallId 参数（因为这不是来自 LLM 的工具调用）
-            toolManager.executeToolAsync(null, "add_model_access_point", args1, new Tool.OnResultCallback() {
+            toolManager.executeToolAsync(null, "addModelAccessPoint", args1, new Tool.OnResultCallback() {
                 @Override
                 public void onResult(JSONObject result1) {
                     // 百炼接入点创建成功，继续创建 Code Plan 接入点
-                    toolManager.executeToolAsync(null, "add_model_access_point", args2, new Tool.OnResultCallback() {
+                    toolManager.executeToolAsync(null, "addModelAccessPoint", args2, new Tool.OnResultCallback() {
                         @Override
                         public void onResult(JSONObject result2) {
                             // Code Plan 创建成功，继续创建 MiniMax 接入点
-                            toolManager.executeToolAsync(null, "add_model_access_point", args3, new Tool.OnResultCallback() {
+                            toolManager.executeToolAsync(null, "addModelAccessPoint", args3, new Tool.OnResultCallback() {
                                 @Override
                                 public void onResult(JSONObject result3) {
                                     // ✅ 三个接入点都创建成功
