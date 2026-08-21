@@ -290,6 +290,15 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     public void updateAiMessage(int position, String newText) {
+        // 🆕 #821166321034 修复 ArrayIndexOutOfBoundsException 崩溃（length=N; index=-1）
+        // 原因：SisterFutureActivity 在流式响应处理时会传入 lastPosition = getItemCount() - 1，
+        //       当消息列表为空（刚清空上下文 / 初始化阶段）时，position = -1，
+        //       直接 messages.get(-1) 会抛 ArrayIndexOutOfBoundsException 崩溃。
+        // 最小化修改：仅在这里加边界判断，其他代码保持原样。
+        if (position < 0 || position >= messages.size()) {
+            FileLogger.w(TAG, "⚠️ [UPDATE_AI_SKIP] updateAiMessage 跳过越界 position=" + position + " | size=" + messages.size());
+            return;
+        }
         MessageItem item = messages.get(position);
         if (item.getType() == MessageType.AI) {
             item.text = newText;
@@ -669,16 +678,16 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                         }
                     }
                     Bitmap bitmap = null;
-                    // 🆕 分支1：file:// 本地路径（GenerateImageTool 实际产物）
-                    if (base64Data.startsWith("file://")) {
-                        String localPath = base64Data.substring("file://".length());
+                    // 🆕 分支1：file:/// 本地路径（GenerateImageTool 实际产物）
+                    if (base64Data.startsWith("file:///")) {
+                        String localPath = base64Data.substring("file:///".length());
                         FileLogger.d(TAG, "📂 [FILE_PATH] 读取本地图片: " + localPath);
                         try {
                             bitmap = BitmapFactory.decodeFile(localPath);
                         } catch (Exception fileEx) {
                             FileLogger.w(TAG, "⚠️ [FILE_DECODE_FAIL] " + fileEx.getMessage());
                         }
-                        // 兜底：file:// 失败时尝试 ContentResolver（兼容 content://）
+                        // 兜底：file:/// 失败时尝试 ContentResolver（兼容 content://）
                         if (bitmap == null) {
                             try {
                                 java.io.InputStream is = ctx.getContentResolver().openInputStream(android.net.Uri.parse(base64Data));
