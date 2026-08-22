@@ -6,6 +6,7 @@ import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.KeyPair;
 import com.jcraft.jsch.Session;
+import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -207,8 +208,18 @@ public class ExecuteRemoteCommandTool implements Tool {
                 }
                 
                 if (channel.isClosed()) {
-                    if (inputStream.available() > 0) continue; 
-                    debugInfo += "[14] Channel closed and no more data. Exit status: " + 
+                    // 🔥 修复 (#858119422553): channel 关闭后继续 drain socket buffer，直到没有更多数据或达到上限
+                    int drainCount = 0;
+                    final int MAX_DRAIN_ITERATIONS = 50;
+                    while (inputStream.available() > 0 && drainCount < MAX_DRAIN_ITERATIONS) {
+                        int j = inputStream.read(tmp, 0, 1024);
+                        if (j < 0) break;
+                        outStream.write(tmp, 0, j);
+                        drainCount++;
+                        FileLogger.i(TAG, "[SSH_DRAIN] channel closed, drained extra " + j + " bytes (iter " + drainCount + ")");
+                    }
+                    FileLogger.i(TAG, "[SSH_DRAIN_FINISH] channel closed, total drained iterations=" + drainCount);
+                    debugInfo += "[14] Channel closed. Drained " + drainCount + " extra iterations. Exit status: " +
                                  Integer.toString(channel.getExitStatus()) + "\n";
                     break;
                 }
