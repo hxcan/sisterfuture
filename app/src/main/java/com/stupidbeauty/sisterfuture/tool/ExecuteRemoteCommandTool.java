@@ -198,13 +198,27 @@ public class ExecuteRemoteCommandTool implements Tool {
             byte[] tmp = new byte[1024];
             long idleStartTime = System.currentTimeMillis();
             final int MAX_IDLE_MS = 5000;
+            int availCheckCount = 0;
+            int availPositiveCount = 0;
+            long logThrottleTime = 0;
+            long lastReadTime = System.currentTimeMillis();
             
             while (true) {
+                int avail = inputStream.available();
+                availCheckCount++;
+                if (avail > 0) availPositiveCount++;
+                long now = System.currentTimeMillis();
+                if (now - logThrottleTime > 500) {
+                    FileLogger.i(TAG, "[SSH_READ_LOOP] iter=" + (availCheckCount) + " avail=" + avail + " checks=" + availCheckCount + " positive=" + availPositiveCount + " outSize=" + outStream.size() + " lastReadAge=" + (now - lastReadTime) + "ms closed=" + channel.isClosed());
+                    logThrottleTime = now;
+                }
                 while (inputStream.available() > 0) {
                     int i = inputStream.read(tmp, 0, 1024);
                     if (i < 0) break;
                     outStream.write(tmp, 0, i);
+
                     idleStartTime = System.currentTimeMillis();
+                    lastReadTime = System.currentTimeMillis();
                 }
                 
                 if (channel.isClosed()) {
