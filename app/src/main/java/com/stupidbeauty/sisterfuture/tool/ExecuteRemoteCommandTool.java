@@ -199,13 +199,29 @@ public class ExecuteRemoteCommandTool implements Tool {
             long idleStartTime = System.currentTimeMillis();
             final int MAX_IDLE_MS = 5000;
             
+            int loopCount = 0;
+            int availCheckCount = 0;
+            int availPositiveCount = 0;
+            long logThrottleTime = 0;
             while (true) {
-                while (inputStream.available() > 0) {
+                int avail = inputStream.available();
+                availCheckCount++;
+                if (avail > 0) availPositiveCount++;
+                long now = System.currentTimeMillis();
+                if (now - logThrottleTime > 500) {
+                    FileLogger.i(TAG, "[SSH_READ_LOOP] iter=" + loopCount + " avail=" + avail + " checks=" + availCheckCount + " positive=" + availPositiveCount + " outSize=" + outStream.size() + " closed=" + channel.isClosed());
+                    logThrottleTime = now;
+                }
+                loopCount++;
+                while (avail > 0) {
                     int i = inputStream.read(tmp, 0, 1024);
                     if (i < 0) break;
                     outStream.write(tmp, 0, i);
                     idleStartTime = System.currentTimeMillis();
+                    avail = inputStream.available();
                 }
+                }
+                
                 
                 if (channel.isClosed()) {
                     // 🔥 修复 (#858119422553): channel 关闭后继续 drain socket buffer，直到没有更多数据或达到上限
