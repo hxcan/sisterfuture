@@ -175,27 +175,27 @@ public class GuideManager {
 
             // 1. 创建百炼标准接入点 (qwen3.7-plus MOE 稀疏模型)
             JSONObject args1 = new JSONObject();
-            args1.put("api_key", apiKey);
+            args1.put("apiKey", apiKey);
             args1.put("name", "Qwen-百炼标准-3.7-plus" + nameSuffix);
-            args1.put("base_url", DASHSCOPE_BASE_URL);
+            args1.put("baseUrl", DASHSCOPE_BASE_URL);
             args1.put("endpoint", DASHSCOPE_ENDPOINT);
-            args1.put("model_name", DASHSCOPE_MODEL);
+            args1.put("modelName", DASHSCOPE_MODEL);
 
             // 2. 创建 Code Plan 接入点 (qwen3.7-plus)
             JSONObject args2 = new JSONObject();
-            args2.put("api_key", apiKey);
+            args2.put("apiKey", apiKey);
             args2.put("name", "Qwen-CodePlan-3.7-plus" + nameSuffix);
-            args2.put("base_url", CODEPLAN_BASE_URL);
+            args2.put("baseUrl", CODEPLAN_BASE_URL);
             args2.put("endpoint", CODEPLAN_ENDPOINT);
-            args2.put("model_name", CODEPLAN_MODEL);
+            args2.put("modelName", CODEPLAN_MODEL);
 
             // 🔥 3. 创建 MiniMax 接入点 (MiniMax-M3)
             JSONObject args3 = new JSONObject();
-            args3.put("api_key", apiKey);
+            args3.put("apiKey", apiKey);
             args3.put("name", "MiniMax-M3" + nameSuffix);
-            args3.put("base_url", MINIMAX_BASE_URL);
+            args3.put("baseUrl", MINIMAX_BASE_URL);
             args3.put("endpoint", MINIMAX_ENDPOINT);
-            args3.put("model_name", MINIMAX_MODEL);
+            args3.put("modelName", MINIMAX_MODEL);
 
             int existingCount = modelAccessPointManager.getAllAccessPoints().size();
             boolean isBackupMode = !nameSuffix.isEmpty();
