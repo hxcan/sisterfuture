@@ -128,6 +128,7 @@ public class ExecuteRemoteCommandTool implements Tool {
         long startTime = System.currentTimeMillis();
         
         try {
+            FileLogger.i(TAG, "[SSH_STAGE_1] enter executeSshCommand, host=" + hostname + " port=" + port + " user=" + username + " cmd=" + command);
             debugInfo += String.format("[1] Init JSch at %dms\n", startTime);
             long t1 = System.currentTimeMillis();
             JSch jsch = new JSch();
@@ -140,6 +141,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                 loadPrivateKey(jsch);
                 connectionStatus = "key_auth_attempted";
             } else if (password != null && !password.isEmpty()) {
+                FileLogger.i(TAG, "[SSH_STAGE_2] using password auth");
                 debugInfo += String.format("[3] Creating session for %s@%s:%d...\n", username, hostname, port);
                 session = jsch.getSession(username, hostname, port);
                 session.setPassword(password);
@@ -160,6 +162,8 @@ public class ExecuteRemoteCommandTool implements Tool {
                 debugInfo += "[6] Setting SocketTimeout=30000ms...\n";
                 session.setConfig("SocketTimeout", String.valueOf(socketTimeoutValue));
                 
+                FileLogger.i(TAG, "[SSH_STAGE_3] session config set, strictHost=" + strictHostCheckValue + " connectTimeout=" + connectTimeoutValue + " socketTimeout=" + socketTimeoutValue);
+                
                 // 记录配置摘要
                 logSessionSetup(session, hostname, port, username, strictHostCheckValue, connectTimeoutValue);
                 
@@ -170,17 +174,20 @@ public class ExecuteRemoteCommandTool implements Tool {
                 connectionStatus = "no_credentials";
             }
             
+            FileLogger.i(TAG, "[SSH_STAGE_4] before session.connect(3000)");
             debugInfo += "\n[8] Connecting to host...\n";
             long connectStart = System.currentTimeMillis();
             session.connect(3000);
             long connectEnd = System.currentTimeMillis();
             connectionStatus = "connected_successfully";
+            FileLogger.i(TAG, "[SSH_STAGE_5] session.connect OK in " + (connectEnd - connectStart) + "ms");
             debugInfo += String.format("    → Connection established after %dms (%s total)\n", 
                                      connectEnd - connectStart, 
                                      (connectEnd - startTime) + "ms");
 
             debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
             channel = (ChannelExec) session.openChannel("exec");
+            FileLogger.i(TAG, "[SSH_STAGE_6] exec channel opened");
             
             errStream = new ByteArrayOutputStream();
             ((ChannelExec) channel).setErrStream(errStream);
@@ -189,49 +196,73 @@ public class ExecuteRemoteCommandTool implements Tool {
             debugInfo += "[11] Environment variables omitted (per official example compatibility)\n";
             
             channel.setCommand(command);
+            FileLogger.i(TAG, "[SSH_STAGE_7] command set: " + command);
             outStream = new ByteArrayOutputStream();
             debugInfo += String.format("[12] Starting command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
+            FileLogger.i(TAG, "[SSH_STAGE_8] before channel.connect, timeout=" + DEFAULT_TIMEOUT_MS + "ms");
             channel.connect(DEFAULT_TIMEOUT_MS);
+            FileLogger.i(TAG, "[SSH_STAGE_9] channel.connect returned, isClosed=" + channel.isClosed());
             
             debugInfo += "[13] Reading stdout stream until channel closed...\n";
             InputStream inputStream = channel.getInputStream();
+            FileLogger.i(TAG, "[SSH_STAGE_10] got inputStream: " + (inputStream != null));
             byte[] tmp = new byte[1024];
             long idleStartTime = System.currentTimeMillis();
             final int MAX_IDLE_MS = 5000;
+            int outerLoopCount = 0;
+            FileLogger.i(TAG, "[SSH_STAGE_11] entering main read loop");
             
             while (true) {
+                outerLoopCount++;
+                if (outerLoopCount % 10 == 1) {
+                    FileLogger.i(TAG, "[SSH_LOOP] outerIter=" + outerLoopCount + " available=" + inputStream.available() + " closed=" + channel.isClosed() + " outSize=" + outStream.size());
+                }
                 while (inputStream.available() > 0) {
                     int i = inputStream.read(tmp, 0, 1024);
                     if (i < 0) break;
                     outStream.write(tmp, 0, i);
                     idleStartTime = System.currentTimeMillis();
+                    FileLogger.i(TAG, "[SSH_DATA_READ] bytes=" + i + " totalOut=" + outStream.size());
                 }
                 
                 if (channel.isClosed()) {
+                    FileLogger.i(TAG, "[SSH_CHANNEL_CLOSED_DETECTED] entering drain phase, outSize before drain=" + outStream.size() + " available=" + inputStream.available());
                     // 🔥 修复 (#858119422553): channel 关闭后继续 drain socket buffer，直到没有更多数据或达到上限
                     int drainCount = 0;
                     final int MAX_DRAIN_ITERATIONS = 50;
                     while (inputStream.available() > 0 && drainCount < MAX_DRAIN_ITERATIONS) {
                         int j = inputStream.read(tmp, 0, 1024);
-                        if (j < 0) break;
+                        if (j < 0) {
+                            FileLogger.i(TAG, "[SSH_DRAIN_EOF] iter=" + drainCount);
+                            break;
+                        }
                         outStream.write(tmp, 0, j);
                         drainCount++;
-                        FileLogger.i(TAG, "[SSH_DRAIN] channel closed, drained extra " + j + " bytes (iter " + drainCount + ")");
+                        FileLogger.i(TAG, "[SSH_DRAIN] channel closed, drained extra " + j + " bytes (iter " + drainCount + ") available=" + inputStream.available() + " totalOut=" + outStream.size());
                     }
-                    FileLogger.i(TAG, "[SSH_DRAIN_FINISH] channel closed, total drained iterations=" + drainCount);
+                    FileLogger.i(TAG, "[SSH_DRAIN_FINISH] channel closed, total drained iterations=" + drainCount + " finalOutSize=" + outStream.size());
                     debugInfo += "[14] Channel closed. Drained " + drainCount + " extra iterations. Exit status: " +
                                  Integer.toString(channel.getExitStatus()) + "\n";
                     break;
                 }
                 
                 if ((System.currentTimeMillis() - idleStartTime) > MAX_IDLE_MS) {
+                    FileLogger.i(TAG, "[SSH_IDLE_TIMEOUT] idleMs=" + (System.currentTimeMillis() - idleStartTime) + " outSize=" + outStream.size() + " available=" + inputStream.available() + " closed=" + channel.isClosed());
                     debugInfo += "    → Detected idle timeout after " + 
                                  Integer.toString(MAX_IDLE_MS / 1000) + "s, stopping read loop.\n";
                     break;
                 }
                 
-                Thread.sleep(100);
+                try {
+                    FileLogger.i(TAG, "[SSH_LOOP_SLEEP] outerIter=" + outerLoopCount + " sleeping 100ms");
+                    Thread.sleep(100);
+                } catch (InterruptedException ie) {
+                    FileLogger.i(TAG, "[SSH_LOOP_INTERRUPTED] " + ie.getMessage());
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
+            FileLogger.i(TAG, "[SSH_MAIN_LOOP_EXIT] outerLoopCount=" + outerLoopCount + " outSize=" + outStream.size() + " exitCode=" + channel.getExitStatus());
             
             byte[] errBytes = errStream.toByteArray();
             if (errBytes.length > 0) {
@@ -242,6 +273,10 @@ public class ExecuteRemoteCommandTool implements Tool {
             byte[] responseBytes = outStream.toByteArray();
             String stdout = new String(responseBytes, "UTF-8");
             int exitCode = channel.getExitStatus();
+            FileLogger.i(TAG, "[SSH_RESULT] status=success outSize=" + stdout.length() + " errSize=" + errStream.size() + " exitCode=" + exitCode + " connectionStatus=" + connectionStatus);
+            if (stdout.length() > 0 && stdout.length() < 500) {
+                FileLogger.i(TAG, "[SSH_RESULT_CONTENT] " + stdout.replace("\n", "\\n"));
+            }
             
             debugInfo += String.format("[16] Output length: %d bytes\n", stdout.length());
             if (!stdout.isEmpty()) {
@@ -251,8 +286,10 @@ public class ExecuteRemoteCommandTool implements Tool {
             return new CommandResult("success", stdout, errStream.toString(), exitCode, 
                                     connectionStatus, debugInfo);
         } catch (Exception e) {
+            FileLogger.i(TAG, "[SSH_EXCEPTION] type=" + e.getClass().getSimpleName() + " msg=" + (e.getMessage() != null ? e.getMessage() : "null"));
             connectionStatus = "connection_failed";
             lastError = e;
+            FileLogger.i(TAG, "[SSH_EXCEPTION_STACK]", e);
             
             String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             if (e instanceof java.net.ConnectException)
