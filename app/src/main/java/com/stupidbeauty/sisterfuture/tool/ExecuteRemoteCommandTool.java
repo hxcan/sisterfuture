@@ -195,57 +195,58 @@ public class ExecuteRemoteCommandTool implements Tool {
             
             debugInfo += "[13] Reading stdout stream until channel closed...\n";
             InputStream inputStream = channel.getInputStream();
-            byte[] tmp = new byte[1024];
-            long idleStartTime = System.currentTimeMillis();
-            final int MAX_IDLE_MS = 5000;
-            int availCheckCount = 0;
-            int availPositiveCount = 0;
-            long logThrottleTime = 0;
-            long lastReadTime = System.currentTimeMillis();
-            
+            byte[] tmp = new byte[4096];
+            // 🔥 修复 (#858119422553 v3): 用 read() 阻塞 + 短超时轮询，绕过 available() 一直返回 0 的 bug
+            long readStartTime = System.currentTimeMillis();
+            long lastDataTime = System.currentTimeMillis();
+            final long READ_TIMEOUT_MS = 3000;
+            int readAttempts = 0;
+            int drainCount = 0;
+            final int MAX_DRAIN_ATTEMPTS = 20;
             while (true) {
-                int avail = inputStream.available();
-                availCheckCount++;
-                if (avail > 0) availPositiveCount++;
-                long now = System.currentTimeMillis();
-                if (now - logThrottleTime > 500) {
-                    FileLogger.i(TAG, "[SSH_READ_LOOP] iter=" + (availCheckCount) + " avail=" + avail + " checks=" + availCheckCount + " positive=" + availPositiveCount + " outSize=" + outStream.size() + " lastReadAge=" + (now - lastReadTime) + "ms closed=" + channel.isClosed());
-                    logThrottleTime = now;
-                }
-                while (inputStream.available() > 0) {
-                    int i = inputStream.read(tmp, 0, 1024);
-                    if (i < 0) break;
-                    outStream.write(tmp, 0, i);
-
-                    idleStartTime = System.currentTimeMillis();
-                    lastReadTime = System.currentTimeMillis();
-                }
-                
-                if (channel.isClosed()) {
-                    // 🔥 修复 (#858119422553): channel 关闭后继续 drain socket buffer，直到没有更多数据或达到上限
-                    int drainCount = 0;
-                    final int MAX_DRAIN_ITERATIONS = 50;
-                    while (inputStream.available() > 0 && drainCount < MAX_DRAIN_ITERATIONS) {
-                        int j = inputStream.read(tmp, 0, 1024);
-                        if (j < 0) break;
-                        outStream.write(tmp, 0, j);
-                        drainCount++;
-                        FileLogger.i(TAG, "[SSH_DRAIN] channel closed, drained extra " + j + " bytes (iter " + drainCount + ")");
+                try {
+                    int n = inputStream.read(tmp, 0, tmp.length);
+                    readAttempts++;
+                    if (n > 0) {
+                        outStream.write(tmp, 0, n);
+                        lastDataTime = System.currentTimeMillis();
+                        drainCount = 0;
+                        FileLogger.i(TAG, "[SSH_READ] attempt=" + readAttempts + " read=" + n + " outSize=" + outStream.size() + " closed=" + channel.isClosed());
+                    } else if (n == -1) {
+                        FileLogger.i(TAG, "[SSH_READ_EOF] attempt=" + readAttempts + " outSize=" + outStream.size());
+                        break;
+                    } else {
+                        if (channel.isClosed()) {
+                            FileLogger.i(TAG, "[SSH_READ_CLOSED] attempt=" + readAttempts + " outSize=" + outStream.size());
+                            break;
+                        }
+                        if (System.currentTimeMillis() - lastDataTime > READ_TIMEOUT_MS) {
+                            FileLogger.i(TAG, "[SSH_READ_IDLE_TIMEOUT] attempt=" + readAttempts + " outSize=" + outStream.size());
+                            break;
+                        }
                     }
-                    FileLogger.i(TAG, "[SSH_DRAIN_FINISH] channel closed, total drained iterations=" + drainCount);
-                    debugInfo += "[14] Channel closed. Drained " + drainCount + " extra iterations. Exit status: " +
-                                 Integer.toString(channel.getExitStatus()) + "\n";
+                } catch (java.io.IOException ioe) {
+                    FileLogger.i(TAG, "[SSH_READ_EXCEPTION] " + ioe.getMessage());
                     break;
                 }
-                
-                if ((System.currentTimeMillis() - idleStartTime) > MAX_IDLE_MS) {
-                    debugInfo += "    → Detected idle timeout after " + 
-                                 Integer.toString(MAX_IDLE_MS / 1000) + "s, stopping read loop.\n";
-                    break;
-                }
-                
-                Thread.sleep(100);
             }
+            // drain 阶段：channel 关闭后再尝试多读几次，防止数据残留在 socket buffer
+            // 这一步和 read 阶段重复，但因为 channel 已关，可能能拿到剩余数据
+            while (drainCount < MAX_DRAIN_ATTEMPTS) {
+                try {
+                    int n = inputStream.read(tmp, 0, tmp.length);
+                    if (n > 0) {
+                        outStream.write(tmp, 0, n);
+                        FileLogger.i(TAG, "[SSH_DRAIN] attempt=" + drainCount + " read=" + n + " outSize=" + outStream.size());
+                    } else if (n == -1) {
+                        break;
+                    }
+                } catch (java.io.IOException ioe) {
+                    break;
+                }
+                drainCount++;
+            }
+            debugInfo += "[14] Read " + readAttempts + " attempts, drained " + drainCount + " more. Exit status: " + Integer.toString(channel.getExitStatus()) + "\n";
             
             byte[] errBytes = errStream.toByteArray();
             if (errBytes.length > 0) {
