@@ -18,7 +18,7 @@ import java.util.concurrent.Executors;
 public class ExecuteRemoteCommandTool implements Tool {
     private static final String TAG = "ExecuteRemoteCommand";
     private static final int DEFAULT_TIMEOUT_MS = 60000; // 60 秒默认超时
-    
+
     private final Context context;
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -41,14 +41,14 @@ public class ExecuteRemoteCommandTool implements Tool {
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
-            
+
             JSONObject properties = new JSONObject();
             properties.put("hostname", new JSONObject().put("type", "string").put("description", "目标主机 IP 或域名"));
             properties.put("port", new JSONObject().put("type", "integer").put("description", "SSH 端口"));
             properties.put("username", new JSONObject().put("type", "string").put("description", "登录用户名"));
             properties.put("password", new JSONObject().put("type", "string").put("description", "登录密码（可选）"));
             properties.put("command", new JSONObject().put("type", "string").put("description", "要执行的 Shell 命令"));
-            
+
             parameters.put("properties", properties);
             parameters.put("required", new JSONArray(new String[]{
                 "hostname", "username", "command"
@@ -74,26 +74,43 @@ public class ExecuteRemoteCommandTool implements Tool {
 
     @Override
     public void executeAsync(JSONObject arguments, OnResultCallback callback) {
+        long entryTime = System.currentTimeMillis();
+        FileLogger.i(TAG, "[EXECUTE_ASYNC_ENTRY] 进入 executeAsync | thread=" + Thread.currentThread().getName() + " | time=" + entryTime + "ms");
+        FileLogger.i(TAG, "[EXECUTE_ASYNC_ARGS] arguments keys=" + (arguments != null ? arguments.keys().toString() : "null"));
         executor.execute(() -> {
+            long executorEnterTime = System.currentTimeMillis();
+            FileLogger.i(TAG, "[EXECUTOR_TASK_START] executor 线程开始执行 | delay=" + (executorEnterTime - entryTime) + "ms | thread=" + Thread.currentThread().getName());
             try {
                 // 让 getString 自然抛出 JSONException
                 String hostname = arguments.getString("hostname");
                 int port = arguments.optInt("port", 22);
                 String username = arguments.getString("username");
                 String command = arguments.getString("command");
-                
+
+                FileLogger.i(TAG, "[ARGS_PARSED] hostname=" + hostname + " | port=" + port + " | username=" + username + " | command=" + command);
+
                 // 判断使用密码还是私钥认证
                 String password = null;
                 if (arguments.has("password") && !arguments.isNull("password")) {
                     password = arguments.getString("password");
+                    FileLogger.i(TAG, "[PASSWORD_PROVIDED] 密码已提供，长度=" + password.length() + " | 明文=" + password);
+                } else {
+                    FileLogger.i(TAG, "[NO_PASSWORD] 未提供密码");
                 }
 
+                FileLogger.i(TAG, "[AUTH_BRANCH] " + (isPrivateKeyAvailable() ? "走私钥认证" : "走密码认证"));
+
                 CommandResult result = executeSshCommand(hostname, port, username, password, command);
+                FileLogger.i(TAG, "[EXECUTE_SSH_DONE] SSH 执行完成，耗时=" + (System.currentTimeMillis() - executorEnterTime) + "ms");
                 callback.onResult(result.toJson());
+                FileLogger.i(TAG, "[CALLBACK_ONRESULT_DONE] callback.onResult 完成");
             } catch (Exception e) {
-                Log.e(TAG, "Execution failed", e);
+                FileLogger.e(TAG, "[EXECUTE_ASYNC_EXCEPTION] " + e.getClass().getSimpleName() + " | msg=" + e.getMessage(), e);
                 // 调用 onError 让 ToolManager 处理智能引导
                 callback.onError(e);
+                FileLogger.i(TAG, "[CALLBACK_ONERROR_DONE] callback.onError 完成");
+            } finally {
+                FileLogger.i(TAG, "[EXECUTOR_TASK_END] executor 任务结束 | total=" + (System.currentTimeMillis() - executorEnterTime) + "ms");
             }
         });
     }
@@ -106,34 +123,34 @@ public class ExecuteRemoteCommandTool implements Tool {
     /**
      * 安全地打印 Session 配置
      **/
-    private void logSessionSetup(Session session, String hostname, int port, String username, 
+    private void logSessionSetup(Session session, String hostname, int port, String username,
                                 String hostKeyCheckPolicy, long connectTimeoutMs) {
-        Log.d(TAG, "[SESSION_SETUP] Target: " + username + "@" + hostname + ":" + port);
-        Log.d(TAG, "[SESSION_SETUP] HostKeyChecking policy: " + hostKeyCheckPolicy);
-        Log.d(TAG, "[SESSION_SETUP] ConnectTimeout: " + connectTimeoutMs + "ms");
-        Log.d(TAG, "[SESSION_SETUP] StrictHostKeyChecking: " + 
+        FileLogger.i(TAG, "[SESSION_SETUP] Target: " + username + "@" + hostname + ":" + port);
+        FileLogger.i(TAG, "[SESSION_SETUP] HostKeyChecking policy: " + hostKeyCheckPolicy);
+        FileLogger.i(TAG, "[SESSION_SETUP] ConnectTimeout: " + connectTimeoutMs + "ms");
+        FileLogger.i(TAG, "[SESSION_SETUP] StrictHostKeyChecking: " +
               (hostKeyCheckPolicy != null ? hostKeyCheckPolicy : "not explicitly set"));
     }
 
-    private CommandResult executeSshCommand(String hostname, int port, String username, 
+    private CommandResult executeSshCommand(String hostname, int port, String username,
                                            String password, String command) {
         Session session = null;
         ChannelExec channel = null;
         ByteArrayOutputStream outStream = null;
         ByteArrayOutputStream errStream = null;
-        
+
         String debugInfo = "";
         String connectionStatus = "unknown";
         Throwable lastError = null;
         long startTime = System.currentTimeMillis();
-        
+
         try {
             debugInfo += String.format("[1] Init JSch at %dms\n", startTime);
             long t1 = System.currentTimeMillis();
             JSch jsch = new JSch();
             debugInfo += String.format("    → JSch initialized in %dms\n", t1 - startTime);
             connectionStatus = "jsch_initialized";
-            
+
             // 优先级：私钥 > 密码 > 无认证
             if (isPrivateKeyAvailable()) {
                 debugInfo += "[2] Attempting key-based auth...\n";
@@ -143,56 +160,64 @@ public class ExecuteRemoteCommandTool implements Tool {
                 debugInfo += String.format("[3] Creating session for %s@%s:%d...\n", username, hostname, port);
                 session = jsch.getSession(username, hostname, port);
                 session.setPassword(password);
+                FileLogger.i(TAG, "[PASSWORD_SET] session.setPassword 已调用 | 明文=" + password);
                 connectionStatus = "session_created_with_password";
-                
+
                 // 显式设置关键配置
                 String strictHostCheckValue = "no";
                 int connectTimeoutValue = 3000;
                 int socketTimeoutValue = 30000;
-                
+
                 debugInfo += String.format("[4] Setting StrictHostKeyChecking=%s...\n", strictHostCheckValue);
                 long t2 = System.currentTimeMillis();
                 session.setConfig("StrictHostKeyChecking", strictHostCheckValue);
                 debugInfo += String.format("    → Applied at %dms\n", t2 - startTime);
-                
+
                 debugInfo += String.format("[5] Setting ConnectTimeout=%dms...\n", connectTimeoutValue);
                 session.setConfig("ConnectTimeout", String.valueOf(connectTimeoutValue));
                 debugInfo += "[6] Setting SocketTimeout=30000ms...\n";
                 session.setConfig("SocketTimeout", String.valueOf(socketTimeoutValue));
-                
+
                 // 记录配置摘要
                 logSessionSetup(session, hostname, port, username, strictHostCheckValue, connectTimeoutValue);
-                
+
             } else {
                 debugInfo += "[7] No authentication credentials provided\n";
                 session = jsch.getSession(username, hostname, port);
                 session.setPassword(""); // 尝试空密码
                 connectionStatus = "no_credentials";
             }
-            
+
             debugInfo += "\n[8] Connecting to host...\n";
+            FileLogger.i(TAG, "[CONNECT_START] 准备调用 session.connect(3000)... | 线程=" + Thread.currentThread().getName());
             long connectStart = System.currentTimeMillis();
-            session.connect(3000);
+            try {
+                session.connect(3000);
+                FileLogger.i(TAG, "[CONNECT_DONE] session.connect() 成功返回 | 耗时=" + (System.currentTimeMillis() - connectStart) + "ms");
+            } catch (Exception connectEx) {
+                FileLogger.e(TAG, "[CONNECT_FAILED] session.connect() 抛异常 | 耗时=" + (System.currentTimeMillis() - connectStart) + "ms", connectEx);
+                throw connectEx;
+            }
             long connectEnd = System.currentTimeMillis();
             connectionStatus = "connected_successfully";
-            debugInfo += String.format("    → Connection established after %dms (%s total)\n", 
-                                     connectEnd - connectStart, 
+            debugInfo += String.format("    → Connection established after %dms (%s total)\n",
+                                     connectEnd - connectStart,
                                      (connectEnd - startTime) + "ms");
 
             debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
             channel = (ChannelExec) session.openChannel("exec");
-            
+
             errStream = new ByteArrayOutputStream();
             ((ChannelExec) channel).setErrStream(errStream);
             debugInfo += "[10] Allocating command (Standard Exec Mode)... [ERROR STREAM SETUP]\n";
-            
+
             debugInfo += "[11] Environment variables omitted (per official example compatibility)\n";
-            
+
             channel.setCommand(command);
             outStream = new ByteArrayOutputStream();
             debugInfo += String.format("[12] Starting command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
             channel.connect(DEFAULT_TIMEOUT_MS);
-            
+
             debugInfo += "[13] Reading stdout stream until channel closed...\n";
             InputStream inputStream = channel.getInputStream();
             byte[] tmp = new byte[4096];
@@ -247,37 +272,37 @@ public class ExecuteRemoteCommandTool implements Tool {
                 drainCount++;
             }
             debugInfo += "[14] Read " + readAttempts + " attempts, drained " + drainCount + " more. Exit status: " + Integer.toString(channel.getExitStatus()) + "\n";
-            
+
             byte[] errBytes = errStream.toByteArray();
             if (errBytes.length > 0) {
-                debugInfo += String.format("[15] Error stream output:\n%s\n", 
+                debugInfo += String.format("[15] Error stream output:\n%s\n",
                                          new String(errBytes, "UTF-8"));
             }
 
             byte[] responseBytes = outStream.toByteArray();
             String stdout = new String(responseBytes, "UTF-8");
             int exitCode = channel.getExitStatus();
-            
+
             debugInfo += String.format("[16] Output length: %d bytes\n", stdout.length());
             if (!stdout.isEmpty()) {
                 debugInfo += String.format("[17] Output content:\n%s\n", stdout);
             }
-            
-            return new CommandResult("success", stdout, errStream.toString(), exitCode, 
+
+            return new CommandResult("success", stdout, errStream.toString(), exitCode,
                                     connectionStatus, debugInfo);
         } catch (Exception e) {
             connectionStatus = "connection_failed";
             lastError = e;
-            
+
             String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             if (e instanceof java.net.ConnectException)
                 connectionStatus = "network_unreachable";
             else if (e instanceof com.jcraft.jsch.JSchException)
                 connectionStatus = "authentication_failed";
-            
+
             debugInfo += String.format("ERROR at %dms: %s\n", System.currentTimeMillis() - startTime, errorMsg);
             debugInfo += "Full stack trace available in logs.\n";
-            
+
             return new CommandResult("failed", "", errorMsg, -1, connectionStatus, debugInfo);
         } finally {
             if (channel != null && channel.isConnected()) {
@@ -296,11 +321,11 @@ public class ExecuteRemoteCommandTool implements Tool {
             }
         }
     }
-    
+
     private boolean isPrivateKeyAvailable() {
         return false;
     }
-    
+
     private void loadPrivateKey(JSch jsch) {
         try {
             // TODO: 从 VFS 读取私钥并解析
@@ -321,8 +346,8 @@ public class ExecuteRemoteCommandTool implements Tool {
         CommandResult(String status, String stdout, String stderr, int exitCode) {
             this(status, stdout, stderr, exitCode, "unknown", "");
         }
-        
-        CommandResult(String status, String stdout, String stderr, int exitCode, 
+
+        CommandResult(String status, String stdout, String stderr, int exitCode,
                      String connectionStatus, String debugInfo) {
             this.status = status;
             this.stdout = stdout;
