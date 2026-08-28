@@ -213,7 +213,7 @@ public class TongYiClient
       this.client = new OkHttpClient.Builder()
         .connectTimeout(500, TimeUnit.MILLISECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(160, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .build();
       this.accessPointManager = accessPointManager;
       this.toolManager = toolManager;
