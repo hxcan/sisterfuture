@@ -205,7 +205,16 @@ public class ExecuteRemoteCommandTool implements Tool {
                                      (connectEnd - startTime) + "ms");
 
             debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
-            channel = (ChannelExec) session.openChannel("exec");
+            // 🔥 新增：openChannel 前后的日志（用于定位 2026-08-28 卡在 connect_done 之后的问题）
+            FileLogger.i(TAG, "[PRE_OPEN_CHANNEL] 准备调用 session.openChannel(\"exec\")... | session.isConnected=" + session.isConnected());
+            long openChannelStart = System.currentTimeMillis();
+            try {
+                channel = (ChannelExec) session.openChannel("exec");
+                FileLogger.i(TAG, "[OPEN_CHANNEL_DONE] openChannel(\"exec\") 成功返回 | 耗时=" + (System.currentTimeMillis() - openChannelStart) + "ms");
+            } catch (Exception channelEx) {
+                FileLogger.e(TAG, "[OPEN_CHANNEL_FAILED] openChannel 抛异常 | 耗时=" + (System.currentTimeMillis() - openChannelStart) + "ms", channelEx);
+                throw channelEx;
+            }
 
             errStream = new ByteArrayOutputStream();
             ((ChannelExec) channel).setErrStream(errStream);
