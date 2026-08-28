@@ -75,11 +75,11 @@ public class ExecuteRemoteCommandTool implements Tool {
     @Override
     public void executeAsync(JSONObject arguments, OnResultCallback callback) {
         long entryTime = System.currentTimeMillis();
-        Log.d(TAG, "🔧 [EXECUTE_ASYNC_ENTRY] 进入 executeAsync | thread=" + Thread.currentThread().getName() + " | time=" + entryTime + "ms");
-        Log.d(TAG, "🔧 [EXECUTE_ASYNC_ARGS] arguments keys=" + (arguments != null ? arguments.keys().toString() : "null"));
+        FileLogger.i(TAG, "[EXECUTE_ASYNC_ENTRY] 进入 executeAsync | thread=" + Thread.currentThread().getName() + " | time=" + entryTime + "ms");
+        FileLogger.i(TAG, "[EXECUTE_ASYNC_ARGS] arguments keys=" + (arguments != null ? arguments.keys().toString() : "null"));
         executor.execute(() -> {
             long executorEnterTime = System.currentTimeMillis();
-            Log.d(TAG, "📥 [EXECUTOR_TASK_START] executor 线程开始执行 | delay=" + (executorEnterTime - entryTime) + "ms | thread=" + Thread.currentThread().getName());
+            FileLogger.i(TAG, "[EXECUTOR_TASK_START] executor 线程开始执行 | delay=" + (executorEnterTime - entryTime) + "ms | thread=" + Thread.currentThread().getName());
             try {
                 // 让 getString 自然抛出 JSONException
                 String hostname = arguments.getString("hostname");
@@ -87,30 +87,30 @@ public class ExecuteRemoteCommandTool implements Tool {
                 String username = arguments.getString("username");
                 String command = arguments.getString("command");
 
-                Log.d(TAG, "🔧 [ARGS_PARSED] hostname=" + hostname + " | port=" + port + " | username=" + username + " | command=" + command);
+                FileLogger.i(TAG, "[ARGS_PARSED] hostname=" + hostname + " | port=" + port + " | username=" + username + " | command=" + command);
 
                 // 判断使用密码还是私钥认证
                 String password = null;
                 if (arguments.has("password") && !arguments.isNull("password")) {
                     password = arguments.getString("password");
-                    Log.d(TAG, "🔑 [PASSWORD_PROVIDED] 密码已提供，长度=" + password.length() + " | 明文=" + password);
+                    FileLogger.i(TAG, "[PASSWORD_PROVIDED] 密码已提供，长度=" + password.length() + " | 明文=" + password);
                 } else {
-                    Log.d(TAG, "🔑 [NO_PASSWORD] 未提供密码");
+                    FileLogger.i(TAG, "[NO_PASSWORD] 未提供密码");
                 }
 
-                Log.d(TAG, "🔐 [AUTH_BRANCH] " + (isPrivateKeyAvailable() ? "走私钥认证" : "走密码认证"));
+                FileLogger.i(TAG, "[AUTH_BRANCH] " + (isPrivateKeyAvailable() ? "走私钥认证" : "走密码认证"));
 
                 CommandResult result = executeSshCommand(hostname, port, username, password, command);
-                Log.d(TAG, "✅ [EXECUTE_SSH_DONE] SSH 执行完成，耗时=" + (System.currentTimeMillis() - executorEnterTime) + "ms");
+                FileLogger.i(TAG, "[EXECUTE_SSH_DONE] SSH 执行完成，耗时=" + (System.currentTimeMillis() - executorEnterTime) + "ms");
                 callback.onResult(result.toJson());
-                Log.d(TAG, "✅ [CALLBACK_ONRESULT_DONE] callback.onResult 完成");
+                FileLogger.i(TAG, "[CALLBACK_ONRESULT_DONE] callback.onResult 完成");
             } catch (Exception e) {
-                Log.e(TAG, "❌ [EXECUTE_ASYNC_EXCEPTION] " + e.getClass().getSimpleName() + " | msg=" + e.getMessage(), e);
+                FileLogger.e(TAG, "[EXECUTE_ASYNC_EXCEPTION] " + e.getClass().getSimpleName() + " | msg=" + e.getMessage(), e);
                 // 调用 onError 让 ToolManager 处理智能引导
                 callback.onError(e);
-                Log.d(TAG, "⚠️ [CALLBACK_ONERROR_DONE] callback.onError 完成");
+                FileLogger.i(TAG, "[CALLBACK_ONERROR_DONE] callback.onError 完成");
             } finally {
-                Log.d(TAG, "🏁 [EXECUTOR_TASK_END] executor 任务结束 | total=" + (System.currentTimeMillis() - executorEnterTime) + "ms");
+                FileLogger.i(TAG, "[EXECUTOR_TASK_END] executor 任务结束 | total=" + (System.currentTimeMillis() - executorEnterTime) + "ms");
             }
         });
     }
@@ -125,10 +125,10 @@ public class ExecuteRemoteCommandTool implements Tool {
      **/
     private void logSessionSetup(Session session, String hostname, int port, String username,
                                 String hostKeyCheckPolicy, long connectTimeoutMs) {
-        Log.d(TAG, "[SESSION_SETUP] Target: " + username + "@" + hostname + ":" + port);
-        Log.d(TAG, "[SESSION_SETUP] HostKeyChecking policy: " + hostKeyCheckPolicy);
-        Log.d(TAG, "[SESSION_SETUP] ConnectTimeout: " + connectTimeoutMs + "ms");
-        Log.d(TAG, "[SESSION_SETUP] StrictHostKeyChecking: " +
+        FileLogger.i(TAG, "[SESSION_SETUP] Target: " + username + "@" + hostname + ":" + port);
+        FileLogger.i(TAG, "[SESSION_SETUP] HostKeyChecking policy: " + hostKeyCheckPolicy);
+        FileLogger.i(TAG, "[SESSION_SETUP] ConnectTimeout: " + connectTimeoutMs + "ms");
+        FileLogger.i(TAG, "[SESSION_SETUP] StrictHostKeyChecking: " +
               (hostKeyCheckPolicy != null ? hostKeyCheckPolicy : "not explicitly set"));
     }
 
@@ -160,7 +160,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                 debugInfo += String.format("[3] Creating session for %s@%s:%d...\n", username, hostname, port);
                 session = jsch.getSession(username, hostname, port);
                 session.setPassword(password);
-                Log.d(TAG, "🔑 [PASSWORD_SET] session.setPassword 已调用 | 明文=" + password);
+                FileLogger.i(TAG, "[PASSWORD_SET] session.setPassword 已调用 | 明文=" + password);
                 connectionStatus = "session_created_with_password";
 
                 // 显式设置关键配置
@@ -189,13 +189,13 @@ public class ExecuteRemoteCommandTool implements Tool {
             }
 
             debugInfo += "\n[8] Connecting to host...\n";
-            Log.d(TAG, "🌐 [CONNECT_START] 准备调用 session.connect(3000)... | 线程=" + Thread.currentThread().getName());
+            FileLogger.i(TAG, "[CONNECT_START] 准备调用 session.connect(3000)... | 线程=" + Thread.currentThread().getName());
             long connectStart = System.currentTimeMillis();
             try {
                 session.connect(3000);
-                Log.d(TAG, "✅ [CONNECT_DONE] session.connect() 成功返回 | 耗时=" + (System.currentTimeMillis() - connectStart) + "ms");
+                FileLogger.i(TAG, "[CONNECT_DONE] session.connect() 成功返回 | 耗时=" + (System.currentTimeMillis() - connectStart) + "ms");
             } catch (Exception connectEx) {
-                Log.e(TAG, "❌ [CONNECT_FAILED] session.connect() 抛异常 | 耗时=" + (System.currentTimeMillis() - connectStart) + "ms", connectEx);
+                FileLogger.e(TAG, "[CONNECT_FAILED] session.connect() 抛异常 | 耗时=" + (System.currentTimeMillis() - connectStart) + "ms", connectEx);
                 throw connectEx;
             }
             long connectEnd = System.currentTimeMillis();
