@@ -230,32 +230,32 @@ public class ExecuteRemoteCommandTool implements Tool {
             debugInfo += "[13] Reading stdout stream until channel closed...\n";
             InputStream inputStream = channel.getInputStream();
             byte[] tmp = new byte[4096];
-            // 🔥 修复 (#858119422553 v3): 用 read() 阻塞 + 短超时轮询，绕过 available() 一直返回 0 的 bug
+            // 🔥 修复 (fix/execute-remote-read-timeout): 增加绝对超时 + 心跳检查，修复无 stdout 数据时 read() 阻塞导致工具卡死
             long readStartTime = System.currentTimeMillis();
-            long lastDataTime = System.currentTimeMillis();
-            final long READ_TIMEOUT_MS = 3000;
+            long readDeadline = readStartTime + DEFAULT_TIMEOUT_MS; // 硬性绝对超时
+            FileLogger.i(TAG, "[READ_LOOP_START] deadline=" + readDeadline + "ms (timeout=" + DEFAULT_TIMEOUT_MS + "ms)");
             int readAttempts = 0;
             int drainCount = 0;
             final int MAX_DRAIN_ATTEMPTS = 20;
             while (true) {
+                // 🔥 新增：绝对超时检查（核心修复点）
+                if (System.currentTimeMillis() > readDeadline) {
+                    FileLogger.i(TAG, "[READ_ABSOLUTE_TIMEOUT] 已超过绝对超时 " + DEFAULT_TIMEOUT_MS + "ms，强制退出 read 循环");
+                    break;
+                }
                 try {
                     int n = inputStream.read(tmp, 0, tmp.length);
                     readAttempts++;
                     if (n > 0) {
                         outStream.write(tmp, 0, n);
-                        lastDataTime = System.currentTimeMillis();
-                        drainCount = 0;
                         FileLogger.i(TAG, "[SSH_READ] attempt=" + readAttempts + " read=" + n + " outSize=" + outStream.size() + " closed=" + channel.isClosed());
                     } else if (n == -1) {
                         FileLogger.i(TAG, "[SSH_READ_EOF] attempt=" + readAttempts + " outSize=" + outStream.size());
                         break;
                     } else {
+                        // n == 0 理论上 read() 阻塞调用不会返回 0，但保留以防万一
                         if (channel.isClosed()) {
                             FileLogger.i(TAG, "[SSH_READ_CLOSED] attempt=" + readAttempts + " outSize=" + outStream.size());
-                            break;
-                        }
-                        if (System.currentTimeMillis() - lastDataTime > READ_TIMEOUT_MS) {
-                            FileLogger.i(TAG, "[SSH_READ_IDLE_TIMEOUT] attempt=" + readAttempts + " outSize=" + outStream.size());
                             break;
                         }
                     }
