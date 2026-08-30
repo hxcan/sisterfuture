@@ -2,7 +2,7 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
-import com.jcraft.jsch.ChannelExec;
+import com.jcraft.jsch.ChannelShell;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.KeyPair;
 import com.jcraft.jsch.Session;
@@ -12,14 +12,16 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ExecuteRemoteCommandTool implements Tool {
     private static final String TAG = "ExecuteRemoteCommand";
-    private static final int DEFAULT_TIMEOUT_MS = 60000; // 60 秒默认超时
-    private static final int READ_POLL_INTERVAL_MS = 100; // 读循环轮询间隔
+    private static final int DEFAULT_TIMEOUT_MS = 60000;
+    private static final int READ_POLL_INTERVAL_MS = 100;
 
     private final Context context;
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -76,7 +78,7 @@ public class ExecuteRemoteCommandTool implements Tool {
     @Override
     public void executeAsync(JSONObject arguments, OnResultCallback callback) {
         long entryTime = System.currentTimeMillis();
-        FileLogger.i(TAG, "[EXECUTE_ASYNC_ENTRY] 进入 executeAsync | thread=" + Thread.currentThread().getName() + " | time=" + entryTime + "ms");
+        FileLogger.i(TAG, "[EXECUTE_ASYNC_ENTRY] 进入 executeAsync | thread=" + Thread.currentThread().getName()+" | time="+entryTime+"ms");
         FileLogger.i(TAG, "[EXECUTE_ASYNC_ARGS] arguments keys=" + (arguments != null ? arguments.keys().toString() : "null"));
         executor.execute(() -> {
             long executorEnterTime = System.currentTimeMillis();
@@ -106,7 +108,7 @@ public class ExecuteRemoteCommandTool implements Tool {
             } catch (Exception e) {
                 FileLogger.e(TAG, "[EXECUTE_ASYNC_EXCEPTION] " + e.getClass().getSimpleName() + " | msg=" + e.getMessage(), e);
                 callback.onError(e);
-                FileLogger.i(TAG, "[CALLBACK_ONERROR_DONE] callback.onError 完成");
+                FileLogger.i(TAG, "[CALLBACK_ONERROR_DONE] callback.onError完成");
             } finally {
                 FileLogger.i(TAG, "[EXECUTOR_TASK_END] executor 任务结束 | total=" + (System.currentTimeMillis() - executorEnterTime) + "ms");
             }
@@ -130,9 +132,8 @@ public class ExecuteRemoteCommandTool implements Tool {
     private CommandResult executeSshCommand(String hostname, int port, String username,
                                            String password, String command) {
         Session session = null;
-        ChannelExec channel = null;
+        ChannelShell channel = null;
         ByteArrayOutputStream outStream = null;
-        ByteArrayOutputStream errStream = null;
 
         String debugInfo = "";
         String connectionStatus = "unknown";
@@ -155,7 +156,7 @@ public class ExecuteRemoteCommandTool implements Tool {
 
                 String strictHostCheckValue = "no";
                 int connectTimeoutValue = 3000;
-                int socketTimeoutValue = 5000; // 🔥 v2: 改 5s，让 JSch 异常时也能快速失败
+                int socketTimeoutValue = 5000;
 
                 debugInfo += String.format("[4] Setting StrictHostKeyChecking=%s...\n", strictHostCheckValue);
                 session.setConfig("StrictHostKeyChecking", strictHostCheckValue);
@@ -181,32 +182,33 @@ public class ExecuteRemoteCommandTool implements Tool {
             connectionStatus = "connected_successfully";
             debugInfo += "    → Connection established successfully\n";
 
-            debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
-            FileLogger.i(TAG, "[PRE_OPEN_CHANNEL] 准备调用 session.openChannel(\"exec\")... | session.isConnected=" + session.isConnected());
-            channel = (ChannelExec) session.openChannel("exec");
-            FileLogger.i(TAG, "[OPEN_CHANNEL_DONE] openChannel(\"exec\") 成功返回");
+            debugInfo += String.format("\n[9] Opening shell channel for command: '%s'\n", command);
+            FileLogger.i(TAG, "[PRE_OPEN_CHANNEL] 准备调用 session.openChannel(\"shell\")... | session.isConnected=" + session.isConnected());
+            channel = (ChannelShell) session.openChannel("shell");
+            FileLogger.i(TAG, "[OPEN_CHANNEL_DONE] openChannel(\"shell\") 成功返回");
 
-            // 🔥 v3 修复: 给 exec channel 分配 PTY，让命令完成后 channel 主动发送 EOF
-            ((ChannelExec) channel).setPty(true);
-            FileLogger.i(TAG, "[V3_PTY_ENABLED] exec channel PTY 已分配");
-
-            errStream = new ByteArrayOutputStream();
-            ((ChannelExec) channel).setErrStream(errStream);
-            channel.setCommand(command);
             outStream = new ByteArrayOutputStream();
+            channel.setOutputStream(outStream);
             channel.connect(DEFAULT_TIMEOUT_MS);
+            FileLogger.i(TAG, "[V4_SHELL_CONNECTED] shell channel 已连接");
 
-            // 🔥 v2: 双线程非阻塞读 - 后台线程读，主线程轮询超时
-            debugInfo += "[13] Reading stdout stream (v2 dual-thread non-blocking)...\n";
+            String sentinel = "__FS_END_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "__";
+            String fullCommand = "echo " + sentinel + "_START__; " + command + "; echo " + sentinel + "_END__\n";
+            FileLogger.i(TAG, "[V4_COMMAND_WRITTEN] 完整命令: " + fullCommand.trim());
+
+            OutputStream channelOut = channel.getOutputStream();
+            channelOut.write(fullCommand.getBytes("UTF-8"));
+            channelOut.flush();
+
+            debugInfo += "[13] Reading shell stdout (v4 sentinel-based)...\n";
             InputStream inputStream = channel.getInputStream();
             final long readStartTime = System.currentTimeMillis();
             final long readDeadline = readStartTime + DEFAULT_TIMEOUT_MS;
-            FileLogger.i(TAG, "[READ_LOOP_START_V2] deadline=" + readDeadline + "ms (timeout=" + DEFAULT_TIMEOUT_MS + "ms) | poll_interval=" + READ_POLL_INTERVAL_MS + "ms");
+            FileLogger.i(TAG, "[READ_LOOP_START_V4] deadline=" + readDeadline + "ms | sentinel=" + sentinel + "_END__");
 
-            // 🔥 v2 关键修复：后台线程读取，主线程监控超时
             final ByteArrayOutputStream finalOutStream = outStream;
             final InputStream finalInputStream = inputStream;
-            final ChannelExec finalChannel = channel;
+            final ChannelShell finalChannel = channel;
             final AtomicBoolean readCompleted = new AtomicBoolean(false);
             final AtomicBoolean readErrored = new AtomicBoolean(false);
             final StringBuilder readError = new StringBuilder();
@@ -233,13 +235,15 @@ public class ExecuteRemoteCommandTool implements Tool {
                 } finally {
                     readCompleted.set(true);
                 }
-            }, "ssh-reader");
+            }, "ssh-reader-v4");
             readerThread.setDaemon(true);
             readerThread.start();
 
-            // 主线程：定期轮询，检查超时或 channel 关闭
+            String sentinelEnd = sentinel + "_END__";
+            boolean commandCompleted = false;
             boolean timedOut = false;
-            while (!readCompleted.get()) {
+
+            while (!readCompleted.get() && !commandCompleted) {
                 try {
                     Thread.sleep(READ_POLL_INTERVAL_MS);
                 } catch (InterruptedException ie) {
@@ -250,59 +254,64 @@ public class ExecuteRemoteCommandTool implements Tool {
                 long elapsed = System.currentTimeMillis() - readStartTime;
                 if (elapsed > DEFAULT_TIMEOUT_MS) {
                     timedOut = true;
-                    FileLogger.i(TAG, "[READ_ABSOLUTE_TIMEOUT_V2] 已超过绝对超时 " + DEFAULT_TIMEOUT_MS + "ms，强制退出 | attempts=" + readAttempts[0] + " outSize=" + outStream.size());
+                    FileLogger.i(TAG, "[READ_ABSOLUTE_TIMEOUT_V4] 已超过绝对超时 " + DEFAULT_TIMEOUT_MS + "ms | attempts=" + readAttempts[0] + " outSize=" + outStream.size());
                     break;
                 }
 
-                if (channel.isClosed() && outStream.size() > 0) {
-                    FileLogger.i(TAG, "[READ_CHANNEL_CLOSED_WITH_DATA] 等待剩余数据 | attempts=" + readAttempts[0] + " outSize=" + outStream.size());
-                    // 给 reader 线程一点时间读残余数据
-                    try { Thread.sleep(200); } catch (InterruptedException ie) { break; }
-                    break;
+                synchronized (finalOutStream) {
+                    String current = finalOutStream.toString("UTF-8");
+                    if (current.contains(sentinelEnd)) {
+                        commandCompleted = true;
+                        FileLogger.i(TAG, "[V4_SENTINEL_DETECTED] 命令完成 marker 已收到 | outSize=" + finalOutStream.size());
+                        break;
+                    }
                 }
             }
 
-            // 等待 reader 线程结束（最多再等 1 秒）
+            if (commandCompleted) {
+                try {
+                    channelOut.write("exit\n".getBytes("UTF-8"));
+                    channelOut.flush();
+                } catch (Exception ignored) {}
+            }
+
             try {
-                readerThread.join(1000);
+                readerThread.join(2000);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
             }
 
-            // 如果是超时，主动断开 channel
-            if (timedOut) {
-                FileLogger.i(TAG, "[READ_TIMEOUT_FORCE_DISCONNECT] 超时强制断开 channel | outSize=" + outStream.size());
-                try {
-                    if (channel.isConnected()) {
-                        channel.disconnect();
-                    }
-                } catch (Exception ignored) {}
+            if (timedOut && channel.isConnected()) {
+                FileLogger.i(TAG, "[READ_TIMEOUT_FORCE_DISCONNECT_V4] 超时断开 channel");
+                try { channel.disconnect(); } catch (Exception ignored) {}
             }
 
             if (readErrored.get()) {
                 debugInfo += "[READ_BG_ERROR] " + readError.toString() + "\n";
             }
-            debugInfo += String.format("[14] Read %d attempts. Timeout: %s. Exit status: %d\n",
-                                     readAttempts[0], timedOut ? "YES" : "NO", channel.getExitStatus());
-
-            byte[] errBytes = errStream.toByteArray();
-            if (errBytes.length > 0) {
-                debugInfo += String.format("[15] Error stream output:\n%s\n",
-                                         new String(errBytes, "UTF-8"));
-            }
+            debugInfo += String.format("[14] Read %d attempts. Timeout: %s. Completed: %s. Exit status: %d\n",
+                                     readAttempts[0], timedOut ? "YES" : "NO", commandCompleted ? "YES" : "NO", channel.getExitStatus());
 
             byte[] responseBytes = outStream.toByteArray();
-            String stdout = new String(responseBytes, "UTF-8");
-            int exitCode = channel.getExitStatus();
+            String rawOutput = new String(responseBytes, "UTF-8");
+            String stdout = stripNoise(rawOutput, sentinel);
 
-            debugInfo += String.format("[16] Output length: %d bytes\n", stdout.length());
+            debugInfo += String.format("[16] Output length: %d bytes (raw: %d)\n", stdout.length(), rawOutput.length());
             if (!stdout.isEmpty()) {
                 debugInfo += String.format("[17] Output content:\n%s\n", stdout);
             }
 
-            // 🔥 v2: 如果超时，返回 status="timeout" 而不是 success
-            String resultStatus = timedOut ? "timeout" : "success";
-            return new CommandResult(resultStatus, stdout, errStream.toString(), exitCode,
+            int exitCode = channel.getExitStatus();
+            String resultStatus;
+            if (timedOut) {
+                resultStatus = "timeout";
+            } else if (!commandCompleted) {
+                resultStatus = "incomplete";
+            } else {
+                resultStatus = "success";
+            }
+
+            return new CommandResult(resultStatus, stdout, "", exitCode,
                                     connectionStatus, debugInfo);
         } catch (Exception e) {
             connectionStatus = "connection_failed";
@@ -329,10 +338,44 @@ public class ExecuteRemoteCommandTool implements Tool {
             if (outStream != null) {
                 try { outStream.close(); } catch (Exception ignored) {}
             }
-            if (errStream != null) {
-                try { errStream.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    private String stripNoise(String raw, String sentinel) {
+        if (raw == null || raw.isEmpty()) return raw;
+
+        StringBuilder cleaned = new StringBuilder();
+        String[] lines = raw.split("\n", -1);
+        boolean inOutput = false;
+
+        for (String line : lines) {
+            String trimmed = line.replace("\r", "");
+
+            if (!inOutput && trimmed.contains(sentinel + "_START__")) {
+                int idx = trimmed.indexOf(sentinel + "_START__");
+                String after = trimmed.substring(idx + sentinel.length() + "_START__".length());
+                if (!after.isEmpty()) {
+                    cleaned.append(after).append("\n");
+                }
+                inOutput = true;
+                continue;
+            }
+
+            if (inOutput && trimmed.contains(sentinel + "_END__")) {
+                int idx = trimmed.indexOf(sentinel + "_END__");
+                String before = trimmed.substring(0, idx);
+                if (!before.isEmpty()) {
+                    cleaned.append(before).append("\n");
+                }
+                break;
+            }
+
+            if (inOutput) {
+                cleaned.append(trimmed).append("\n");
             }
         }
+
+        return cleaned.toString().trim();
     }
 
     private boolean isPrivateKeyAvailable() {
@@ -346,7 +389,6 @@ public class ExecuteRemoteCommandTool implements Tool {
             Log.e(TAG, "Failed to load private key", e);
         }
     }
-
     private static class CommandResult {
         final String status;
         final String stdout;
