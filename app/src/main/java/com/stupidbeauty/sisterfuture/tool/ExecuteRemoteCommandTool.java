@@ -186,6 +186,10 @@ public class ExecuteRemoteCommandTool implements Tool {
             channel = (ChannelExec) session.openChannel("exec");
             FileLogger.i(TAG, "[OPEN_CHANNEL_DONE] openChannel(\"exec\") 成功返回");
 
+            // 🔥 v3 修复: 给 exec channel 分配 PTY，让命令完成后 channel 主动发送 EOF
+            ((ChannelExec) channel).setPty(true);
+            FileLogger.i(TAG, "[V3_PTY_ENABLED] exec channel PTY 已分配");
+
             errStream = new ByteArrayOutputStream();
             ((ChannelExec) channel).setErrStream(errStream);
             channel.setCommand(command);
