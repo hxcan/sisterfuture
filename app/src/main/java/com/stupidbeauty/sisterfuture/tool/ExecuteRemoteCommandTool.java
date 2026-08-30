@@ -2,7 +2,6 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import android.util.Log;
-import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.ChannelShell;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.KeyPair;
@@ -21,8 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ExecuteRemoteCommandTool implements Tool {
     private static final String TAG = "ExecuteRemoteCommand";
-    private static final int DEFAULT_TIMEOUT_MS = 60000; // 60 秒默认超时
-    private static final int READ_POLL_INTERVAL_MS = 100; // 读循环轮询间隔
+    private static final int DEFAULT_TIMEOUT_MS = 60000;
+    private static final int READ_POLL_INTERVAL_MS = 100;
 
     private final Context context;
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -135,7 +134,6 @@ public class ExecuteRemoteCommandTool implements Tool {
         Session session = null;
         ChannelShell channel = null;
         ByteArrayOutputStream outStream = null;
-        ByteArrayOutputStream errStream = null;
 
         String debugInfo = "";
         String connectionStatus = "unknown";
@@ -184,19 +182,16 @@ public class ExecuteRemoteCommandTool implements Tool {
             connectionStatus = "connected_successfully";
             debugInfo += "    → Connection established successfully\n";
 
-            // v4: 改用 ChannelShell
             debugInfo += String.format("\n[9] Opening shell channel for command: '%s'\n", command);
             FileLogger.i(TAG, "[PRE_OPEN_CHANNEL] 准备调用 session.openChannel(\"shell\")... | session.isConnected=" + session.isConnected());
             channel = (ChannelShell) session.openChannel("shell");
             FileLogger.i(TAG, "[OPEN_CHANNEL_DONE] openChannel(\"shell\") 成功返回");
 
-            errStream = new ByteArrayOutputStream();
-            channel.setErrStream(errStream);
             outStream = new ByteArrayOutputStream();
+            channel.setOutputStream(outStream);
             channel.connect(DEFAULT_TIMEOUT_MS);
             FileLogger.i(TAG, "[V4_SHELL_CONNECTED] shell channel 已连接");
 
-            // 生成 sentinel
             String sentinel = "__FS_END_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "__";
             String fullCommand = "echo " + sentinel + "_START__; " + command + "; echo " + sentinel + "_END__\n";
             FileLogger.i(TAG, "[V4_COMMAND_WRITTEN] 完整命令: " + fullCommand.trim());
@@ -297,12 +292,6 @@ public class ExecuteRemoteCommandTool implements Tool {
             debugInfo += String.format("[14] Read %d attempts. Timeout: %s. Completed: %s. Exit status: %d\n",
                                      readAttempts[0], timedOut ? "YES" : "NO", commandCompleted ? "YES" : "NO", channel.getExitStatus());
 
-            byte[] errBytes = errStream.toByteArray();
-            if (errBytes.length > 0) {
-                debugInfo += String.format("[15] Error stream output:\n%s\n",
-                                         new String(errBytes, "UTF-8"));
-            }
-
             byte[] responseBytes = outStream.toByteArray();
             String rawOutput = new String(responseBytes, "UTF-8");
             String stdout = stripNoise(rawOutput, sentinel);
@@ -322,7 +311,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                 resultStatus = "success";
             }
 
-            return new CommandResult(resultStatus, stdout, errStream.toString(), exitCode,
+            return new CommandResult(resultStatus, stdout, "", exitCode,
                                     connectionStatus, debugInfo);
         } catch (Exception e) {
             connectionStatus = "connection_failed";
@@ -348,9 +337,6 @@ public class ExecuteRemoteCommandTool implements Tool {
             }
             if (outStream != null) {
                 try { outStream.close(); } catch (Exception ignored) {}
-            }
-            if (errStream != null) {
-                try { errStream.close(); } catch (Exception ignored) {}
             }
         }
     }
