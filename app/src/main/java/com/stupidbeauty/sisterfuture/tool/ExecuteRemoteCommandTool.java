@@ -189,44 +189,20 @@ public class ExecuteRemoteCommandTool implements Tool {
 
             outStream = new ByteArrayOutputStream();
             channel.setOutputStream(outStream);
-            channel.connect(DEFAULT_TIMEOUT_MS);
-            FileLogger.i(TAG, "[V4_SHELL_CONNECTED] shell channel 已连接");
+channel.connect(DEFAULT_TIMEOUT_MS);
+FileLogger.i(TAG, "[V4_SHELL_CONNECTED] shell channel 已连接");
 
-            // 🔥 v6 修复：先用 stty -echo 关闭 PTY 回显
-            String sentinel = "__FS_END_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "__";
-            String setupCommand = "stty -echo 2>/dev/null; echo " + sentinel + "_READY__\n";
-            OutputStream channelOut = channel.getOutputStream();
-            channelOut.write(setupCommand.getBytes("UTF-8"));
-            channelOut.flush();
-            FileLogger.i(TAG, "[V6_STTY_ECHO_OFF] 已发送 stty -echo 禁用 PTY 回显");
+// 🔥 v7 修复：完全抛弃 stty -echo，改为 Java 端清洗
+FileLogger.i(TAG, "[V7_NO_STTY] 不再发送 stty -echo，纯 Java 端清洗");
+String sentinel = "__FS_END_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "__";
+OutputStream channelOut = channel.getOutputStream();
 
-            // 等待 READY sentinel
-            long setupStart = System.currentTimeMillis();
-            String readyMarker = sentinel + "_READY__";
-            while (System.currentTimeMillis() - setupStart < 5000) {
-                Thread.sleep(50);
-                String current;
-                synchronized (outStream) {
-                    current = outStream.toString("UTF-8");
-                }
-                if (current.contains(readyMarker)) {
-                    FileLogger.i(TAG, "[V6_READY_DETECTED] stty -echo 完成 | elapsed=" + (System.currentTimeMillis() - setupStart) + "ms");
-                    break;
-                }
-            }
+// 构造正式命令（三行 \n 分隔）
+String fullCommand = "echo " + sentinel + "_START__\n" + command + "\necho " + sentinel + "_END__\n";
+FileLogger.i(TAG, "[V7_COMMAND_WRITTEN] 完整命令(多行): " + fullCommand.trim().replace("\n", " | "));
 
-            // 清空 outStream 中的 setup 阶段输出（shell prompt + READY marker）
-            synchronized (outStream) {
-                outStream.reset();
-            }
-            FileLogger.i(TAG, "[V6_STREAM_RESET] setup 阶段输出已清空");
-
-            // 构造正式命令（三行 \n 分隔）
-            String fullCommand = "echo " + sentinel + "_START__\n" + command + "\necho " + sentinel + "_END__\n";
-            FileLogger.i(TAG, "[V6_COMMAND_WRITTEN] 完整命令(多行+无回显): " + fullCommand.trim().replace("\n", " | "));
-
-            channelOut.write(fullCommand.getBytes("UTF-8"));
-            channelOut.flush();
+channelOut.write(fullCommand.getBytes("UTF-8"));
+channelOut.flush();
 
             debugInfo += "[13] Reading shell stdout (v6 no-echo sentinel)...\n";
             InputStream inputStream = channel.getInputStream();
@@ -370,41 +346,62 @@ public class ExecuteRemoteCommandTool implements Tool {
     }
 
     private String stripNoise(String raw, String sentinel) {
-        if (raw == null || raw.isEmpty()) return raw;
+private String stripNoise(String raw, String sentinel) {
+if (raw == null || raw.isEmpty()) return raw;
 
-        StringBuilder cleaned = new StringBuilder();
-        String[] lines = raw.split("\n", -1);
-        boolean inOutput = false;
+FileLogger.i(TAG, "[V7_STRIP_NOISE_START] raw length=" + raw.length() + " | sentinel=" + sentinel);
 
-        for (String line : lines) {
-            String trimmed = line.replace("\r", "");
+// 🔥 v7 修复：完全在 Java 端清洗 raw 输出，不依赖 shell 行为
+// 步骤：
+// 1. 按行扫描 raw.split("\n")
+// 2. 删除包含 sentinel 的行（_START__ 和 _END__）
+// 3. 删除纯 ANSI 控制码行
+// 4. 删除 shell prompt 行
+// 5. 删除尾部空行
+StringBuilder cleaned = new StringBuilder();
+String[] lines = raw.split("\n", -1);
+int ansiStripped = 0;
+int promptStripped = 0;
+int sentinelStripped = 0;
+int echoCommandStripped = 0;
 
-            if (!inOutput && trimmed.contains(sentinel + "_START__")) {
-                int idx = trimmed.indexOf(sentinel + "_START__");
-                String after = trimmed.substring(idx + sentinel.length() + "_START__".length());
-                if (!after.isEmpty()) {
-                    cleaned.append(after).append("\n");
-                }
-                inOutput = true;
-                continue;
-            }
+for (String line : lines) {
+String trimmed = line.replace("\r", "");
+if (trimmed.isEmpty()) continue;
 
-            if (inOutput && trimmed.contains(sentinel + "_END__")) {
-                int idx = trimmed.indexOf(sentinel + "_END__");
-                String before = trimmed.substring(0, idx);
-                if (!before.isEmpty()) {
-                    cleaned.append(before).append("\n");
-                }
-                break;
-            }
+// 删除 sentinel 行
+if (trimmed.contains(sentinel + "_START__") || trimmed.contains(sentinel + "_END__")) {
+sentinelStripped++;
+continue;
+}
 
-            if (inOutput) {
-                cleaned.append(trimmed).append("\n");
-            }
-        }
+// 删除纯 ANSI 控制码行（如 [?2004h, [?2004l）
+if (trimmed.matches("\\[\\?[\\d;hl]+")) {
+ansiStripped++;
+continue;
+}
 
-        return cleaned.toString().trim();
-    }
+// 删除 shell prompt 行（如 [root@localhost ~]# 或 [user@host dir]$）
+// 匹配模式：可能含 ANSI 前缀 + 用户名@主机 + 路径 + # 或 $ + 可选空格
+if (trimmed.matches(".*\\]?\\[[\\?\\dhl]+\\]?\\[[\\?\\dhl]+\\]?\\s*\\[[\\d;]*[a-zA-Z]?\\s*\\]?.*[#\\$]\\s*$") ||
+trimmed.matches(".*\\[\\?[\\d;hl]+\\].*\\s*[#\\$]\\s*$") ||
+trimmed.matches("^\\s*[\\[\\]?\\??[\\dhl;]*\\]?[\\w@:/.-]+[#$]\\s*$")) {
+promptStripped++;
+continue;
+}
+
+// 删除 echo 命令的回显行（含 echo SENTINEL_XXX 或 echo <command>）
+if (trimmed.startsWith("echo ")) {
+echoCommandStripped++;
+continue;
+}
+
+cleaned.append(trimmed).append("\n");
+}
+
+FileLogger.i(TAG, "[V7_STRIP_NOISE_RESULT] cleaned length=" + cleaned.length() + " | sentinelStripped=" + sentinelStripped + " | ansiStripped=" + ansiStripped + " | promptStripped=" + promptStripped + " | echoCommandStripped=" + echoCommandStripped);
+return cleaned.toString().trim();
+}
 
     private boolean isPrivateKeyAvailable() {
         return false;
