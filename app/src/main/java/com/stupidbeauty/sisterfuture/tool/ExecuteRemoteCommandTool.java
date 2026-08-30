@@ -193,18 +193,18 @@ public class ExecuteRemoteCommandTool implements Tool {
             FileLogger.i(TAG, "[V4_SHELL_CONNECTED] shell channel 已连接");
 
             String sentinel = "__FS_END_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "__";
-            String fullCommand = "echo " + sentinel + "_START__; " + command + "; echo " + sentinel + "_END__\n";
-            FileLogger.i(TAG, "[V4_COMMAND_WRITTEN] 完整命令: " + fullCommand.trim());
+            String fullCommand = "echo " + sentinel + "_START__\n" + command + "\necho " + sentinel + "_END__\n";
+            FileLogger.i(TAG, "[V5_COMMAND_WRITTEN] 完整命令(多行版): " + fullCommand.trim().replace("\n", " | "));
 
             OutputStream channelOut = channel.getOutputStream();
             channelOut.write(fullCommand.getBytes("UTF-8"));
             channelOut.flush();
 
-            debugInfo += "[13] Reading shell stdout (v4 sentinel-based)...\n";
+            debugInfo += "[13] Reading shell stdout (v5 sentinel-newline)...\n";
             InputStream inputStream = channel.getInputStream();
             final long readStartTime = System.currentTimeMillis();
             final long readDeadline = readStartTime + DEFAULT_TIMEOUT_MS;
-            FileLogger.i(TAG, "[READ_LOOP_START_V4] deadline=" + readDeadline + "ms | sentinel=" + sentinel + "_END__");
+            FileLogger.i(TAG, "[READ_LOOP_START_V5] deadline=" + readDeadline + "ms | sentinel=" + sentinel + "_END__");
 
             final ByteArrayOutputStream finalOutStream = outStream;
             final InputStream finalInputStream = inputStream;
@@ -235,7 +235,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                 } finally {
                     readCompleted.set(true);
                 }
-            }, "ssh-reader-v4");
+            }, "ssh-reader-v5");
             readerThread.setDaemon(true);
             readerThread.start();
 
@@ -254,7 +254,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                 long elapsed = System.currentTimeMillis() - readStartTime;
                 if (elapsed > DEFAULT_TIMEOUT_MS) {
                     timedOut = true;
-                    FileLogger.i(TAG, "[READ_ABSOLUTE_TIMEOUT_V4] 已超过绝对超时 " + DEFAULT_TIMEOUT_MS + "ms | attempts=" + readAttempts[0] + " outSize=" + outStream.size());
+                    FileLogger.i(TAG, "[READ_ABSOLUTE_TIMEOUT_V5] 已超过绝对超时 " + DEFAULT_TIMEOUT_MS + "ms | attempts=" + readAttempts[0] + " outSize=" + outStream.size());
                     break;
                 }
 
@@ -262,7 +262,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                     String current = finalOutStream.toString("UTF-8");
                     if (current.contains(sentinelEnd)) {
                         commandCompleted = true;
-                        FileLogger.i(TAG, "[V4_SENTINEL_DETECTED] 命令完成 marker 已收到 | outSize=" + finalOutStream.size());
+                        FileLogger.i(TAG, "[V5_SENTINEL_DETECTED] 命令完成 marker 已收到 | outSize=" + finalOutStream.size());
                         break;
                     }
                 }
@@ -282,7 +282,7 @@ public class ExecuteRemoteCommandTool implements Tool {
             }
 
             if (timedOut && channel.isConnected()) {
-                FileLogger.i(TAG, "[READ_TIMEOUT_FORCE_DISCONNECT_V4] 超时断开 channel");
+                FileLogger.i(TAG, "[READ_TIMEOUT_FORCE_DISCONNECT_V5] 超时断开 channel");
                 try { channel.disconnect(); } catch (Exception ignored) {}
             }
 
