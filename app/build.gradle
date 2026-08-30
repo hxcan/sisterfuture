@@ -85,7 +85,7 @@ android
 
   lint
   {
-    baseline = file("lint baseline.xml")
+    baseline = file("lint-baseline.xml")
   }
 
   buildFeatures
@@ -188,7 +188,7 @@ android.applicationVariants.all { variant ->
         if (buildType == 'debug') {
             outputFileName = "sisterfuture-debug-v${versionName}-${versionCode}-${buildTime}.apk"
         } else {
-            outputFileName = "sisterfuture-release-v${versionName}-${versionCode}-${buildTime}-signed.apk"
+            outputFileName = "sisterfuture-release-v${versionName}-${versionCode}-${buildTime}.apk"
         }
     }
 }
