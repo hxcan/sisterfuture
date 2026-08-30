@@ -192,19 +192,47 @@ public class ExecuteRemoteCommandTool implements Tool {
             channel.connect(DEFAULT_TIMEOUT_MS);
             FileLogger.i(TAG, "[V4_SHELL_CONNECTED] shell channel 已连接");
 
+            // 🔥 v6 修复：先用 stty -echo 关闭 PTY 回显
             String sentinel = "__FS_END_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "__";
-            String fullCommand = "echo " + sentinel + "_START__\n" + command + "\necho " + sentinel + "_END__\n";
-            FileLogger.i(TAG, "[V5_COMMAND_WRITTEN] 完整命令(多行版): " + fullCommand.trim().replace("\n", " | "));
-
+            String setupCommand = "stty -echo 2>/dev/null; echo " + sentinel + "_READY__\n";
             OutputStream channelOut = channel.getOutputStream();
+            channelOut.write(setupCommand.getBytes("UTF-8"));
+            channelOut.flush();
+            FileLogger.i(TAG, "[V6_STTY_ECHO_OFF] 已发送 stty -echo 禁用 PTY 回显");
+
+            // 等待 READY sentinel
+            long setupStart = System.currentTimeMillis();
+            String readyMarker = sentinel + "_READY__";
+            while (System.currentTimeMillis() - setupStart < 5000) {
+                Thread.sleep(50);
+                String current;
+                synchronized (outStream) {
+                    current = outStream.toString("UTF-8");
+                }
+                if (current.contains(readyMarker)) {
+                    FileLogger.i(TAG, "[V6_READY_DETECTED] stty -echo 完成 | elapsed=" + (System.currentTimeMillis() - setupStart) + "ms");
+                    break;
+                }
+            }
+
+            // 清空 outStream 中的 setup 阶段输出（shell prompt + READY marker）
+            synchronized (outStream) {
+                outStream.reset();
+            }
+            FileLogger.i(TAG, "[V6_STREAM_RESET] setup 阶段输出已清空");
+
+            // 构造正式命令（三行 \n 分隔）
+            String fullCommand = "echo " + sentinel + "_START__\n" + command + "\necho " + sentinel + "_END__\n";
+            FileLogger.i(TAG, "[V6_COMMAND_WRITTEN] 完整命令(多行+无回显): " + fullCommand.trim().replace("\n", " | "));
+
             channelOut.write(fullCommand.getBytes("UTF-8"));
             channelOut.flush();
 
-            debugInfo += "[13] Reading shell stdout (v5 sentinel-newline)...\n";
+            debugInfo += "[13] Reading shell stdout (v6 no-echo sentinel)...\n";
             InputStream inputStream = channel.getInputStream();
             final long readStartTime = System.currentTimeMillis();
             final long readDeadline = readStartTime + DEFAULT_TIMEOUT_MS;
-            FileLogger.i(TAG, "[READ_LOOP_START_V5] deadline=" + readDeadline + "ms | sentinel=" + sentinel + "_END__");
+            FileLogger.i(TAG, "[READ_LOOP_START_V6] deadline=" + readDeadline + "ms | sentinel=" + sentinel + "_END__");
 
             final ByteArrayOutputStream finalOutStream = outStream;
             final InputStream finalInputStream = inputStream;
@@ -235,7 +263,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                 } finally {
                     readCompleted.set(true);
                 }
-            }, "ssh-reader-v5");
+            }, "ssh-reader-v6");
             readerThread.setDaemon(true);
             readerThread.start();
 
@@ -254,7 +282,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                 long elapsed = System.currentTimeMillis() - readStartTime;
                 if (elapsed > DEFAULT_TIMEOUT_MS) {
                     timedOut = true;
-                    FileLogger.i(TAG, "[READ_ABSOLUTE_TIMEOUT_V5] 已超过绝对超时 " + DEFAULT_TIMEOUT_MS + "ms | attempts=" + readAttempts[0] + " outSize=" + outStream.size());
+                    FileLogger.i(TAG, "[READ_ABSOLUTE_TIMEOUT_V6] 已超过绝对超时 " + DEFAULT_TIMEOUT_MS + "ms | attempts=" + readAttempts[0] + " outSize=" + outStream.size());
                     break;
                 }
 
@@ -262,7 +290,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                     String current = finalOutStream.toString("UTF-8");
                     if (current.contains(sentinelEnd)) {
                         commandCompleted = true;
-                        FileLogger.i(TAG, "[V5_SENTINEL_DETECTED] 命令完成 marker 已收到 | outSize=" + finalOutStream.size());
+                        FileLogger.i(TAG, "[V6_SENTINEL_DETECTED] 命令完成 marker 已收到 | outSize=" + finalOutStream.size());
                         break;
                     }
                 }
@@ -282,7 +310,7 @@ public class ExecuteRemoteCommandTool implements Tool {
             }
 
             if (timedOut && channel.isConnected()) {
-                FileLogger.i(TAG, "[READ_TIMEOUT_FORCE_DISCONNECT_V5] 超时断开 channel");
+                FileLogger.i(TAG, "[READ_TIMEOUT_FORCE_DISCONNECT_V6] 超时断开 channel");
                 try { channel.disconnect(); } catch (Exception ignored) {}
             }
 
