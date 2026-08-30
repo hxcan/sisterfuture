@@ -14,10 +14,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ExecuteRemoteCommandTool implements Tool {
     private static final String TAG = "ExecuteRemoteCommand";
     private static final int DEFAULT_TIMEOUT_MS = 60000; // 60 秒默认超时
+    private static final int READ_POLL_INTERVAL_MS = 100; // 读循环轮询间隔
 
     private final Context context;
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -28,7 +30,6 @@ public class ExecuteRemoteCommandTool implements Tool {
 
     @Override
     public String getName() {
-        // 🔥 修改：工具名改为驼峰风格
         return "executeRemoteCommand";
     }
 
@@ -81,7 +82,6 @@ public class ExecuteRemoteCommandTool implements Tool {
             long executorEnterTime = System.currentTimeMillis();
             FileLogger.i(TAG, "[EXECUTOR_TASK_START] executor 线程开始执行 | delay=" + (executorEnterTime - entryTime) + "ms | thread=" + Thread.currentThread().getName());
             try {
-                // 让 getString 自然抛出 JSONException
                 String hostname = arguments.getString("hostname");
                 int port = arguments.optInt("port", 22);
                 String username = arguments.getString("username");
@@ -89,7 +89,6 @@ public class ExecuteRemoteCommandTool implements Tool {
 
                 FileLogger.i(TAG, "[ARGS_PARSED] hostname=" + hostname + " | port=" + port + " | username=" + username + " | command=" + command);
 
-                // 判断使用密码还是私钥认证
                 String password = null;
                 if (arguments.has("password") && !arguments.isNull("password")) {
                     password = arguments.getString("password");
@@ -106,7 +105,6 @@ public class ExecuteRemoteCommandTool implements Tool {
                 FileLogger.i(TAG, "[CALLBACK_ONRESULT_DONE] callback.onResult 完成");
             } catch (Exception e) {
                 FileLogger.e(TAG, "[EXECUTE_ASYNC_EXCEPTION] " + e.getClass().getSimpleName() + " | msg=" + e.getMessage(), e);
-                // 调用 onError 让 ToolManager 处理智能引导
                 callback.onError(e);
                 FileLogger.i(TAG, "[CALLBACK_ONERROR_DONE] callback.onError 完成");
             } finally {
@@ -120,9 +118,6 @@ public class ExecuteRemoteCommandTool implements Tool {
         throw new UnsupportedOperationException("Use executeAsync for async execution");
     }
 
-    /**
-     * 安全地打印 Session 配置
-     **/
     private void logSessionSetup(Session session, String hostname, int port, String username,
                                 String hostKeyCheckPolicy, long connectTimeoutMs) {
         FileLogger.i(TAG, "[SESSION_SETUP] Target: " + username + "@" + hostname + ":" + port);
@@ -141,17 +136,13 @@ public class ExecuteRemoteCommandTool implements Tool {
 
         String debugInfo = "";
         String connectionStatus = "unknown";
-        Throwable lastError = null;
         long startTime = System.currentTimeMillis();
 
         try {
             debugInfo += String.format("[1] Init JSch at %dms\n", startTime);
-            long t1 = System.currentTimeMillis();
             JSch jsch = new JSch();
-            debugInfo += String.format("    → JSch initialized in %dms\n", t1 - startTime);
             connectionStatus = "jsch_initialized";
 
-            // 优先级：私钥 > 密码 > 无认证
             if (isPrivateKeyAvailable()) {
                 debugInfo += "[2] Attempting key-based auth...\n";
                 loadPrivateKey(jsch);
@@ -160,127 +151,135 @@ public class ExecuteRemoteCommandTool implements Tool {
                 debugInfo += String.format("[3] Creating session for %s@%s:%d...\n", username, hostname, port);
                 session = jsch.getSession(username, hostname, port);
                 session.setPassword(password);
-                FileLogger.i(TAG, "[PASSWORD_SET] session.setPassword 已调用 | 明文=" + password);
                 connectionStatus = "session_created_with_password";
 
-                // 显式设置关键配置
                 String strictHostCheckValue = "no";
                 int connectTimeoutValue = 3000;
-                int socketTimeoutValue = 30000;
+                int socketTimeoutValue = 5000; // 🔥 v2: 改 5s，让 JSch 异常时也能快速失败
 
                 debugInfo += String.format("[4] Setting StrictHostKeyChecking=%s...\n", strictHostCheckValue);
-                long t2 = System.currentTimeMillis();
                 session.setConfig("StrictHostKeyChecking", strictHostCheckValue);
-                debugInfo += String.format("    → Applied at %dms\n", t2 - startTime);
 
                 debugInfo += String.format("[5] Setting ConnectTimeout=%dms...\n", connectTimeoutValue);
                 session.setConfig("ConnectTimeout", String.valueOf(connectTimeoutValue));
-                debugInfo += "[6] Setting SocketTimeout=30000ms...\n";
+                debugInfo += String.format("[6] Setting SocketTimeout=%dms...\n", socketTimeoutValue);
                 session.setConfig("SocketTimeout", String.valueOf(socketTimeoutValue));
 
-                // 记录配置摘要
                 logSessionSetup(session, hostname, port, username, strictHostCheckValue, connectTimeoutValue);
 
             } else {
                 debugInfo += "[7] No authentication credentials provided\n";
                 session = jsch.getSession(username, hostname, port);
-                session.setPassword(""); // 尝试空密码
+                session.setPassword("");
                 connectionStatus = "no_credentials";
             }
 
             debugInfo += "\n[8] Connecting to host...\n";
             FileLogger.i(TAG, "[CONNECT_START] 准备调用 session.connect(3000)... | 线程=" + Thread.currentThread().getName());
-            long connectStart = System.currentTimeMillis();
-            try {
-                session.connect(3000);
-                FileLogger.i(TAG, "[CONNECT_DONE] session.connect() 成功返回 | 耗时=" + (System.currentTimeMillis() - connectStart) + "ms");
-            } catch (Exception connectEx) {
-                FileLogger.e(TAG, "[CONNECT_FAILED] session.connect() 抛异常 | 耗时=" + (System.currentTimeMillis() - connectStart) + "ms", connectEx);
-                throw connectEx;
-            }
-            long connectEnd = System.currentTimeMillis();
+            session.connect(3000);
+            FileLogger.i(TAG, "[CONNECT_DONE] session.connect() 成功返回");
             connectionStatus = "connected_successfully";
-            debugInfo += String.format("    → Connection established after %dms (%s total)\n",
-                                     connectEnd - connectStart,
-                                     (connectEnd - startTime) + "ms");
+            debugInfo += "    → Connection established successfully\n";
 
             debugInfo += String.format("\n[9] Opening exec channel for command: '%s'\n", command);
-            // 🔥 新增：openChannel 前后的日志（用于定位 2026-08-28 卡在 connect_done 之后的问题）
             FileLogger.i(TAG, "[PRE_OPEN_CHANNEL] 准备调用 session.openChannel(\"exec\")... | session.isConnected=" + session.isConnected());
-            long openChannelStart = System.currentTimeMillis();
-            try {
-                channel = (ChannelExec) session.openChannel("exec");
-                FileLogger.i(TAG, "[OPEN_CHANNEL_DONE] openChannel(\"exec\") 成功返回 | 耗时=" + (System.currentTimeMillis() - openChannelStart) + "ms");
-            } catch (Exception channelEx) {
-                FileLogger.e(TAG, "[OPEN_CHANNEL_FAILED] openChannel 抛异常 | 耗时=" + (System.currentTimeMillis() - openChannelStart) + "ms", channelEx);
-                throw channelEx;
-            }
+            channel = (ChannelExec) session.openChannel("exec");
+            FileLogger.i(TAG, "[OPEN_CHANNEL_DONE] openChannel(\"exec\") 成功返回");
 
             errStream = new ByteArrayOutputStream();
             ((ChannelExec) channel).setErrStream(errStream);
-            debugInfo += "[10] Allocating command (Standard Exec Mode)... [ERROR STREAM SETUP]\n";
-
-            debugInfo += "[11] Environment variables omitted (per official example compatibility)\n";
-
             channel.setCommand(command);
             outStream = new ByteArrayOutputStream();
-            debugInfo += String.format("[12] Starting command with timeout: %dms...\n", DEFAULT_TIMEOUT_MS);
             channel.connect(DEFAULT_TIMEOUT_MS);
 
-            debugInfo += "[13] Reading stdout stream until channel closed...\n";
+            // 🔥 v2: 双线程非阻塞读 - 后台线程读，主线程轮询超时
+            debugInfo += "[13] Reading stdout stream (v2 dual-thread non-blocking)...\n";
             InputStream inputStream = channel.getInputStream();
-            byte[] tmp = new byte[4096];
-            // 🔥 修复 (fix/execute-remote-read-timeout): 增加绝对超时 + 心跳检查，修复无 stdout 数据时 read() 阻塞导致工具卡死
-            long readStartTime = System.currentTimeMillis();
-            long readDeadline = readStartTime + DEFAULT_TIMEOUT_MS; // 硬性绝对超时
-            FileLogger.i(TAG, "[READ_LOOP_START] deadline=" + readDeadline + "ms (timeout=" + DEFAULT_TIMEOUT_MS + "ms)");
-            int readAttempts = 0;
-            int drainCount = 0;
-            final int MAX_DRAIN_ATTEMPTS = 20;
-            while (true) {
-                // 🔥 新增：绝对超时检查（核心修复点）
-                if (System.currentTimeMillis() > readDeadline) {
-                    FileLogger.i(TAG, "[READ_ABSOLUTE_TIMEOUT] 已超过绝对超时 " + DEFAULT_TIMEOUT_MS + "ms，强制退出 read 循环");
-                    break;
-                }
+            final long readStartTime = System.currentTimeMillis();
+            final long readDeadline = readStartTime + DEFAULT_TIMEOUT_MS;
+            FileLogger.i(TAG, "[READ_LOOP_START_V2] deadline=" + readDeadline + "ms (timeout=" + DEFAULT_TIMEOUT_MS + "ms) | poll_interval=" + READ_POLL_INTERVAL_MS + "ms");
+
+            // 🔥 v2 关键修复：后台线程读取，主线程监控超时
+            final ByteArrayOutputStream finalOutStream = outStream;
+            final InputStream finalInputStream = inputStream;
+            final ChannelExec finalChannel = channel;
+            final AtomicBoolean readCompleted = new AtomicBoolean(false);
+            final AtomicBoolean readErrored = new AtomicBoolean(false);
+            final StringBuilder readError = new StringBuilder();
+            int[] readAttempts = {0};
+
+            Thread readerThread = new Thread(() -> {
                 try {
-                    int n = inputStream.read(tmp, 0, tmp.length);
-                    readAttempts++;
-                    if (n > 0) {
-                        outStream.write(tmp, 0, n);
-                        FileLogger.i(TAG, "[SSH_READ] attempt=" + readAttempts + " read=" + n + " outSize=" + outStream.size() + " closed=" + channel.isClosed());
-                    } else if (n == -1) {
-                        FileLogger.i(TAG, "[SSH_READ_EOF] attempt=" + readAttempts + " outSize=" + outStream.size());
-                        break;
-                    } else {
-                        // n == 0 理论上 read() 阻塞调用不会返回 0，但保留以防万一
-                        if (channel.isClosed()) {
-                            FileLogger.i(TAG, "[SSH_READ_CLOSED] attempt=" + readAttempts + " outSize=" + outStream.size());
-                            break;
+                    byte[] tmp = new byte[4096];
+                    int n;
+                    while ((n = finalInputStream.read(tmp, 0, tmp.length)) != -1) {
+                        synchronized (finalOutStream) {
+                            finalOutStream.write(tmp, 0, n);
+                        }
+                        readAttempts[0]++;
+                        if (readAttempts[0] % 50 == 0) {
+                            FileLogger.i(TAG, "[READ_BG_PROGRESS] attempts=" + readAttempts[0] + " outSize=" + finalOutStream.size());
                         }
                     }
+                    FileLogger.i(TAG, "[READ_BG_EOF] attempts=" + readAttempts[0] + " outSize=" + finalOutStream.size());
                 } catch (java.io.IOException ioe) {
-                    FileLogger.i(TAG, "[SSH_READ_EXCEPTION] " + ioe.getMessage());
-                    break;
+                    readErrored.set(true);
+                    readError.append(ioe.getMessage());
+                    FileLogger.i(TAG, "[READ_BG_EXCEPTION] " + ioe.getMessage());
+                } finally {
+                    readCompleted.set(true);
                 }
-            }
-            // drain 阶段：channel 关闭后再尝试多读几次，防止数据残留在 socket buffer
-            // 这一步和 read 阶段重复，但因为 channel 已关，可能能拿到剩余数据
-            while (drainCount < MAX_DRAIN_ATTEMPTS) {
+            }, "ssh-reader");
+            readerThread.setDaemon(true);
+            readerThread.start();
+
+            // 主线程：定期轮询，检查超时或 channel 关闭
+            boolean timedOut = false;
+            while (!readCompleted.get()) {
                 try {
-                    int n = inputStream.read(tmp, 0, tmp.length);
-                    if (n > 0) {
-                        outStream.write(tmp, 0, n);
-                        FileLogger.i(TAG, "[SSH_DRAIN] attempt=" + drainCount + " read=" + n + " outSize=" + outStream.size());
-                    } else if (n == -1) {
-                        break;
-                    }
-                } catch (java.io.IOException ioe) {
+                    Thread.sleep(READ_POLL_INTERVAL_MS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
                     break;
                 }
-                drainCount++;
+
+                long elapsed = System.currentTimeMillis() - readStartTime;
+                if (elapsed > DEFAULT_TIMEOUT_MS) {
+                    timedOut = true;
+                    FileLogger.i(TAG, "[READ_ABSOLUTE_TIMEOUT_V2] 已超过绝对超时 " + DEFAULT_TIMEOUT_MS + "ms，强制退出 | attempts=" + readAttempts[0] + " outSize=" + outStream.size());
+                    break;
+                }
+
+                if (channel.isClosed() && outStream.size() > 0) {
+                    FileLogger.i(TAG, "[READ_CHANNEL_CLOSED_WITH_DATA] 等待剩余数据 | attempts=" + readAttempts[0] + " outSize=" + outStream.size());
+                    // 给 reader 线程一点时间读残余数据
+                    try { Thread.sleep(200); } catch (InterruptedException ie) { break; }
+                    break;
+                }
             }
-            debugInfo += "[14] Read " + readAttempts + " attempts, drained " + drainCount + " more. Exit status: " + Integer.toString(channel.getExitStatus()) + "\n";
+
+            // 等待 reader 线程结束（最多再等 1 秒）
+            try {
+                readerThread.join(1000);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+
+            // 如果是超时，主动断开 channel
+            if (timedOut) {
+                FileLogger.i(TAG, "[READ_TIMEOUT_FORCE_DISCONNECT] 超时强制断开 channel | outSize=" + outStream.size());
+                try {
+                    if (channel.isConnected()) {
+                        channel.disconnect();
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            if (readErrored.get()) {
+                debugInfo += "[READ_BG_ERROR] " + readError.toString() + "\n";
+            }
+            debugInfo += String.format("[14] Read %d attempts. Timeout: %s. Exit status: %d\n",
+                                     readAttempts[0], timedOut ? "YES" : "NO", channel.getExitStatus());
 
             byte[] errBytes = errStream.toByteArray();
             if (errBytes.length > 0) {
@@ -297,11 +296,12 @@ public class ExecuteRemoteCommandTool implements Tool {
                 debugInfo += String.format("[17] Output content:\n%s\n", stdout);
             }
 
-            return new CommandResult("success", stdout, errStream.toString(), exitCode,
+            // 🔥 v2: 如果超时，返回 status="timeout" 而不是 success
+            String resultStatus = timedOut ? "timeout" : "success";
+            return new CommandResult(resultStatus, stdout, errStream.toString(), exitCode,
                                     connectionStatus, debugInfo);
         } catch (Exception e) {
             connectionStatus = "connection_failed";
-            lastError = e;
 
             String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             if (e instanceof java.net.ConnectException)
@@ -343,7 +343,6 @@ public class ExecuteRemoteCommandTool implements Tool {
         }
     }
 
-    // 内部静态类用于封装结果
     private static class CommandResult {
         final String status;
         final String stdout;
