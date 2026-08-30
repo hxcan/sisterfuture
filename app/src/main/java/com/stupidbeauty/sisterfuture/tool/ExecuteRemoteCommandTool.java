@@ -188,7 +188,8 @@ public class ExecuteRemoteCommandTool implements Tool {
             FileLogger.i(TAG, "[OPEN_CHANNEL_DONE] openChannel(\"shell\") 成功返回");
 
             outStream = new ByteArrayOutputStream();
-            channel.setOutputStream(outStream);
+outStream = new ByteArrayOutputStream();
+channel.setOutputStream(outStream);
 channel.connect(DEFAULT_TIMEOUT_MS);
 FileLogger.i(TAG, "[V4_SHELL_CONNECTED] shell channel 已连接");
 
@@ -344,8 +345,6 @@ channelOut.flush();
             }
         }
     }
-
-    private String stripNoise(String raw, String sentinel) {
 private String stripNoise(String raw, String sentinel) {
 if (raw == null || raw.isEmpty()) return raw;
 
@@ -401,6 +400,7 @@ cleaned.append(trimmed).append("\n");
 
 FileLogger.i(TAG, "[V7_STRIP_NOISE_RESULT] cleaned length=" + cleaned.length() + " | sentinelStripped=" + sentinelStripped + " | ansiStripped=" + ansiStripped + " | promptStripped=" + promptStripped + " | echoCommandStripped=" + echoCommandStripped);
 return cleaned.toString().trim();
+}
 }
 
     private boolean isPrivateKeyAvailable() {
