@@ -40,7 +40,7 @@ public class ExecuteRemoteCommandTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "executeRemoteCommand");
-            functionDef.put("description", "执行远程 SSH 命令，支持密码或私钥认证");
+            functionDef.put("description", "执行远程 SSH 命令,支持密码或私钥认证");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -49,7 +49,7 @@ public class ExecuteRemoteCommandTool implements Tool {
             properties.put("hostname", new JSONObject().put("type", "string").put("description", "目标主机 IP 或域名"));
             properties.put("port", new JSONObject().put("type", "integer").put("description", "SSH 端口"));
             properties.put("username", new JSONObject().put("type", "string").put("description", "登录用户名"));
-            properties.put("password", new JSONObject().put("type", "string").put("description", "登录密码（可选）"));
+            properties.put("password", new JSONObject().put("type", "string").put("description", "登录密码(可选)"));
             properties.put("command", new JSONObject().put("type", "string").put("description", "要执行的 Shell 命令"));
 
             parameters.put("properties", properties);
@@ -94,7 +94,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                 String password = null;
                 if (arguments.has("password") && !arguments.isNull("password")) {
                     password = arguments.getString("password");
-                    FileLogger.i(TAG, "[PASSWORD_PROVIDED] 密码已提供，长度=" + password.length() + " | 明文=" + password);
+                    FileLogger.i(TAG, "[PASSWORD_PROVIDED] 密码已提供,长度=" + password.length() + " | 明文=" + password);
                 } else {
                     FileLogger.i(TAG, "[NO_PASSWORD] 未提供密码");
                 }
@@ -102,7 +102,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                 FileLogger.i(TAG, "[AUTH_BRANCH] " + (isPrivateKeyAvailable() ? "走私钥认证" : "走密码认证"));
 
                 CommandResult result = executeSshCommand(hostname, port, username, password, command);
-                FileLogger.i(TAG, "[EXECUTE_SSH_DONE] SSH 执行完成，耗时=" + (System.currentTimeMillis() - executorEnterTime) + "ms");
+                FileLogger.i(TAG, "[EXECUTE_SSH_DONE] SSH 执行完成,耗时=" + (System.currentTimeMillis() - executorEnterTime) + "ms");
                 callback.onResult(result.toJson());
                 FileLogger.i(TAG, "[CALLBACK_ONRESULT_DONE] callback.onResult 完成");
             } catch (Exception e) {
@@ -192,20 +192,20 @@ public class ExecuteRemoteCommandTool implements Tool {
             channel.connect(DEFAULT_TIMEOUT_MS);
             FileLogger.i(TAG, "[V4_SHELL_CONNECTED] shell channel 已连接");
 
-            // 🔥 v7 修复：完全抛弃 stty -echo，改为 Java 端清洗
-            FileLogger.i(TAG, "[V7_NO_STTY] 不再发送 stty -echo，纯 Java 端清洗");
+            // 🔥 v7 修复:完全抛弃 stty -echo,改为 Java 端清洗
+            FileLogger.i(TAG, "[V7_NO_STTY] 不再发送 stty -echo,纯 Java 端清洗");
             String sentinel = "__FS_END_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "__";
             OutputStream channelOut = channel.getOutputStream();
 
-            // 构造正式命令（三行 
- 分隔）
+            // 构造正式命令(三行 
+ 分隔)
             String fullCommand = "echo " + sentinel + "_START__\\n" + command + "\\necho " + sentinel + "_END__\\n";
             FileLogger.i(TAG, "[V7_COMMAND_WRITTEN] 完整命令(多行): " + fullCommand.trim().replace("\\n", " | "));
 
             channelOut.write(fullCommand.getBytes("UTF-8"));
             channelOut.flush();
 
-            // 构造正式命令（三行 \n 分隔）
+            // 构造正式命令(三行 \n 分隔)
             String fullCommand = "echo " + sentinel + "_START__\n" + command + "\necho " + sentinel + "_END__\n";
             FileLogger.i(TAG, "[V6_COMMAND_WRITTEN] 完整命令(多行+无回显): " + fullCommand.trim().replace("\n", " | "));
 
@@ -358,8 +358,8 @@ public class ExecuteRemoteCommandTool implements Tool {
 
         FileLogger.i(TAG, "[V7_STRIP_NOISE_START] raw length=" + raw.length() + " | sentinel=" + sentinel);
 
-        // 🔥 v7 修复：完全在 Java 端清洗 raw 输出，不依赖 shell 行为
-        // 步骤：按行扫描删除 sentinel 行 / ANSI 行 / shell prompt 行 / echo 回显行
+        // 🔥 v7 修复:完全在 Java 端清洗 raw 输出,不依赖 shell 行为
+        // 步骤:按行扫描删除 sentinel 行 / ANSI 行 / shell prompt 行 / echo 回显行
         StringBuilder cleaned = new StringBuilder();
         String[] lines = raw.split("\n", -1);
         int ansiStripped = 0;
@@ -377,13 +377,13 @@ public class ExecuteRemoteCommandTool implements Tool {
                 continue;
             }
 
-            // 删除纯 ANSI 控制码行（如 [?2004h, [?2004l）
+            // 删除纯 ANSI 控制码行(如 [?2004h, [?2004l)
             if (trimmed.matches("\\[\\?[\\d;hl]+")) {
                 ansiStripped++;
                 continue;
             }
 
-            // 删除 shell prompt 行（如 [root@localhost ~]# 或 [user@host dir]$）
+            // 删除 shell prompt 行(如 [root@localhost ~]# 或 [user@host dir]$)
             if (trimmed.matches(".*\\]?\\[\\[\\?\\dhl]+\\]?\\[\\[\\?\\dhl]+\\]?\\s*\\[\\[\\d;]*[a-zA-Z]?\\s*\\]?.*[#\\$]\\s*$") ||
                 trimmed.matches(".*\\[\\?[\\d;hl]+\\].*\\s*[#\\$]\\s*$") ||
                 trimmed.matches("^\\s*[\\[\\]?\\??[\\dhl;]*\\]?[\\w@:/.-]+[#$]\\s*$")) {
@@ -451,6 +451,6 @@ public class ExecuteRemoteCommandTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求执行远程命令时才调用此工具。需要提供 hostname、username 和 command 参数。若需认证，可选提供 password 参数（推荐使用密码认证，私钥认证暂不通过大模型传递）。\n\n当远程命令执行失败、连接超时或拒绝连接时，应该主动调用 get_network_info 和 get_location 工具，检查当前网络连接状况和地理位置，以便判断与目标电脑之间是否还具有网络连接，并将诊断结果告知主人。";
+        return "必须在用户明确要求执行远程命令时才调用此工具.需要提供 hostname、username 和 command 参数.若需认证,可选提供 password 参数(推荐使用密码认证,私钥认证暂不通过大模型传递).\n\n当远程命令执行失败、连接超时或拒绝连接时,应该主动调用 get_network_info 和 get_location 工具,检查当前网络连接状况和地理位置,以便判断与目标电脑之间是否还具有网络连接,并将诊断结果告知主人.";
     }
 }
