@@ -192,15 +192,14 @@ public class ExecuteRemoteCommandTool implements Tool {
             channel.connect(DEFAULT_TIMEOUT_MS);
             FileLogger.i(TAG, "[V4_SHELL_CONNECTED] shell channel 已连接");
 
-            // 🔥 v7 修复:完全抛弃 stty -echo,改为 Java 端清洗
-            FileLogger.i(TAG, "[V7_NO_STTY] 不再发送 stty -echo,纯 Java 端清洗");
+            // 🔥 v7 修复: 完全抛弃 stty -echo, 改为 Java 端清洗
+            FileLogger.i(TAG, "[V7_NO_STTY] 不再发送 stty -echo, 纯 Java 端清洗");
             String sentinel = "__FS_END_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "__";
             OutputStream channelOut = channel.getOutputStream();
 
-            // 构造正式命令(三行 
- 分隔)
-            String fullCommand = "echo " + sentinel + "_START__\\n" + command + "\\necho " + sentinel + "_END__\\n";
-            FileLogger.i(TAG, "[V7_COMMAND_WRITTEN] 完整命令(多行): " + fullCommand.trim().replace("\\n", " | "));
+            // 构造正式命令(三行 \n 分隔)
+            String fullCommand = "echo " + sentinel + "_START__\n" + command + "\necho " + sentinel + "_END__\n";
+            FileLogger.i(TAG, "[V7_COMMAND_WRITTEN] 完整命令(多行): " + fullCommand.trim().replace("\n", " | "));
 
             channelOut.write(fullCommand.getBytes("UTF-8"));
             channelOut.flush();
