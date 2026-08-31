@@ -365,15 +365,14 @@ echo " + sentinel + "_END__
         // 🔥 v7 修复：完全在 Java 端清洗 raw 输出，不依赖 shell 行为
         // 步骤：按行扫描删除 sentinel 行 / ANSI 行 / shell prompt 行 / echo 回显行
         StringBuilder cleaned = new StringBuilder();
-        String[] lines = raw.split("
-", -1);
+        String[] lines = raw.split("\n", -1);
         int ansiStripped = 0;
         int promptStripped = 0;
         int sentinelStripped = 0;
         int echoCommandStripped = 0;
 
         for (String line : lines) {
-            String trimmed = line.replace("", "");
+            String trimmed = line.replace("\r", "");
             if (trimmed.isEmpty()) continue;
 
             // 删除 sentinel 行
@@ -382,16 +381,16 @@ echo " + sentinel + "_END__
                 continue;
             }
 
-            // 删除纯 ANSI 控制码行
-            if (trimmed.matches("\[\?\[\d;hl]+")) {
+            // 删除纯 ANSI 控制码行（如 [?2004h, [?2004l）
+            if (trimmed.matches("\\[\\?[\\d;hl]+")) {
                 ansiStripped++;
                 continue;
             }
 
-            // 删除 shell prompt 行
-            if (trimmed.matches(".*\]?\[\[\?\dhl]+\]?\[\[\?\dhl]+\]?\s*\[\[\d;]*[a-zA-Z]?\s*\]?.*[#\$]\s*$") ||
-                trimmed.matches(".*\[\?\[\d;hl]+\].*\s*[#\$]\s*$") ||
-                trimmed.matches("^\s*[\[\]?\??[\dhl;]*\]?[\w@:/.-]+[#$]\s*$")) {
+            // 删除 shell prompt 行（如 [root@localhost ~]# 或 [user@host dir]$）
+            if (trimmed.matches(".*\\]?\\[\\[\\?\\dhl]+\\]?\\[\\[\\?\\dhl]+\\]?\\s*\\[\\[\\d;]*[a-zA-Z]?\\s*\\]?.*[#\\$]\\s*$") ||
+                trimmed.matches(".*\\[\\?[\\d;hl]+\\].*\\s*[#\\$]\\s*$") ||
+                trimmed.matches("^\\s*[\\[\\]?\\??[\\dhl;]*\\]?[\\w@:/.-]+[#$]\\s*$")) {
                 promptStripped++;
                 continue;
             }
@@ -402,8 +401,7 @@ echo " + sentinel + "_END__
                 continue;
             }
 
-            cleaned.append(trimmed).append("
-");
+            cleaned.append(trimmed).append("\n");
         }
 
         FileLogger.i(TAG, "[V7_STRIP_NOISE_RESULT] cleaned length=" + cleaned.length() + " | sentinelStripped=" + sentinelStripped + " | ansiStripped=" + ansiStripped + " | promptStripped=" + promptStripped + " | echoCommandStripped=" + echoCommandStripped);
