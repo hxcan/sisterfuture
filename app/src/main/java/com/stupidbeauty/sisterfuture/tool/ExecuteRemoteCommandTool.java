@@ -199,12 +199,8 @@ public class ExecuteRemoteCommandTool implements Tool {
 
             // 构造正式命令（三行 
  分隔）
-            String fullCommand = "echo " + sentinel + "_START__
-" + command + "
-echo " + sentinel + "_END__
-";
-            FileLogger.i(TAG, "[V7_COMMAND_WRITTEN] 完整命令(多行): " + fullCommand.trim().replace("
-", " | "));
+            String fullCommand = "echo " + sentinel + "_START__\\n" + command + "\\necho " + sentinel + "_END__\\n";
+            FileLogger.i(TAG, "[V7_COMMAND_WRITTEN] 完整命令(多行): " + fullCommand.trim().replace("\\n", " | "));
 
             channelOut.write(fullCommand.getBytes("UTF-8"));
             channelOut.flush();
