@@ -204,13 +204,6 @@ public class ExecuteRemoteCommandTool implements Tool {
             channelOut.write(fullCommand.getBytes("UTF-8"));
             channelOut.flush();
 
-            // 构造正式命令(三行 \n 分隔)
-            String fullCommand = "echo " + sentinel + "_START__\n" + command + "\necho " + sentinel + "_END__\n";
-            FileLogger.i(TAG, "[V6_COMMAND_WRITTEN] 完整命令(多行+无回显): " + fullCommand.trim().replace("\n", " | "));
-
-            channelOut.write(fullCommand.getBytes("UTF-8"));
-            channelOut.flush();
-
             debugInfo += "[13] Reading shell stdout (v7 java-side strip noise)...\n";
             InputStream inputStream = channel.getInputStream();
             final long readStartTime = System.currentTimeMillis();
