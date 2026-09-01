@@ -348,46 +348,71 @@ public class ExecuteRemoteCommandTool implements Tool {
     private String stripNoise(String raw, String sentinel) {
         if (raw == null || raw.isEmpty()) return raw;
 
-        FileLogger.i(TAG, "[V7_STRIP_NOISE_START] raw length=" + raw.length() + " | sentinel=" + sentinel);
+        FileLogger.i(TAG, "[V9_STRIP_NOISE_START] raw length=" + raw.length() + " | sentinel=" + sentinel);
 
-        // 🔥 v8 修复: 修正正则表达式语法错误
-        // 问题: v7 第三个正则 "^\\s*[\\[\\]?\\??[\\dhl;]*\\]?[\\w@:\\/.-]+[#$]\\s*$" 有歧义
-        // Java 正则解析器认为 \\[ 后面没正常闭合, 导致 "Missing closing bracket" 异常
-        // 修复: 使用明确的字符类, 把 [ 和 ] 用 \\Q...\\E 或分开处理
+        // 🔥 v9 修复: 服务端预过滤 ANSI 序列, 让大模型读起来干净
+        // 方法: 在按行扫描之前, 先把 ANSI 控制码统一清理
+        // 然后再处理: sentinel / 登录横幅 / prompt / 中文断开提示
+
+        // 步骤 1: 先把 ANSI 转义序列统一去掉(整个 raw 字符串)
+        String step1 = raw.replaceAll("\\x1B\\[[0-9;]*[a-zA-Z]", "");
+        // 同时清理独立的 [?2004h / [?2004l(没 ESC 头的 bracketed paste mode)
+        step1 = step1.replaceAll("\\[\\?[0-9]+[hl]", "");
+
+        FileLogger.i(TAG, "[V9_ANSI_PREFILTER] after ANSI strip, length=" + step1.length() + " (was " + raw.length() + ")");
+
+        // 步骤 2: 按行扫描, 清理各类噪音
         StringBuilder cleaned = new StringBuilder();
-        String[] lines = raw.split("\n", -1);
-        int ansiStripped = 0;
-        int promptStripped = 0;
-        int sentinelStripped = 0;
-        int echoCommandStripped = 0;
+        String[] lines = step1.split("\n", -1);
+        int bannerStripped = 0;       // Last login / Last failed login
+        int promptStripped = 0;       // shell prompt [user@host dir]#
+        int sentinelStripped = 0;     // __FS_END_xxx_START__ / _END__
+        int echoCommandStripped = 0;  // echo xxx 这类命令回显
+        int disconnectStripped = 0;   // 注销 / logout / Connection closed
+        int pureAnsiStripped = 0;     // 纯 ANSI 行
+        int emptyStripped = 0;        // 纯空白行
+        int commandStdinStripped = 0; // > cat <<EOF 这种命令以 stdin 方式呈现
 
         for (String line : lines) {
             String trimmed = line.replace("\r", "");
-            if (trimmed.isEmpty()) continue;
+            if (trimmed.isEmpty()) {
+                emptyStripped++;
+                continue;
+            }
 
-            // 删除 sentinel 行
+            // 1. sentinel 行(命令 wrapper 的 echo 输出)
             if (trimmed.contains(sentinel + "_START__") || trimmed.contains(sentinel + "_END__")) {
                 sentinelStripped++;
                 continue;
             }
 
-            // 删除纯 ANSI 控制码行(如 [?2004h, [?2004l)
-            if (trimmed.matches("\\[\\?[\\d;hl]+")) {
-                ansiStripped++;
+            // 2. 登录横幅(motd 输出): Last login / Last failed login / New session
+            if (trimmed.matches("^\\s*(Last login|Last failed login|New session|There were|There was).*") ||
+                trimmed.matches("^\\s*Welcome to.*")) {
+                bannerStripped++;
                 continue;
             }
 
-            // 删除 shell prompt 行(简化版: 只匹配基本 prompt 格式)
-            // 匹配: 可选 ANSI 噪音 + [user@host dir]# 或 $ 结尾
-            // 例如: [root@localhost ~]# 或 [[?2004h[root@localhost ~]]#]
-            // 使用 \\Q...\\E 处理字面量字符
-            if (trimmed.matches(".*?\\[?\\??[\\dhl;]*\\]?\\[?\\??[\\dhl;]*\\]?[\\w@:/.-]+[#$]\\s*$") ||
-                trimmed.matches("^\\s*[\\w@:/.-]+[#$]\\s*$")) {
+            // 3. shell prompt 行(简化版): [user@host dir]# 或 $ 结尾
+            // 允许中间含 ANSI 残留(虽然步骤 1 已经清理了一部分)
+            if (trimmed.matches(".*[\\w@:/.-]+[#$]\\s*$")) {
                 promptStripped++;
                 continue;
             }
 
-            // 删除 echo 命令的回显行
+            // 4. 断开提示: 注销 / logout / Connection to ... closed
+            if (trimmed.matches("^\\s*(注销|logout|Connection to .* closed|Connection closed).*$")) {
+                disconnectStripped++;
+                continue;
+            }
+
+            // 5. 纯 ANSI 控制码行(兜底, 步骤 1 没完全清理的)
+            if (trimmed.matches("\\[\\?[\\d;hl]+")) {
+                pureAnsiStripped++;
+                continue;
+            }
+
+            // 6. echo 命令的回显行(v7 的命令 wrapper 残留)
             if (trimmed.startsWith("echo ")) {
                 echoCommandStripped++;
                 continue;
@@ -396,7 +421,14 @@ public class ExecuteRemoteCommandTool implements Tool {
             cleaned.append(trimmed).append("\n");
         }
 
-        FileLogger.i(TAG, "[V7_STRIP_NOISE_RESULT] cleaned length=" + cleaned.length() + " | sentinelStripped=" + sentinelStripped + " | ansiStripped=" + ansiStripped + " | promptStripped=" + promptStripped + " | echoCommandStripped=" + echoCommandStripped);
+        FileLogger.i(TAG, "[V9_STRIP_NOISE_RESULT] cleaned length=" + cleaned.length() +
+                " | bannerStripped=" + bannerStripped +
+                " | promptStripped=" + promptStripped +
+                " | sentinelStripped=" + sentinelStripped +
+                " | echoCommandStripped=" + echoCommandStripped +
+                " | disconnectStripped=" + disconnectStripped +
+                " | pureAnsiStripped=" + pureAnsiStripped +
+                " | emptyStripped=" + emptyStripped);
         return cleaned.toString().trim();
     }
 
