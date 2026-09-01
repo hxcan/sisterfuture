@@ -2,9 +2,9 @@ name: Build APK
 
 on:
   push:
-    branches: [ master, fix/v7-final ]
+    branches: [ master ]
   pull_request:
-    branches: [ master, fix/v7-final ]
+    branches: [ master ]
 
 jobs:
   build:
