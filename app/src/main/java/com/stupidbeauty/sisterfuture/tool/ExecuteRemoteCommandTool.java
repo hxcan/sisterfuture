@@ -231,7 +231,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                             FileLogger.i(TAG, "[READ_BG_PROGRESS] attempts=" + readAttempts[0] + " outSize=" + finalOutStream.size());
                         }
                     }
-                    FileLogger.i(TAG, "[READ_BG_EOF] attempts=" + readAttempts[0] + outSize=" + finalOutStream.size());
+                    FileLogger.i(TAG, "[READ_BG_EOF] attempts=" + readAttempts[0] + " outSize=" + finalOutStream.size());
                 } catch (java.io.IOException ioe) {
                     readErrored.set(true);
                     readError.append(ioe.getMessage());
@@ -380,6 +380,7 @@ public class ExecuteRemoteCommandTool implements Tool {
             // 删除 shell prompt 行(简化版: 只匹配基本 prompt 格式)
             // 匹配: 可选 ANSI 噪音 + [user@host dir]# 或 $ 结尾
             // 例如: [root@localhost ~]# 或 [[?2004h[root@localhost ~]]#]
+            // 使用 \\Q...\\E 处理字面量字符
             if (trimmed.matches(".*?\\[?\\??[\\dhl;]*\\]?\\[?\\??[\\dhl;]*\\]?[\\w@:/.-]+[#$]\\s*$") ||
                 trimmed.matches("^\\s*[\\w@:/.-]+[#$]\\s*$")) {
                 promptStripped++;
