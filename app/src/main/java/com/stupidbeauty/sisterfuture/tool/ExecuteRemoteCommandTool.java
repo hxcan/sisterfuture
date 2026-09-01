@@ -231,7 +231,7 @@ public class ExecuteRemoteCommandTool implements Tool {
                             FileLogger.i(TAG, "[READ_BG_PROGRESS] attempts=" + readAttempts[0] + " outSize=" + finalOutStream.size());
                         }
                     }
-                    FileLogger.i(TAG, "[READ_BG_EOF] attempts=" + readAttempts[0] + " outSize=" + finalOutStream.size());
+                    FileLogger.i(TAG, "[READ_BG_EOF] attempts=" + readAttempts[0] + outSize=" + finalOutStream.size());
                 } catch (java.io.IOException ioe) {
                     readErrored.set(true);
                     readError.append(ioe.getMessage());
@@ -350,8 +350,10 @@ public class ExecuteRemoteCommandTool implements Tool {
 
         FileLogger.i(TAG, "[V7_STRIP_NOISE_START] raw length=" + raw.length() + " | sentinel=" + sentinel);
 
-        // 🔥 v7 修复:完全在 Java 端清洗 raw 输出,不依赖 shell 行为
-        // 步骤:按行扫描删除 sentinel 行 / ANSI 行 / shell prompt 行 / echo 回显行
+        // 🔥 v8 修复: 修正正则表达式语法错误
+        // 问题: v7 第三个正则 "^\\s*[\\[\\]?\\??[\\dhl;]*\\]?[\\w@:\\/.-]+[#$]\\s*$" 有歧义
+        // Java 正则解析器认为 \\[ 后面没正常闭合, 导致 "Missing closing bracket" 异常
+        // 修复: 使用明确的字符类, 把 [ 和 ] 用 \\Q...\\E 或分开处理
         StringBuilder cleaned = new StringBuilder();
         String[] lines = raw.split("\n", -1);
         int ansiStripped = 0;
@@ -375,10 +377,11 @@ public class ExecuteRemoteCommandTool implements Tool {
                 continue;
             }
 
-            // 删除 shell prompt 行(如 [root@localhost ~]# 或 [user@host dir]$)
-            if (trimmed.matches(".*\\]?\\[\\[\\?\\dhl]+\\]?\\[\\[\\?\\dhl]+\\]?\\s*\\[\\[\\d;]*[a-zA-Z]?\\s*\\]?.*[#\\$]\\s*$") ||
-                trimmed.matches(".*\\[\\?[\\d;hl]+\\].*\\s*[#\\$]\\s*$") ||
-                trimmed.matches("^\\s*[\\[\\]?\\??[\\dhl;]*\\]?[\\w@:/.-]+[#$]\\s*$")) {
+            // 删除 shell prompt 行(简化版: 只匹配基本 prompt 格式)
+            // 匹配: 可选 ANSI 噪音 + [user@host dir]# 或 $ 结尾
+            // 例如: [root@localhost ~]# 或 [[?2004h[root@localhost ~]]#]
+            if (trimmed.matches(".*?\\[?\\??[\\dhl;]*\\]?\\[?\\??[\\dhl;]*\\]?[\\w@:/.-]+[#$]\\s*$") ||
+                trimmed.matches("^\\s*[\\w@:/.-]+[#$]\\s*$")) {
                 promptStripped++;
                 continue;
             }
