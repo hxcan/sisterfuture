@@ -377,6 +377,8 @@ public class KlingVideoGenerationTool implements Tool {
                 ResponseBody respBody = response.body();
                 String responseStr = respBody != null ? respBody.string() : "";
 
+                FileLogger.d(TAG, "  [poll] 原始响应: HTTP " + code + " - " + responseStr);
+
                 if (code < 200 || code >= 300) {
                     throw new IOException("查询任务失败 HTTP " + code + ": " + responseStr);
                 }
@@ -389,7 +391,12 @@ public class KlingVideoGenerationTool implements Tool {
                 }
 
                 JSONObject data = jsonResponse.getJSONObject("data");
-                JSONArray taskList = data.getJSONArray("task_list");
+                // 修复：可灵查询接口真实响应中任务列表在 data.result（数组），不是 data.task_list
+                JSONArray taskList = data.optJSONArray("result");
+                if (taskList == null) {
+                    // 兼容：少数情况下也可能在 task_list
+                    taskList = data.optJSONArray("task_list");
+                }
                 if (taskList == null || taskList.length() == 0) {
                     FileLogger.w(TAG, "  [poll] 任务列表为空");
                     return null;
@@ -401,14 +408,17 @@ public class KlingVideoGenerationTool implements Tool {
 
                 switch (status) {
                     case "succeeded":
-                        // 从 task_result.videos[0].url 拿视频
-                        JSONObject taskResult = task.optJSONObject("task_result");
-                        if (taskResult == null) {
-                            throw new IOException("任务成功但无 task_result");
-                        }
-                        JSONArray videos = taskResult.optJSONArray("videos");
+                        // 修复：可灵查询接口真实响应中视频数组在 outputs（不是 task_result.videos）
+                        JSONArray videos = task.optJSONArray("outputs");
                         if (videos == null || videos.length() == 0) {
-                            throw new IOException("任务成功但无视频结果");
+                            // 兼容：旧版本可能在 task_result.videos
+                            JSONObject taskResult = task.optJSONObject("task_result");
+                            if (taskResult != null) {
+                                videos = taskResult.optJSONArray("videos");
+                            }
+                        }
+                        if (videos == null || videos.length() == 0) {
+                            throw new IOException("任务成功但无视频结果（outputs 和 task_result.videos 都为空）");
                         }
                         String url = videos.getJSONObject(0).optString("url", null);
                         if (url == null || url.isEmpty()) {
