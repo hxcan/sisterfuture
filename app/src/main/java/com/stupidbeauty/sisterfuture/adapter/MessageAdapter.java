@@ -642,30 +642,45 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         // 🆕 渲染附件图片（多个 attachment 在 tool_call_result_images_container 容器中等宽显示，保持宽高比）
         // 🆕 支持三种 URL 格式：data:image/...;base64,xxx、纯 Base64、file:///绝对路径
         // 🆕 布局：图片宽度 = 容器宽度（MATCH_PARENT），高度按 bitmap 宽高比自动计算
+        // 🆕 修复 #883422015337：新增 video 类型分支，渲染到 tool_call_result_videos_container
         private void renderAttachments(MessageItem message) {
             try {
                 java.util.List<Attachment> attachments = message.getAttachments();
-                android.view.ViewGroup container = itemView.findViewById(
+                android.view.ViewGroup imageContainer = itemView.findViewById(
                     com.stupidbeauty.sisterfuture.R.id.tool_call_result_images_container);
-                if (container == null) {
+                android.view.ViewGroup videoContainer = itemView.findViewById(
+                    com.stupidbeauty.sisterfuture.R.id.tool_call_result_videos_container);
+                if (imageContainer == null) {
                     FileLogger.w(TAG, "⚠️ [IMAGE_CONTAINER_NULL] 找不到附件容器，跳过渲染");
                     return;
                 }
                 // 先清空旧内容（防止 RecyclerView 复用时显示错误图片）
-                container.removeAllViews();
+                imageContainer.removeAllViews();
+                if (videoContainer != null) {
+                    videoContainer.removeAllViews();
+                }
                 if (attachments == null || attachments.isEmpty()) {
-                    container.setVisibility(android.view.View.GONE);
+                    imageContainer.setVisibility(android.view.View.GONE);
+                    if (videoContainer != null) videoContainer.setVisibility(android.view.View.GONE);
                     FileLogger.d(TAG, "📦 [NO_ATTACHMENTS] 无附件，隐藏图片容器");
                     return;
                 }
                 android.content.Context ctx = itemView.getContext();
                 int imageCount = 0;
+                int videoCount = 0;
                 for (int i = 0; i < attachments.size(); i++) {
                     Attachment att = attachments.get(i);
                     if (att == null) continue;
                     String type = att.getType();
                     String url = att.getUrl();
                     FileLogger.d(TAG, "📦 [ATTACHMENT_" + i + "] type=" + type + " | url=" + url);
+                    // 🆕 修复 #883422015337：video 分支
+                    if ("video".equals(type) && url != null && url.startsWith("file://")) {
+                        if (addVideoView(videoContainer, url, ctx, videoCount)) {
+                            videoCount++;
+                        }
+                        continue;
+                    }
                     if (!"image".equals(type) || url == null || url.isEmpty()) {
                         continue;
                     }
@@ -725,7 +740,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     ImageView imageView = new ImageView(ctx);
                     
                     // 容器宽度（与上面文字消息等宽）
-                    int containerWidth = container.getWidth();
+                    int containerWidth = imageContainer.getWidth();
                     if (containerWidth <= 0) {
                         // 容器还没 layout，用屏幕宽度估算
                         containerWidth = ctx.getResources().getDisplayMetrics().widthPixels 
@@ -754,17 +769,58 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
                     imageView.setImageBitmap(bitmap);
                     imageView.setAdjustViewBounds(false);
-                    container.addView(imageView);
+                    imageContainer.addView(imageView);
                     imageCount++;
                 }
                 if (imageCount > 0) {
-                    container.setVisibility(android.view.View.VISIBLE);
+                    imageContainer.setVisibility(android.view.View.VISIBLE);
                     FileLogger.i(TAG, "🖼️ [ATTACHMENTS_RENDERED] 成功渲染 " + imageCount + " 张图片（等宽+保持比例）");
                 } else {
-                    container.setVisibility(android.view.View.GONE);
+                    imageContainer.setVisibility(android.view.View.GONE);
+                }
+                // 🆕 修复 #883422015337：显示/隐藏视频容器
+                if (videoContainer != null) {
+                    if (videoCount > 0) {
+                        videoContainer.setVisibility(android.view.View.VISIBLE);
+                        FileLogger.i(TAG, "🎬 [VIDEOS_RENDERED] 成功渲染 " + videoCount + " 个视频");
+                    } else {
+                        videoContainer.setVisibility(android.view.View.GONE);
+                    }
                 }
             } catch (Exception e) {
                 FileLogger.e(TAG, "❌ [RENDER_ATTACHMENTS_ERROR] 渲染附件失败", e);
+            }
+        }
+
+        // 🆕 修复 #883422015337：创建 VideoView 并添加到视频容器，支持点击播放
+        private boolean addVideoView(android.view.ViewGroup videoContainer, String url, android.content.Context ctx, int currentCount) {
+            try {
+                if (videoContainer == null) {
+                    FileLogger.w(TAG, "⚠️ [VIDEO_CONTAINER_NULL] 视频容器为空");
+                    return false;
+                }
+                String localPath = url.substring("file://".length());
+                java.io.File videoFile = new java.io.File(localPath);
+                if (!videoFile.exists()) {
+                    FileLogger.e(TAG, "❌ [VIDEO_FILE_MISSING] 视频文件不存在: " + localPath);
+                    return false;
+                }
+                android.widget.VideoView videoView = new android.widget.VideoView(ctx);
+                android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    (int)(220 * ctx.getResources().getDisplayMetrics().density)); // 固定 220dp 高
+                if (currentCount > 0) {
+                    lp.topMargin = (int)(8 * ctx.getResources().getDisplayMetrics().density);
+                }
+                videoView.setLayoutParams(lp);
+                videoView.setVideoURI(android.net.Uri.fromFile(videoFile));
+                videoView.setMediaController(new android.widget.MediaController(ctx));
+                videoContainer.addView(videoView);
+                FileLogger.i(TAG, "🎬 [VIDEO_VIEW_ADDED] 已添加 VideoView | path=" + localPath + " | size=" + videoFile.length() + "B");
+                return true;
+            } catch (Exception e) {
+                FileLogger.e(TAG, "❌ [ADD_VIDEO_VIEW_ERROR] 添加视频视图失败", e);
+                return false;
             }
         }
     }
