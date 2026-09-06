@@ -249,7 +249,9 @@ public class KlingVideoGenerationTool implements Tool {
                 result.put("aspect_ratio", aspectRatio);
                 result.put("total_duration_ms", totalDurationMs);
                 result.put("timestamp", timestamp);
-                result.put("attachment", buildVideoAttachment(savedPath, duration));
+                // 🆕 修复 #883422015337：attachment → attachments（JSONArray），与 SisterFutureActivity.parseAttachments 期望一致
+                JSONObject videoAtt = buildVideoAttachment(savedPath, duration);
+                result.put("attachments", new JSONArray().put(videoAtt));
 
                 callback.onResult(result);
 
