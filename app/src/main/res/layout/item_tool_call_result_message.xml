@@ -28,4 +28,12 @@
         android:orientation="vertical"
         android:layout_marginTop="8dp"
         android:visibility="gone"/>
+    <!-- 🆕 修复 #883422015337：新增视频附件容器，渲染 Kling 生成的 mp4 -->
+    <LinearLayout
+        android:id="@+id/tool_call_result_videos_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="8dp"
+        android:visibility="gone"/>
 </LinearLayout>
