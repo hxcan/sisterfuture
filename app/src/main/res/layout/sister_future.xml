@@ -65,7 +65,7 @@
     android:layout_alignParentBottom="true"
     android:layout_toLeftOf="@+id/commandRecognizebutton2" />
 
-  <!-- 🆕 图片上传按钮 -->
+  <!-- 图片/视频上传按钮 -->
   <Button
     android:layout_width="48dp"
     android:layout_height="48dp"
@@ -74,7 +74,7 @@
     android:background="@drawable/ic_image"
     android:layout_alignParentBottom="true"
     android:layout_toLeftOf="@+id/sendButtonn2"
-    android:contentDescription="上传图片" />
+    android:contentDescription="上传图片或视频" />
 
   <!-- 手动兜底：不经过大模型，直接清空当前会话上下文 -->
   <Button
