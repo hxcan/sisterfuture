@@ -296,7 +296,7 @@ public class TongYiClient
 
         JSONObject requestBody = new JSONObject();
         requestBody.put("model", accessPointManager.getCurrentModelName());
-        requestBody.put("messages", messages);
+        requestBody.put("messages", stripLocalMessageMetadata(messages));
         requestBody.put("stream", true);
         requestBody.put("enable_thinking", false);
         
@@ -459,6 +459,17 @@ public class TongYiClient
         // 🔗 清理映射
         tongYiClient.removeRequestIdMapping(requestId);
       }
+    }
+
+    private JSONArray stripLocalMessageMetadata(JSONArray messages) throws Exception
+    {
+      JSONArray apiMessages = new JSONArray(messages.toString());
+      for (int i = 0; i < apiMessages.length(); i++)
+      {
+        JSONObject message = apiMessages.optJSONObject(i);
+        if (message != null) message.remove("local_attachments");
+      }
+      return apiMessages;
     }
   }
 

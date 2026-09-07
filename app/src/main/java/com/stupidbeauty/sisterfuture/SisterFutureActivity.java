@@ -155,6 +155,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private ActivityResultLauncher<Intent> imagePickerLauncher;
   private String currentImageBase64 = null;
   private String currentImagePath = null;  // WanxiangImage 工具支持参考图片：图片本地缓存路径
+  private String currentVideoPath = null;
+  private String currentVideoMimeType = null;
+  private JSONArray currentVideoFrames = null;
+  private volatile boolean isVideoProcessing = false;
+  private volatile int mediaSelectionGeneration = 0;
   @BindView(R.id.uploadImageButton) Button uploadImageButton;
   @BindView(R.id.resetContextButton) Button resetContextButton;
 
@@ -360,6 +365,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         String content = msg.optString("content");
         String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
         MessageItem item = new MessageItem(displayText, MessageType.TOOL_CALL_RESULT);
+        try {
+          JSONObject toolResult = new JSONObject(content);
+          item.setAttachments(Attachment.fromJsonArray(toolResult.optJSONArray("attachments")));
+        } catch (JSONException ignored) {
+        }
         if (messageId != null && !messageId.isEmpty()) {
           item.setMessageId(messageId); // 设置正确的 messageId
         }
@@ -410,6 +420,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           }
 
           MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
+          item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
           if (messageId != null && !messageId.isEmpty()) {
             item.setMessageId(messageId);
           }
@@ -504,17 +515,25 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   public void sendMessageToSister(String message)
   {
+    if (isVideoProcessing)
+    {
+      Toast.makeText(this, "视频仍在处理中，请稍候", Toast.LENGTH_SHORT).show();
+      return;
+    }
     if (message == null || message.trim().isEmpty())
     {
-      if (currentImageBase64 == null || currentImageBase64.isEmpty())
+      if ((currentImageBase64 == null || currentImageBase64.isEmpty())
+          && (currentVideoPath == null || currentVideoPath.isEmpty()))
       {
         return;
       }
     }
 
     boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
+    boolean hasVideo = (currentVideoPath != null && !currentVideoPath.isEmpty()
+        && currentVideoFrames != null && currentVideoFrames.length() > 0);
 
-    if (hasImage)
+    if (hasImage || hasVideo)
     {
       try
       {
@@ -528,21 +547,42 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           contentArray.put(textContent);
         }
 
-        JSONObject imageContent = new JSONObject();
-        imageContent.put("type", "image_url");
+        if (hasImage)
+        {
+          JSONObject imageContent = new JSONObject();
+          imageContent.put("type", "image_url");
 
-        JSONObject imageUrl = new JSONObject();
-        imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
-        imageContent.put("image_url", imageUrl);
-        contentArray.put(imageContent);
+          JSONObject imageUrl = new JSONObject();
+          imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+          imageContent.put("image_url", imageUrl);
+          contentArray.put(imageContent);
+        }
+
+        if (hasVideo)
+        {
+          JSONObject videoContent = new JSONObject();
+          videoContent.put("type", "video");
+          videoContent.put("video", currentVideoFrames);
+          contentArray.put(videoContent);
+        }
 
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
         userMessage.put("content", contentArray);
 
+        List<Attachment> uiAttachments = new ArrayList<>();
+        if (hasVideo)
+        {
+          JSONObject videoAttachmentJson = buildLocalVideoAttachment(currentVideoPath, currentVideoMimeType);
+          userMessage.put("local_attachments", new JSONArray().put(videoAttachmentJson));
+          uiAttachments = Attachment.fromJsonArray(userMessage.optJSONArray("local_attachments"));
+        }
+
         contextManager.addRawMessage(userMessage);
 
-        messageAdapter.addMessage(new MessageItem(message != null ? message : "", MessageType.USER, hasImage ? currentImageBase64 : null));
+        MessageItem displayedMessage = new MessageItem(message != null ? message : "", MessageType.USER, hasImage ? currentImageBase64 : null);
+        displayedMessage.setAttachments(uiAttachments);
+        messageAdapter.addMessage(displayedMessage);
 
         // 🔥 新增：把图片本地路径作为独立文本消息追加（供 wanxiangImage 等工具使用）
         if (currentImagePath != null)
@@ -552,6 +592,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
         currentImageBase64 = null;
         currentImagePath = null;
+        currentVideoPath = null;
+        currentVideoMimeType = null;
+        currentVideoFrames = null;
 
         scrollToBottom();
 
@@ -691,6 +734,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     indexToOriginalIdMap.clear();
     currentImageBase64 = null;
     currentImagePath = null;
+    deletePendingVideo();
+    currentVideoPath = null;
+    currentVideoMimeType = null;
+    currentVideoFrames = null;
+    isVideoProcessing = false;
+    mediaSelectionGeneration++;
     uploadImageButton.setAlpha(1.0f);
 
     Toast.makeText(this, "上下文已强制重置", Toast.LENGTH_SHORT).show();
@@ -700,11 +749,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   @OnClick(R.id.uploadImageButton)
   public void onUploadImageButton()
   {
+    if (isVideoProcessing)
+    {
+      Toast.makeText(this, "视频仍在处理中，请稍候", Toast.LENGTH_SHORT).show();
+      return;
+    }
+    deletePendingVideo();
+    mediaSelectionGeneration++;
     if (currentImageBase64 != null)
     {
       currentImageBase64 = null;
     }
-    openImagePicker();
+    currentImagePath = null;
+    currentVideoPath = null;
+    currentVideoMimeType = null;
+    currentVideoFrames = null;
+    openMediaPicker();
   }
 
   private void sendChatRequest()
@@ -1921,6 +1981,161 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     FileLogger.d(TAG, "📷 [IMAGE_PICKER_INIT] 图片选择器已初始化");
   }
 
+  private void handleSelectedMedia(Intent data)
+  {
+    Uri uri = data.getData();
+    if (uri == null) return;
+
+    String mimeType = getContentResolver().getType(uri);
+    if (mimeType != null && mimeType.startsWith("video/"))
+    {
+      handleSelectedVideo(uri, mimeType);
+    }
+    else
+    {
+      handleSelectedImage(data);
+    }
+  }
+
+  private void handleSelectedVideo(Uri videoUri, String mimeType)
+  {
+    final int selectionGeneration = mediaSelectionGeneration;
+    isVideoProcessing = true;
+    new Thread(() -> {
+      try
+      {
+        File videoDirectory = new File(getFilesDir(), "message_videos");
+        if (!videoDirectory.exists() && !videoDirectory.mkdirs())
+        {
+          throw new IOException("无法创建视频存储目录");
+        }
+
+        String extension = mimeType != null && mimeType.contains("quicktime") ? ".mov" : ".mp4";
+        File target = new File(videoDirectory, "user_video_" + System.currentTimeMillis() + extension);
+        try (InputStream input = getContentResolver().openInputStream(videoUri);
+             FileOutputStream output = new FileOutputStream(target))
+        {
+          if (input == null) throw new IOException("无法读取所选视频");
+          byte[] buffer = new byte[8192];
+          int count;
+          while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+        }
+
+        JSONArray frames = extractVideoFrames(target);
+        if (frames.length() == 0)
+        {
+          if (!target.delete()) FileLogger.w(TAG, "⚠️ 无法删除无效视频文件: " + target.getAbsolutePath());
+          throw new IOException("无法从视频中提取画面");
+        }
+
+        if (selectionGeneration != mediaSelectionGeneration)
+        {
+          if (!target.delete()) FileLogger.w(TAG, "⚠️ 无法删除已取消的视频文件: " + target.getAbsolutePath());
+          return;
+        }
+
+        currentImageBase64 = null;
+        currentImagePath = null;
+        currentVideoPath = target.getAbsolutePath();
+        currentVideoMimeType = mimeType != null ? mimeType : "video/mp4";
+        currentVideoFrames = frames;
+        isVideoProcessing = false;
+
+        runOnUiThread(() -> Toast.makeText(this,
+          "✅ 视频已加载，已提取 " + frames.length() + " 帧", Toast.LENGTH_SHORT).show());
+        FileLogger.i(TAG, "✅ [VIDEO_SELECTED] path=" + currentVideoPath + " | frames=" + frames.length());
+      }
+      catch (Exception e)
+      {
+        isVideoProcessing = false;
+        FileLogger.e(TAG, "❌ [VIDEO_ERROR] 加载视频失败", e);
+        runOnUiThread(() -> Toast.makeText(this, "❌ 视频加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show());
+      }
+    }, "UserVideoProcessor").start();
+  }
+
+  private void deletePendingVideo()
+  {
+    if (currentVideoPath == null || currentVideoPath.isEmpty()) return;
+    try
+    {
+      File videoDirectory = new File(getFilesDir(), "message_videos").getCanonicalFile();
+      File pendingVideo = new File(currentVideoPath).getCanonicalFile();
+      if (pendingVideo.getParentFile() != null && pendingVideo.getParentFile().equals(videoDirectory)
+          && pendingVideo.exists() && !pendingVideo.delete())
+      {
+        FileLogger.w(TAG, "⚠️ 无法删除未发送视频: " + pendingVideo.getAbsolutePath());
+      }
+    }
+    catch (Exception e)
+    {
+      FileLogger.w(TAG, "⚠️ 清理未发送视频失败: " + e.getMessage());
+    }
+  }
+
+  private JSONArray extractVideoFrames(File videoFile) throws IOException
+  {
+    android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
+    JSONArray result = new JSONArray();
+    try
+    {
+      retriever.setDataSource(videoFile.getAbsolutePath());
+      String durationText = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION);
+      long durationMs = durationText == null ? 0L : Long.parseLong(durationText);
+      if (durationMs <= 0) throw new IOException("无法读取视频时长");
+      int frameCount = 8;
+
+      for (int i = 0; i < frameCount; i++)
+      {
+        long timeUs = (durationMs * 1000L * i) / (frameCount - 1);
+        android.graphics.Bitmap frame = retriever.getFrameAtTime(
+          timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST);
+        if (frame == null) continue;
+
+        int maxDimension = 960;
+        int width = frame.getWidth();
+        int height = frame.getHeight();
+        android.graphics.Bitmap outputFrame = frame;
+        if (Math.max(width, height) > maxDimension)
+        {
+          float scale = (float) maxDimension / Math.max(width, height);
+          outputFrame = android.graphics.Bitmap.createScaledBitmap(frame,
+            Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)), true);
+        }
+
+        ByteArrayOutputStream encoded = new ByteArrayOutputStream();
+        outputFrame.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, encoded);
+        result.put("data:image/jpeg;base64," + Base64.encodeToString(encoded.toByteArray(), Base64.NO_WRAP));
+
+        if (outputFrame != frame) outputFrame.recycle();
+        frame.recycle();
+      }
+      return result;
+    }
+    catch (Exception e)
+    {
+      throw new IOException("视频抽帧失败", e);
+    }
+    finally
+    {
+      retriever.release();
+    }
+  }
+
+  private JSONObject buildLocalVideoAttachment(String path, String mimeType) throws JSONException
+  {
+    File videoFile = new File(path);
+    JSONObject metadata = new JSONObject();
+    metadata.put("size", videoFile.length());
+    metadata.put("mimeType", mimeType != null ? mimeType : "video/mp4");
+
+    JSONObject attachment = new JSONObject();
+    attachment.put("type", "video");
+    attachment.put("url", Uri.fromFile(videoFile).toString());
+    attachment.put("metadata", metadata);
+    return attachment;
+  }
+
   private void handleSelectedImage(Intent data)
   {
     try
@@ -1975,16 +2190,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
-  private void openImagePicker()
+  private void openMediaPicker()
   {
     FileLogger.d(TAG, "📂 [PICKER] 准备打开相册选择器...");
 
-    Intent pickIntent = new Intent(Intent.ACTION_PICK);
-    pickIntent.setType("image/*");
+    Intent pickIntent = new Intent(Intent.ACTION_GET_CONTENT);
+    pickIntent.setType("*/*");
+    pickIntent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+    pickIntent.addCategory(Intent.CATEGORY_OPENABLE);
     try
     {
       startActivityForResult(pickIntent, 1001);
-      FileLogger.d(TAG, "📷 [IMAGE_PICKER] 已打开图片选择器");
+      FileLogger.d(TAG, "📷 [MEDIA_PICKER] 已打开图片/视频选择器");
     }
     catch (Exception e)
     {
@@ -2002,7 +2219,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     if (requestCode == 1001 && resultCode == RESULT_OK && data != null)
     {
-      handleSelectedImage(data);
+      handleSelectedMedia(data);
     }
   }
   /**

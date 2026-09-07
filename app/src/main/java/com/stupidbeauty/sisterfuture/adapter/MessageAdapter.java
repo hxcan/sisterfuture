@@ -84,6 +84,11 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     String content = msg.optString("content");
                     String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
                     MessageItem item = new MessageItem(displayText, MessageType.TOOL_CALL_RESULT);
+                    try {
+                        JSONObject result = new JSONObject(content);
+                        item.setAttachments(Attachment.fromJsonArray(result.optJSONArray("attachments")));
+                    } catch (Exception ignored) {
+                    }
                     // 🆕 设置 messageId
                     if (messageId != null && !messageId.isEmpty()) {
                         item.setMessageId(messageId);
@@ -126,6 +131,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                         }
                         
                         MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
+                        item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
                         // 🆕 设置 messageId
                         if (messageId != null && !messageId.isEmpty()) {
                             item.setMessageId(messageId);
@@ -231,6 +237,16 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         return messages.size();
     }
 
+    @Override
+    public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
+        if (holder instanceof UserMessageViewHolder) {
+            ((UserMessageViewHolder) holder).releaseVideos();
+        } else if (holder instanceof ToolCallResultViewHolder) {
+            ((ToolCallResultViewHolder) holder).releaseVideos();
+        }
+        super.onViewRecycled(holder);
+    }
+
     // 🔗 新增：添加消息并返回消息项，方便后续关联
     public MessageItem addMessage(MessageItem message) {
         messages.add(message);
@@ -317,6 +333,45 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
         return text;
     }
+
+    private static boolean addVideoView(android.view.ViewGroup videoContainer, String url,
+                                        android.content.Context ctx, int currentCount) {
+        try {
+            if (videoContainer == null || url == null || !url.startsWith("file://")) return false;
+            String localPath = android.net.Uri.parse(url).getPath();
+            if (localPath == null) return false;
+            java.io.File videoFile = new java.io.File(localPath);
+            if (!videoFile.exists()) {
+                FileLogger.e(TAG, "❌ [VIDEO_FILE_MISSING] 视频文件不存在: " + localPath);
+                return false;
+            }
+
+            android.widget.VideoView videoView = new android.widget.VideoView(ctx);
+            android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                (int)(220 * ctx.getResources().getDisplayMetrics().density));
+            if (currentCount > 0) lp.topMargin = (int)(8 * ctx.getResources().getDisplayMetrics().density);
+            videoView.setLayoutParams(lp);
+            videoView.setVideoURI(android.net.Uri.fromFile(videoFile));
+            videoView.setMediaController(new android.widget.MediaController(ctx));
+            videoContainer.addView(videoView);
+            return true;
+        } catch (Exception e) {
+            FileLogger.e(TAG, "❌ [ADD_VIDEO_VIEW_ERROR] 添加视频视图失败", e);
+            return false;
+        }
+    }
+
+    private static void clearVideoViews(android.view.ViewGroup container) {
+        if (container == null) return;
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if (child instanceof android.widget.VideoView) {
+                ((android.widget.VideoView) child).stopPlayback();
+            }
+        }
+        container.removeAllViews();
+    }
     
     // 🗑️ 显示长按菜单（同时包含"删除"和"复制"选项）- 传递 messageId
     private static void showLongPressMenuStatic(View anchorView, MessageItem message, int position, TextView textView, List<MessageItem> messagesList, OnMessageDeleteListener listener) {
@@ -355,6 +410,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     {
       @BindView(R.id.user_text) TextView textView;
       @BindView(R.id.user_image) ImageView imageView;
+      @BindView(R.id.user_videos_container) android.view.ViewGroup videoContainer;
       private List<MessageItem> messagesRef;
       private MessageAdapter.OnMessageDeleteListener deleteListenerRef;
 
@@ -414,6 +470,18 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
       public void bind(MessageItem message) 
       {
+        clearVideoViews(videoContainer);
+        int videoCount = 0;
+        if (message.getAttachments() != null) {
+          for (Attachment attachment : message.getAttachments()) {
+            if (attachment != null && "video".equals(attachment.getType())
+                && addVideoView(videoContainer, attachment.getUrl(), itemView.getContext(), videoCount)) {
+              videoCount++;
+            }
+          }
+        }
+        videoContainer.setVisibility(videoCount > 0 ? View.VISIBLE : View.GONE);
+
         // 🖼️ 检测是否有图片
         if (message.getImageUrl() != null && !message.getImageUrl().isEmpty()) 
         {
@@ -496,6 +564,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
           imageView.setVisibility(View.GONE);
           textView.setText(message.getText());
         }
+      }
+
+      public void releaseVideos() {
+        clearVideoViews(videoContainer);
       }
     }
 
@@ -684,7 +756,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 // 先清空旧内容（防止 RecyclerView 复用时显示错误图片）
                 imageContainer.removeAllViews();
                 if (videoContainer != null) {
-                    videoContainer.removeAllViews();
+                    clearVideoViews(videoContainer);
                 }
                 if (attachments == null || attachments.isEmpty()) {
                     imageContainer.setVisibility(android.view.View.GONE);
@@ -703,7 +775,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     FileLogger.d(TAG, "📦 [ATTACHMENT_" + i + "] type=" + type + " | url=" + url);
                     // 🆕 修复 #883422015337：video 分支
                     if ("video".equals(type) && url != null && url.startsWith("file://")) {
-                        if (addVideoView(videoContainer, url, ctx, videoCount)) {
+                        if (MessageAdapter.addVideoView(videoContainer, url, ctx, videoCount)) {
                             videoCount++;
                         }
                         continue;
@@ -819,36 +891,12 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             }
         }
 
-        // 🆕 修复 #883422015337：创建 VideoView 并添加到视频容器，支持点击播放
-        private boolean addVideoView(android.view.ViewGroup videoContainer, String url, android.content.Context ctx, int currentCount) {
-            try {
-                if (videoContainer == null) {
-                    FileLogger.w(TAG, "⚠️ [VIDEO_CONTAINER_NULL] 视频容器为空");
-                    return false;
-                }
-                String localPath = url.substring("file://".length());
-                java.io.File videoFile = new java.io.File(localPath);
-                if (!videoFile.exists()) {
-                    FileLogger.e(TAG, "❌ [VIDEO_FILE_MISSING] 视频文件不存在: " + localPath);
-                    return false;
-                }
-                android.widget.VideoView videoView = new android.widget.VideoView(ctx);
-                android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    (int)(220 * ctx.getResources().getDisplayMetrics().density)); // 固定 220dp 高
-                if (currentCount > 0) {
-                    lp.topMargin = (int)(8 * ctx.getResources().getDisplayMetrics().density);
-                }
-                videoView.setLayoutParams(lp);
-                videoView.setVideoURI(android.net.Uri.fromFile(videoFile));
-                videoView.setMediaController(new android.widget.MediaController(ctx));
-                videoContainer.addView(videoView);
-                FileLogger.i(TAG, "🎬 [VIDEO_VIEW_ADDED] 已添加 VideoView | path=" + localPath + " | size=" + videoFile.length() + "B");
-                return true;
-            } catch (Exception e) {
-                FileLogger.e(TAG, "❌ [ADD_VIDEO_VIEW_ERROR] 添加视频视图失败", e);
-                return false;
+        public void releaseVideos() {
+            View videoContainer = itemView.findViewById(R.id.tool_call_result_videos_container);
+            if (videoContainer instanceof android.view.ViewGroup) {
+                clearVideoViews((android.view.ViewGroup) videoContainer);
             }
         }
+
     }
 }
