@@ -567,6 +567,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     public static class ToolCallResultViewHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.tool_call_result_text) TextView textView;
         private boolean isExpanded = false;
+        private boolean suppressNextExpandToggle = false;
         private List<MessageItem> messagesRef;
         private MessageAdapter.OnMessageDeleteListener deleteListenerRef;
 
@@ -584,8 +585,22 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 return true;
             });
             
-            // 点击切换展开/收起状态
+            // 视频播放器及 MediaController 都位于消息根视图内部。记录触摸是否发生在
+            // 视频区域，避免播放器交互同时触发工具消息文字的展开/收起。
+            itemView.setOnTouchListener((v, event) -> {
+                if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                    View videoContainer = itemView.findViewById(R.id.tool_call_result_videos_container);
+                    suppressNextExpandToggle = isTouchInsideView(event, videoContainer);
+                }
+                return false;
+            });
+
+            // 点击非视频区域时切换展开/收起状态
             itemView.setOnClickListener(v -> {
+                if (suppressNextExpandToggle) {
+                    suppressNextExpandToggle = false;
+                    return;
+                }
                 isExpanded = !isExpanded;
                 if (isExpanded) {
                     textView.setMaxLines(Integer.MAX_VALUE);
@@ -629,12 +644,24 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             });
         }
 
+        private static boolean isTouchInsideView(android.view.MotionEvent event, View target) {
+            if (target == null || target.getVisibility() != View.VISIBLE) {
+                return false;
+            }
+            android.graphics.Rect visibleBounds = new android.graphics.Rect();
+            return target.getGlobalVisibleRect(visibleBounds)
+                && visibleBounds.contains((int) event.getRawX(), (int) event.getRawY());
+        }
+
         public void bind(MessageItem message) {
             // 🔥 #4881 仅工具调用结果消息限制显示长度
             String text = limitToolResultDisplayLength(message.getText());
             textView.setText(text);
             // 重置状态 - 依赖布局文件中的 maxLines 和 ellipsize 设置
             isExpanded = false;
+            suppressNextExpandToggle = false;
+            textView.setMaxLines(5);
+            textView.setEllipsize(android.text.TextUtils.TruncateAt.END);
             // 🆕 渲染附件图片：遍历 message.getAttachments()，对 image 类型解码并显示
             renderAttachments(message);
         }
