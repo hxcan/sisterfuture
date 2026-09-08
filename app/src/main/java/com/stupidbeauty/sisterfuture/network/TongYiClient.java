@@ -6,7 +6,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
+import android.content.Context;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
+import com.stupidbeauty.sisterfuture.manager.OssManager;
 import com.stupidbeauty.sisterfuture.tool.Tool;
 import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
@@ -65,9 +67,15 @@ public class TongYiClient
 
   public TongYiClient(ModelAccessPointManager accessPointManager, ToolManager toolManager)
   {
+    this(null, accessPointManager, toolManager);
+  }
+
+  public TongYiClient(Context context, ModelAccessPointManager accessPointManager, ToolManager toolManager)
+  {
     this.accessPointManager = accessPointManager;
     this.toolManager = toolManager;
-    this.networkRequester = new OkHttpNetworkRequester(this.accessPointManager, this.toolManager, this);
+    this.networkRequester = new OkHttpNetworkRequester(this.accessPointManager, this.toolManager, this,
+      context == null ? null : new OssManager(context));
     
     // === 🔒 #5028 启动队列处理器 ===
     startQueueProcessor();
@@ -207,8 +215,10 @@ public class TongYiClient
     private final ModelAccessPointManager accessPointManager;
     private final ToolManager toolManager;
     private final TongYiClient tongYiClient; // 引用父类，用于访问映射表
+    private final OssManager ossManager;
 
-    public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager, TongYiClient tongYiClient)
+    public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager,
+                                  TongYiClient tongYiClient, OssManager ossManager)
     {
       this.client = new OkHttpClient.Builder()
         .connectTimeout(500, TimeUnit.MILLISECONDS)
@@ -218,6 +228,7 @@ public class TongYiClient
       this.accessPointManager = accessPointManager;
       this.toolManager = toolManager;
       this.tongYiClient = tongYiClient;
+      this.ossManager = ossManager;
     }
 
     @Override
@@ -464,6 +475,7 @@ public class TongYiClient
     private JSONArray stripLocalMessageMetadata(JSONArray messages) throws Exception
     {
       JSONArray apiMessages = new JSONArray(messages.toString());
+      if (ossManager != null) ossManager.refreshVideoMessageUrls(apiMessages);
       for (int i = 0; i < apiMessages.length(); i++)
       {
         JSONObject message = apiMessages.optJSONObject(i);
