@@ -352,8 +352,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
             if (currentCount > 0) lp.topMargin = (int)(8 * ctx.getResources().getDisplayMetrics().density);
             videoView.setLayoutParams(lp);
-            videoView.setOnPreparedListener(player ->
-                videoView.setVideoSize(player.getVideoWidth(), player.getVideoHeight()));
+            videoView.setOnPreparedListener(player -> {
+                videoView.setVideoSize(player.getVideoWidth(), player.getVideoHeight());
+                videoView.seekTo(100);
+            });
             videoView.setVideoURI(android.net.Uri.fromFile(videoFile));
             videoView.setMediaController(new android.widget.MediaController(ctx));
             videoContainer.addView(videoView);
