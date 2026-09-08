@@ -113,5 +113,8 @@ public class ToolRegistry {
         // 飞书工具组
         toolManager.registerTool(new AddFeishuBitableRecordTool(context));
         toolManager.registerTool(new GetFeishuUserIdByMobileTool(context));
+
+        // GitHub PR 列表获取工具
+        toolManager.registerTool(new GetPullRequestsTool(context));
     }
 }
