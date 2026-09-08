@@ -23,7 +23,7 @@ import java.util.concurrent.Executors;
  * 主要解决日报任务中拉 PR 把上下文吃满的问题。
  *
  * @author 未来姐姐
- * @version 1.0.0 (2026-09-08)
+ * @version 1.0.1 (2026-09-08) - 修复 include_merged 语法错误
  */
 public class GetPullRequestsTool implements Tool {
 
@@ -52,38 +52,56 @@ public class GetPullRequestsTool implements Tool {
       functionDef.put("name", "getPullRequests");
       functionDef.put("description", "获取 GitHub 指定仓库在指定时间范围内的 Pull Request 列表（已合并 + 未合并）。自动处理分页，支持时间窗口过滤。结果可保存到手机以避免上下文过长。");
 
+      JSONObject ownerProp = new JSONObject();
+      ownerProp.put("type", "string");
+      ownerProp.put("description", "仓库所有者（必需，如 ppnew-ai）");
+
+      JSONObject repoProp = new JSONObject();
+      repoProp.put("type", "string");
+      repoProp.put("description", "仓库名称（必需，如 ppnew）");
+
+      JSONObject startTimeProp = new JSONObject();
+      startTimeProp.put("type", "string");
+      startTimeProp.put("description", "起始时间（ISO 8601 格式，必需，如 2026-09-07T18:00:00+08:00）");
+
+      JSONObject endTimeProp = new JSONObject();
+      endTimeProp.put("type", "string");
+      endTimeProp.put("description", "结束时间（ISO 8601 格式，必需，如 2026-09-08T18:00:00+08:00）");
+
+      JSONObject stateProp = new JSONObject();
+      stateProp.put("type", "string");
+      stateProp.put("description", "PR 状态过滤：open / closed / all（可选，默认 all）");
+
+      JSONObject includeMergedProp = new JSONObject();
+      includeMergedProp.put("type", "boolean");
+      includeMergedProp.put("description", "当 state=all 时，是否包含已合并的 PR（可选，默认 true）");
+
+      JSONObject perPageProp = new JSONObject();
+      perPageProp.put("type", "integer");
+      perPageProp.put("description", "每页数量（GitHub 上限 100，可选，默认 30）");
+
+      JSONObject saveToPhoneProp = new JSONObject();
+      saveToPhoneProp.put("type", "boolean");
+      saveToPhoneProp.put("description", "是否将完整 PR 列表保存到手机存储（可选，默认 true，避免上下文超长）");
+
+      JSONObject tokenProp = new JSONObject();
+      tokenProp.put("type", "string");
+      tokenProp.put("description", "GitHub Token（可选，从工具备注读取）");
+
+      JSONObject properties = new JSONObject();
+      properties.put("owner", ownerProp);
+      properties.put("repo", repoProp);
+      properties.put("start_time", startTimeProp);
+      properties.put("end_time", endTimeProp);
+      properties.put("state", stateProp);
+      properties.put("include_merged", includeMergedProp);
+      properties.put("per_page", perPageProp);
+      properties.put("save_to_phone", saveToPhoneProp);
+      properties.put("token", tokenProp);
+
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
-      parameters.put("properties", new JSONObject()
-        .put("owner", new JSONObject()
-          .put("type", "string")
-          .put("description", "仓库所有者（必需，如 ppnew-ai）"))
-        .put("repo", new JSONObject()
-          .put("type", "string")
-          .put("description", "仓库名称（必需，如 ppnew）"))
-        .put("start_time", new JSONObject()
-          .put("type", "string")
-          .put("description", "起始时间（ISO 8601 格式，必需，如 2026-09-07T18:00:00+08:00）"))
-        .put("end_time", new JSONObject()
-          .put("type", "string")
-          .put("description", "结束时间（ISO 8601 格式，必需，如 2026-09-08T18:00:00+08:00）"))
-        .put("state", new JSONObject()
-          .put("type", "string")
-          .put("description", "PR 状态过滤：open / closed / all（可选，默认 all）"))
-        .put("include_merged", new JSONObject()
-          .put("boolean", new JSONObject()
-          .put("type", "boolean")
-          .put("description", "当 state=all 时，是否包含已合并的 PR（可选，默认 true）"))
-        .put("per_page", new JSONObject()
-          .put("type", "integer")
-          .put("description", "每页数量（GitHub 上限 100，可选，默认 30）"))
-        .put("save_to_phone", new JSONObject()
-          .put("type", "boolean")
-          .put("description", "是否将完整 PR 列表保存到手机存储（可选，默认 true，避免上下文超长）"))
-        .put("token", new JSONObject()
-          .put("type", "string")
-          .put("description", "GitHub Token（可选，从工具备注读取）"))
-      );
+      parameters.put("properties", properties);
       parameters.put("required", new JSONArray(new String[]{"owner", "repo", "start_time", "end_time"}));
 
       functionDef.put("parameters", parameters);
@@ -183,9 +201,10 @@ public class GetPullRequestsTool implements Tool {
         response.put("status", "success");
         response.put("owner", owner);
         response.put("repo", repo);
-        response.put("time_window", new JSONObject()
-          .put("start", startTime)
-          .put("end", endTime));
+        JSONObject timeWindow = new JSONObject();
+        timeWindow.put("start", startTime);
+        timeWindow.put("end", endTime);
+        response.put("time_window", timeWindow);
         response.put("state", state);
         response.put("total_count", allPRs.length());
         response.put("filtered_count", filteredPRs.length());
