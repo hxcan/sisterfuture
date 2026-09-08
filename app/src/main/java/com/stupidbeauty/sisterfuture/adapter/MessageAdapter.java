@@ -352,10 +352,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
             if (currentCount > 0) lp.topMargin = (int)(8 * ctx.getResources().getDisplayMetrics().density);
             videoView.setLayoutParams(lp);
-            videoView.setVideoURI(android.net.Uri.fromFile(videoFile));
-            videoView.setMediaController(new android.widget.MediaController(ctx));
             videoView.setOnPreparedListener(player ->
                 videoView.setVideoSize(player.getVideoWidth(), player.getVideoHeight()));
+            videoView.setVideoURI(android.net.Uri.fromFile(videoFile));
+            videoView.setMediaController(new android.widget.MediaController(ctx));
             videoContainer.addView(videoView);
             return true;
         } catch (Exception e) {
@@ -368,9 +368,11 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     private static class FullWidthVideoView extends android.widget.VideoView {
         private int videoWidth;
         private int videoHeight;
+        private final int initialHeight;
 
         FullWidthVideoView(Context context) {
             super(context);
+            initialHeight = Math.round(220 * context.getResources().getDisplayMetrics().density);
         }
 
         void setVideoSize(int width, int height) {
@@ -388,7 +390,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 int height = Math.round((float) width * videoHeight / videoWidth);
                 setMeasuredDimension(width, height);
             } else {
-                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                setMeasuredDimension(width, initialHeight);
             }
         }
     }
