@@ -713,6 +713,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   @OnClick(R.id.sendButtonn2)
   public void sendButtonn2()
   {
+    if (isVideoProcessing)
+    {
+      Toast.makeText(this, "视频正在上传，请稍候", Toast.LENGTH_SHORT).show();
+      return;
+    }
     voiceRecognizeResultString = recognizeResulttextView.getText().toString();
     sendMessageToSister(voiceRecognizeResultString);
     recognizeResulttextView.setText("");
@@ -747,6 +752,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     currentVideoOssObjectKey = null;
     currentVideoUrlExpiresAt = 0L;
     isVideoProcessing = false;
+    sendButtonn2.setEnabled(true);
     mediaSelectionGeneration++;
     uploadImageButton.setAlpha(1.0f);
 
@@ -2011,6 +2017,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     final int selectionGeneration = mediaSelectionGeneration;
     isVideoProcessing = true;
+    sendButtonn2.setEnabled(false);
     new Thread(() -> {
       File target = null;
       try
@@ -2038,10 +2045,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         String objectKey = "sisterfuture/video-messages/" + System.currentTimeMillis() + "_" + target.getName();
         JSONObject uploadResult = ossManager.uploadFile(target, objectKey, false,
           OssManager.DEFAULT_URL_EXPIRY_SECONDS, null);
+        long uploadedVideoSize = uploadResult.getLong("size");
 
         if (selectionGeneration != mediaSelectionGeneration)
         {
           if (!target.delete()) FileLogger.w(TAG, "⚠️ 无法删除已取消的视频文件: " + target.getAbsolutePath());
+          isVideoProcessing = false;
+          runOnUiThread(() -> sendButtonn2.setEnabled(true));
           return;
         }
 
@@ -2054,10 +2064,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         currentVideoUrlExpiresAt = uploadResult.getLong("expiresAt");
         isVideoProcessing = false;
 
-        runOnUiThread(() -> Toast.makeText(this,
-          "✅ 视频已上传，可以发送", Toast.LENGTH_SHORT).show());
+        runOnUiThread(() -> {
+          sendButtonn2.setEnabled(true);
+          Toast.makeText(this, "✅ 视频已上传，可以发送", Toast.LENGTH_SHORT).show();
+        });
         FileLogger.i(TAG, "✅ [VIDEO_SELECTED] path=" + currentVideoPath
-          + " | ossObjectKey=" + currentVideoOssObjectKey);
+          + " | size=" + uploadedVideoSize + " | ossObjectKey=" + currentVideoOssObjectKey);
       }
       catch (Exception e)
       {
@@ -2067,7 +2079,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
         isVideoProcessing = false;
         FileLogger.e(TAG, "❌ [VIDEO_ERROR] 处理视频失败", e);
-        runOnUiThread(() -> Toast.makeText(this, "❌ 视频处理失败：" + e.getMessage(), Toast.LENGTH_LONG).show());
+        runOnUiThread(() -> {
+          sendButtonn2.setEnabled(true);
+          Toast.makeText(this, "❌ 视频处理失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        });
       }
     }, "UserVideoProcessor").start();
   }
