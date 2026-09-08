@@ -595,6 +595,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
           contextManager.addUserMessage(currentImagePath);
         }
+        if (currentVideoPath != null)
+        {
+          contextManager.addUserMessage("视频本地路径：" + currentVideoPath);
+        }
 
         currentImageBase64 = null;
         currentImagePath = null;
