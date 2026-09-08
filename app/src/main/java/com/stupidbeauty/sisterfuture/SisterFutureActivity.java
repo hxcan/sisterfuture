@@ -565,7 +565,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
           JSONObject videoContent = new JSONObject();
           videoContent.put("type", "video_url");
-          videoContent.put("video_url", new JSONObject().put("url", currentVideoRemoteUrl));
+          videoContent.put("video_url", new JSONObject()
+            .put("url", currentVideoRemoteUrl)
+            .put("fps", 5));
           contentArray.put(videoContent);
         }
 
