@@ -346,19 +346,50 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 return false;
             }
 
-            android.widget.VideoView videoView = new android.widget.VideoView(ctx);
+            FullWidthVideoView videoView = new FullWidthVideoView(ctx);
             android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                (int)(220 * ctx.getResources().getDisplayMetrics().density));
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
             if (currentCount > 0) lp.topMargin = (int)(8 * ctx.getResources().getDisplayMetrics().density);
             videoView.setLayoutParams(lp);
             videoView.setVideoURI(android.net.Uri.fromFile(videoFile));
             videoView.setMediaController(new android.widget.MediaController(ctx));
+            videoView.setOnPreparedListener(player ->
+                videoView.setVideoSize(player.getVideoWidth(), player.getVideoHeight()));
             videoContainer.addView(videoView);
             return true;
         } catch (Exception e) {
             FileLogger.e(TAG, "❌ [ADD_VIDEO_VIEW_ERROR] 添加视频视图失败", e);
             return false;
+        }
+    }
+
+    /** Keeps videos full-width and derives height from the video's own aspect ratio. */
+    private static class FullWidthVideoView extends android.widget.VideoView {
+        private int videoWidth;
+        private int videoHeight;
+
+        FullWidthVideoView(Context context) {
+            super(context);
+        }
+
+        void setVideoSize(int width, int height) {
+            if (width > 0 && height > 0) {
+                videoWidth = width;
+                videoHeight = height;
+                requestLayout();
+            }
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int width = View.MeasureSpec.getSize(widthMeasureSpec);
+            if (videoWidth > 0 && videoHeight > 0 && width > 0) {
+                int height = Math.round((float) width * videoHeight / videoWidth);
+                setMeasuredDimension(width, height);
+            } else {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            }
         }
     }
 
