@@ -2015,6 +2015,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       File target = null;
       try
       {
+        OssManager ossManager = new OssManager(this);
+        ossManager.validateConfiguration();
+
         File videoDirectory = new File(getFilesDir(), "message_videos");
         if (!videoDirectory.exists() && !videoDirectory.mkdirs())
         {
@@ -2033,7 +2036,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
 
         String objectKey = "sisterfuture/video-messages/" + System.currentTimeMillis() + "_" + target.getName();
-        JSONObject uploadResult = new OssManager(this).uploadFile(target, objectKey, false,
+        JSONObject uploadResult = ossManager.uploadFile(target, objectKey, false,
           OssManager.DEFAULT_URL_EXPIRY_SECONDS, null);
 
         if (selectionGeneration != mediaSelectionGeneration)
@@ -2063,8 +2066,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           FileLogger.w(TAG, "⚠️ 无法删除上传失败的视频文件: " + target.getAbsolutePath());
         }
         isVideoProcessing = false;
-        FileLogger.e(TAG, "❌ [VIDEO_ERROR] 加载视频失败", e);
-        runOnUiThread(() -> Toast.makeText(this, "❌ 视频加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show());
+        FileLogger.e(TAG, "❌ [VIDEO_ERROR] 处理视频失败", e);
+        runOnUiThread(() -> Toast.makeText(this, "❌ 视频处理失败：" + e.getMessage(), Toast.LENGTH_LONG).show());
       }
     }, "UserVideoProcessor").start();
   }

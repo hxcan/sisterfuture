@@ -34,6 +34,11 @@ public class OssManager {
         this.context = context.getApplicationContext();
     }
 
+    /** Fail fast before doing local media work when the shared OSS note is not configured. */
+    public void validateConfiguration() {
+        loadConfig(null);
+    }
+
     public JSONObject uploadFile(File localFile, String objectKey, boolean publicRead,
                                  int expiresInSeconds, JSONObject overrides) throws Exception {
         if (localFile == null || !localFile.isFile()) {
@@ -149,7 +154,7 @@ public class OssManager {
         config.endpoint = value(overrides, "endpoint", note, NOTE_KEY_ENDPOINT);
         if (config.accessKeyId == null || config.accessKeySecret == null
             || config.bucketName == null || config.endpoint == null) {
-            throw new IllegalArgumentException("OSS 凭证不完整，请配置 ossUploadFile 工具备注");
+            throw new IllegalArgumentException("OSS 凭证不完整，请先配置 ossUploadFile 工具备注");
         }
         return config;
     }
