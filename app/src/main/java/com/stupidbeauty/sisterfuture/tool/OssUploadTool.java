@@ -2,37 +2,24 @@ package com.stupidbeauty.sisterfuture.tool;
 
 import android.content.Context;
 import androidx.annotation.NonNull;
-import com.alibaba.sdk.android.oss.ClientConfiguration;
-import com.alibaba.sdk.android.oss.OSS;
-import com.alibaba.sdk.android.oss.OSSClient;
-import com.alibaba.sdk.android.oss.common.auth.OSSCredentialProvider;
-import com.alibaba.sdk.android.oss.common.auth.OSSPlainTextAKSKCredentialProvider;
-import com.alibaba.sdk.android.oss.model.ObjectMetadata;
-import com.alibaba.sdk.android.oss.model.PutObjectRequest;
-import com.alibaba.sdk.android.oss.model.PutObjectResult;
+import com.stupidbeauty.sisterfuture.manager.OssManager;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class OssUploadTool implements Tool {
     private static final String TAG = "OssUploadTool";
 
-    private static final String NOTE_KEY_ACCESS_KEY_ID = "aliyun_oss_access_key_id";
-    private static final String NOTE_KEY_ACCESS_KEY_SECRET = "aliyun_oss_access_key_secret";
-    private static final String NOTE_KEY_BUCKET_NAME = "aliyun_oss_bucket_name";
-    private static final String NOTE_KEY_ENDPOINT = "aliyun_oss_endpoint";
-
-    private final Context context;
+    private final OssManager ossManager;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public OssUploadTool(Context context) {
-        this.context = context;
+        this.ossManager = new OssManager(context);
     }
 
     @Override
@@ -126,15 +113,6 @@ public class OssUploadTool implements Tool {
                     throw new IOException("本地文件不存在: " + localPath);
                 }
 
-                String accessKeyId = getOrFromNote(arguments, "accessKeyId", NOTE_KEY_ACCESS_KEY_ID);
-                String accessKeySecret = getOrFromNote(arguments, "accessKeySecret", NOTE_KEY_ACCESS_KEY_SECRET);
-                String bucketName = getOrFromNote(arguments, "bucketName", NOTE_KEY_BUCKET_NAME);
-                String endpoint = getOrFromNote(arguments, "endpoint", NOTE_KEY_ENDPOINT);
-
-                if (accessKeyId == null || accessKeySecret == null || bucketName == null || endpoint == null) {
-                    throw new IllegalArgumentException("凭证不完整");
-                }
-
                 String objectKey = arguments.optString("objectKey", null);
                 if (objectKey == null || objectKey.trim().isEmpty()) {
                     long timestamp = System.currentTimeMillis();
@@ -142,51 +120,16 @@ public class OssUploadTool implements Tool {
                     objectKey = "sisterfuture/" + timestamp + "_" + originalName;
                 }
 
-                ClientConfiguration conf = new ClientConfiguration();
-                conf.setConnectionTimeout(15 * 1000);
-                conf.setSocketTimeout(15 * 1000);
-                conf.setMaxConcurrentRequest(5);
-                conf.setMaxErrorRetry(2);
-
-                OSSCredentialProvider credentialProvider = new OSSPlainTextAKSKCredentialProvider(accessKeyId, accessKeySecret);
-                OSS oss = new OSSClient(context.getApplicationContext(), endpoint, credentialProvider, conf);
-
                 boolean publicRead = arguments.optBoolean("publicRead", false);
-                ObjectMetadata metadata = new ObjectMetadata();
-                if (publicRead) {
-                    metadata.setHeader("x-oss-object-acl", "public-read");
-                }
-
-                PutObjectRequest put = new PutObjectRequest(bucketName, objectKey, localPath);
-                put.setMetadata(metadata);
-
-                long uploadStart = System.currentTimeMillis();
-                PutObjectResult result = oss.putObject(put);
-                long uploadDuration = System.currentTimeMillis() - uploadStart;
-
-long oneHour = 3600;
-String signedUrl = oss.presignConstrainedObjectURL(bucketName, objectKey, oneHour).toString();
-
+                JSONObject output = ossManager.uploadFile(localFile, objectKey, publicRead,
+                    OssManager.DEFAULT_URL_EXPIRY_SECONDS, arguments);
                 long totalDuration = System.currentTimeMillis() - totalStartTime;
-
-                JSONObject output = new JSONObject();
-                output.put("status", "success");
-                output.put("objectKey", objectKey);
-                output.put("bucketName", bucketName);
-                output.put("endpoint", endpoint);
-                output.put("publicUrl", publicRead ? "https://" + bucketName + "." + endpoint.replace("https://", "").replace("http://", "") + "/" + objectKey : null);
-                output.put("signedUrl", signedUrl);
-                output.put("expiresInSeconds", oneHour);
-                output.put("size", localFile.length());
-                output.put("etag", result.getETag());
-                output.put("publicRead", publicRead);
-                output.put("durationMs", uploadDuration);
                 output.put("totalDurationMs", totalDuration);
 
                 JSONObject attachment = new JSONObject();
                 attachment.put("type", "oss");
-                attachment.put("objectKey", objectKey);
-                attachment.put("url", signedUrl);
+                attachment.put("objectKey", output.getString("objectKey"));
+                attachment.put("url", output.getString("signedUrl"));
                 attachment.put("size", localFile.length());
                 output.put("attachment", attachment);
 
@@ -198,32 +141,6 @@ String signedUrl = oss.presignConstrainedObjectURL(bucketName, objectKey, oneHou
                 callback.onError(e);
             }
         });
-    }
-
-    private String getOrFromNote(JSONObject arguments, String paramName, String noteKey) {
-        String value = arguments.optString(paramName, null);
-        if (value != null && !value.trim().isEmpty()) {
-            return value.trim();
-        }
-        return getValueFromNote(noteKey);
-    }
-
-    private String getValueFromNote(String key) {
-        String note = getNote(context);
-        if (note == null || note.isEmpty()) {
-            return null;
-        }
-        String[] lines = note.split("\n");
-        for (String line : lines) {
-            line = line.trim();
-            if (line.startsWith(key + "=")) {
-                String value = line.substring((key + "=").length()).trim();
-                if (!value.isEmpty()) {
-                    return value;
-                }
-            }
-        }
-        return null;
     }
 
     @Override

@@ -94,6 +94,7 @@ import com.stupidbeauty.sisterfuture.adapter.MessageAdapter;
 import com.stupidbeauty.sisterfuture.manager.GuideManager;
 import com.stupidbeauty.sisterfuture.manager.PermissionManager;
 import com.stupidbeauty.sisterfuture.manager.RepeatDetectionManager;
+import com.stupidbeauty.sisterfuture.manager.OssManager;
 import com.stupidbeauty.sisterfuture.manager.EmptyDeltaDetectionManager;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import com.google.gson.Gson;
@@ -157,7 +158,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private String currentImagePath = null;  // WanxiangImage 工具支持参考图片：图片本地缓存路径
   private String currentVideoPath = null;
   private String currentVideoMimeType = null;
-  private JSONArray currentVideoFrames = null;
+  private String currentVideoRemoteUrl = null;
+  private String currentVideoOssObjectKey = null;
+  private long currentVideoUrlExpiresAt = 0L;
   private volatile boolean isVideoProcessing = false;
   private volatile int mediaSelectionGeneration = 0;
   @BindView(R.id.uploadImageButton) Button uploadImageButton;
@@ -531,7 +534,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
     boolean hasVideo = (currentVideoPath != null && !currentVideoPath.isEmpty()
-        && currentVideoFrames != null && currentVideoFrames.length() > 0);
+        && currentVideoRemoteUrl != null && !currentVideoRemoteUrl.isEmpty());
 
     if (hasImage || hasVideo)
     {
@@ -561,8 +564,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         if (hasVideo)
         {
           JSONObject videoContent = new JSONObject();
-          videoContent.put("type", "video");
-          videoContent.put("video", currentVideoFrames);
+          videoContent.put("type", "video_url");
+          videoContent.put("video_url", new JSONObject().put("url", currentVideoRemoteUrl));
           contentArray.put(videoContent);
         }
 
@@ -573,7 +576,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         List<Attachment> uiAttachments = new ArrayList<>();
         if (hasVideo)
         {
-          JSONObject videoAttachmentJson = buildLocalVideoAttachment(currentVideoPath, currentVideoMimeType);
+          JSONObject videoAttachmentJson = buildLocalVideoAttachment(currentVideoPath, currentVideoMimeType,
+            currentVideoOssObjectKey, currentVideoUrlExpiresAt);
           userMessage.put("local_attachments", new JSONArray().put(videoAttachmentJson));
           uiAttachments = Attachment.fromJsonArray(userMessage.optJSONArray("local_attachments"));
         }
@@ -594,7 +598,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         currentImagePath = null;
         currentVideoPath = null;
         currentVideoMimeType = null;
-        currentVideoFrames = null;
+        currentVideoRemoteUrl = null;
+        currentVideoOssObjectKey = null;
+        currentVideoUrlExpiresAt = 0L;
 
         scrollToBottom();
 
@@ -737,7 +743,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     deletePendingVideo();
     currentVideoPath = null;
     currentVideoMimeType = null;
-    currentVideoFrames = null;
+    currentVideoRemoteUrl = null;
+    currentVideoOssObjectKey = null;
+    currentVideoUrlExpiresAt = 0L;
     isVideoProcessing = false;
     mediaSelectionGeneration++;
     uploadImageButton.setAlpha(1.0f);
@@ -763,7 +771,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     currentImagePath = null;
     currentVideoPath = null;
     currentVideoMimeType = null;
-    currentVideoFrames = null;
+    currentVideoRemoteUrl = null;
+    currentVideoOssObjectKey = null;
+    currentVideoUrlExpiresAt = 0L;
     openMediaPicker();
   }
 
@@ -1888,7 +1898,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       }
     });
 
-    tongYiClient = new TongYiClient(modelAccessPointManager, toolManager);
+    tongYiClient = new TongYiClient(this, modelAccessPointManager, toolManager);
     guideManager = new GuideManager(this, modelAccessPointManager, toolManager);
 
     String question = getIntent().getStringExtra("question");
@@ -2002,6 +2012,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     final int selectionGeneration = mediaSelectionGeneration;
     isVideoProcessing = true;
     new Thread(() -> {
+      File target = null;
       try
       {
         File videoDirectory = new File(getFilesDir(), "message_videos");
@@ -2011,7 +2022,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
 
         String extension = mimeType != null && mimeType.contains("quicktime") ? ".mov" : ".mp4";
-        File target = new File(videoDirectory, "user_video_" + System.currentTimeMillis() + extension);
+        target = new File(videoDirectory, "user_video_" + System.currentTimeMillis() + extension);
         try (InputStream input = getContentResolver().openInputStream(videoUri);
              FileOutputStream output = new FileOutputStream(target))
         {
@@ -2021,12 +2032,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
         }
 
-        JSONArray frames = extractVideoFrames(target);
-        if (frames.length() == 0)
-        {
-          if (!target.delete()) FileLogger.w(TAG, "⚠️ 无法删除无效视频文件: " + target.getAbsolutePath());
-          throw new IOException("无法从视频中提取画面");
-        }
+        String objectKey = "sisterfuture/video-messages/" + System.currentTimeMillis() + "_" + target.getName();
+        JSONObject uploadResult = new OssManager(this).uploadFile(target, objectKey, false,
+          OssManager.DEFAULT_URL_EXPIRY_SECONDS, null);
 
         if (selectionGeneration != mediaSelectionGeneration)
         {
@@ -2038,15 +2046,22 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         currentImagePath = null;
         currentVideoPath = target.getAbsolutePath();
         currentVideoMimeType = mimeType != null ? mimeType : "video/mp4";
-        currentVideoFrames = frames;
+        currentVideoRemoteUrl = uploadResult.getString("signedUrl");
+        currentVideoOssObjectKey = uploadResult.getString("objectKey");
+        currentVideoUrlExpiresAt = uploadResult.getLong("expiresAt");
         isVideoProcessing = false;
 
         runOnUiThread(() -> Toast.makeText(this,
-          "✅ 视频已加载，已提取 " + frames.length() + " 帧", Toast.LENGTH_SHORT).show());
-        FileLogger.i(TAG, "✅ [VIDEO_SELECTED] path=" + currentVideoPath + " | frames=" + frames.length());
+          "✅ 视频已上传，可以发送", Toast.LENGTH_SHORT).show());
+        FileLogger.i(TAG, "✅ [VIDEO_SELECTED] path=" + currentVideoPath
+          + " | ossObjectKey=" + currentVideoOssObjectKey);
       }
       catch (Exception e)
       {
+        if (target != null && target.exists() && !target.delete())
+        {
+          FileLogger.w(TAG, "⚠️ 无法删除上传失败的视频文件: " + target.getAbsolutePath());
+        }
         isVideoProcessing = false;
         FileLogger.e(TAG, "❌ [VIDEO_ERROR] 加载视频失败", e);
         runOnUiThread(() -> Toast.makeText(this, "❌ 视频加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show());
@@ -2073,56 +2088,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
-  private JSONArray extractVideoFrames(File videoFile) throws IOException
-  {
-    android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
-    JSONArray result = new JSONArray();
-    try
-    {
-      retriever.setDataSource(videoFile.getAbsolutePath());
-      String durationText = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION);
-      long durationMs = durationText == null ? 0L : Long.parseLong(durationText);
-      if (durationMs <= 0) throw new IOException("无法读取视频时长");
-      int frameCount = 8;
-
-      for (int i = 0; i < frameCount; i++)
-      {
-        long timeUs = (durationMs * 1000L * i) / (frameCount - 1);
-        android.graphics.Bitmap frame = retriever.getFrameAtTime(
-          timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST);
-        if (frame == null) continue;
-
-        int maxDimension = 960;
-        int width = frame.getWidth();
-        int height = frame.getHeight();
-        android.graphics.Bitmap outputFrame = frame;
-        if (Math.max(width, height) > maxDimension)
-        {
-          float scale = (float) maxDimension / Math.max(width, height);
-          outputFrame = android.graphics.Bitmap.createScaledBitmap(frame,
-            Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)), true);
-        }
-
-        ByteArrayOutputStream encoded = new ByteArrayOutputStream();
-        outputFrame.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, encoded);
-        result.put("data:image/jpeg;base64," + Base64.encodeToString(encoded.toByteArray(), Base64.NO_WRAP));
-
-        if (outputFrame != frame) outputFrame.recycle();
-        frame.recycle();
-      }
-      return result;
-    }
-    catch (Exception e)
-    {
-      throw new IOException("视频抽帧失败", e);
-    }
-    finally
-    {
-      retriever.release();
-    }
-  }
-
-  private JSONObject buildLocalVideoAttachment(String path, String mimeType) throws JSONException
+  private JSONObject buildLocalVideoAttachment(String path, String mimeType, String ossObjectKey,
+                                               long ossUrlExpiresAt) throws JSONException
   {
     File videoFile = new File(path);
     JSONObject metadata = new JSONObject();
@@ -2132,6 +2099,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     JSONObject attachment = new JSONObject();
     attachment.put("type", "video");
     attachment.put("url", Uri.fromFile(videoFile).toString());
+    attachment.put("ossObjectKey", ossObjectKey);
+    attachment.put("ossUrlExpiresAt", ossUrlExpiresAt);
     attachment.put("metadata", metadata);
     return attachment;
   }
