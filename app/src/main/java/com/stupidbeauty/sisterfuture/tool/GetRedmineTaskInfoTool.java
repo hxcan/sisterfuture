@@ -55,6 +55,9 @@ public class GetRedmineTaskInfoTool implements Tool
         .put("password", new JSONObject()
           .put("type", "string")
           .put("description", "登录密码"))
+        .put("api_key", new JSONObject()
+          .put("type", "string")
+          .put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"))
         .put("task_id", new JSONObject()
           .put("type", "long")
           .put("description", "要查询的任务编号（支持长整型 ID，如 JoyMan 生成的 12-14 位数字）"))
@@ -93,47 +96,8 @@ public class GetRedmineTaskInfoTool implements Tool
       {
         // 1. 获取参数
         long taskId = arguments.getLong("task_id");
-        String redmineUrl = arguments.optString("redmine_url", "").trim();
-        String username = arguments.optString("username", "").trim();
-        String password = arguments.optString("password", "").trim();
-
-        // 2. 尝试从备注恢复默认值
-        if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty())
-        {
-          String noteJson = getNote(context);
-          if (!noteJson.isEmpty())
-          {
-            try
-            {
-              JSONObject saved = new JSONObject(noteJson);
-              if (redmineUrl.isEmpty() && saved.has("redmine_url"))
-                redmineUrl = saved.getString("redmine_url");
-              if (username.isEmpty() && saved.has("username"))
-                username = saved.getString("username");
-              if (password.isEmpty() && saved.has("password"))
-                password = saved.getString("password");
-            }
-            catch (Exception ignored)
-            {
-              // 备注解析失败，忽略并继续
-              Log.w(TAG, "Failed to parse tool remark, ignoring.");
-            }
-          }
-        }
-
-        // 3. 验证必要参数 - 使用标准化错误消息格式
-        if (redmineUrl.isEmpty())
-        {
-          throw new IllegalArgumentException("Missing required parameter: redmine_url");
-        }
-        if (username.isEmpty())
-        {
-          throw new IllegalArgumentException("Missing required parameter: username");
-        }
-        if (password.isEmpty())
-        {
-          throw new IllegalArgumentException("Missing required parameter: password");
-        }
+        RedmineAuth auth = RedmineAuth.resolve(arguments, getNote(context));
+        String redmineUrl = auth.getRedmineUrl();
 
         // 4. 构建请求
         OkHttpClient client = new OkHttpClient();
@@ -143,10 +107,7 @@ public class GetRedmineTaskInfoTool implements Tool
           .addQueryParameter("include", "journals,relations,attachments,children,watchers,time_entries") // 五重数据维度全解锁
           .build();
 
-        Request request = new Request.Builder()
-          .url(url)
-          .header("Authorization", Credentials.basic(username, password))
-          .build();
+        Request request = auth.apply(new Request.Builder().url(url)).build();
 
         Response response = client.newCall(request).execute();
 
@@ -186,6 +147,6 @@ public class GetRedmineTaskInfoTool implements Tool
   @Override
   public String getDefaultSystemPromptEnhancement()
   {
-    return "必须在用户明确要求获取 Redmine 任务信息时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。";
+    return "必须在用户明确要求获取 Redmine 任务信息时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。API Key 不得输出到回复或日志。";
   }
 }

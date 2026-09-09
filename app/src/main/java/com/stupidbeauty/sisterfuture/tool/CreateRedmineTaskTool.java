@@ -62,6 +62,9 @@ public class CreateRedmineTaskTool implements Tool
         .put("password", new JSONObject()
           .put("type", "string")
           .put("description", "登录密码"))
+        .put("api_key", new JSONObject()
+          .put("type", "string")
+          .put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"))
         .put("project_id", new JSONObject()
           .put("type", "integer")
           .put("description", "目标项目 ID（支持长整型，如 JoyMan 生成的 750160066086）"))
@@ -111,9 +114,8 @@ public class CreateRedmineTaskTool implements Tool
           try
           {
               // 1. 解析参数
-              String redmineUrl = arguments.optString("redmine_url", "").trim();
-              String username = arguments.optString("username", "").trim();
-              String password = arguments.optString("password", "").trim();
+              RedmineAuth auth = RedmineAuth.resolve(arguments, getNote(context));
+              String redmineUrl = auth.getRedmineUrl();
               
               // ✅ 修复：支持长整型 project_id（JoyMan 生成的 12-14 位数字）
               long projectId;
@@ -139,29 +141,6 @@ public class CreateRedmineTaskTool implements Tool
               long parentIssueId = arguments.optLong("parent_issue_id", -1);
               long trackerId = arguments.optLong("tracker_id", -1);
 
-              // 2. 尝试从备注恢复凭证
-              if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty())
-              {
-                  String noteJson = getNote(context);
-                  if (!noteJson.isEmpty())
-                  {
-                      JSONObject saved = new JSONObject(noteJson);
-                      if (redmineUrl.isEmpty() && saved.has("redmine_url"))
-                          redmineUrl = saved.getString("redmine_url");
-                      if (username.isEmpty() && saved.has("username"))
-                          username = saved.getString("username");
-                      if (password.isEmpty() && saved.has("password"))
-                          password = saved.getString("password");
-                  }
-              }
-
-              // 3. 验证必要参数
-              if (redmineUrl.isEmpty())
-                  throw new IllegalArgumentException("缺少 redmine_url 参数，且未在备注中配置");
-              if (username.isEmpty())
-                  throw new IllegalArgumentException("缺少 username 参数，且未在备注中配置");
-              if (password.isEmpty())
-                  throw new IllegalArgumentException("缺少 password 参数，且未在备注中配置");
               if (projectId <= 0)
                   throw new IllegalArgumentException("project_id 必须大于 0");
 
@@ -190,11 +169,9 @@ public class CreateRedmineTaskTool implements Tool
                   MediaType.get("application/json; charset=utf-8")
               );
 
-              Request request = new Request.Builder()
+              Request request = auth.apply(new Request.Builder()
                   .url(redmineUrl + "/issues.json")
-                  .header("Authorization", Credentials.basic(username, password))
-                  .post(body)
-                  .build();
+                  .post(body)).build();
 
               Response response = client.newCall(request).execute();
 
@@ -239,7 +216,7 @@ public class CreateRedmineTaskTool implements Tool
   @Override
   public String getDefaultSystemPromptEnhancement()
   {
-      return "必须在用户明确要求创建 Redmine 任务时才调用此工具。project_id 参数现在支持长整型（如 JoyMan 生成的 750160066086）。\n\n💡 示例正确调用格式：\n```json\n{\n  \"project_id\": 750160066086,\n  \"subject\": \"任务标题\"\n}\n```";
+      return "必须在用户明确要求创建 Redmine 任务时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。project_id 支持长整型。";
   }
   
   // 获取工具备注
@@ -248,6 +225,8 @@ public class CreateRedmineTaskTool implements Tool
   {
       try
       {
+          String currentNote = Tool.super.getNote(context);
+          if (!currentNote.isEmpty()) return currentNote;
           android.content.SharedPreferences prefs = context.getSharedPreferences("tool_config", Context.MODE_PRIVATE);
           return prefs.getString("create_redmine_task", "");
       }

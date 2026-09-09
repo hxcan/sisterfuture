@@ -69,6 +69,10 @@ public class UpdateRedmineIssueTool implements Tool
                     .put("type", "string")
                     .put("description", "登录密码"))
 
+                .put("api_key", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"))
+
                 .put("task_id", new JSONObject()
                     .put("type", "long")
                     .put("description", "要更新的目标任务 ID"))
@@ -110,7 +114,7 @@ public class UpdateRedmineIssueTool implements Tool
                     .put("description", "可选：此任务阻塞了哪些任务"))
             );
 
-            parameters.put("required", new JSONArray(new String[]{"redmine_url", "username", "password", "task_id"}));
+            parameters.put("required", new JSONArray(new String[]{"task_id"}));
 
             functionDef.put("parameters", parameters);
 
@@ -143,78 +147,9 @@ public class UpdateRedmineIssueTool implements Tool
             try
             {
                 // 1. 解析参数
-                String redmineUrl = arguments.optString("redmine_url", "").trim();
-                String username = arguments.optString("username", "").trim();
-                String password = arguments.optString("password", "").trim();
+                RedmineAuth auth = RedmineAuth.resolve(arguments, getNote(context));
+                String redmineUrl = auth.getRedmineUrl();
                 long taskId = arguments.getLong("task_id");
-
-                // 2. 尝试从备注恢复凭证 - 改进 JSON 解析错误处理
-                if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty())
-                {
-                    String noteJson = getNote(context);
-                    if (!noteJson.isEmpty())
-                    {
-                        try
-                        {
-                            JSONObject saved = new JSONObject(noteJson);
-                            if (redmineUrl.isEmpty() && saved.has("redmine_url"))
-                                redmineUrl = saved.getString("redmine_url");
-                            if (username.isEmpty() && saved.has("username"))
-                                username = saved.getString("username");
-                            if (password.isEmpty() && saved.has("password"))
-                                password = saved.getString("password");
-                        }
-                        catch (Exception parseEx)
-                        {
-                            // JSON 解析失败时，返回引导式提示
-                            throw new IllegalArgumentException(
-                                "检测到当前工具调用缺少必要的访问参数，且工具备注中的配置无法解析。\n\n" +
-                                "💡 请大模型自行检查并确保：\n" +
-                                " 1. 工具备注中的 JSON 格式正确（无多余标点/引号匹配等）\n" +
-                                " 2. 键名与字段名一致（如 redmine_url, username, password）\n" +
-                                " 3. 值类型正确（URL、字符串等）\n\n" +
-                                "🔄 建议操作：\n" +
-                                " - 调用 get_tool_remark(\"updateRedmineIssue\") 查看当前备注内容\n" +
-                                " - 修正备注为正确的 JSON 格式，或在下一次工具调用中显式传入所有必填参数"
-                            );
-                        }
-                    }
-                }
-
-                // 3. 验证必要参数 - 改进错误提示为引导式
-                if (redmineUrl.isEmpty())
-                {
-                    throw new IllegalArgumentException(
-                        "检测到当前工具调用缺少必要的访问参数（如 redmine_url, username, password 等）。\n\n" +
-                        "💡 请大模型自行从本工具的工具备注中读取对应的访问参数配置。\n\n" +
-                        "🔄 建议操作：\n" +
-                        " - 调用 get_tool_remark(\"updateRedmineIssue\") 查看备注内容\n" +
-                        " - 提取其中的 redmine_url, username, password 等字段\n" +
-                        " - 在下一次工具调用时显式传入这些参数"
-                    );
-                }
-                if (username.isEmpty())
-                {
-                    throw new IllegalArgumentException(
-                        "检测到当前工具调用缺少必要的访问参数（如 redmine_url, username, password 等）。\n\n" +
-                        "💡 请大模型自行从本工具的工具备注中读取对应的访问参数配置。\n\n" +
-                        "🔄 建议操作：\n" +
-                        " - 调用 get_tool_remark(\"updateRedmineIssue\") 查看备注内容\n" +
-                        " - 提取其中的 redmine_url, username, password 等字段\n" +
-                        " - 在下一次工具调用时显式传入这些参数"
-                    );
-                }
-                if (password.isEmpty())
-                {
-                    throw new IllegalArgumentException(
-                        "检测到当前工具调用缺少必要的访问参数（如 redmine_url, username, password 等）。\n\n" +
-                        "💡 请大模型自行从本工具的工具备注中读取对应的访问参数配置。\n\n" +
-                        "🔄 建议操作：\n" +
-                        " - 调用 get_tool_remark(\"updateRedmineIssue\") 查看备注内容\n" +
-                        " - 提取其中的 redmine_url, username, password 等字段\n" +
-                        " - 在下一次工具调用时显式传入这些参数"
-                    );
-                }
                 if (taskId <= 0)
                     throw new IllegalArgumentException("task_id 必须大于 0");
 
@@ -284,11 +219,9 @@ public class UpdateRedmineIssueTool implements Tool
                     MediaType.get("application/json; charset=utf-8")
                 );
 
-                Request request = new Request.Builder()
+                Request request = auth.apply(new Request.Builder()
                     .url(redmineUrl + "/issues/" + taskId + ".json")
-                    .header("Authorization", Credentials.basic(username, password))
-                    .put(body) // 使用 PUT 方法
-                    .build();
+                    .put(body)).build(); // 使用 PUT 方法
 
                 Response response = client.newCall(request).execute();
 
@@ -339,6 +272,6 @@ public class UpdateRedmineIssueTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求更新 Redmine 任务信息时才调用此工具。若凭证缺失，应提示用户先通过 set_tool_remark 配置。支持更新任务的多个属性，包括添加评论（notes）、修改父子关系（parent_issue_id）和任务依赖关系。";
+        return "必须在用户明确要求更新 Redmine 任务信息时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。支持添加评论、修改父子关系和任务依赖关系。";
     }
 }

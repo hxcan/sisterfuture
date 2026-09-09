@@ -45,6 +45,7 @@ public class RemoveTaskRelationshipTool implements Tool {
             props.put("redmineUrl", new JSONObject().put("type", "string").put("description", "Redmine 实例 URL"));
             props.put("username", new JSONObject().put("type", "string").put("description", "用户名"));
             props.put("password", new JSONObject().put("type", "string").put("description", "密码"));
+            props.put("api_key", new JSONObject().put("type", "string").put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"));
             parameters.put("properties", props);
             parameters.put("required", new JSONArray().put("taskId"));
 
@@ -68,27 +69,24 @@ public class RemoveTaskRelationshipTool implements Tool {
                 // ✅ 修复：使用 long 类型处理 taskId（JoyMan 生成的任务 ID 是长整型）
                 long taskId = args.getLong("taskId");
                 long relationId = args.optLong("relationId", -1);
-                String redmineUrl = args.optString("redmineUrl", "").trim();
-                String username = args.optString("username", "").trim();
-                String password = args.optString("password", "").trim();
+                RedmineAuth auth = RedmineAuth.resolve(args, getNote(context));
+                String redmineUrl = auth.getRedmineUrl();
 
-                if (taskId <= 0 || redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty()) {
-                    throw new IllegalArgumentException("参数验证失败");
-                }
+                if (taskId <= 0) throw new IllegalArgumentException("taskId 必须大于 0");
 
                 int deletedCount = 0;
                 JSONArray deletedRelations = new JSONArray();
 
                 if (relationId > 0) {
-                    deleteRelation(redmineUrl, taskId, relationId, username, password);
+                    deleteRelation(redmineUrl, taskId, relationId, auth);
                     deletedCount = 1;
                     deletedRelations.put(relationId);
                 } else {
-                    JSONArray relations = getRelations(redmineUrl, taskId, username, password);
+                    JSONArray relations = getRelations(redmineUrl, taskId, auth);
                     for (int i = 0; i < relations.length(); i++) {
                         long relId = relations.getJSONObject(i).getLong("id");
                         try {
-                            deleteRelation(redmineUrl, taskId, relId, username, password);
+                            deleteRelation(redmineUrl, taskId, relId, auth);
                             deletedCount++;
                             deletedRelations.put(relId);
                         } catch (Exception e) {
@@ -112,10 +110,10 @@ public class RemoveTaskRelationshipTool implements Tool {
         });
     }
 
-    private JSONArray getRelations(String url, long taskId, String user, String pass) throws Exception {
+    private JSONArray getRelations(String url, long taskId, RedmineAuth auth) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url + "/issues/" + taskId + "/relations.json").openConnection();
         conn.setRequestMethod("GET");
-        conn.setRequestProperty("Authorization", "Basic " + Base64.encodeToString((user + ":" + pass).getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP));
+        auth.apply(conn);
         StringBuilder resp = new StringBuilder();
         try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
@@ -125,10 +123,10 @@ public class RemoveTaskRelationshipTool implements Tool {
         return new JSONObject(resp.toString()).optJSONArray("relations");
     }
 
-    private void deleteRelation(String url, long taskId, long relationId, String user, String pass) throws Exception {
+    private void deleteRelation(String url, long taskId, long relationId, RedmineAuth auth) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url + "/issues/" + taskId + "/relations/" + relationId + ".json").openConnection();
         conn.setRequestMethod("DELETE");
-        conn.setRequestProperty("Authorization", "Basic " + Base64.encodeToString((user + ":" + pass).getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP));
+        auth.apply(conn);
         if (conn.getResponseCode() != 200) throw new RuntimeException("删除失败：" + conn.getResponseCode());
         conn.disconnect();
     }
@@ -136,6 +134,6 @@ public class RemoveTaskRelationshipTool implements Tool {
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求删除 Redmine 任务之间的阻塞关系时才调用此工具。需要提供 taskId 参数（支持长整型，如 JoyMan 生成的 750160066086），以及 redmineUrl, username, password 等认证参数。";
+        return "必须在用户明确要求删除 Redmine 任务阻塞关系时才调用此工具。认证支持 api_key，或 username 与 password，并可从工具备注读取；API Key 不得输出到回复或日志。taskId 支持长整型。";
     }
 }
