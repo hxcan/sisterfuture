@@ -53,7 +53,10 @@ public class OssManager {
         }
 
         ObjectMetadata metadata = new ObjectMetadata();
-        String contentType = URLConnection.guessContentTypeFromName(localFile.getName());
+        String contentType = overrides == null ? null : overrides.optString("contentType", null);
+        if (contentType == null || contentType.trim().isEmpty()) {
+            contentType = URLConnection.guessContentTypeFromName(localFile.getName());
+        }
         if (contentType != null) metadata.setContentType(contentType);
         if (publicRead) metadata.setHeader("x-oss-object-acl", "public-read");
 
