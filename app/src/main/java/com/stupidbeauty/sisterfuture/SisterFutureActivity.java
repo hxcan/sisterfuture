@@ -197,6 +197,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private int rateLimitRetryCount = 0;
   private static final int MAX_RATE_LIMIT_RETRIES = 3;
 
+  // A group of tool calls returned by one model response counts as one hop.
+  private static final int MAX_TOOL_CALL_HOPS = 8;
+  private static final int MAX_CONSECUTIVE_TOOL_ERROR_HOPS = 3;
+  private int toolCallHopCount = 0;
+  private int consecutiveToolErrorHops = 0;
+
   private volatile long currentRequestId = 0;
   private volatile long lastSuccessRequestId = 0;
   private static final int FTP_SERVER_PORT = 2123;
@@ -531,6 +537,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         return;
       }
     }
+
+    // A real user message starts a new autonomous tool-call chain.
+    resetToolCallHopGuard();
 
     boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
     boolean hasVideo = (currentVideoPath != null && !currentVideoPath.isEmpty()
@@ -1248,6 +1257,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       if ("tool_calls".equals(choice.getFinishReason()))
       {
+        toolCallHopCount++;
+        FileLogger.i(TAG, "🔗 [TOOL_HOP] 当前工具调用跳数：" + toolCallHopCount
+          + " / " + MAX_TOOL_CALL_HOPS);
+
         runOnUiThread(() ->
         {
           try
@@ -1509,6 +1522,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           modelAccessPointManager.resetFailureCount();
           rateLimitRetryCount = 0;
+          resetToolCallHopGuard();
         });
       }
     }
@@ -1528,6 +1542,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       try
       {
+        boolean hopHasError = false;
+        JSONArray failedTools = new JSONArray();
+
         for (int i = 0; i < toolCallsArray.length(); i++)
         {
           JSONObject call = toolCallsArray.getJSONObject(i);
@@ -1542,6 +1559,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           String name = wrapper.getString("name");
           JSONObject result = wrapper.getJSONObject("result");
+
+          if (isToolErrorResult(result))
+          {
+            hopHasError = true;
+            failedTools.put(name);
+          }
 
           boolean isDuplicate = !toolManager.tryMarkToolCallAsReplied(id);
 
@@ -1574,6 +1597,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
         clearAccumulatedToolCalls();
 
+        consecutiveToolErrorHops = hopHasError ? consecutiveToolErrorHops + 1 : 0;
+        FileLogger.i(TAG, "🔗 [TOOL_HOP_RESULT] hop=" + toolCallHopCount
+          + ", hasError=" + hopHasError
+          + ", consecutiveErrorHops=" + consecutiveToolErrorHops);
+
+        if (toolCallHopCount >= MAX_TOOL_CALL_HOPS
+          || consecutiveToolErrorHops >= MAX_CONSECUTIVE_TOOL_ERROR_HOPS)
+        {
+          stopToolCallChainAndAskOwner(hopHasError, failedTools);
+          return;
+        }
+
         FileLogger.i(TAG, "🚀 [TRIGGER] 准备触发新请求 | toolCallsCount=" + toolCallsArray.length());
         sendChatRequestTongYi();
       }
@@ -1582,6 +1617,48 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         FileLogger.e(TAG, "postProcessToolResults 出错", e);
       }
     });
+  }
+
+  private boolean isToolErrorResult(JSONObject result)
+  {
+    if (result == null || result.has("error")) return true;
+
+    String status = result.optString("status", "").trim().toLowerCase(java.util.Locale.US);
+    if ("error".equals(status) || "failed".equals(status) || "failure".equals(status)) return true;
+
+    return result.has("success") && !result.optBoolean("success", true);
+  }
+
+  private void stopToolCallChainAndAskOwner(boolean stoppedForErrors, JSONArray failedTools)
+  {
+    String message;
+    if (consecutiveToolErrorHops >= MAX_CONSECUTIVE_TOOL_ERROR_HOPS)
+    {
+      message = "主人，工具已经连续 " + consecutiveToolErrorHops
+        + " 跳执行出错，我先停止自动重试，避免无止境循环。"
+        + (failedTools.length() > 0 ? "最近出错的工具：" + failedTools.toString() + "。" : "")
+        + "请告诉我是修改参数、换一种工具，还是先停止这个任务？";
+    }
+    else
+    {
+      message = "主人，这轮任务已经连续调用工具 " + toolCallHopCount
+        + " 跳，达到安全上限，我先停下来。"
+        + (stoppedForErrors ? "最后一跳包含工具错误。" : "")
+        + "请告诉我要继续、调整方案，还是停止这个任务？";
+    }
+
+    FileLogger.w(TAG, "🛑 [TOOL_HOP_LIMIT] " + message);
+    contextManager.addAssistantMessage(message);
+    messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
+    SisterFutureService.updateNotificationStatus(this, "等待主人指示");
+    scrollToBottom();
+    ttsSayReply(message);
+  }
+
+  private void resetToolCallHopGuard()
+  {
+    toolCallHopCount = 0;
+    consecutiveToolErrorHops = 0;
   }
 
   private void scrollToBottom()
