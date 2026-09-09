@@ -222,7 +222,8 @@ public class ToolManager
 
   public void recordToolSuccess(String toolName, JSONObject arguments)
   {
-    Log.d(TAG, ">>> [RECORD] 记录工具成功调用：tool=" + toolName + ", args=" + arguments);
+    Log.d(TAG, ">>> [RECORD] 记录工具成功调用：tool=" + toolName
+      + "（参数值不写入日志）");
     parameterHistory.recordSuccess(toolName, arguments);
   }
 

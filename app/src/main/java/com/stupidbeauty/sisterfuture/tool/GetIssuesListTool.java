@@ -51,6 +51,9 @@ public class GetIssuesListTool implements Tool {
                 .put("password", new JSONObject()
                     .put("type", "string")
                     .put("description", "登录密码"))
+                .put("api_key", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"))
                 .put("project_id", new JSONObject()
                     .put("type", "long")
                     .put("description", "可选：项目 ID，用于查询特定项目的任务列表（支持 64 位长整数）"))
@@ -61,7 +64,7 @@ public class GetIssuesListTool implements Tool {
                     .put("type", "integer")
                     .put("description", "偏移量，默认 0"))
             );
-            parameters.put("required", new JSONArray(new String[]{"redmine_url", "username", "password"}));
+            parameters.put("required", new JSONArray());
             functionDef.put("parameters", parameters);
             return new JSONObject().put("type", "function").put("function", functionDef);
         } catch (Exception e) {
@@ -85,37 +88,11 @@ public class GetIssuesListTool implements Tool {
         executor.execute(() -> {
             try {
                 // 1. 解析参数
-                String redmineUrl = arguments.optString("redmine_url", "").trim();
-                String username = arguments.optString("username", "").trim();
-                String password = arguments.optString("password", "").trim();
+                RedmineAuth auth = RedmineAuth.resolve(arguments, getNote(context));
+                String redmineUrl = auth.getRedmineUrl();
                 long projectId = arguments.optLong("project_id", -1);
                 int limit = arguments.optInt("limit",25);
                 int offset = arguments.optInt("offset", 0);
-
-                // 2. 尝试从备注恢复默认值
-                if (redmineUrl.isEmpty() || username.isEmpty() || password.isEmpty()) {
-                    String noteJson = getNote(context);
-                    if (!noteJson.isEmpty()) {
-                        JSONObject saved = new JSONObject(noteJson);
-                        if (redmineUrl.isEmpty() && saved.has("redmine_url"))
-                            redmineUrl = saved.getString("redmine_url");
-                        if (username.isEmpty() && saved.has("username"))
-                            username = saved.getString("username");
-                        if (password.isEmpty() && saved.has("password"))
-                            password = saved.getString("password");
-                    }
-                }
-
-                // 3. 验证必要参数
-                if (redmineUrl.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 redmine_url 参数，且未在备注中配置");
-                }
-                if (username.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 username 参数，且未在备注中配置");
-                }
-                if (password.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 password 参数，且未在备注中配置");
-                }
 
                 // 4. 构建请求
                 OkHttpClient client = new OkHttpClient();
@@ -130,10 +107,8 @@ public class GetIssuesListTool implements Tool {
                     urlBuilder.addQueryParameter("project_id", String.valueOf(projectId));
                 }
 
-                Request request = new Request.Builder()
-                    .url(urlBuilder.build())
-                    .header("Authorization", Credentials.basic(username, password))
-                    .build();
+                Request request = auth.apply(new Request.Builder()
+                    .url(urlBuilder.build())).build();
 
                 Response response = client.newCall(request).execute();
 
@@ -170,6 +145,6 @@ public class GetIssuesListTool implements Tool {
     // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求获取 Redmine 任务列表时才调用此工具。在调用前，必须优先检查本工具的备注内容，从中提取 redmine_url、username 和 password 配置。只有当备注中缺少某些字段时，才允许使用用户提供的对应参数作为 fallback。严禁工具自行验证 JSON 格式，这是助手的责任。";
+        return "必须在用户明确要求获取 Redmine 任务列表时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。API Key 不得输出到回复或日志。";
     }
 }

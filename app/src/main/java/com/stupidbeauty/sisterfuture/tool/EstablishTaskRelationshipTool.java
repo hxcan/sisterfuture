@@ -67,6 +67,9 @@ public class EstablishTaskRelationshipTool implements Tool {
                 .put("password", new JSONObject()
                     .put("type", "string")
                     .put("description", "登录密码"))
+                .put("api_key", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"))
             );
 
 
@@ -106,26 +109,14 @@ public class EstablishTaskRelationshipTool implements Tool {
                 JSONArray blockedByIds = arguments.optJSONArray("blocked_by_ids");
                 JSONArray blockingIds = arguments.optJSONArray("blocking_ids");
 
-                String redmineUrl = arguments.optString("redmine_url", "").trim();
-                String username = arguments.optString("username", "").trim();
-                String password = arguments.optString("password", "").trim();
+                RedmineAuth auth = RedmineAuth.resolve(arguments, getNote(context));
+                String redmineUrl = auth.getRedmineUrl();
 
 
                 // 2. 验证必要参数
                 if (taskId <= 0) {
                     throw new IllegalArgumentException("task_id 必须大于 0");
                 }
-                if (redmineUrl.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 redmine_url 参数");
-                }
-                if (username.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 username 参数");
-                }
-                if (password.isEmpty()) {
-                    throw new IllegalArgumentException("缺少 password 参数");
-                }
-
-
                 // 3. 构建请求体，直接调用 /issues/:issue_id/relations.json API 来创建关系
                 // 使用基本的 HttpURLConnection 实现 HTTP 请求
                 
@@ -145,7 +136,7 @@ public class EstablishTaskRelationshipTool implements Tool {
 
                             // 发起 POST 请求
                             FileLogger.d(TAG, "🚀 创建关系：" + taskId + " blocked_by " + blockerId);
-                            sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", username, password, requestBody.toString());
+                            sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", auth, requestBody.toString());
                             FileLogger.d(TAG, "✅ 关系创建成功：" + blockerId);
                         }
                     }
@@ -168,7 +159,7 @@ public class EstablishTaskRelationshipTool implements Tool {
 
                             // 发起 POST 请求
                             FileLogger.d(TAG, "🚀 创建关系：" + taskId + " blocks " + blockedId);
-                            sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", username, password, requestBody.toString());
+                            sendPostRequest(redmineUrl + "/issues/" + taskId + "/relations.json", auth, requestBody.toString());
                             FileLogger.d(TAG, "✅ 关系创建成功：" + blockedId);
                         }
                     }
@@ -199,12 +190,11 @@ public class EstablishTaskRelationshipTool implements Tool {
     /**
      * 辅助方法：发送 POST 请求
      * @param urlString 目标 URL
-     * @param username 用户名
-     * @param password 密码
+     * @param auth Redmine 认证配置
      * @param body 请求体 JSON 字符串
      * @throws Exception 如果 HTTP 请求失败
      */
-    private void sendPostRequest(String urlString, String username, String password, String body) throws Exception {
+    private void sendPostRequest(String urlString, RedmineAuth auth, String body) throws Exception {
         FileLogger.d(TAG, "📡 发送 POST 请求到：" + urlString);
         FileLogger.d(TAG, "📝 请求体：" + body);
         
@@ -212,7 +202,7 @@ public class EstablishTaskRelationshipTool implements Tool {
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-        connection.setRequestProperty("Authorization", "Basic " + android.util.Base64.encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8), android.util.Base64.NO_WRAP));
+        auth.apply(connection);
         connection.setDoOutput(true);
 
         // 写入请求体
@@ -239,6 +229,6 @@ public class EstablishTaskRelationshipTool implements Tool {
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求建立 Redmine 任务之间的阻塞关系时才调用此工具。需要提供 redmine_url, username, password 等认证参数。注意：此工具仅管理阻塞关系，不支持父子关系。本工具支持长整型任务 ID（如 JoyMan 生成的 14 位数字 ID）。";
+        return "必须在用户明确要求建立 Redmine 任务阻塞关系时才调用此工具。认证支持 api_key，或 username 与 password，并可从工具备注读取；API Key 不得输出到回复或日志。仅管理阻塞关系，不支持父子关系。";
     }
 }
