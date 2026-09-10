@@ -3,6 +3,7 @@ package com.stupidbeauty.sisterfuture.adapter;
 import com.stupidbeauty.sisterfuture.bean.Attachment;
 import com.stupidbeauty.sisterfuture.bean.MessageItem;
 import com.stupidbeauty.sisterfuture.bean.MessageType;
+import com.stupidbeauty.sisterfuture.bean.ModelUsage;
 import androidx.recyclerview.widget.RecyclerView;
 import android.text.Spannable;
 import android.text.Selection;
@@ -152,7 +153,12 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 }
                 else if ("assistant".equals(role)) {
                     if (toolCalls != null && toolCalls.length() > 0) {
-                        StringBuilder callText = new StringBuilder("🛠️ 正在调用工具：\n");
+                        String assistantContent = msg.optString("content", "");
+                        StringBuilder callText = new StringBuilder();
+                        if (!assistantContent.trim().isEmpty()) {
+                            callText.append(assistantContent).append("\n\n");
+                        }
+                        callText.append("🛠️ 正在调用工具：\n");
                         for (int j = 0; j < toolCalls.length(); j++) {
                             try {
                                 JSONObject toolCall = toolCalls.getJSONObject(j);
@@ -175,6 +181,8 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     }
                     else if (!msg.optString("content").isEmpty()) {
                         MessageItem item = new MessageItem(msg.optString("content"), MessageType.AI);
+                        item.setModelUsage(ModelUsage.fromJson(
+                            msg.optJSONObject(ModelUsage.LOCAL_METADATA_KEY)));
                         // 🆕 设置 messageId
                         if (messageId != null && !messageId.isEmpty()) {
                             item.setMessageId(messageId);
@@ -318,6 +326,29 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         MessageItem item = messages.get(position);
         if (item.getType() == MessageType.AI) {
             item.text = newText;
+            notifyItemChanged(position);
+        }
+    }
+
+    public void updateAiMessageById(String messageId, String newText) {
+        int position = getMessagePositionById(messageId);
+        if (position < 0) {
+            FileLogger.w(TAG, "⚠️ [UPDATE_AI_SKIP] 未找到消息 ID=" + messageId);
+            return;
+        }
+        updateAiMessage(position, newText);
+    }
+
+    public void updateAiUsageByMessageId(String messageId, ModelUsage modelUsage) {
+        int position = getMessagePositionById(messageId);
+        if (position < 0) {
+            FileLogger.w(TAG, "⚠️ [UPDATE_USAGE_SKIP] 未找到消息 ID=" + messageId);
+            return;
+        }
+
+        MessageItem item = messages.get(position);
+        if (item.getType() == MessageType.AI) {
+            item.setModelUsage(modelUsage);
             notifyItemChanged(position);
         }
     }
@@ -608,6 +639,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
     public static class AIMessageViewHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.ai_text) TextView textView;
+        @BindView(R.id.ai_usage) TextView usageView;
 
         private final Markwon markwon;
         private List<MessageItem> messagesRef;
@@ -668,6 +700,14 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
         public void bind(MessageItem message) {
             markwon.setMarkdown(textView, message.getText());
+            ModelUsage usage = message.getModelUsage();
+            if (usage != null && usage.hasAnyUsage()) {
+                usageView.setText(usage.buildCompactSummary());
+                usageView.setVisibility(View.VISIBLE);
+            } else {
+                usageView.setText("");
+                usageView.setVisibility(View.GONE);
+            }
         }
     }
 

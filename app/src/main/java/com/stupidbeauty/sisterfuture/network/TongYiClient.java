@@ -15,6 +15,7 @@ import com.stupidbeauty.sisterfuture.utils.FileLogger;
 
 import com.stupidbeauty.sisterfuture.bean.ToolCall;
 import com.stupidbeauty.sisterfuture.bean.Function;
+import com.stupidbeauty.sisterfuture.bean.ModelUsage;
 
 import com.stupidbeauty.sisterfuture.tool.ToolManager;
 
@@ -29,17 +30,22 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import okio.Buffer;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
+import java.util.Set;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TongYiClient
 {
@@ -62,8 +68,141 @@ public class TongYiClient
   private final AtomicInteger queueSizeHighWaterMark = new AtomicInteger(0);
   
   // 🔗 新增：requestId ↔ messageId 映射表（用于追踪请求与消息的关联）
-  private final Map<Long, String> requestIdToMessageIdMap = new HashMap<>();
+  private final Map<Long, String> requestIdToMessageIdMap = new ConcurrentHashMap<>();
   private final AtomicLong requestIdCounter = new AtomicLong(0);
+
+  /**
+   * Small, Android-independent guard used by every asynchronous request path.
+   * The first terminal path wins; later OkHttp/SSE callbacks are ignored.
+   */
+  static final class CompletionGate
+  {
+    private final AtomicBoolean completed = new AtomicBoolean(false);
+
+    boolean tryComplete()
+    {
+      return completed.compareAndSet(false, true);
+    }
+
+    boolean isCompleted()
+    {
+      return completed.get();
+    }
+  }
+
+  /** Aggregates every HTTP attempt made by one logical model request. */
+  static final class RequestMetricsAccumulator
+  {
+    private long totalRequestBytes;
+    private long peakRequestBytes;
+    private int requestCount;
+    private String modelName;
+    private long promptTokens = -1L;
+    private long completionTokens = -1L;
+    private long totalTokens = -1L;
+    private boolean hasExplicitTotalTokens;
+
+    synchronized void recordAttempt(long requestBytes, String attemptedModelName)
+    {
+      long normalizedBytes = Math.max(0L, requestBytes);
+      totalRequestBytes += normalizedBytes;
+      peakRequestBytes = Math.max(peakRequestBytes, normalizedBytes);
+      requestCount++;
+      if (attemptedModelName != null && !attemptedModelName.isEmpty())
+      {
+        modelName = attemptedModelName;
+      }
+    }
+
+    synchronized void recordProviderUsage(long latestPromptTokens,
+                                          long latestCompletionTokens,
+                                          long latestTotalTokens)
+    {
+      if (latestPromptTokens >= 0L) promptTokens = latestPromptTokens;
+      if (latestCompletionTokens >= 0L) completionTokens = latestCompletionTokens;
+      if (latestTotalTokens >= 0L)
+      {
+        totalTokens = latestTotalTokens;
+        hasExplicitTotalTokens = true;
+      }
+      else if (!hasExplicitTotalTokens
+        && (latestPromptTokens >= 0L || latestCompletionTokens >= 0L))
+      {
+        totalTokens = Math.max(0L, promptTokens) + Math.max(0L, completionTokens);
+      }
+    }
+
+    synchronized ModelUsage snapshot()
+    {
+      boolean hasTokenUsage = promptTokens >= 0L
+        || completionTokens >= 0L
+        || totalTokens >= 0L;
+      long normalizedPrompt = Math.max(0L, promptTokens);
+      long normalizedCompletion = Math.max(0L, completionTokens);
+      long normalizedTotal = totalTokens >= 0L
+        ? totalTokens
+        : normalizedPrompt + normalizedCompletion;
+
+      return new ModelUsage(
+        normalizedPrompt,
+        normalizedCompletion,
+        normalizedTotal,
+        normalizedPrompt,
+        totalRequestBytes,
+        peakRequestBytes,
+        requestCount,
+        hasTokenUsage ? 1 : 0,
+        modelName,
+        0L
+      );
+    }
+  }
+
+  /**
+   * Only retry when the server clearly rejected the optional OpenAI usage
+   * extension. Other 4xx responses must retain their original semantics.
+   */
+  static boolean isUnsupportedStreamOptionsResponse(int statusCode, String responseBody)
+  {
+    if ((statusCode != 400 && statusCode != 422) || responseBody == null)
+    {
+      return false;
+    }
+
+    String normalized = responseBody.toLowerCase(Locale.ROOT);
+    boolean namesOptionalField = normalized.contains("stream_options")
+      || normalized.contains("stream options")
+      || normalized.contains("streamoptions")
+      || normalized.contains("include_usage");
+    if (!namesOptionalField)
+    {
+      return false;
+    }
+
+    return normalized.contains("unsupported")
+      || normalized.contains("not supported")
+      || normalized.contains("does not support")
+      || normalized.contains("unknown")
+      || normalized.contains("unrecognized")
+      || normalized.contains("not recognized")
+      || normalized.contains("unexpected")
+      || normalized.contains("extra")
+      || normalized.contains("additional properties")
+      || normalized.contains("not permitted")
+      || normalized.contains("not allowed")
+      || normalized.contains("invalid")
+      || normalized.contains("not a valid")
+      || normalized.contains("不支持")
+      || normalized.contains("未知")
+      || normalized.contains("无效");
+  }
+
+  static boolean isTerminalFinishReason(String finishReason)
+  {
+    return finishReason != null
+      && !finishReason.isEmpty()
+      && !"null".equalsIgnoreCase(finishReason);
+  }
 
   public TongYiClient(ModelAccessPointManager accessPointManager, ToolManager toolManager)
   {
@@ -142,10 +281,10 @@ public class TongYiClient
       try {
         // 执行实际的网络请求，传入 requestId 和 messageId
         networkRequester.sendRequest(messages, includeTools, listener, onStreamComplete, requestId, reservedMessageId);
-        
+
         final long endTime = System.currentTimeMillis();
         final long executionTime = endTime - startTime;
-        
+
         FileLogger.d(TAG, "🔒 [QUEUE_DONE] 请求 #" + totalRequests + " (requestId=" + requestId + ") 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
         
         // 每 10 个请求输出一次统计
@@ -156,13 +295,47 @@ public class TongYiClient
         }
       } catch (Exception e) {
         FileLogger.e(TAG, "🔒 [QUEUE_ERROR] 请求 #" + totalRequests + " (requestId=" + requestId + ") 执行失败", e);
-        throw e;
+        deliverTerminalUsage(listener, null, requestId);
+        try
+        {
+          listener.onError(e);
+        }
+        catch (Exception callbackError)
+        {
+          FileLogger.e(TAG, "队列错误回调执行失败 (requestId=" + requestId + ")",
+            callbackError);
+        }
+        removeRequestIdMapping(requestId);
       }
     });
     
     if (!queued) {
       FileLogger.e(TAG, "🔒 [QUEUE_REJECTED] 请求 #" + totalRequests + " (requestId=" + requestId + ") 被队列拒绝（队列已满）");
-      listener.onError(new IllegalStateException("请求队列已满，无法接受新请求"));
+      deliverTerminalUsage(listener, null, requestId);
+      try
+      {
+        listener.onError(new IllegalStateException("请求队列已满，无法接受新请求"));
+      }
+      catch (Exception callbackError)
+      {
+        FileLogger.e(TAG, "队列拒绝回调执行失败 (requestId=" + requestId + ")",
+          callbackError);
+      }
+      removeRequestIdMapping(requestId);
+    }
+  }
+
+  private static void deliverTerminalUsage(OnResponseListener listener, ModelUsage usage,
+                                           long requestId)
+  {
+    try
+    {
+      listener.onUsage(usage);
+    }
+    catch (Exception callbackError)
+    {
+      FileLogger.e(TAG, "用量回调执行失败 (requestId=" + requestId + ")",
+        callbackError);
     }
   }
   
@@ -201,6 +374,10 @@ public class TongYiClient
   {
     void onResponse(String response);
     void onError(Exception error);
+
+    default void onUsage(ModelUsage usage)
+    {
+    }
   }
 
   interface NetworkRequester
@@ -216,6 +393,8 @@ public class TongYiClient
     private final ToolManager toolManager;
     private final TongYiClient tongYiClient; // 引用父类，用于访问映射表
     private final OssManager ossManager;
+    private final Set<String> streamOptionsUnsupportedEndpoints =
+      ConcurrentHashMap.newKeySet();
 
     public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager,
                                   TongYiClient tongYiClient, OssManager ossManager)
@@ -251,6 +430,7 @@ public class TongYiClient
       
       // 🔗 记录请求信息
       FileLogger.d(NETWORK_TAG, "🔗 [REQUEST_INFO] requestId=" + requestId + " | messageId=" + reservedMessageId);
+      RequestLifecycle lifecycle = new RequestLifecycle(listener, onStreamComplete, tongYiClient, requestId);
 
       try
       {
@@ -344,112 +524,33 @@ public class TongYiClient
             }
         }
 
-        RequestBody body = RequestBody.create
-        (
-          MediaType.parse("application/json; charset=utf-8"),
-          requestBody.toString()
-        );
-
         String baseUrl = accessPointManager.getCurrentBaseUrl();
         String endpoint = accessPointManager.getCurrentChatEndpoint();
         String fullUrl = baseUrl + endpoint;
-        
-        FileLogger.d(NETWORK_TAG, "URL: " + fullUrl);
-        FileLogger.d(NETWORK_TAG, "Body length: " + requestBody.toString().length());
-        
-        String bodyPreview = requestBody.toString().length() > 200 
-            ? requestBody.toString().substring(0, 200) + "..." 
-            : requestBody.toString();
-        FileLogger.d(NETWORK_TAG, "Body preview: " + bodyPreview);
 
         if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
             FileLogger.w(NETWORK_TAG, "⚠️ Double slash in URL!");
         }
 
-        Request request = new Request.Builder()
-          .url(fullUrl)
-          .addHeader("Authorization", "Bearer " + effectiveApiKey)
-          .addHeader("Content-Type", "application/json")
-          .post(body)
-          .build();
-
-        client.newCall(request).enqueue(new Callback()
+        // Build only the request we are about to send. Image messages can make
+        // this JSON very large, so the compatibility fallback is materialized
+        // lazily only after an explicit stream_options validation error.
+        boolean knownUnsupported = streamOptionsUnsupportedEndpoints.contains(fullUrl);
+        if (!knownUnsupported)
         {
-          @Override
-          public void onFailure(Call call, IOException e)
-          {
-            FileLogger.e(NETWORK_TAG, "🌐 [HTTP_FAILURE] 请求失败 (requestId=" + requestId + "): " + e.getMessage() + " | 线程：" + Thread.currentThread().getName());
-            listener.onError(new AccessPointUnavailableException("Current access point is unavailable", e));
-            // 🔗 清理映射
-            tongYiClient.removeRequestIdMapping(requestId);
-          }
+          requestBody.put("stream_options",
+            new JSONObject().put("include_usage", true));
+        }
+        RequestAttempt primaryAttempt = buildAttempt(fullUrl, effectiveApiKey, requestBody);
 
-          @Override
-          public void onResponse(Call call, Response response) throws IOException
-          {
-            int statusCode = response.code();
-            FileLogger.d(NETWORK_TAG, "🌐 [HTTP_RESPONSE] HTTP Response Status: " + statusCode + " (requestId=" + requestId + ") | 线程：" + Thread.currentThread().getName());
-            
-            if (!response.isSuccessful())
-            {
-              String errorBody = "";
-              try {
-                errorBody = response.body().string();
-                FileLogger.e(NETWORK_TAG, "HTTP " + statusCode + " Error Body: " + errorBody);
-                
-                String errorPreview = errorBody.length() > 2000 
-                    ? errorBody.substring(0, 2000) + "..." 
-                    : errorBody;
-                FileLogger.e(NETWORK_TAG, "Error Body Preview: " + errorPreview);
-                
-                // ✅ #4823 HTTP 400 → 上下文超长
-                if (statusCode == 400 && ContextLengthUtils.isContextLengthError(errorBody)) {
-                  FileLogger.w(NETWORK_TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点 (requestId=" + requestId + ")");
-                  listener.onError(new ResponseException(response, errorBody));
-                  // 🔗 清理映射
-                  tongYiClient.removeRequestIdMapping(requestId);
-                  return; // 只调用一次 onError()
-                }
-                
-                // ✅ #4824 HTTP 429 → 限流错误
-                if (statusCode == 429) {
-                  FileLogger.w(NETWORK_TAG, "⚠️ 检测到 HTTP 429 限流错误，不切换接入点 (requestId=" + requestId + ")");
-                  listener.onError(new RateLimitException(response, errorBody));
-                  // 🔗 清理映射
-                  tongYiClient.removeRequestIdMapping(requestId);
-                  return; // 只调用一次 onError()
-                }
-                
-                // ✅ 其他错误 (401/403/500/503) → 接入点不可用
-                FileLogger.d(NETWORK_TAG, "状态码 " + statusCode + " 表示接入点不可用，触发切换 (requestId=" + requestId + ")");
-                listener.onError(new AccessPointUnavailableException("Error: " + errorBody));
-                // 🔗 清理映射
-                tongYiClient.removeRequestIdMapping(requestId);
-                return; // 只调用一次 onError()
-              } catch (Exception e) {
-                FileLogger.e(NETWORK_TAG, "Failed to read error body: " + e.getMessage());
-                listener.onError(new AccessPointUnavailableException("Failed to read error body: " + e.getMessage()));
-                // 🔗 清理映射
-                tongYiClient.removeRequestIdMapping(requestId);
-                return; // 只调用一次 onError()
-              }
-            }
-            else
-            {
-              ResponseBody responseBody = response.body();
-              if (responseBody != null)
-              {
-                FileLogger.d(NETWORK_TAG, "🌐 [HTTP_STREAM_START] 开始处理 SSE 流式响应 (requestId=" + requestId + ") | 线程：" + Thread.currentThread().getName());
-                processSSEStream(responseBody.charStream(), listener, accessPointManager, onStreamComplete, requestId, reservedMessageId);
-              }
-            }
-          }
-        });
+        enqueueAttempt(primaryAttempt, !knownUnsupported, fullUrl, lifecycle, requestId,
+          reservedMessageId,
+          currentAccessPoint != null ? currentAccessPoint.getModelName() : null);
       }
       catch (Exception e)
       {
         FileLogger.e(NETWORK_TAG, "🌐 [HTTP_ERROR] 请求构建失败 (requestId=" + requestId + ")", e);
-        
+
         // === 🔒 #5029 新增：检测 Authorization header 编码错误 ===
         // 当出现 IllegalArgumentException 且错误信息包含 "Unexpected char" 或 "Authorization" 时
         // 视为凭证损坏，触发接入点切换
@@ -457,18 +558,318 @@ public class TongYiClient
           String errorMsg = e.getMessage();
           if (errorMsg != null && (errorMsg.contains("Unexpected char") || errorMsg.contains("Authorization"))) {
             FileLogger.w(NETWORK_TAG, "⚠️ 检测到 Authorization header 编码错误，标记接入点不可用 (requestId=" + requestId + ")");
-            accessPointManager.reportCurrentAccessPointUnavailable();
-            listener.onError(new AccessPointUnavailableException("Invalid authorization header: " + errorMsg, e));
-            // 🔗 清理映射
-            tongYiClient.removeRequestIdMapping(requestId);
+            reportAccessPointUnavailable(accessPointManager, requestId);
+            lifecycle.fail(new AccessPointUnavailableException("Invalid authorization header: " + errorMsg, e));
             return;
           }
         }
-        
+
         e.printStackTrace();
-        listener.onError(e);
-        // 🔗 清理映射
-        tongYiClient.removeRequestIdMapping(requestId);
+        lifecycle.fail(e);
+      }
+    }
+
+    private RequestAttempt buildAttempt(String fullUrl, String apiKey, JSONObject requestBody)
+    {
+      String requestJson = requestBody.toString();
+      long requestBodyBytes = requestJson.getBytes(StandardCharsets.UTF_8).length;
+      RequestBody body = RequestBody.create(
+        MediaType.parse("application/json; charset=utf-8"), requestJson);
+      Request request = new Request.Builder()
+        .url(fullUrl)
+        .addHeader("Authorization", "Bearer " + apiKey)
+        .addHeader("Content-Type", "application/json")
+        .post(body)
+        .build();
+      return new RequestAttempt(request, requestJson.length(), preview(requestJson),
+        requestBodyBytes);
+    }
+
+    private RequestAttempt buildFallbackAttempt(RequestAttempt originalAttempt)
+      throws Exception
+    {
+      RequestBody originalBody = originalAttempt.request.body();
+      if (originalBody == null)
+      {
+        throw new IOException("Cannot build stream_options fallback without a request body");
+      }
+
+      Buffer buffer = new Buffer();
+      originalBody.writeTo(buffer);
+      JSONObject fallbackBody = new JSONObject(buffer.readUtf8());
+      fallbackBody.remove("stream_options");
+
+      String requestJson = fallbackBody.toString();
+      long requestBodyBytes = requestJson.getBytes(StandardCharsets.UTF_8).length;
+      RequestBody body = RequestBody.create(
+        MediaType.parse("application/json; charset=utf-8"), requestJson);
+      Request request = originalAttempt.request.newBuilder().post(body).build();
+      return new RequestAttempt(request, requestJson.length(), preview(requestJson),
+        requestBodyBytes);
+    }
+
+    private static String preview(String requestJson)
+    {
+      return requestJson.length() > 200
+        ? requestJson.substring(0, 200) + "..."
+        : requestJson;
+    }
+
+    private void enqueueAttempt(RequestAttempt attempt, boolean allowStreamOptionsFallback,
+                                String endpointKey,
+                                RequestLifecycle lifecycle, long requestId,
+                                String reservedMessageId, String modelName)
+    {
+      if (lifecycle.isCompleted()) return;
+
+      FileLogger.d(NETWORK_TAG, "URL: " + attempt.request.url());
+      FileLogger.d(NETWORK_TAG, "Body length: " + attempt.requestCharCount
+        + " chars, " + attempt.requestBodyBytes + " bytes");
+      FileLogger.d(NETWORK_TAG, "Body preview: " + attempt.requestPreview);
+
+      try
+      {
+        Call call = client.newCall(attempt.request);
+        lifecycle.recordAttempt(attempt.requestBodyBytes, modelName);
+        call.enqueue(new Callback()
+        {
+          @Override
+          public void onFailure(Call call, IOException e)
+          {
+            FileLogger.e(NETWORK_TAG, "🌐 [HTTP_FAILURE] 请求失败 (requestId="
+              + requestId + "): " + e.getMessage() + " | 线程："
+              + Thread.currentThread().getName());
+            lifecycle.fail(new AccessPointUnavailableException(
+              "Current access point is unavailable", e));
+          }
+
+          @Override
+          public void onResponse(Call call, Response response)
+          {
+            if (lifecycle.isCompleted())
+            {
+              response.close();
+              return;
+            }
+
+            int statusCode = response.code();
+            FileLogger.d(NETWORK_TAG, "🌐 [HTTP_RESPONSE] HTTP Response Status: "
+              + statusCode + " (requestId=" + requestId + ") | 线程："
+              + Thread.currentThread().getName());
+
+            if (!response.isSuccessful())
+            {
+              handleHttpError(response, attempt, allowStreamOptionsFallback,
+                endpointKey, lifecycle, requestId, reservedMessageId, modelName);
+              return;
+            }
+
+            ResponseBody responseBody = response.body();
+            if (responseBody == null)
+            {
+              response.close();
+              lifecycle.fail(new AccessPointUnavailableException(
+                "Successful response contained no body"));
+              return;
+            }
+
+            FileLogger.d(NETWORK_TAG, "🌐 [HTTP_STREAM_START] 开始处理 SSE 流式响应 (requestId="
+              + requestId + ") | 线程：" + Thread.currentThread().getName());
+            processSSEStream(responseBody.charStream(), lifecycle, accessPointManager,
+              requestId, reservedMessageId);
+          }
+        });
+      }
+      catch (Exception e)
+      {
+        FileLogger.e(NETWORK_TAG, "🌐 [HTTP_ERROR] 请求入队失败 (requestId="
+          + requestId + ")", e);
+        lifecycle.fail(e);
+      }
+    }
+
+    private void handleHttpError(Response response, RequestAttempt attemptedRequest,
+                                 boolean allowStreamOptionsFallback, String endpointKey,
+                                 RequestLifecycle lifecycle, long requestId,
+                                 String reservedMessageId, String modelName)
+    {
+      int statusCode = response.code();
+      String errorBody;
+      try
+      {
+        ResponseBody body = response.body();
+        errorBody = body == null ? "" : body.string();
+      }
+      catch (Exception e)
+      {
+        response.close();
+        FileLogger.e(NETWORK_TAG, "Failed to read error body: " + e.getMessage());
+        lifecycle.fail(new AccessPointUnavailableException(
+          "Failed to read error body: " + e.getMessage(), e));
+        return;
+      }
+
+      FileLogger.e(NETWORK_TAG, "HTTP " + statusCode + " Error Body: " + errorBody);
+      String errorPreview = errorBody.length() > 2000
+        ? errorBody.substring(0, 2000) + "..."
+        : errorBody;
+      FileLogger.e(NETWORK_TAG, "Error Body Preview: " + errorPreview);
+
+      if (allowStreamOptionsFallback
+        && isUnsupportedStreamOptionsResponse(statusCode, errorBody))
+      {
+        streamOptionsUnsupportedEndpoints.add(endpointKey);
+        try
+        {
+          RequestAttempt fallbackAttempt = buildFallbackAttempt(attemptedRequest);
+          FileLogger.w(NETWORK_TAG, "接入点不支持 stream_options，将在同一请求生命周期内回退一次"
+            + " (requestId=" + requestId + ")");
+          enqueueAttempt(fallbackAttempt, false, endpointKey, lifecycle, requestId,
+            reservedMessageId, modelName);
+        }
+        catch (Exception fallbackError)
+        {
+          FileLogger.e(NETWORK_TAG, "构建 stream_options 兼容回退请求失败"
+            + " (requestId=" + requestId + ")", fallbackError);
+          lifecycle.fail(fallbackError);
+        }
+        return;
+      }
+
+      // ✅ #4823 HTTP 400 → 上下文超长
+      if (statusCode == 400 && ContextLengthUtils.isContextLengthError(errorBody))
+      {
+        FileLogger.w(NETWORK_TAG, "🔍 检测到上下文超长错误（HTTP 400），不切换接入点"
+          + " (requestId=" + requestId + ")");
+        lifecycle.fail(new ResponseException(response, errorBody));
+        return;
+      }
+
+      // ✅ #4824 HTTP 429 → 限流错误
+      if (statusCode == 429)
+      {
+        FileLogger.w(NETWORK_TAG, "⚠️ 检测到 HTTP 429 限流错误，不切换接入点"
+          + " (requestId=" + requestId + ")");
+        lifecycle.fail(new RateLimitException(response, errorBody));
+        return;
+      }
+
+      FileLogger.d(NETWORK_TAG, "状态码 " + statusCode
+        + " 表示接入点不可用，触发切换 (requestId=" + requestId + ")");
+      lifecycle.fail(new AccessPointUnavailableException("Error: " + errorBody));
+    }
+
+    private static final class RequestAttempt
+    {
+      private final Request request;
+      private final int requestCharCount;
+      private final String requestPreview;
+      private final long requestBodyBytes;
+
+      private RequestAttempt(Request request, int requestCharCount, String requestPreview,
+                             long requestBodyBytes)
+      {
+        this.request = request;
+        this.requestCharCount = requestCharCount;
+        this.requestPreview = requestPreview;
+        this.requestBodyBytes = requestBodyBytes;
+      }
+    }
+
+    private static final class RequestLifecycle
+    {
+      private final OnResponseListener listener;
+      private final Runnable onStreamComplete;
+      private final TongYiClient tongYiClient;
+      private final long requestId;
+      private final CompletionGate completionGate = new CompletionGate();
+      private final RequestMetricsAccumulator metrics = new RequestMetricsAccumulator();
+
+      private RequestLifecycle(OnResponseListener listener, Runnable onStreamComplete,
+                               TongYiClient tongYiClient, long requestId)
+      {
+        this.listener = listener;
+        this.onStreamComplete = onStreamComplete;
+        this.tongYiClient = tongYiClient;
+        this.requestId = requestId;
+      }
+
+      private boolean isCompleted()
+      {
+        return completionGate.isCompleted();
+      }
+
+      private boolean deliverResponse(String response)
+      {
+        if (completionGate.isCompleted()) return false;
+        try
+        {
+          listener.onResponse(response);
+          return !completionGate.isCompleted();
+        }
+        catch (Exception e)
+        {
+          fail(e);
+          return false;
+        }
+      }
+
+      private void recordAttempt(long requestBytes, String modelName)
+      {
+        metrics.recordAttempt(requestBytes, modelName);
+      }
+
+      private void recordProviderUsage(long promptTokens, long completionTokens,
+                                       long totalTokens)
+      {
+        metrics.recordProviderUsage(promptTokens, completionTokens, totalTokens);
+      }
+
+      private void succeed()
+      {
+        if (!completionGate.tryComplete()) return;
+        try
+        {
+          deliverTerminalUsage(listener,
+            metrics.snapshot(), requestId);
+
+          if (onStreamComplete != null)
+          {
+            try
+            {
+              onStreamComplete.run();
+              FileLogger.d(NETWORK_TAG, "流式响应处理完成，回调已执行 (requestId="
+                + requestId + ")");
+            }
+            catch (Exception e)
+            {
+              FileLogger.e(NETWORK_TAG, "流完成回调失败 (requestId=" + requestId + ")", e);
+            }
+          }
+        }
+        finally
+        {
+          tongYiClient.removeRequestIdMapping(requestId);
+        }
+      }
+
+      private void fail(Exception error)
+      {
+        if (!completionGate.tryComplete()) return;
+        try
+        {
+          deliverTerminalUsage(listener, metrics.snapshot(), requestId);
+          listener.onError(error);
+        }
+        catch (Exception callbackError)
+        {
+          FileLogger.e(NETWORK_TAG, "错误回调执行失败 (requestId=" + requestId + ")",
+            callbackError);
+        }
+        finally
+        {
+          tongYiClient.removeRequestIdMapping(requestId);
+        }
       }
     }
 
@@ -479,7 +880,11 @@ public class TongYiClient
       for (int i = 0; i < apiMessages.length(); i++)
       {
         JSONObject message = apiMessages.optJSONObject(i);
-        if (message != null) message.remove("local_attachments");
+        if (message != null)
+        {
+          message.remove("local_attachments");
+          message.remove(ModelUsage.LOCAL_METADATA_KEY);
+        }
       }
       return apiMessages;
     }
@@ -500,8 +905,24 @@ public class TongYiClient
            trimmedContent.contains("<TITLE");
   }
 
+  private static void reportAccessPointUnavailable(ModelAccessPointManager accessPointManager,
+                                                   long requestId)
+  {
+    try
+    {
+      accessPointManager.reportCurrentAccessPointUnavailable();
+    }
+    catch (Exception e)
+    {
+      FileLogger.e(TAG, "标记接入点不可用时失败 (requestId=" + requestId + ")", e);
+    }
+  }
+
   // 🔗 修改：添加 requestId 和 messageId 参数，用于日志记录
-  private static void processSSEStream(java.io.Reader reader, OnResponseListener listener, ModelAccessPointManager accessPointManager, Runnable onStreamComplete, long requestId, String reservedMessageId)
+  private static void processSSEStream(java.io.Reader reader,
+                                       OkHttpNetworkRequester.RequestLifecycle lifecycle,
+                                       ModelAccessPointManager accessPointManager,
+                                       long requestId, String reservedMessageId)
   {
     try (java.io.BufferedReader bufferedReader = new java.io.BufferedReader(reader))
     {
@@ -513,6 +934,7 @@ public class TongYiClient
       int lineCount = 0;
       int contentLineCount = 0;
       StringBuilder allContentBuilder = new StringBuilder();
+      boolean sawTerminalChoice = false;
 
       while ((line = bufferedReader.readLine()) != null)
       {
@@ -527,8 +949,8 @@ public class TongYiClient
           if (isHtmlResponse(preview))
           {
             FileLogger.e(TAG, "API returned HTML page (requestId=" + requestId + ")");
-            accessPointManager.reportCurrentAccessPointUnavailable();
-            listener.onError(new ResponseException(null, "API returned HTML page"));
+            reportAccessPointUnavailable(accessPointManager, requestId);
+            lifecycle.fail(new ResponseException(null, "API returned HTML page"));
             return;
           }
         }
@@ -542,10 +964,29 @@ public class TongYiClient
           {
             if (!dataPart.equals("[DONE]"))
             {
+              boolean usageOnlyChunk = false;
               try {
                 JSONObject json = new JSONObject(dataPart);
-                if (json.has("choices") && json.getJSONArray("choices").length() > 0) {
+                JSONObject usageJson = json.optJSONObject("usage");
+                if (usageJson != null)
+                {
+                  long promptTokens = optLong(usageJson, "prompt_tokens", "input_tokens");
+                  long completionTokens = optLong(usageJson, "completion_tokens", "output_tokens");
+                  long totalTokens = usageJson.has("total_tokens")
+                    ? usageJson.optLong("total_tokens", -1L)
+                    : -1L;
+                  lifecycle.recordProviderUsage(promptTokens, completionTokens, totalTokens);
+                }
+
+                boolean hasChoices = json.has("choices") && json.getJSONArray("choices").length() > 0;
+                usageOnlyChunk = usageJson != null && !hasChoices;
+                if (hasChoices) {
                   JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
+                  String finishReason = choice.optString("finish_reason", "");
+                  if (isTerminalFinishReason(finishReason))
+                  {
+                    sawTerminalChoice = true;
+                  }
                   if (choice.has("delta")) {
                     JSONObject delta = choice.getJSONObject("delta");
                     
@@ -570,7 +1011,10 @@ public class TongYiClient
                 FileLogger.e(TAG, "[SSE Parse Error] Failed to parse JSON (requestId=" + requestId + "): " + e.getMessage());
               }
               
-              listener.onResponse(dataPart);
+              if (!usageOnlyChunk)
+              {
+                if (!lifecycle.deliverResponse(dataPart)) return;
+              }
             }
             else
             {
@@ -587,23 +1031,43 @@ public class TongYiClient
               } else {
                 FileLogger.d(TAG, "[SSE Summary] ✓ 模型响应正常，长度：" + finalContent.length() + " (requestId=" + requestId + ")");
               }
+              break;
             }
           }
         }
       }
 
-      if (isDone && onStreamComplete != null)
+      if (isDone || sawTerminalChoice)
       {
-        onStreamComplete.run();
-        FileLogger.d(TAG, "流式响应处理完成，回调已执行 (requestId=" + requestId + ")");
+        if (!isDone)
+        {
+          FileLogger.w(TAG, "SSE 流未发送 [DONE]，但已收到 finish_reason，"
+            + "按完整响应结算 (requestId=" + requestId + ")");
+        }
+        lifecycle.succeed();
+      }
+      else
+      {
+        FileLogger.e(TAG, "SSE 流在 [DONE] 前结束 (requestId=" + requestId + ")");
+        reportAccessPointUnavailable(accessPointManager, requestId);
+        lifecycle.fail(new AccessPointUnavailableException(
+          "Stream ended before [DONE]"));
       }
     }
-    catch (IOException e)
+    catch (Exception e)
     {
       FileLogger.e(TAG, "SSE 流处理失败 (requestId=" + requestId + ")", e);
-      accessPointManager.reportCurrentAccessPointUnavailable();
-      listener.onError(new AccessPointUnavailableException("Stream failed", e));
+      reportAccessPointUnavailable(accessPointManager, requestId);
+      lifecycle.fail(new AccessPointUnavailableException("Stream failed", e));
     }
+  }
+
+  private static long optLong(JSONObject json, String primaryKey, String fallbackKey)
+  {
+    if (json == null) return -1L;
+    if (json.has(primaryKey)) return json.optLong(primaryKey, -1L);
+    if (json.has(fallbackKey)) return json.optLong(fallbackKey, -1L);
+    return -1L;
   }
 
   public static class AccessPointUnavailableException extends Exception
@@ -649,14 +1113,15 @@ public class TongYiClient
 
     public ResponseException(Response response)
     {
-      super("HTTP " + response.code());
+      super(response == null ? "Response error" : "HTTP " + response.code());
       this.response = response;
       this.customMessage = null;
     }
 
     public ResponseException(Response response, String customMessage)
     {
-      super("HTTP " + response.code() + " - " + customMessage);
+      super((response == null ? "Response error" : "HTTP " + response.code())
+        + " - " + customMessage);
       this.response = response;
       this.customMessage = customMessage;
     }
