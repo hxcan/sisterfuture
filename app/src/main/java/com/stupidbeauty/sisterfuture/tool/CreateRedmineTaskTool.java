@@ -43,7 +43,7 @@ public class CreateRedmineTaskTool implements Tool
     {
       JSONObject functionDef = new JSONObject();
       functionDef.put("name", "createRedmineTask");
-      functionDef.put("description", "向 Redmine 创建一个新任务。支持创建为指定父任务的子任务。");
+      functionDef.put("description", "向 Redmine 创建一个新任务。支持指定指派人，或创建为指定父任务的子任务。");
 
       JSONObject priorityEnum = new JSONObject();
       priorityEnum.put("type", "string");
@@ -81,6 +81,10 @@ public class CreateRedmineTaskTool implements Tool
         .put("tracker_id", new JSONObject()
           .put("type", "integer")
           .put("description", "可选：任务类型 ID（1=Bug, 2=Feature, 3=Support），默认为项目默认值"))
+        .put("assigned_to_id", new JSONObject()
+          .put("type", "integer")
+          .put("minimum", 1)
+          .put("description", "可选：任务指派人的用户 ID，必须为正整数"))
       );
       parameters.put("required", new JSONArray(new String[]{"project_id", "subject"}));
 
@@ -159,6 +163,14 @@ public class CreateRedmineTaskTool implements Tool
                   issueJson.put("tracker_id", trackerId);
               }
 
+              if (arguments.has("assigned_to_id")) {
+                  long assignedToId = arguments.getLong("assigned_to_id");
+                  if (assignedToId <= 0) {
+                      throw new IllegalArgumentException("assigned_to_id 必须为正整数");
+                  }
+                  issueJson.put("assigned_to_id", assignedToId);
+              }
+
               JSONObject requestJson = new JSONObject();
               requestJson.put("issue", issueJson);
 
@@ -216,7 +228,7 @@ public class CreateRedmineTaskTool implements Tool
   @Override
   public String getDefaultSystemPromptEnhancement()
   {
-      return "必须在用户明确要求创建 Redmine 任务时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。project_id 支持长整型。";
+      return "必须在用户明确要求创建 Redmine 任务时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。project_id 支持长整型。可通过 assigned_to_id 指定指派人的用户 ID，不支持按姓名指派。";
   }
   
   // 获取工具备注
