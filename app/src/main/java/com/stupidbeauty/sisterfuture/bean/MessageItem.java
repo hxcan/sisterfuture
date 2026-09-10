@@ -10,6 +10,7 @@ public class MessageItem {
     public String imageUrl; // 🖼️ 新增：存储图片的 Base64 数据（如果有）
     private String messageId; // 🔗 新增：消息唯一 ID，用于 UI 与上下文关联
     private List<Attachment> attachments; // 🔥 新增：工具生成的多媒体附件
+    private ModelUsage modelUsage; // 本地展示用，不发送给模型
 
     public MessageItem(String text, MessageType type) {
         this.text = text;
@@ -68,6 +69,14 @@ public class MessageItem {
     // 🔥 新增：设置附件列表
     public void setAttachments(List<Attachment> attachments) {
         this.attachments = attachments;
+    }
+
+    public ModelUsage getModelUsage() {
+        return modelUsage;
+    }
+
+    public void setModelUsage(ModelUsage modelUsage) {
+        this.modelUsage = modelUsage;
     }
 
     // 🔗 生成唯一消息 ID（时间戳 + 随机数）

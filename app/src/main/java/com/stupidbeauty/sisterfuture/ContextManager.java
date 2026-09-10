@@ -26,6 +26,7 @@ import java.util.List;
 import android.util.Log;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import com.stupidbeauty.sisterfuture.manager.ToolAvoidanceDetectionManager;
+import com.stupidbeauty.sisterfuture.bean.ModelUsage;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.Set;
@@ -522,6 +523,11 @@ public class ContextManager
   // 🔗 带 messageId 的 addAssistantMessage 重载
   public void addAssistantMessage(String message, String messageId)
   {
+    addAssistantMessage(message, messageId, null);
+  }
+
+  public void addAssistantMessage(String message, String messageId, ModelUsage modelUsage)
+  {
     JSONObject msg = createMessage("assistant", message);
     if (messageId != null && !messageId.isEmpty())
     {
@@ -537,7 +543,51 @@ public class ContextManager
         FileLogger.e(TAG, "❌ [CONFIRM] 添加 messageId 失败", e);
       }
     }
+    if (modelUsage != null && modelUsage.hasAnyUsage())
+    {
+      try
+      {
+        msg.put(ModelUsage.LOCAL_METADATA_KEY, modelUsage.toJson());
+      }
+      catch (JSONException e)
+      {
+        FileLogger.e(TAG, "❌ 添加模型用量失败", e);
+      }
+    }
     addRawMessage(msg);
+  }
+
+  public boolean updateAssistantMessageUsage(String messageId, ModelUsage modelUsage)
+  {
+    if (messageId == null || messageId.isEmpty() || modelUsage == null || !modelUsage.hasAnyUsage())
+    {
+      return false;
+    }
+
+    List<JSONObject> history = getHistory();
+    for (JSONObject message : history)
+    {
+      if ("assistant".equals(message.optString("role"))
+        && messageId.equals(message.optString("id")))
+      {
+        try
+        {
+          message.put(ModelUsage.LOCAL_METADATA_KEY,
+            new JSONObject(modelUsage.toJson().toString()));
+          saveHistory(history);
+          FileLogger.d(TAG, "📊 已更新助手消息模型用量 | id=" + messageId);
+          return true;
+        }
+        catch (JSONException e)
+        {
+          FileLogger.e(TAG, "❌ 更新模型用量失败 | id=" + messageId, e);
+          return false;
+        }
+      }
+    }
+
+    FileLogger.w(TAG, "⚠️ 未找到待更新用量的助手消息 | id=" + messageId);
+    return false;
   }
 
   public void addRawMessage(JSONObject message)
