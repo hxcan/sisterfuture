@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 /**
  * 工具类：更新 Redmine 任务信息
  * 本工具基于 Redmine API 的 'Updating an issue' 接口，用于更新任务的任意属性。
- * 支持添加评论（notes）、修改标题（subject）、描述（description）、优先级（priority_id）、状态（status_id）和目标版本（fixed_version_id）等。
+ * 支持添加评论（notes）、修改标题（subject）、描述（description）、优先级（priority_id）、状态（status_id）、指派人（assigned_to_id）和目标版本（fixed_version_id）等。
  * 新增支持修改上级任务编号（parent_issue_id）和任务阻挡关系。
  * 一个工具，满足多种任务更新需求，具有高度的通用性和可扩展性。
  */
@@ -47,7 +47,7 @@ public class UpdateRedmineIssueTool implements Tool
         {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "updateRedmineIssue");
-            functionDef.put("description", "更新 Redmine 任务的任意属性。支持添加评论、修改标题、描述、优先级、状态和父子关系等。");
+            functionDef.put("description", "更新 Redmine 任务的任意属性。支持添加评论、修改标题、描述、优先级、状态、指派人和父子关系等。");
 
             JSONObject priorityEnum = new JSONObject();
             priorityEnum.put("type", "string");
@@ -90,6 +90,11 @@ public class UpdateRedmineIssueTool implements Tool
                 .put("status_id", new JSONObject()
                     .put("type", "long")
                     .put("description", "可选：任务的新状态 ID"))
+
+                .put("assigned_to_id", new JSONObject()
+                    .put("type", "integer")
+                    .put("minimum", 0)
+                    .put("description", "可选：新的指派人用户 ID；传 0 可清空指派人"))
 
                 .put("fixed_version_id", new JSONObject()
                     .put("type", "long")
@@ -175,6 +180,29 @@ public class UpdateRedmineIssueTool implements Tool
                 if (arguments.has("status_id"))
                 {
                     issueJson.put("status_id", arguments.getLong("status_id"));
+                }
+                if (arguments.has("assigned_to_id"))
+                {
+                    if (arguments.isNull("assigned_to_id"))
+                    {
+                        issueJson.put("assigned_to_id", "");
+                    }
+                    else
+                    {
+                        long assignedToId = arguments.getLong("assigned_to_id");
+                        if (assignedToId < 0)
+                        {
+                            throw new IllegalArgumentException("assigned_to_id 必须为正整数；传 0 可清空指派人");
+                        }
+                        if (assignedToId == 0)
+                        {
+                            issueJson.put("assigned_to_id", "");
+                        }
+                        else
+                        {
+                            issueJson.put("assigned_to_id", assignedToId);
+                        }
+                    }
                 }
                 if (arguments.has("fixed_version_id"))
                 {
@@ -292,6 +320,6 @@ public class UpdateRedmineIssueTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求更新 Redmine 任务信息时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。支持添加评论、修改目标版本（fixed_version_id）、父子关系和任务依赖关系；目标版本必须使用版本 ID，传 0 或 null 可清空。";
+        return "必须在用户明确要求更新 Redmine 任务信息时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。支持添加评论、修改指派人（assigned_to_id）、目标版本（fixed_version_id）、父子关系和任务依赖关系；指派人必须使用用户 ID，传 0 可清空，不支持按姓名指派；目标版本必须使用版本 ID，传 0 或 null 可清空。";
     }
 }
