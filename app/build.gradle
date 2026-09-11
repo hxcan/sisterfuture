@@ -39,6 +39,7 @@ dependencies
   annotationProcessor 'io.objectbox:objectbox-processor:5.1.0'
   implementation 'commons-net:commons-net:3.8.0'
   testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20240303'
 
   // #3088 百度地图 SDK 依赖（降级到 7.5.4，与旅行盲盒一致）
   // 地图组件
