@@ -1,7 +1,5 @@
 package com.stupidbeauty.sisterfuture.tool;
 
-import com.sun.net.httpserver.HttpServer;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Rule;
@@ -15,10 +13,11 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
 
 import okhttp3.HttpUrl;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import okio.Buffer;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -245,29 +244,20 @@ public class HttpFileDownloadSupportTest
   public void downloadsBinaryResponseAndFollowsRedirect() throws Exception
   {
     byte[] payload = new byte[]{0x00, (byte) 0xff, 0x01, 0x02};
-    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-    server.createContext("/file.bin", exchange ->
-    {
-      exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
-      exchange.sendResponseHeaders(200, payload.length);
-      try (OutputStream responseBody = exchange.getResponseBody())
-      {
-        responseBody.write(payload);
-      }
-    });
-    server.createContext("/redirect", exchange ->
-    {
-      exchange.getResponseHeaders().add("Location", "/file.bin");
-      exchange.sendResponseHeaders(302, -1L);
-      exchange.close();
-    });
+    MockWebServer server = new MockWebServer();
+    server.enqueue(new MockResponse()
+      .setResponseCode(302)
+      .addHeader("Location", "/file.bin"));
+    server.enqueue(new MockResponse()
+      .setResponseCode(200)
+      .addHeader("Content-Type", "application/octet-stream")
+      .setBody(new Buffer().write(payload)));
     server.start();
 
     try
     {
       File target = new File(temporaryFolder.getRoot(), "downloaded.bin");
-      HttpUrl url = HttpUrl.parse(
-        "http://127.0.0.1:" + server.getAddress().getPort() + "/redirect");
+      HttpUrl url = server.url("/redirect");
 
       HttpFileDownloadTool.DownloadResult result = new HttpFileDownloadTool(null)
         .download(url, target, 30);
@@ -283,26 +273,21 @@ public class HttpFileDownloadSupportTest
     }
     finally
     {
-      server.stop(0);
+      server.shutdown();
     }
   }
 
   @Test
   public void httpErrorDoesNotCreateTargetFile() throws Exception
   {
-    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-    server.createContext("/missing", exchange ->
-    {
-      exchange.sendResponseHeaders(404, -1L);
-      exchange.close();
-    });
+    MockWebServer server = new MockWebServer();
+    server.enqueue(new MockResponse().setResponseCode(404));
     server.start();
 
     try
     {
       File target = new File(temporaryFolder.getRoot(), "error-page.bin");
-      HttpUrl url = HttpUrl.parse(
-        "http://127.0.0.1:" + server.getAddress().getPort() + "/missing");
+      HttpUrl url = server.url("/missing");
 
       assertThrows(IOException.class, () -> new HttpFileDownloadTool(null)
         .download(url, target, 30));
@@ -312,7 +297,7 @@ public class HttpFileDownloadSupportTest
     }
     finally
     {
-      server.stop(0);
+      server.shutdown();
     }
   }
 
