@@ -45,6 +45,7 @@ public class ToolRegistry {
 
         toolManager.registerTool(new BasicWebRequestTool(context));
         toolManager.registerTool(new GenericWebRequestTool(context));
+        toolManager.registerTool(new HttpFileDownloadTool(context));
         toolManager.registerTool(new GenerateImageTool(context));
         toolManager.registerTool(new WanxiangTool(context));
         toolManager.registerTool(new KlingVideoGenerationTool(context));

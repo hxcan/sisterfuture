@@ -102,6 +102,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 #### 网页访问
 - **基础请求**: 获取网页 HTML/纯文本/摘要 (`basic_web_request`)
 - **通用 HTTP**: 支持 GET/POST/PUT/DELETE/PATCH，自定义 Headers/Auth/Body (`generic_web_request`)
+- **HTTP 文件下载**: 将任意 HTTP/HTTPS 文件流式保存到手机，不把二进制内容写入对话 (`downloadHttpFile`)
 - **安全搜索**: 集成 Brave Search API，保护隐私 (`search_with_brave`)
 - **API 调试**: 临时验证第三方 API，不持久化敏感凭证
 

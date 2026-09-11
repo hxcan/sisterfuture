@@ -222,6 +222,13 @@ public class ToolManager
 
   public void recordToolSuccess(String toolName, JSONObject arguments)
   {
+    Tool tool = getTool(toolName);
+    if (tool != null && !tool.shouldRecordParameterHistory())
+    {
+      Log.d(TAG, ">>> [RECORD] 跳过敏感工具的参数历史：tool=" + toolName);
+      return;
+    }
+
     Log.d(TAG, ">>> [RECORD] 记录工具成功调用：tool=" + toolName
       + "（参数值不写入日志）");
     parameterHistory.recordSuccess(toolName, arguments);

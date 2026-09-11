@@ -86,6 +86,14 @@ public interface Tool
     return false;
   }
 
+  /**
+   * 是否记录成功调用的参数历史。包含一次性签名地址等敏感参数的工具应覆盖为 false。
+   */
+  default boolean shouldRecordParameterHistory()
+  {
+    return true;
+  }
+
   // 原始同步方法（保留）
   default JSONObject execute(JSONObject arguments) throws Exception
   {
