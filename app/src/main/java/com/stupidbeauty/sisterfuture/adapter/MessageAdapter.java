@@ -44,6 +44,8 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     
     // 🔥 #4881 救援模式：仅限制 TOOL_CALL_RESULT 类型消息的最大显示长度
     private static final int MAX_TOOL_RESULT_DISPLAY_LENGTH = 10000; // 10KB 显示限制
+    private static final long MAX_LOCAL_ATTACHMENT_IMAGE_BYTES = 32L * 1024 * 1024;
+    private static final int MAX_LOCAL_ATTACHMENT_BITMAP_DIMENSION = 2048;
     private static final String TAG = "MessageAdapter";
 
     private List<MessageItem> messages = new ArrayList<>();
@@ -368,10 +370,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     private static boolean addVideoView(android.view.ViewGroup videoContainer, String url,
                                         android.content.Context ctx, int currentCount) {
         try {
-            if (videoContainer == null || url == null || !url.startsWith("file://")) return false;
-            String localPath = android.net.Uri.parse(url).getPath();
-            if (localPath == null) return false;
-            java.io.File videoFile = new java.io.File(localPath);
+            if (videoContainer == null) return false;
+            java.io.File videoFile = resolveLocalAttachmentFile(url);
+            if (videoFile == null) return false;
+            String localPath = videoFile.getAbsolutePath();
             if (!videoFile.exists()) {
                 FileLogger.e(TAG, "❌ [VIDEO_FILE_MISSING] 视频文件不存在: " + localPath);
                 return false;
@@ -394,6 +396,50 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         } catch (Exception e) {
             FileLogger.e(TAG, "❌ [ADD_VIDEO_VIEW_ERROR] 添加视频视图失败", e);
             return false;
+        }
+    }
+
+    private static java.io.File resolveLocalAttachmentFile(String url) {
+        if (url == null || !url.startsWith("file://")) return null;
+        String rawPath = url.substring("file://".length());
+        if (rawPath.isEmpty()) return null;
+
+        // 工具附件历史上同时存在原始路径和 Uri.fromFile 编码路径。
+        java.io.File rawFile = new java.io.File(rawPath);
+        if (!rawFile.isAbsolute()) return null;
+        if (rawFile.exists()) return rawFile;
+        if (rawPath.indexOf('#') >= 0 || rawPath.indexOf('?') >= 0) return rawFile;
+        String decodedPath = android.net.Uri.parse(url).getPath();
+        if (decodedPath == null) return rawFile;
+        java.io.File decodedFile = new java.io.File(decodedPath);
+        return decodedFile.isAbsolute() ? decodedFile : null;
+    }
+
+    private static Bitmap decodeLocalAttachmentBitmap(String localPath) {
+        try {
+            java.io.File imageFile = new java.io.File(localPath);
+            if (!imageFile.isFile() || imageFile.length() > MAX_LOCAL_ATTACHMENT_IMAGE_BYTES) {
+                return null;
+            }
+
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(localPath, bounds);
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+
+            int sampleSize = 1;
+            while ((bounds.outWidth / sampleSize > MAX_LOCAL_ATTACHMENT_BITMAP_DIMENSION
+                    || bounds.outHeight / sampleSize > MAX_LOCAL_ATTACHMENT_BITMAP_DIMENSION)
+                    && sampleSize <= Integer.MAX_VALUE / 2) {
+                sampleSize *= 2;
+            }
+
+            BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
+            decodeOptions.inSampleSize = sampleSize;
+            return BitmapFactory.decodeFile(localPath, decodeOptions);
+        } catch (OutOfMemoryError error) {
+            FileLogger.e(TAG, "本地附件图片内存不足，已跳过显示");
+            return null;
         }
     }
 
@@ -869,24 +915,14 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     Bitmap bitmap = null;
                     // 🆕 分支1：file:/// 本地路径（GenerateImageTool 实际产物）
                     if (base64Data.startsWith("file:///")) {
-                        String localPath = base64Data.substring("file:///".length());
+                        java.io.File localFile = MessageAdapter.resolveLocalAttachmentFile(base64Data);
+                        if (localFile == null) continue;
+                        String localPath = localFile.getAbsolutePath();
                         FileLogger.d(TAG, "📂 [FILE_PATH] 读取本地图片: " + localPath);
                         try {
-                            bitmap = BitmapFactory.decodeFile(localPath);
+                            bitmap = MessageAdapter.decodeLocalAttachmentBitmap(localPath);
                         } catch (Exception fileEx) {
                             FileLogger.w(TAG, "⚠️ [FILE_DECODE_FAIL] " + fileEx.getMessage());
-                        }
-                        // 兜底：file:/// 失败时尝试 ContentResolver（兼容 content://）
-                        if (bitmap == null) {
-                            try {
-                                java.io.InputStream is = ctx.getContentResolver().openInputStream(android.net.Uri.parse(base64Data));
-                                if (is != null) {
-                                    bitmap = BitmapFactory.decodeStream(is);
-                                    is.close();
-                                }
-                            } catch (Exception uriEx) {
-                                FileLogger.w(TAG, "⚠️ [URI_DECODE_FAIL] " + uriEx.getMessage());
-                            }
                         }
                         if (bitmap == null) {
                             FileLogger.e(TAG, "❌ [FILE_BMP_NULL] 无法读取本地图片: " + localPath);

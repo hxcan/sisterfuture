@@ -15,6 +15,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -67,7 +68,8 @@ public class HttpFileDownloadTool implements Tool
       functionDefinition.put("name", getName());
       functionDefinition.put("description",
         "从任意 HTTP 或 HTTPS URL 下载文件到手机。文件以二进制流直接保存，"
-          + "不会把内容或 Base64 返回到对话中。仅在用户明确要求下载文件时使用。");
+          + "不会把内容或 Base64 返回到对话中；图片和视频会作为本地附件返回，"
+          + "以便直接预览或播放。仅在用户明确要求下载文件时使用。");
 
       JSONObject properties = new JSONObject();
       properties.put("url", new JSONObject()
@@ -160,18 +162,7 @@ public class HttpFileDownloadTool implements Tool
         DownloadResult downloadResult = download(requestedUrl, explicitTarget, timeoutSec);
         scanDownloadedFile(downloadResult.file, downloadResult.contentType);
 
-        result = new JSONObject();
-        result.put("status", "success");
-        result.put("success", true);
-        result.put("file_saved", true);
-        result.put("phone_path", downloadResult.file.getAbsolutePath());
-        result.put("file_name", downloadResult.file.getName());
-        result.put("size_bytes", downloadResult.sizeBytes);
-        result.put("content_type", downloadResult.contentType);
-        result.put("status_code", downloadResult.statusCode);
-        result.put("redirect_count", downloadResult.redirectCount);
-        result.put("duration_ms", downloadResult.durationMs);
-        result.put("processed_at", System.currentTimeMillis());
+        result = buildSuccessResult(downloadResult);
       }
       catch (Exception e)
       {
@@ -182,6 +173,140 @@ public class HttpFileDownloadTool implements Tool
 
       callback.onResult(result);
     });
+  }
+
+  JSONObject buildSuccessResult(DownloadResult downloadResult) throws Exception
+  {
+    JSONObject result = new JSONObject();
+    result.put("status", "success");
+    result.put("success", true);
+    result.put("file_saved", true);
+    result.put("phone_path", downloadResult.file.getAbsolutePath());
+    result.put("file_name", downloadResult.file.getName());
+    result.put("size_bytes", downloadResult.sizeBytes);
+    result.put("content_type", downloadResult.contentType);
+    result.put("status_code", downloadResult.statusCode);
+    result.put("redirect_count", downloadResult.redirectCount);
+    result.put("duration_ms", downloadResult.durationMs);
+    result.put("processed_at", System.currentTimeMillis());
+
+    JSONObject mediaAttachment = buildMediaAttachment(downloadResult);
+    if (mediaAttachment != null)
+    {
+      result.put("attachments", new JSONArray().put(mediaAttachment));
+    }
+    return result;
+  }
+
+  private JSONObject buildMediaAttachment(DownloadResult downloadResult) throws Exception
+  {
+    String mimeType = resolveMediaMimeType(
+      downloadResult.contentType, downloadResult.file.getName());
+    if (mimeType == null)
+    {
+      return null;
+    }
+
+    String mediaType = attachmentTypeForMimeType(mimeType);
+
+    JSONObject metadata = new JSONObject();
+    metadata.put("size", downloadResult.sizeBytes);
+    metadata.put("mimeType", mimeType);
+
+    JSONObject attachment = new JSONObject();
+    attachment.put("type", mediaType);
+    attachment.put("url", "file://" + downloadResult.file.getAbsolutePath());
+    attachment.put("metadata", metadata);
+    return attachment;
+  }
+
+  private String resolveMediaMimeType(String contentType, String fileName)
+  {
+    String declaredMimeType = normalizeContentType(contentType);
+    String supportedMimeType = supportedMediaMimeType(declaredMimeType);
+    if (supportedMimeType != null)
+    {
+      return supportedMimeType;
+    }
+    if (!declaredMimeType.isEmpty()
+      && !"application/octet-stream".equals(declaredMimeType)
+      && !"binary/octet-stream".equals(declaredMimeType)
+      && !"application/download".equals(declaredMimeType)
+      && !"application/x-download".equals(declaredMimeType))
+    {
+      return null;
+    }
+
+    String lowerName = fileName != null ? fileName.toLowerCase(Locale.ROOT) : "";
+    if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")
+      || lowerName.endsWith(".jpe"))
+    {
+      return "image/jpeg";
+    }
+    if (lowerName.endsWith(".png")) return "image/png";
+    if (lowerName.endsWith(".gif")) return "image/gif";
+    if (lowerName.endsWith(".webp")) return "image/webp";
+    if (lowerName.endsWith(".bmp")) return "image/bmp";
+    if (lowerName.endsWith(".mp4") || lowerName.endsWith(".m4v")) return "video/mp4";
+    if (lowerName.endsWith(".mov")) return "video/quicktime";
+    if (lowerName.endsWith(".webm")) return "video/webm";
+    if (lowerName.endsWith(".mkv")) return "video/x-matroska";
+    if (lowerName.endsWith(".3gp") || lowerName.endsWith(".3gpp")) return "video/3gpp";
+    return null;
+  }
+
+  private String normalizeContentType(String contentType)
+  {
+    if (contentType == null)
+    {
+      return "";
+    }
+
+    int parameterStart = contentType.indexOf(';');
+    String mimeType = parameterStart >= 0
+      ? contentType.substring(0, parameterStart)
+      : contentType;
+    return mimeType.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private String supportedMediaMimeType(String mimeType)
+  {
+    switch (mimeType)
+    {
+      case "image/jpeg":
+      case "image/png":
+      case "image/gif":
+      case "image/webp":
+      case "image/bmp":
+      case "video/mp4":
+      case "video/webm":
+      case "video/3gpp":
+      case "video/quicktime":
+      case "video/x-matroska":
+        return mimeType;
+      case "image/jpg":
+      case "image/pjpeg":
+        return "image/jpeg";
+      case "image/x-png":
+        return "image/png";
+      case "image/x-ms-bmp":
+        return "image/bmp";
+      default:
+        return null;
+    }
+  }
+
+  private String attachmentTypeForMimeType(String mimeType)
+  {
+    if (mimeType != null && mimeType.startsWith("image/"))
+    {
+      return "image";
+    }
+    if (mimeType != null && mimeType.startsWith("video/"))
+    {
+      return "video";
+    }
+    return null;
   }
 
   DownloadResult download(HttpUrl requestedUrl, File explicitTarget,
@@ -306,7 +431,8 @@ public class HttpFileDownloadTool implements Tool
   {
     return "只有在用户明确要求把 HTTP/HTTPS 文件下载到手机时，才调用 downloadHttpFile。"
       + "url 必填；phone_path 可指定完整绝对路径，省略时保存到公共 Download 目录；"
-      + "大文件可适当提高 timeout_sec。工具只返回实际保存路径和元数据，不返回文件内容。";
+      + "大文件可适当提高 timeout_sec。工具只返回实际保存路径和元数据，不返回文件内容；"
+      + "下载的图片和视频会作为本地附件返回，以便直接预览或播放。";
   }
 
   static class DownloadResult

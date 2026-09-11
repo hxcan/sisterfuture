@@ -241,6 +241,101 @@ public class HttpFileDownloadSupportTest
   }
 
   @Test
+  public void successResultIncludesImageAttachmentFromContentType() throws Exception
+  {
+    File file = new File(temporaryFolder.getRoot(), "download.bin").getCanonicalFile();
+    HttpFileDownloadTool.DownloadResult download = downloadResult(
+      file, 123L, "image/png; charset=binary");
+
+    JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
+    JSONObject attachment = result.getJSONArray("attachments").getJSONObject(0);
+    JSONObject metadata = attachment.getJSONObject("metadata");
+
+    assertEquals("image", attachment.getString("type"));
+    assertEquals("file://" + file.getAbsolutePath(), attachment.getString("url"));
+    assertEquals(123L, metadata.getLong("size"));
+    assertEquals("image/png", metadata.getString("mimeType"));
+  }
+
+  @Test
+  public void successResultUsesFileExtensionAsVideoFallback() throws Exception
+  {
+    File file = new File(temporaryFolder.getRoot(), "download.MP4").getCanonicalFile();
+    HttpFileDownloadTool.DownloadResult download = downloadResult(
+      file, 456L, "application/octet-stream");
+
+    JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
+    JSONObject attachment = result.getJSONArray("attachments").getJSONObject(0);
+
+    assertEquals("video", attachment.getString("type"));
+    assertEquals("video/mp4",
+      attachment.getJSONObject("metadata").getString("mimeType"));
+  }
+
+  @Test
+  public void explicitNonMediaContentTypeIsNotOverriddenByExtension() throws Exception
+  {
+    File file = new File(temporaryFolder.getRoot(), "error.jpg").getCanonicalFile();
+    HttpFileDownloadTool.DownloadResult download = downloadResult(
+      file, 321L, "text/html; charset=utf-8");
+
+    JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
+
+    assertFalse(result.has("attachments"));
+  }
+
+  @Test
+  public void unsupportedSvgImageIsNotAddedAsAttachment() throws Exception
+  {
+    File file = new File(temporaryFolder.getRoot(), "vector.svg").getCanonicalFile();
+    HttpFileDownloadTool.DownloadResult download = downloadResult(
+      file, 654L, "image/svg+xml");
+
+    JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
+
+    assertFalse(result.has("attachments"));
+  }
+
+  @Test
+  public void unsupportedDeclaredMediaTypeIsNotAddedAsAttachment() throws Exception
+  {
+    File file = new File(temporaryFolder.getRoot(), "scan.tiff").getCanonicalFile();
+    HttpFileDownloadTool.DownloadResult download = downloadResult(
+      file, 741L, "image/tiff");
+
+    JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
+
+    assertFalse(result.has("attachments"));
+  }
+
+  @Test
+  public void attachmentUrlPreservesSpecialCharactersInLocalPath() throws Exception
+  {
+    File file = new File(temporaryFolder.getRoot(), "视频 #1 100%.mp4").getCanonicalFile();
+    writeBytes(file, new byte[]{1});
+    HttpFileDownloadTool.DownloadResult download = downloadResult(
+      file, file.length(), "video/mp4");
+
+    JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
+
+    assertEquals("file://" + file.getAbsolutePath(),
+      result.getJSONArray("attachments").getJSONObject(0).getString("url"));
+  }
+
+  @Test
+  public void successResultOmitsAttachmentsForNonMediaFile() throws Exception
+  {
+    File file = new File(temporaryFolder.getRoot(), "document.pdf").getCanonicalFile();
+    HttpFileDownloadTool.DownloadResult download = downloadResult(
+      file, 789L, "application/pdf");
+
+    JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
+
+    assertFalse(result.has("attachments"));
+    assertEquals(file.getAbsolutePath(), result.getString("phone_path"));
+  }
+
+  @Test
   public void downloadsBinaryResponseAndFollowsRedirect() throws Exception
   {
     byte[] payload = new byte[]{0x00, (byte) 0xff, 0x01, 0x02};
@@ -306,6 +401,20 @@ public class HttpFileDownloadSupportTest
     File[] partialFiles = temporaryFolder.getRoot().listFiles(
       (directory, name) -> name.endsWith(".part"));
     assertTrue(partialFiles == null || partialFiles.length == 0);
+  }
+
+  private static HttpFileDownloadTool.DownloadResult downloadResult(
+    File file, long sizeBytes, String contentType)
+  {
+    return new HttpFileDownloadTool.DownloadResult(
+      file,
+      HttpUrl.parse("https://example.com/download"),
+      sizeBytes,
+      contentType,
+      200,
+      0,
+      10L
+    );
   }
 
   private static void writeBytes(File file, byte[] content) throws IOException
