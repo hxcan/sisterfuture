@@ -99,6 +99,7 @@ import com.stupidbeauty.sisterfuture.manager.OssManager;
 import com.stupidbeauty.sisterfuture.manager.EmptyDeltaDetectionManager;
 import com.stupidbeauty.sisterfuture.manager.TurnUsageTracker;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import com.stupidbeauty.sisterfuture.utils.ToolArgumentsParser;
 import com.google.gson.Gson;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
@@ -1382,9 +1383,19 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               }
               catch (JSONException e)
               {
-                FileLogger.e(TAG, "❌ [TOOL_CALL_JSON_ERROR] 工具调用参数 JSON 格式错误，已跳过 | toolName=" + toolName + ", toolCallId=" + toolCallId, e);
-                continue;
+                args = ToolArgumentsParser.parseOrEmpty(argsJsonStr);
+                if (args.length() > 0)
+                {
+                  FileLogger.w(TAG, "⚠️ [TOOL_CALL_JSON_RECOVERED] 工具调用参数 JSON 格式错误，已恢复 | toolName=" + toolName + ", toolCallId=" + toolCallId + ", keyCount=" + args.length());
+                }
+                else
+                {
+                  FileLogger.w(TAG, "⚠️ [TOOL_CALL_JSON_EMPTY] 工具调用参数 JSON 无法恢复，将交由工具报告缺少参数 | toolName=" + toolName + ", toolCallId=" + toolCallId);
+                }
               }
+
+              // 历史消息只保存规范 JSON，避免下一轮再次被无效参数污染。
+              argsJsonStr = args.toString();
 
               JSONObject toolCallObject = new JSONObject();
               toolCallObject.put("id", toolCallId);
