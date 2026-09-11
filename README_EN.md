@@ -102,6 +102,7 @@ plan_route(origin="location", destination="22.5369,113.9489", mode="driving")
 #### Web Access
 - **Basic Requests**: Get HTML/plain text/summary of web pages (`basic_web_request`)
 - **Generic HTTP**: Support GET/POST/PUT/DELETE/PATCH with custom Headers/Auth/Body (`generic_web_request`)
+- **HTTP File Download**: Stream any HTTP/HTTPS file directly to phone storage without returning binary data in chat (`downloadHttpFile`)
 - **Secure Search**: Integrated Brave Search API for privacy protection (`search_with_brave`)
 - **API Debugging**: Temporarily verify third-party APIs without persisting sensitive credentials
 
