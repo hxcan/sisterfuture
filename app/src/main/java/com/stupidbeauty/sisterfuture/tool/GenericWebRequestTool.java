@@ -8,7 +8,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -18,7 +21,11 @@ import java.util.concurrent.Executors;
  *
  * 增强功能：支持 return_cookies 参数，让调用方获取结构化的 Cookie 列表
  * 用于需要登录认证的多步流程（如 Redmine 附件下载）
- */
+ *
+ * 增强功能：支持 session_id 参数，自动管理同一会话的 cookie jar
+ * 解决多步登录流程（如 Redmine 登录：GET 拿 CSRF + POST 登录 + GET 下载附件）
+ * 中 session 不一致导致的 CSRF token 失效问题
+ * */
 public class GenericWebRequestTool implements Tool {
     private static final String TAG = "GenericWebRequestTool";
     private static final int DEFAULT_TIMEOUT_SEC = 30;
@@ -27,6 +34,11 @@ public class GenericWebRequestTool implements Tool {
     private final OkHttpClient client = new OkHttpClient.Builder()
             .callTimeout(DEFAULT_TIMEOUT_SEC, java.util.concurrent.TimeUnit.SECONDS)
             .build();
+
+    // 🆕 新增：session cookie jar 存储
+    // Map<session_id, Map<cookie_name, Cookie>> 用于跨请求复用 cookie
+    // 线程安全：使用 ConcurrentHashMap
+    private static final Map<String, Map<String, Cookie>> sessionCookieJars = new ConcurrentHashMap<>();
 
     public GenericWebRequestTool(Context context) {
         this.context = context;
@@ -42,7 +54,7 @@ public class GenericWebRequestTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "genericWebRequest");
-            functionDef.put("description", "通用 HTTP 请求工具，支持 GET/POST/PUT/DELETE/PATCH，可自定义 Headers/Auth/Body，用于临时 API 验证和调试。不执行 JavaScript，不持久化敏感凭证。超时默认 30 秒 (可配置)。可选 return_cookies 启用结构化 Cookie 返回（用于需要登录认证的多步流程）。");
+            functionDef.put("description", "通用 HTTP 请求工具，支持 GET/POST/PUT/DELETE/PATCH，可自定义 Headers/Auth/Body，用于临时 API 验证和调试。不执行 JavaScript，不持久化敏感凭证。超时默认 30 秒 (可配置)。可选 return_cookies 启用结构化 Cookie 返回（用于需要登录认证的多步流程）。可选 session_id 启用会话内 cookie jar 自动管理：相同 session_id 的多次请求会自动复用 cookie（如 Redmine 两步登录场景）。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -103,6 +115,12 @@ public class GenericWebRequestTool implements Tool {
             returnCookiesParam.put("description", "是否在响应中返回结构化的 Cookie 列表（用于多步登录认证流程）。默认 false 不返回，避免影响现有调用。");
             properties.put("return_cookies", returnCookiesParam);
 
+            // 🆕 新增：session_id 参数，用于 cookie jar 自动管理
+            JSONObject sessionIdParam = new JSONObject();
+            sessionIdParam.put("type", "string");
+            sessionIdParam.put("description", "会话标识 (可选)。传入相同 session_id 的多次请求会自动共享 cookie jar：自动注入该 session 已保存的 Cookie，并在响应后保存新 Set-Cookie。典型场景：Redmine 两步登录（GET /login 拿 CSRF → POST /login 带 CSRF → GET 下载附件）。不传则不启用会话管理，每次请求独立。");
+            properties.put("session_id", sessionIdParam);
+
             parameters.put("properties", properties);
             JSONArray required = new JSONArray();
             required.put("method").put("url");
@@ -126,6 +144,57 @@ public class GenericWebRequestTool implements Tool {
         return true;
     }
 
+    /**
+     * 🆕 新增：从 session cookie jar 构造 Cookie 请求头
+     * @param sessionId 会话标识
+     * @return Cookie 头的值（如 "name1=value1; name2=value2"），无 cookie 时返回 null
+     */
+    private String buildCookieHeaderForSession(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            return null;
+        }
+        Map<String, Cookie> jar = sessionCookieJars.get(sessionId);
+        if (jar == null || jar.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<String, Cookie> entry : jar.entrySet()) {
+            if (!first) {
+                sb.append("; ");
+            }
+            sb.append(entry.getValue().name()).append("=").append(entry.getValue().value());
+            first = false;
+        }
+        return sb.length() > 0 ? sb.toString() : null;
+    }
+
+    /**
+     * 🆕 新增：将响应中的 Set-Cookie 保存到 session cookie jar
+     * @param sessionId 会话标识
+     * @param url 请求的 URL（用于解析 cookie 的 domain/path）
+     * @param responseHeaders 响应头
+     */
+    private void saveResponseCookiesToSession(String sessionId, String url, Headers responseHeaders) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            return;
+        }
+        try {
+            HttpUrl httpUrl = HttpUrl.get(url);
+            List<Cookie> cookies = Cookie.parseAll(httpUrl, responseHeaders);
+            if (cookies.isEmpty()) {
+                return;
+            }
+            Map<String, Cookie> jar = sessionCookieJars.computeIfAbsent(sessionId, k -> new ConcurrentHashMap<>());
+            for (Cookie cookie : cookies) {
+                jar.put(cookie.name(), cookie);
+            }
+            android.util.Log.d(TAG, "Session [" + sessionId + "] saved " + cookies.size() + " cookie(s)");
+        } catch (Exception e) {
+            android.util.Log.w(TAG, "Failed to save cookies for session " + sessionId, e);
+        }
+    }
+
     @Override
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
@@ -133,7 +202,7 @@ public class GenericWebRequestTool implements Tool {
                 // 1. 解析参数
                 String method = arguments.getString("method");
                 String url = arguments.getString("url").trim();
-                
+
                 if (url.isEmpty()) {
                     throw new IllegalArgumentException("URL 不能为空");
                 }
@@ -146,9 +215,23 @@ public class GenericWebRequestTool implements Tool {
                 int timeoutSec = arguments.optInt("timeout_sec", DEFAULT_TIMEOUT_SEC);
                 // 🆕 新增：是否返回 cookies
                 boolean returnCookies = arguments.optBoolean("return_cookies", false);
+                // 🆕 新增：session_id 参数
+                String sessionId = arguments.optString("session_id", null);
+                if (sessionId != null && sessionId.isEmpty()) {
+                    sessionId = null; // 空字符串视为未传
+                }
 
                 // 2. 构建请求
                 Request.Builder builder = new Request.Builder().url(url);
+
+                // 🆕 新增：从 session cookie jar 注入 Cookie（如果指定了 session_id）
+                if (sessionId != null) {
+                    String cookieHeader = buildCookieHeaderForSession(sessionId);
+                    if (cookieHeader != null) {
+                        builder.header("Cookie", cookieHeader);
+                        android.util.Log.d(TAG, "Session [" + sessionId + "] injecting Cookie: " + cookieHeader);
+                    }
+                }
 
                 // 添加自定义 Headers
                 if (headers != null && !headers.isNull("Content-Type")) {
@@ -256,6 +339,11 @@ public class GenericWebRequestTool implements Tool {
                         .newCall(request)
                         .execute();
 
+                // 🆕 新增：响应后保存 Set-Cookie 到 session jar（如果指定了 session_id）
+                if (sessionId != null) {
+                    saveResponseCookiesToSession(sessionId, url, response.headers());
+                }
+
                 // 4. 返回结构化结果
                 String responseBody = response.body() != null ? response.body().string() : "";
                 long durationMs = System.currentTimeMillis() - startTime;
@@ -287,6 +375,15 @@ public class GenericWebRequestTool implements Tool {
                         cookiesArray.put(cookieObj);
                     }
                     result.put("cookies", cookiesArray);
+                }
+
+                // 🆕 新增：如果启用了 session，告知调用方当前 session 状态
+                if (sessionId != null) {
+                    Map<String, Cookie> jar = sessionCookieJars.get(sessionId);
+                    if (jar != null) {
+                        result.put("session_id", sessionId);
+                        result.put("session_cookie_count", jar.size());
+                    }
                 }
 
                 if (response.isSuccessful()) {
@@ -327,6 +424,6 @@ public class GenericWebRequestTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求发起外部 HTTP 请求时才调用此工具。支持 GET/POST/PUT/DELETE/PATCH 方法，可自定义 Headers/Auth/Body。不执行页面内脚本，不持久化敏感凭证。超时默认 30 秒 (可配置)。可选 return_cookies=true 返回结构化 Cookie 列表，用于多步登录认证流程。适用于快速验证新 API、调试 Redmine Bug #4615、模拟 OAuth 流程等临时性需求。";
+        return "必须在用户明确要求发起外部 HTTP 请求时才调用此工具。支持 GET/POST/PUT/DELETE/PATCH 方法，可自定义 Headers/Auth/Body。不执行页面内脚本，不持久化敏感凭证。超时默认 30 秒 (可配置)。可选 return_cookies=true 返回结构化 Cookie 列表，用于多步登录认证流程。可选 session_id 启用会话内 cookie jar 自动管理：相同 session_id 的多次请求自动共享 cookie（如 Redmine 两步登录）。适用于快速验证新 API、调试 Redmine Bug #4615、模拟 OAuth 流程等临时性需求。";
     }
 }
