@@ -271,9 +271,10 @@ public class GenericWebRequestTool implements Tool {
                 result.put("timestamp", System.currentTimeMillis());
 
                 // 🆕 新增：如果启用，返回结构化 Cookie 列表
+                // 修复：使用 HttpUrl.get(url) 将 String 转成 HttpUrl，避免编译错误
                 if (returnCookies) {
                     JSONArray cookiesArray = new JSONArray();
-                    List<Cookie> cookies = Cookie.parseAll(url, response.headers());
+                    List<Cookie> cookies = Cookie.parseAll(HttpUrl.get(url), response.headers());
                     for (Cookie cookie : cookies) {
                         JSONObject cookieObj = new JSONObject();
                         cookieObj.put("name", cookie.name());
@@ -299,7 +300,7 @@ public class GenericWebRequestTool implements Tool {
                     // 出错时也返回 cookies，方便调试登录失败场景
                     if (returnCookies) {
                         JSONArray cookiesArray = new JSONArray();
-                        List<Cookie> cookies = Cookie.parseAll(url, response.headers());
+                        List<Cookie> cookies = Cookie.parseAll(HttpUrl.get(url), response.headers());
                         for (Cookie cookie : cookies) {
                             JSONObject cookieObj = new JSONObject();
                             cookieObj.put("name", cookie.name());
