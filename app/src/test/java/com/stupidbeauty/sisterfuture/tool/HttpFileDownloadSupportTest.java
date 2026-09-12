@@ -231,10 +231,11 @@ public class HttpFileDownloadSupportTest
     JSONArray required = definition.getJSONObject("parameters").getJSONArray("required");
 
     assertEquals("downloadHttpFile", definition.getString("name"));
-    assertEquals(3, properties.length());
+    assertEquals(4, properties.length());
     assertTrue(properties.has("url"));
     assertTrue(properties.has("phone_path"));
     assertTrue(properties.has("timeout_sec"));
+    assertTrue(properties.has("headers"));
     assertEquals(1, required.length());
     assertEquals("url", required.getString(0));
     assertFalse(new HttpFileDownloadTool(null).shouldRecordParameterHistory());
@@ -355,7 +356,7 @@ public class HttpFileDownloadSupportTest
       HttpUrl url = server.url("/redirect");
 
       HttpFileDownloadTool.DownloadResult result = new HttpFileDownloadTool(null)
-        .download(url, target, 30);
+        .download(url, target, 30, null);
 
       assertArrayEquals(payload, readBytes(target));
       assertEquals(payload.length, result.sizeBytes);
@@ -385,7 +386,7 @@ public class HttpFileDownloadSupportTest
       HttpUrl url = server.url("/missing");
 
       assertThrows(IOException.class, () -> new HttpFileDownloadTool(null)
-        .download(url, target, 30));
+        .download(url, target, 30, null));
 
       assertFalse(target.exists());
       assertNoPartialFiles();
