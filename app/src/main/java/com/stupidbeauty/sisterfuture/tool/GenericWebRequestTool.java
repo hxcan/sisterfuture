@@ -8,12 +8,16 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.util.Base64;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
  * 通用 HTTP 请求工具 - 支持任意外部 API 调用
  * 作为"瑞士军刀"临时验证工具，不执行脚本、不存凭证
+ *
+ * 增强功能：支持 return_cookies 参数，让调用方获取结构化的 Cookie 列表
+ * 用于需要登录认证的多步流程（如 Redmine 附件下载）
  */
 public class GenericWebRequestTool implements Tool {
     private static final String TAG = "GenericWebRequestTool";
@@ -38,7 +42,7 @@ public class GenericWebRequestTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "genericWebRequest");
-            functionDef.put("description", "通用 HTTP 请求工具，支持 GET/POST/PUT/DELETE/PATCH，可自定义 Headers/Auth/Body，用于临时 API 验证和调试。不执行 JavaScript，不持久化敏感凭证。超时默认 30 秒 (可配置)。");
+            functionDef.put("description", "通用 HTTP 请求工具，支持 GET/POST/PUT/DELETE/PATCH，可自定义 Headers/Auth/Body，用于临时 API 验证和调试。不执行 JavaScript，不持久化敏感凭证。超时默认 30 秒 (可配置)。可选 return_cookies 启用结构化 Cookie 返回（用于需要登录认证的多步流程）。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -92,6 +96,13 @@ public class GenericWebRequestTool implements Tool {
             timeoutParam.put("description", "超时时间 (秒) (可选)");
             properties.put("timeout_sec", timeoutParam);
 
+            // 🆕 新增：return_cookies 参数，用于返回结构化 Cookie 列表
+            JSONObject returnCookiesParam = new JSONObject();
+            returnCookiesParam.put("type", "boolean");
+            returnCookiesParam.put("default", false);
+            returnCookiesParam.put("description", "是否在响应中返回结构化的 Cookie 列表（用于多步登录认证流程）。默认 false 不返回，避免影响现有调用。");
+            properties.put("return_cookies", returnCookiesParam);
+
             parameters.put("properties", properties);
             JSONArray required = new JSONArray();
             required.put("method").put("url");
@@ -133,6 +144,8 @@ public class GenericWebRequestTool implements Tool {
                 String authType = arguments.optString("auth_type", "none");
                 String authValue = arguments.optString("auth_value", null);
                 int timeoutSec = arguments.optInt("timeout_sec", DEFAULT_TIMEOUT_SEC);
+                // 🆕 新增：是否返回 cookies
+                boolean returnCookies = arguments.optBoolean("return_cookies", false);
 
                 // 2. 构建请求
                 Request.Builder builder = new Request.Builder().url(url);
@@ -257,6 +270,25 @@ public class GenericWebRequestTool implements Tool {
                 result.put("method", method);
                 result.put("timestamp", System.currentTimeMillis());
 
+                // 🆕 新增：如果启用，返回结构化 Cookie 列表
+                // 修复：使用 HttpUrl.get(url) 将 String 转成 HttpUrl，避免编译错误
+                if (returnCookies) {
+                    JSONArray cookiesArray = new JSONArray();
+                    List<Cookie> cookies = Cookie.parseAll(HttpUrl.get(url), response.headers());
+                    for (Cookie cookie : cookies) {
+                        JSONObject cookieObj = new JSONObject();
+                        cookieObj.put("name", cookie.name());
+                        cookieObj.put("value", cookie.value());
+                        cookieObj.put("domain", cookie.domain());
+                        cookieObj.put("path", cookie.path());
+                        cookieObj.put("expiresAt", cookie.expiresAt());
+                        cookieObj.put("secure", cookie.secure());
+                        cookieObj.put("httpOnly", cookie.httpOnly());
+                        cookiesArray.put(cookieObj);
+                    }
+                    result.put("cookies", cookiesArray);
+                }
+
                 if (response.isSuccessful()) {
                     callback.onResult(result);
                 } else {
@@ -265,6 +297,23 @@ public class GenericWebRequestTool implements Tool {
                     error.put("message", "HTTP 请求失败：" + response.code() + " " + response.message());
                     error.put("raw_body", responseBody);
                     error.put("status_code", response.code());
+                    // 出错时也返回 cookies，方便调试登录失败场景
+                    if (returnCookies) {
+                        JSONArray cookiesArray = new JSONArray();
+                        List<Cookie> cookies = Cookie.parseAll(HttpUrl.get(url), response.headers());
+                        for (Cookie cookie : cookies) {
+                            JSONObject cookieObj = new JSONObject();
+                            cookieObj.put("name", cookie.name());
+                            cookieObj.put("value", cookie.value());
+                            cookieObj.put("domain", cookie.domain());
+                            cookieObj.put("path", cookie.path());
+                            cookieObj.put("expiresAt", cookie.expiresAt());
+                            cookieObj.put("secure", cookie.secure());
+                            cookieObj.put("httpOnly", cookie.httpOnly());
+                            cookiesArray.put(cookieObj);
+                        }
+                        error.put("cookies", cookiesArray);
+                    }
                     callback.onResult(error);
                 }
 
@@ -278,6 +327,6 @@ public class GenericWebRequestTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求发起外部 HTTP 请求时才调用此工具。支持 GET/POST/PUT/DELETE/PATCH 方法，可自定义 Headers/Auth/Body。不执行页面内脚本，不持久化敏感凭证。超时默认 30 秒 (可配置)。适用于快速验证新 API、调试 Redmine Bug #4615、模拟 OAuth 流程等临时性需求。";
+        return "必须在用户明确要求发起外部 HTTP 请求时才调用此工具。支持 GET/POST/PUT/DELETE/PATCH 方法，可自定义 Headers/Auth/Body。不执行页面内脚本，不持久化敏感凭证。超时默认 30 秒 (可配置)。可选 return_cookies=true 返回结构化 Cookie 列表，用于多步登录认证流程。适用于快速验证新 API、调试 Redmine Bug #4615、模拟 OAuth 流程等临时性需求。";
     }
 }
