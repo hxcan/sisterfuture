@@ -148,9 +148,9 @@ public class HttpFileDownloadSupportTest
   public void sanitizesUntrustedFileNames() throws Exception
   {
     String[] unsafeNames = new String[]{
-      "..\/..\/evil.bin",
+      "../../evil.bin",
       "..\\evil.bin",
-      "nested\/name.bin",
+      "nested/name.bin",
       "line\r\nbreak.bin",
       "nul\u0000byte.bin",
       "safe\u202Egnp.exe"
@@ -160,7 +160,7 @@ public class HttpFileDownloadSupportTest
     {
       String sanitized = HttpFileDownloadSupport.sanitizeFileName(unsafeName);
       assertFalse(sanitized.isEmpty());
-      assertFalse(sanitized.contains("\/"));
+      assertFalse(sanitized.contains("/"));
       assertFalse(sanitized.contains("\\"));
       assertFalse(sanitized.contains(".."));
       for (int index = 0; index < sanitized.length(); index++)
@@ -198,8 +198,8 @@ public class HttpFileDownloadSupportTest
   @Test
   public void rejectsHttpsToHttpDowngradeButAllowsUpgrade() throws Exception
   {
-    HttpUrl https = HttpUrl.parse("https:\/\/example.com\/file.bin");
-    HttpUrl http = HttpUrl.parse("http:\/\/example.com\/file.bin");
+    HttpUrl https = HttpUrl.parse("https://example.com/file.bin");
+    HttpUrl http = HttpUrl.parse("http://example.com/file.bin");
 
     assertThrows(IOException.class,
       () -> HttpFileDownloadTool.enforceNoHttpsDowngrade(https, http));
@@ -246,16 +246,16 @@ public class HttpFileDownloadSupportTest
   {
     File file = new File(temporaryFolder.getRoot(), "download.bin").getCanonicalFile();
     HttpFileDownloadTool.DownloadResult download = downloadResult(
-      file, 123L, "image\/png; charset=binary");
+      file, 123L, "image/png; charset=binary");
 
     JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
     JSONObject attachment = result.getJSONArray("attachments").getJSONObject(0);
     JSONObject metadata = attachment.getJSONObject("metadata");
 
     assertEquals("image", attachment.getString("type"));
-    assertEquals("file:\/\/" + file.getAbsolutePath(), attachment.getString("url"));
+    assertEquals("file://" + file.getAbsolutePath(), attachment.getString("url"));
     assertEquals(123L, metadata.getLong("size"));
-    assertEquals("image\/png", metadata.getString("mimeType"));
+    assertEquals("image/png", metadata.getString("mimeType"));
   }
 
   @Test
@@ -263,13 +263,13 @@ public class HttpFileDownloadSupportTest
   {
     File file = new File(temporaryFolder.getRoot(), "download.MP4").getCanonicalFile();
     HttpFileDownloadTool.DownloadResult download = downloadResult(
-      file, 456L, "application\/octet-stream");
+      file, 456L, "application/octet-stream");
 
     JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
     JSONObject attachment = result.getJSONArray("attachments").getJSONObject(0);
 
     assertEquals("video", attachment.getString("type"));
-    assertEquals("video\/mp4",
+    assertEquals("video/mp4",
       attachment.getJSONObject("metadata").getString("mimeType"));
   }
 
@@ -278,7 +278,7 @@ public class HttpFileDownloadSupportTest
   {
     File file = new File(temporaryFolder.getRoot(), "error.jpg").getCanonicalFile();
     HttpFileDownloadTool.DownloadResult download = downloadResult(
-      file, 321L, "text\/html; charset=utf-8");
+      file, 321L, "text/html; charset=utf-8");
 
     JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
 
@@ -290,7 +290,7 @@ public class HttpFileDownloadSupportTest
   {
     File file = new File(temporaryFolder.getRoot(), "vector.svg").getCanonicalFile();
     HttpFileDownloadTool.DownloadResult download = downloadResult(
-      file, 654L, "image\/svg+xml");
+      file, 654L, "image/svg+xml");
 
     JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
 
@@ -302,7 +302,7 @@ public class HttpFileDownloadSupportTest
   {
     File file = new File(temporaryFolder.getRoot(), "scan.tiff").getCanonicalFile();
     HttpFileDownloadTool.DownloadResult download = downloadResult(
-      file, 741L, "image\/tiff");
+      file, 741L, "image/tiff");
 
     JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
 
@@ -315,11 +315,11 @@ public class HttpFileDownloadSupportTest
     File file = new File(temporaryFolder.getRoot(), "视频 #1 100%.mp4").getCanonicalFile();
     writeBytes(file, new byte[]{1});
     HttpFileDownloadTool.DownloadResult download = downloadResult(
-      file, file.length(), "video\/mp4");
+      file, file.length(), "video/mp4");
 
     JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
 
-    assertEquals("file:\/\/" + file.getAbsolutePath(),
+    assertEquals("file://" + file.getAbsolutePath(),
       result.getJSONArray("attachments").getJSONObject(0).getString("url"));
   }
 
@@ -328,7 +328,7 @@ public class HttpFileDownloadSupportTest
   {
     File file = new File(temporaryFolder.getRoot(), "document.pdf").getCanonicalFile();
     HttpFileDownloadTool.DownloadResult download = downloadResult(
-      file, 789L, "application\/pdf");
+      file, 789L, "application/pdf");
 
     JSONObject result = new HttpFileDownloadTool(null).buildSuccessResult(download);
 
@@ -343,17 +343,17 @@ public class HttpFileDownloadSupportTest
     MockWebServer server = new MockWebServer();
     server.enqueue(new MockResponse()
       .setResponseCode(302)
-      .addHeader("Location", "\/file.bin"));
+      .addHeader("Location", "/file.bin"));
     server.enqueue(new MockResponse()
       .setResponseCode(200)
-      .addHeader("Content-Type", "application\/octet-stream")
+      .addHeader("Content-Type", "application/octet-stream")
       .setBody(new Buffer().write(payload)));
     server.start();
 
     try
     {
       File target = new File(temporaryFolder.getRoot(), "downloaded.bin");
-      HttpUrl url = server.url("\/redirect");
+      HttpUrl url = server.url("/redirect");
 
       HttpFileDownloadTool.DownloadResult result = new HttpFileDownloadTool(null)
         .download(url, target, 30, null);
@@ -364,7 +364,7 @@ public class HttpFileDownloadSupportTest
       assertEquals(1, result.redirectCount);
       assertEquals("file.bin", result.finalUrl.pathSegments()
         .get(result.finalUrl.pathSegments().size() - 1));
-      assertEquals("application\/octet-stream", result.contentType);
+      assertEquals("application/octet-stream", result.contentType);
       assertNoPartialFiles();
     }
     finally
@@ -383,7 +383,7 @@ public class HttpFileDownloadSupportTest
     try
     {
       File target = new File(temporaryFolder.getRoot(), "error-page.bin");
-      HttpUrl url = server.url("\/missing");
+      HttpUrl url = server.url("/missing");
 
       assertThrows(IOException.class, () -> new HttpFileDownloadTool(null)
         .download(url, target, 30, null));
@@ -409,7 +409,7 @@ public class HttpFileDownloadSupportTest
   {
     return new HttpFileDownloadTool.DownloadResult(
       file,
-      HttpUrl.parse("https:\/\/example.com\/download"),
+      HttpUrl.parse("https://example.com/download"),
       sizeBytes,
       contentType,
       200,
