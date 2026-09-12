@@ -7,6 +7,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +27,8 @@ import java.util.concurrent.Executors;
  * 增强功能：支持 session_id 参数，自动管理同一会话的 cookie jar
  * 解决多步登录流程（如 Redmine 登录：GET 拿 CSRF + POST 登录 + GET 下载附件）
  * 中 session 不一致导致的 CSRF token 失效问题
+ *
+ * 修复：form-urlencoded body 多字段解析（之前只解析第一个 = 字段）
  * */
 public class GenericWebRequestTool implements Tool {
     private static final String TAG = "GenericWebRequestTool";
@@ -80,7 +84,7 @@ public class GenericWebRequestTool implements Tool {
 
             JSONObject bodyParam = new JSONObject();
             bodyParam.put("type", "string");
-            bodyParam.put("description", "请求体内容 (JSON/String/Form) (POST/PUT 时选填)");
+            bodyParam.put("description", "请求体内容 (JSON/String/Form) (POST/PUT 时选填)。form-urlencoded 格式支持多字段，例如：key1=value1&key2=value2");
             properties.put("body", bodyParam);
 
             JSONObject paramsObjParam = new JSONObject();
@@ -289,12 +293,25 @@ public class GenericWebRequestTool implements Tool {
                         contentType = "application/json";
                     } else if (bodyStr != null && bodyStr.contains("=") && !bodyStr.startsWith("{")) {
                         contentType = "application/x-www-form-urlencoded";
-                        int equalsIndex = bodyStr.indexOf("=");
-                        if (equalsIndex > 0) {
-                            String key = bodyStr.substring(0, equalsIndex);
-                            String value = bodyStr.substring(equalsIndex + 1);
-                            requestBody = new FormBody.Builder().add(key, value).build();
+                        // 🔥 修复：完整解析 form-urlencoded 多字段，按 & 分割每个 key=value 对
+                        FormBody.Builder formBuilder = new FormBody.Builder();
+                        String[] pairs = bodyStr.split("&");
+                        for (String pair : pairs) {
+                            int eqIdx = pair.indexOf("=");
+                            if (eqIdx > 0) {
+                                String key = pair.substring(0, eqIdx);
+                                String value = pair.substring(eqIdx + 1);
+                                try {
+                                    // URLDecoder 处理 %xx 编码
+                                    key = URLDecoder.decode(key, StandardCharsets.UTF_8.name());
+                                    value = URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+                                } catch (Exception e) {
+                                    android.util.Log.w(TAG, "URL decode failed for: " + pair, e);
+                                }
+                                formBuilder.add(key, value);
+                            }
                         }
+                        requestBody = formBuilder.build();
                     } else {
                         contentType = "text/plain";
                     }
@@ -424,6 +441,6 @@ public class GenericWebRequestTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求发起外部 HTTP 请求时才调用此工具。支持 GET/POST/PUT/DELETE/PATCH 方法，可自定义 Headers/Auth/Body。不执行页面内脚本，不持久化敏感凭证。超时默认 30 秒 (可配置)。可选 return_cookies=true 返回结构化 Cookie 列表，用于多步登录认证流程。可选 session_id 启用会话内 cookie jar 自动管理：相同 session_id 的多次请求自动共享 cookie（如 Redmine 两步登录）。适用于快速验证新 API、调试 Redmine Bug #4615、模拟 OAuth 流程等临时性需求。";
+        return "必须在用户明确要求发起外部 HTTP 请求时才调用此工具。支持 GET/POST/PUT/DELETE/PATCH 方法，可自定义 Headers/Auth/Body。不执行页面内脚本，不持久化敏感凭证。超时默认 30 秒 (可配置)。可选 return_cookies=true 返回结构化 Cookie 列表，用于多步登录认证流程。可选 session_id 启用会话内 cookie jar 自动管理：相同 session_id 的多次请求自动共享 cookie（如 Redmine 两步登录）。form-urlencoded body 支持多字段（如 key1=v1&key2=v2），会自动 URL 解码。适用于快速验证新 API、调试 Redmine Bug #4615、模拟 OAuth 流程等临时性需求。";
     }
 }
