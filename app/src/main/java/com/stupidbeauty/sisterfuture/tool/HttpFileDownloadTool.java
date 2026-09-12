@@ -14,8 +14,10 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -84,6 +86,10 @@ public class HttpFileDownloadTool implements Tool
         .put("minimum", MIN_TIMEOUT_SEC)
         .put("maximum", MAX_TIMEOUT_SEC)
         .put("description", "整个下载的超时时间（秒），默认 300，允许 5 到 3600"));
+      properties.put("headers", new JSONObject()
+        .put("type", "object")
+        .put("description", "可选的自定义 HTTP 请求头，键值对形式。常用场景：Cookie（Redmine 附件下载）、Authorization（Bearer / API Key）、Referer、User-Agent 等。")
+        .put("additionalProperties", new JSONObject().put("type", "string")));
 
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
@@ -159,7 +165,10 @@ public class HttpFileDownloadTool implements Tool
           }
         }
 
-        DownloadResult downloadResult = download(requestedUrl, explicitTarget, timeoutSec);
+        // 解析自定义请求头（如 Cookie、Authorization 等），用于需要认证的下载场景（Redmine 附件、GitHub 私有仓库等）
+        Map<String, String> customHeaders = parseCustomHeaders(arguments.optJSONObject("headers"));
+
+        DownloadResult downloadResult = download(requestedUrl, explicitTarget, timeoutSec, customHeaders);
         scanDownloadedFile(downloadResult.file, downloadResult.contentType);
 
         result = buildSuccessResult(downloadResult);
@@ -173,6 +182,31 @@ public class HttpFileDownloadTool implements Tool
 
       callback.onResult(result);
     });
+  }
+
+  /**
+   * 从工具入参的 headers 字段中解析出 Map<String, String>。
+   * 为空、为 null、或字段不是 JSONObject 时返回 null（视为不传 headers）。
+   */
+  private Map<String, String> parseCustomHeaders(JSONObject headersObject)
+  {
+    if (headersObject == null || headersObject.length() == 0)
+    {
+      return null;
+    }
+
+    Map<String, String> result = new java.util.HashMap<>();
+    Iterator<String> keys = headersObject.keys();
+    while (keys.hasNext())
+    {
+      String key = keys.next();
+      Object value = headersObject.opt(key);
+      if (value != null)
+      {
+        result.put(key, value.toString());
+      }
+    }
+    return result.isEmpty() ? null : result;
   }
 
   JSONObject buildSuccessResult(DownloadResult downloadResult) throws Exception
@@ -310,7 +344,7 @@ public class HttpFileDownloadTool implements Tool
   }
 
   DownloadResult download(HttpUrl requestedUrl, File explicitTarget,
-                          int timeoutSec) throws IOException
+                          int timeoutSec, Map<String, String> customHeaders) throws IOException
   {
     OkHttpClient client = BASE_CLIENT.newBuilder()
       .connectTimeout(Math.min(30, timeoutSec), TimeUnit.SECONDS)
@@ -323,11 +357,26 @@ public class HttpFileDownloadTool implements Tool
       })
       .build();
 
-    Request request = new Request.Builder()
+    Request.Builder requestBuilder = new Request.Builder()
       .url(requestedUrl)
       .header("User-Agent", "SisterFuture/1.0")
-      .get()
-      .build();
+      .get();
+
+    // 透传调用方传入的自定义请求头。OkHttp 的 header() 同名将覆盖上面的同名值。
+    if (customHeaders != null)
+    {
+      for (Map.Entry<String, String> entry : customHeaders.entrySet())
+      {
+        String name = entry.getKey();
+        String value = entry.getValue();
+        if (name != null && !name.isEmpty() && value != null)
+        {
+          requestBuilder.header(name, value);
+        }
+      }
+    }
+
+    Request request = requestBuilder.build();
 
     long startedAt = System.currentTimeMillis();
     try (Response response = client.newCall(request).execute())
@@ -431,7 +480,8 @@ public class HttpFileDownloadTool implements Tool
   {
     return "只有在用户明确要求把 HTTP/HTTPS 文件下载到手机时，才调用 downloadHttpFile。"
       + "url 必填；phone_path 可指定完整绝对路径，省略时保存到公共 Download 目录；"
-      + "大文件可适当提高 timeout_sec。工具只返回实际保存路径和元数据，不返回文件内容；"
+      + "大文件可适当提高 timeout_sec；headers 可选，键值对形式，用于 Cookie / Authorization / Referer / User-Agent 等需要认证或自定义头的下载场景（如 Redmine 附件、GitHub 私有仓库）。"
+      + "工具只返回实际保存路径和元数据，不返回文件内容；"
       + "下载的图片和视频会作为本地附件返回，以便直接预览或播放。";
   }
 
