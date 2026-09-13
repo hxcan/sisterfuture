@@ -257,6 +257,13 @@ public class GenericWebRequestTool implements Tool {
                 if (method == null || method.isEmpty()) {
                     throw new IllegalArgumentException("缺少必需参数: method（GET/POST/PUT/DELETE/PATCH）");
                 }
+                // 🆕 Bug1 修复：method 值白名单校验。问题：method 值非法时（如 "get" 小写、"INVALID"），
+                // OkHttp 的 Request.Builder.method() 内部用 equals() 比对合法值，传非合法值进去会抛 NPE。
+                // 修复：在调用 OkHttp 前显式校验 method 值，避免 NPE 抛到外层让 LLM 难以排查。
+                if (!"GET".equals(method) && !"POST".equals(method) && !"PUT".equals(method)
+                        && !"DELETE".equals(method) && !"PATCH".equals(method)) {
+                    throw new IllegalArgumentException("method 必须是 GET/POST/PUT/DELETE/PATCH 之一，当前值: " + method);
+                }
                 if (url == null || url.isEmpty()) {
                     throw new IllegalArgumentException("缺少必需参数: url");
                 }
@@ -267,7 +274,19 @@ public class GenericWebRequestTool implements Tool {
                     throw new IllegalArgumentException("URL 不能为空");
                 }
 
-                JSONObject headers = arguments.optJSONObject("headers");
+                // 🆕 Bug2 修复：headers 解析失败时报清晰错误。
+                // 问题：arguments.optJSONObject("headers") 在 headers 字段是字符串但 JSON 解析失败时
+                // 静默返回 null，后续代码 if (headers != null && ...) 直接跳过，表现为请求不带任何 headers
+                // 但仍然返回 200，LLM 难以排查。
+                // 修复：用 try-catch 包裹 getJSONObject，解析失败时抛清晰 IllegalArgumentException。
+                JSONObject headers = null;
+                if (arguments.has("headers") && !arguments.isNull("headers")) {
+                    try {
+                        headers = arguments.getJSONObject("headers");
+                    } catch (JSONException e) {
+                        throw new IllegalArgumentException("headers 格式错误，必须是 JSON 对象: " + e.getMessage());
+                    }
+                }
                 String bodyStr = arguments.optString("body", null);
                 JSONObject paramsObj = arguments.optJSONObject("params");
                 String authType = arguments.optString("auth_type", "none");
