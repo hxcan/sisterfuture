@@ -53,6 +53,51 @@ public class GenericWebRequestTool implements Tool {
         return "genericWebRequest";
     }
 
+
+    /**
+     * 🆕 容错解析：从 JSONObject 中安全提取字符串字段
+     * 解决问题：LLM 序列化的参数有时 JSON 结构轻微异常（如多余字段、类型偏差），
+     * 直接调 arguments.getString(key) 会抛 JSONException。
+     * 容错策略：
+     * 1. 先尝试直接 getString（标准路径）
+     * 2. 失败时遍历所有 key，做大小写不敏感匹配（兼容 method/METHOD/Method）
+     * 3. 返回 null（让调用方决定如何处理缺失）
+     */
+    private String safeGetString(JSONObject obj, String key) {
+        if (obj == null || key == null) {
+            return null;
+        }
+        try {
+            String v = obj.getString(key);
+            if (v != null) {
+                return v;
+            }
+        } catch (JSONException ignored) {
+            // fall through to case-insensitive search
+        }
+        try {
+            JSONArray names = obj.names();
+            if (names != null) {
+                for (int i = 0; i < names.length(); i++) {
+                    String k = names.getString(i);
+                    if (k != null && k.equalsIgnoreCase(key)) {
+                        try {
+                            Object v = obj.get(k);
+                            if (v != null) {
+                                return String.valueOf(v);
+                            }
+                        } catch (JSONException ignored) {
+                            // try next key
+                        }
+                    }
+                }
+            }
+        } catch (JSONException ignored) {
+            // names() failed
+        }
+        return null;
+    }
+
     @Override
     public JSONObject getDefinition() {
         try {
@@ -203,10 +248,21 @@ public class GenericWebRequestTool implements Tool {
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
             try {
-                // 1. 解析参数
-                String method = arguments.getString("method");
-                String url = arguments.getString("url").trim();
-
+                // 1. 解析参数（容错版：LLM 序列化的参数可能 JSON 结构轻微异常）
+                String method = safeGetString(arguments, "method");
+                String url = safeGetString(arguments, "url");
+                if (url != null) {
+                    url = url.trim();
+                }
+                if (method == null || method.isEmpty()) {
+                    throw new IllegalArgumentException("缺少必需参数: method（GET/POST/PUT/DELETE/PATCH）");
+                }
+                if (url == null || url.isEmpty()) {
+                    throw new IllegalArgumentException("缺少必需参数: url");
+                }
+                if (url.isEmpty()) {
+                    throw new IllegalArgumentException("URL 不能为空");
+                }
                 if (url.isEmpty()) {
                     throw new IllegalArgumentException("URL 不能为空");
                 }
