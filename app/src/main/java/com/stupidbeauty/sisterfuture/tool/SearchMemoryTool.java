@@ -1,21 +1,10 @@
 // SearchMemoryTool.java
 package com.stupidbeauty.sisterfuture.tool;
 
-import java.util.List;
-import android.text.TextUtils;
-import android.widget.EditText;
-import android.widget.RadioGroup;
-import net.tatans.tensorflowtts.utils.ThreadPoolManager;
-import com.stupidbeauty.sisterfuture.bean.MemoryEntity;
-import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import com.stupidbeauty.sisterfuture.memory.SemanticMemorySearch;
 import com.stupidbeauty.sisterfuture.manager.MemoryManager;
-import com.stupidbeauty.sisterfuture.tool.GetCurrentTimeTool;
-import com.stupidbeauty.sisterfuture.tool.SwitchLargeLanguageModelTool;
-import com.stupidbeauty.sisterfuture.tool.GetCurrentAccessPointInfoTool;
-import com.stupidbeauty.sisterfuture.tool.DeveloperInfoTool;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import android.content.Context;
@@ -23,13 +12,17 @@ import android.util.Log;
 
 public class SearchMemoryTool implements Tool {
     private static final String TAG = "SearchMemoryTool";
-    private final Context context;
-    private MemoryManager memoryManager;
+    private static final ExecutorService SEARCH_EXECUTOR = Executors.newSingleThreadExecutor();
+    interface SearchBackend {
+        SemanticMemorySearch.Result search(String query, int limit, double minSimilarity);
+    }
+    private final SearchBackend searchBackend;
 
     public SearchMemoryTool(MemoryManager memoryManager , Context context) {
-        this.context = context;
-        this.memoryManager = memoryManager;
+        this(memoryManager::searchMemoryWithScores);
     }
+
+    SearchMemoryTool(SearchBackend searchBackend) { this.searchBackend = searchBackend; }
 
     @Override
     public String getName() {
@@ -49,7 +42,13 @@ public class SearchMemoryTool implements Tool {
             JSONObject properties = new JSONObject();
             properties.put("query", new JSONObject()
                 .put("type", "string")
-                .put("description", "搜索关键词，可以是语义化的查询，例如\"我喜欢的音乐风格\"或\"系统登录密码\""));
+                .put("description", "自然语言查询或精确关键词，例如\"我喜欢的音乐风格\"或\"系统登录密码\"。本地向量检索结合关键词匹配。"));
+            properties.put("limit", new JSONObject().put("type", "integer")
+                .put("minimum", 1).put("maximum", 20).put("default", SemanticMemorySearch.DEFAULT_LIMIT)
+                .put("description", "最多返回条数，默认 5；关键词命中优先，其余按相似度排序。"));
+            properties.put("min_similarity", new JSONObject().put("type", "number")
+                .put("minimum", -1).put("maximum", 1).put("default", SemanticMemorySearch.DEFAULT_MIN_SIMILARITY)
+                .put("description", "语义候选的最低余弦相似度，默认 0.5。不是置信概率；精确关键词命中不受此阈值限制。"));
 
             parameters.put("properties", properties);
             parameters.put("required", new JSONArray().put("query"));
@@ -69,7 +68,21 @@ public class SearchMemoryTool implements Tool {
 
     @Override
     public boolean isAsync() {
-        return false;
+        return true;
+    }
+
+    @Override
+    public void executeAsync(JSONObject arguments, OnResultCallback callback) {
+        SEARCH_EXECUTOR.execute(() -> {
+            JSONObject result;
+            try {
+                result = execute(arguments);
+            } catch (Exception error) {
+                callback.onError(error);
+                return;
+            }
+            callback.onResult(result);
+        });
     }
 
     @Override
@@ -77,27 +90,10 @@ public class SearchMemoryTool implements Tool {
         try {
             String query = arguments.getString("query");
 
-            // 智能搜索：先搜索内容，再搜索标签
-            List<MemoryEntity> results = memoryManager.searchMemory(query);
-
-            // 构建返回结果
-            JSONObject result = new JSONObject();
-            result.put("status", "success");
-            result.put("query", query);
-            result.put("found_count", results.size());
-
-            JSONArray matches = new JSONArray();
-            for (MemoryEntity memory : results) {
-                JSONObject match = new JSONObject();
-                match.put("key", memory.getKey());
-                match.put("content", memory.getContent());
-                match.put("tags", memory.getTags());
-                match.put("timestamp", memory.getTimestamp());
-                matches.put(match);
-            }
-            result.put("matches", matches);
-
-            return result;
+            int limit = arguments.has("limit") ? arguments.getInt("limit") : SemanticMemorySearch.DEFAULT_LIMIT;
+            double minSimilarity = arguments.has("min_similarity") ? arguments.getDouble("min_similarity")
+                    : SemanticMemorySearch.DEFAULT_MIN_SIMILARITY;
+            return searchBackend.search(query, limit, minSimilarity).toJson();
 
         } catch (Exception e) {
             Log.e(TAG, "执行出错", e);
@@ -110,6 +106,9 @@ public class SearchMemoryTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "用于搜索长期记忆。会智能匹配内容和标签，返回相关记忆条目。";
+        return "用于搜索长期记忆。使用本地语义向量并保留 key、内容和标签的关键词命中，默认最多返回 5 条。"
+                + "观察 search_mode、ready_vectors 和 similarity 判断是否实际使用向量。"
+                + "keyword_fallback 表示本次未能使用向量，不能据此断定不存在语义相关记忆。"
+                + "返回的是候选记忆，相关不代表赞同或事实正确，请阅读原文后判断。";
     }
 }

@@ -1,7 +1,7 @@
 # Offline memory embeddings — phase 1
 
-This phase generates and persists embeddings. **`search_memory` still uses its
-existing keyword matching; this is not yet semantic retrieval.**
+This document describes phase 1 (generation and persistence). Phase 2 now connects
+the existing `searchMemory` tool to these vectors; see [semantic-memory-search.md](semantic-memory-search.md).
 
 ## Behavior
 

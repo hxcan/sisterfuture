@@ -46,6 +46,13 @@ public class OfflineMemoryTest {
             MemoryEntity restored=store.boxFor(MemoryEntity.class).get(id);
             assertTrue(MemoryEmbeddingIndexer.isCurrent(restored));
             assertEquals(1.0,dot(restored.getEmbedding(),restored.getEmbedding()),0.0001);
+            SemanticMemorySearch.Result result=new SemanticMemorySearch(getContext().getAssets()).search(
+                    store.boxFor(MemoryEntity.class).getAll(),"我平时爱喝什么饮品",5,0.5);
+            assertNull(result.fallbackReason);
+            assertEquals(1,result.matches.size());
+            assertTrue(result.matches.get(0).semantic);
+            assertFalse(result.matches.get(0).keyword);
+            assertEquals(id,result.matches.get(0).memory.getId());
         } finally { BoxStore.deleteAllFiles(dir); }
     }
     @Test public void testExistingSpeechPipeline() throws Exception {
