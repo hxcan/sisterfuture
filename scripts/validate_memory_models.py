@@ -36,6 +36,19 @@ unrelated = float(vectors[0] @ vectors[2])
 assert similar > unrelated + 0.3
 print(f"BGE: 512-dimensional normalized vectors; similar={similar:.3f}, unrelated={unrelated:.3f}")
 
+# Queries use the BGE retrieval instruction; stored document embeddings do not.
+for query, expected_index in [("我平时爱喝什么饮品", 0), ("怎样登录服务器", 2)]:
+    encoding = tokenizer.encode("为这个句子生成表示以用于检索相关文章：" + query)
+    result = run(args_0=np.array([encoding.ids], np.int32),
+                 args_1=np.array([encoding.attention_mask], np.int32))
+    query_vector = result["last_hidden_state"][0, 0]
+    query_vector /= np.linalg.norm(query_vector)
+    scores = np.array([query_vector @ v for v in vectors])
+    # Two coffee paraphrases are both valid results for the drink query.
+    assert (int(scores.argmax()) in [0, 1]) if expected_index == 0 else (int(scores.argmax()) == expected_index)
+    assert scores.max() >= 0.5
+    print(f"Retrieval query={query!r}, cosine={scores.round(3).tolist()}")
+
 mapping = json.loads((assets / "baker_mapper.json").read_text())["symbol_to_id"]
 ids = np.array([[mapping[s] for s in ["n", "i3", "h", "ao3", "#3"]]], np.int32)
 tts = Interpreter(model_path=str(assets / "fastspeech2_quan.tflite"), num_threads=2)

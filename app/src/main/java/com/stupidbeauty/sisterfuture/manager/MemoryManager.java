@@ -33,6 +33,7 @@ public class MemoryManager
   private static final String TAG="SisterFutureActivity"; //!<输出调试信息时使用的标记。
     private final BoxStore boxStore;
     private final Box<MemoryEntity> memoryBox;
+    private final com.stupidbeauty.sisterfuture.memory.SemanticMemorySearch semanticSearch;
     
     // 单例模式：全局唯一的 BoxStore 实例
     private static BoxStore sInstanceBoxStore = null;
@@ -54,6 +55,7 @@ public class MemoryManager
             sEmbeddingIndexer.request();
         }
         this.memoryBox = boxStore.boxFor(MemoryEntity.class);
+        this.semanticSearch = new com.stupidbeauty.sisterfuture.memory.SemanticMemorySearch(context.getApplicationContext().getAssets());
     }
 
     // 保存记忆
@@ -88,14 +90,21 @@ public class MemoryManager
         return false;
     }
 
-    // 修改搜索方法
+    /** Called by the asynchronous search tool; inference must not run on the UI thread. */
+    public com.stupidbeauty.sisterfuture.memory.SemanticMemorySearch.Result searchMemoryWithScores(
+            String query, int limit, double minSimilarity) {
+        return semanticSearch.search(memoryBox.getAll(), query, limit, minSimilarity);
+    }
+
+    // Legacy keyword-only helper, also used by the ObjectBox smoke test.
     public List<MemoryEntity> searchMemory(String query) {
-        Query<MemoryEntity> queryBuilder = memoryBox.query()
+        try (Query<MemoryEntity> queryBuilder = memoryBox.query()
             .contains(MemoryEntity_.content, query, StringOrder.CASE_INSENSITIVE)
             .or()
             .contains(MemoryEntity_.tags, query, StringOrder.CASE_INSENSITIVE)
-            .build();
-        return queryBuilder.find();
+            .build()) {
+            return queryBuilder.find();
+        }
     }
 
     // 获取所有记忆
