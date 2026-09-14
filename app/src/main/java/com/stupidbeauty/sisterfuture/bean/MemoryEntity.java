@@ -27,6 +27,18 @@ public class MemoryEntity {
 
     private long timestamp;
 
+    // Null for legacy/pending memories; original content is always persisted first.
+    private float[] embedding;
+    private String embeddingModel;
+    private String embeddingContent;
+
+    public float[] getEmbedding() { return embedding; }
+    public void setEmbedding(float[] embedding) { this.embedding = embedding; }
+    public String getEmbeddingModel() { return embeddingModel; }
+    public void setEmbeddingModel(String embeddingModel) { this.embeddingModel = embeddingModel; }
+    public String getEmbeddingContent() { return embeddingContent; }
+    public void setEmbeddingContent(String embeddingContent) { this.embeddingContent = embeddingContent; }
+
     // Getters and Setters
     public long getId() {
         return id;

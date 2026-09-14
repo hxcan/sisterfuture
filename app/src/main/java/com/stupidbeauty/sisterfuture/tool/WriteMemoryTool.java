@@ -85,9 +85,9 @@ public class WriteMemoryTool implements Tool
     {
       String key = arguments.getString("key");
       String content = arguments.getString("content");
-      JSONArray tagsArray = arguments.getJSONArray("tags");
+      JSONArray tagsArray = arguments.optJSONArray("tags");
       java.util.List<String> tags = new java.util.ArrayList<>();
-      for (int i = 0; i < tagsArray.length(); i++) 
+      for (int i = 0; tagsArray != null && i < tagsArray.length(); i++)
       {
         tags.add(tagsArray.getString(i));
       }
@@ -128,6 +128,7 @@ public class WriteMemoryTool implements Tool
       result.put("status", "success");
       result.put("message", "已成功写入长期记忆：key=" + key);
       result.put("tags", tags);
+      result.put("embedding", "scheduled");
       return result;
 
     }

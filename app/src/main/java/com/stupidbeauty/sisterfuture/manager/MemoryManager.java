@@ -37,6 +37,7 @@ public class MemoryManager
     // 单例模式：全局唯一的 BoxStore 实例
     private static BoxStore sInstanceBoxStore = null;
     private static final Object sLock = new Object();
+    private static com.stupidbeauty.sisterfuture.memory.MemoryEmbeddingIndexer sEmbeddingIndexer;
 
     public MemoryManager(Context context) {
         // 检查是否已有 BoxStore 实例，避免重复创建
@@ -44,10 +45,13 @@ public class MemoryManager
             if (sInstanceBoxStore == null) {
                 Log.i(TAG, CodePosition.newInstance().toString() + "✅ 首次创建 BoxStore 实例");
                 sInstanceBoxStore = MyObjectBox.builder().androidContext(context).build();
+                sEmbeddingIndexer = new com.stupidbeauty.sisterfuture.memory.MemoryEmbeddingIndexer(
+                        sInstanceBoxStore, context.getApplicationContext().getAssets());
             } else {
                 Log.i(TAG, CodePosition.newInstance().toString() + "⚠️ 复用已存在的 BoxStore 实例");
             }
             this.boxStore = sInstanceBoxStore;
+            sEmbeddingIndexer.request();
         }
         this.memoryBox = boxStore.boxFor(MemoryEntity.class);
     }
@@ -60,6 +64,9 @@ public class MemoryManager
         memory.setTags(tags);
         memory.setTimestamp(System.currentTimeMillis());
         memoryBox.put(memory);
+        synchronized (sLock) {
+            if (sInstanceBoxStore == boxStore && sEmbeddingIndexer != null) sEmbeddingIndexer.request();
+        }
     }
 
     // 删除记忆
@@ -110,6 +117,8 @@ public class MemoryManager
     public static void closeBoxStore() {
         synchronized (sLock) {
             if (sInstanceBoxStore != null && !sInstanceBoxStore.isClosed()) {
+                sEmbeddingIndexer.close();
+                sEmbeddingIndexer = null;
                 Log.i(TAG, CodePosition.newInstance().toString() + "🔒 关闭 BoxStore 实例");
                 sInstanceBoxStore.close();
                 sInstanceBoxStore = null;

@@ -2,3 +2,4 @@
 SisterFuture.iml
 build/
 local.properties
+/app/libobjectbox-jni-linux-*.so
