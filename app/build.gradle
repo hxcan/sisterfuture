@@ -25,7 +25,7 @@ dependencies
   implementation 'androidx.annotation:annotation:1.5.0'
   implementation 'androidx.appcompat:appcompat:1.6.1' // Or the latest version
   implementation 'androidx.legacy:legacy-support-v4:1.0.0'
-  implementation 'org.tensorflow:tensorflow-lite:1.12.0'
+  implementation 'com.google.ai.edge.litert:litert:1.2.0'
   implementation 'org.tensorflow:tensorflow-lite-select-tf-ops:2.16.1'
   implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
   implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0' // Or the latest version
@@ -41,6 +41,9 @@ dependencies
   testImplementation 'junit:junit:4.13.2'
   testImplementation 'org.json:json:20240303'
   testImplementation 'com.squareup.okhttp3:mockwebserver:4.10.0'
+  testRuntimeOnly 'io.objectbox:objectbox-linux:5.1.0'
+  androidTestImplementation 'androidx.test:runner:1.5.2'
+  androidTestImplementation 'androidx.test.ext:junit:1.1.5'
 
   // #3088 百度地图 SDK 依赖（降级到 7.5.4，与旅行盲盒一致）
   // 地图组件
@@ -66,6 +69,12 @@ dependencies
   // 文档：https://github.com/aliyun/aliyun-oss-android-sdk
   // 优势：基于 OkHttp 而非 HttpClient，兼容 Android 系统，不再有 NoSuchFieldError 问题
   implementation 'com.aliyun.dpa:oss-android-sdk:2.9.17'
+}
+
+// LiteRT retains org.tensorflow.lite APIs; exclude the old runtime pulled by support/Flex.
+configurations.configureEach {
+  exclude group: 'org.tensorflow', module: 'tensorflow-lite'
+  exclude group: 'org.tensorflow', module: 'tensorflow-lite-api'
 }
 
 android
@@ -130,6 +139,7 @@ android
     versionCode 1098
     versionName "2026.8.30"
     multiDexEnabled true
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
     // 配置支持的 SO 库架构 - 仅保留手机端需要的架构
     ndk

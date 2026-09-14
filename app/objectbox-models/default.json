@@ -5,7 +5,7 @@
   "entities": [
     {
       "id": "1:459422324382558246",
-      "lastPropertyId": "5:1021669159040957994",
+      "lastPropertyId": "8:1446640386578603410",
       "name": "MemoryEntity",
       "properties": [
         {
@@ -33,6 +33,21 @@
           "id": "5:1021669159040957994",
           "name": "timestamp",
           "type": 6
+        },
+        {
+          "id": "6:246079523908432751",
+          "name": "embedding",
+          "type": 28
+        },
+        {
+          "id": "7:1326338765442285428",
+          "name": "embeddingModel",
+          "type": 9
+        },
+        {
+          "id": "8:1446640386578603410",
+          "name": "embeddingContent",
+          "type": 9
         }
       ],
       "relations": []

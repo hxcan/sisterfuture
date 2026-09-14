@@ -84,6 +84,12 @@ public class ListAllMemoriesTool implements Tool {
                 memoryObj.put("content", memory.getContent());
                 memoryObj.put("tags", memory.getTags());
                 memoryObj.put("timestamp", memory.getTimestamp());
+                boolean embeddingReady = com.stupidbeauty.sisterfuture.memory.MemoryEmbeddingIndexer.isCurrent(memory);
+                memoryObj.put("embedding_status", embeddingReady ? "ready" : "pending_or_failed");
+                if (embeddingReady) {
+                    memoryObj.put("embedding_model", memory.getEmbeddingModel());
+                    memoryObj.put("embedding_dimensions", memory.getEmbedding().length);
+                }
                 memories.put(memoryObj);
             }
             result.put("memories", memories);
