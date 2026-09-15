@@ -37,6 +37,19 @@ public class VideoStitcherTool implements Tool {
     private static final long DEFAULT_BUFFER_SIZE = 1 << 20; // 1 MB
     private static final int DEFAULT_TIMEOUT_US = 10_000;
 
+    // MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM 是 API 21+ 才有的常量，
+    // 通过反射获取，避免在编译期硬依赖（让 sisterfuture 仍然兼容 API 24+）。
+    private static final int MUXER_OUTPUT_WEBM = resolveWebmFormat();
+
+    /** 通过反射读取 MUXER_OUTPUT_WEBM 常量；读取失败时返回 -1 表示不支持。 */
+    private static int resolveWebmFormat() {
+        try {
+            return MediaMuxer.OutputFormat.class.getField("MUXER_OUTPUT_WEBM").getInt(null);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
     private final Context context;
 
     public VideoStitcherTool(Context context) {
@@ -305,17 +318,13 @@ public class VideoStitcherTool implements Tool {
     }
 
     private int parseOutputFormat(String name) {
-        switch (name == null ? "mp4" : name.toLowerCase(Locale.US)) {
+        String key = name == null ? "mp4" : name.toLowerCase(Locale.US);
+        switch (key) {
             case "webm":
-                return MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4; // webm 需要 API 21+
-                // 注：API 21+ 直接用 WEBM 输出
-                try {
-                    return MediaMuxer.OutputFormat.class
-                        .getField("MUXER_OUTPUT_WEBM")
-                        .getInt(null);
-                } catch (Exception e) {
-                    return MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4;
-                }
+                if (MUXER_OUTPUT_WEBM > 0) return MUXER_OUTPUT_WEBM;
+                // 旧版 API（< 21）不支持 WEBM，回退到 MP4 并警告
+                FileLogger.w(TAG, "当前 Android 版本不支持 MUXER_OUTPUT_WEBM，回退到 MP4");
+                return MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4;
             case "_3gp":
             case "3gp":
                 return MediaMuxer.OutputFormat.MUXER_OUTPUT_3GPP;
