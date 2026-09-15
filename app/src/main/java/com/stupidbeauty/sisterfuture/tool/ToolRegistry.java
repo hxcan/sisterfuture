@@ -50,6 +50,7 @@ public class ToolRegistry {
         toolManager.registerTool(new WanxiangTool(context));
         toolManager.registerTool(new KlingVideoGenerationTool(context));
         toolManager.registerTool(new AnalyzeVideoTimelineTool(context));
+        toolManager.registerTool(new VideoStitcherTool(context));
 
         toolManager.registerTool(new OssUploadTool(context));
         toolManager.registerTool(new OssGetSignedUrlTool(context));
