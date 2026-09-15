@@ -50,6 +50,28 @@ public class VideoStitcherTool implements Tool {
         }
     }
 
+    /**
+     * 将 MediaExtractor 的 SAMPLE_FLAG_* 标志转换为 MediaCodec 的 BUFFER_FLAG_* 标志。
+     *
+     * MediaExtractor 返回的标志位：
+     * - SAMPLE_FLAG_SYNC (1)         → BUFFER_FLAG_KEY_FRAME (1)
+     * - SAMPLE_FLAG_PARTIAL_FRAME (8) → BUFFER_FLAG_PARTIAL_FRAME (8)
+     * - SAMPLE_FLAG_ENCRYPTED (2)   → 不映射（MediaMuxer 不需要）
+     *
+     * MediaCodec.BufferInfo.flags 期望的标志位来自 MediaCodec.BUFFER_FLAG_*。
+     */
+    private static int convertSampleFlags(int extractorFlags) {
+        int codecFlags = 0;
+        if ((extractorFlags & MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+            codecFlags |= MediaCodec.BUFFER_FLAG_KEY_FRAME;
+        }
+        if ((extractorFlags & MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME) != 0) {
+            codecFlags |= MediaCodec.BUFFER_FLAG_PARTIAL_FRAME;
+        }
+        // 注：CODEC_CONFIG 和 END_OF_STREAM 由 MediaMuxer 内部处理，不需要从 extractor 传入
+        return codecFlags;
+    }
+
     private final Context context;
 
     public VideoStitcherTool(Context context) {
@@ -274,7 +296,7 @@ public class VideoStitcherTool implements Tool {
             bufferInfo.offset = 0;
             bufferInfo.size = sampleSize;
             bufferInfo.presentationTimeUs = adjustedPts;
-            bufferInfo.flags = extractor.getSampleFlags();
+            bufferInfo.flags = convertSampleFlags(extractor.getSampleFlags());
 
             muxer.writeSampleData(destTrackIndex, buffer, bufferInfo);
             if (adjustedPts > maxPtsUs) maxPtsUs = adjustedPts;
