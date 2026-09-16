@@ -77,6 +77,7 @@ public class ToolRegistry {
         toolManager.registerTool(new CreateGitHubCommitTool(context));
         toolManager.registerTool(new GetGitHubActionsLogsTool(context));
         toolManager.registerTool(new CreatePullRequestTool(context));
+        toolManager.registerTool(new ApprovePullRequestTool(context));
 
         toolManager.registerTool(new FuseSystemPromptTool(context));
         toolManager.registerTool(new GetCurrentSystemPromptTool((SisterFutureApplication) SisterFutureApplication.getAppContext()));
