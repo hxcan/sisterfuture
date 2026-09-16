@@ -765,7 +765,7 @@ public class ContextManager
     return new JSONArray(history);
   }
 
-  // ✅ 直接返回内存中的历史列表（唯一真相源）
+  // �� 直接返回内存中的历史列表（唯一真相源）
   public List<JSONObject> getHistory()
   {
     if (memoryHistory == null)
@@ -827,12 +827,12 @@ public class ContextManager
             String argumentsStr = function.getString("arguments");
             
             // 严格检查 JSON 对象开头，拦截非法结构如 {5LiU..."path": ...}
-            String trimmedArgs = argumentsStr.trim();
-            if (trimmedArgs.startsWith("{"))
+            String trimmedString = argumentsStr.trim();
+            if (trimmedString.startsWith("{"))
             {
-              if (trimmedArgs.length() > 1)
+              if (trimmedString.length() > 1)
               {
-                char secondChar = trimmedArgs.charAt(1);
+                char secondChar = trimmedString.charAt(1);
                 if (secondChar != '"' && secondChar != '}')
                 {
                   FileLogger.w(TAG, "[isValidToolCallMessage] Invalid: JSON object does not start with quoted key or empty object. Second char: " + secondChar);
@@ -955,7 +955,28 @@ public class ContextManager
         else if (roleString.equals("tool"))
         {
           String answeringtoolCAllId = currentObject.optString("tool_call_id", "none");
-          FileLogger.d(TAG, "🔬 [NORM_TOOL_MSG] i=" + i + " | tool_call_id=" + answeringtoolCAllId + " | pendingNotNull=" + (pendingToolCallsObject != null) + " | matchedToolCallIds=" + matchedToolCallIds.toString() + " | bufferedSize=" + matchedToolMessages.size());
+          // 🔬 打印 pendingToolCallsObject 里所有 tool_call.id 和 name，对比 answeringtoolCAllId
+          StringBuilder pendingIds = new StringBuilder("[");
+          StringBuilder pendingNames = new StringBuilder("[");
+          if (pendingToolCallsObject != null) {
+            try {
+              JSONArray pToolCalls = pendingToolCallsObject.optJSONArray("tool_calls");
+              if (pToolCalls != null) {
+                for (int tc = 0; tc < pToolCalls.length(); tc++) {
+                  JSONObject pTc = pToolCalls.optJSONObject(tc);
+                  if (pTc != null) {
+                    if (tc > 0) { pendingIds.append(","); pendingNames.append(","); }
+                    pendingIds.append(pTc.optString("id", "<EMPTY>"));
+                    JSONObject pFunc = pTc.optJSONObject("function");
+                    pendingNames.append(pFunc != null ? pFunc.optString("name", "?") : "?");
+                  }
+                }
+              }
+            } catch (Exception e) {}
+          }
+          pendingIds.append("]");
+          pendingNames.append("]");
+          FileLogger.d(TAG, "🔬 [NORM_TOOL_MSG] i=" + i + " | tool_call_id=" + answeringtoolCAllId + " | pendingToolCallIds=" + pendingIds.toString() + " | pendingToolNames=" + pendingNames.toString() + " | matchedSoFar=" + matchedToolCallIds.toString() + " | bufferedSize=" + matchedToolMessages.size());
           
           if (pendingToolCallsObject!=null)
           {
@@ -969,8 +990,17 @@ public class ContextManager
               {
                 matched = true;
                 matchedToolCallIds.add(toolCallId);
+                FileLogger.d(TAG, "🔬 [NORM_MATCH] i=" + i + " | matched tool_call_id=" + toolCallId + " | totalMatched=" + matchedToolCallIds.size() + "/" + toolCallsArray.length());
                 break;
               }
+              else
+              {
+                FileLogger.d(TAG, "🔬 [NORM_TRY] i=" + i + " | trying tool_call_id='" + toolCallId + "' vs answering='" + answeringtoolCAllId + "' | equal=" + toolCallId.equals(answeringtoolCAllId));
+              }
+            }
+            if (!matched && toolCallsArray.length() > 0)
+            {
+              FileLogger.w(TAG, "🔬 [NORM_NO_MATCH] i=" + i + " | answeringtoolCAllId=" + answeringtoolCAllId + " | availableIds=" + pendingIds.toString());
             }
             if (matched)
             {
@@ -1129,7 +1159,7 @@ public class ContextManager
         writer.flush();
         writer.close();
         
-        FileLogger.d(TAG, "🔬 [ASYNC_SAVE] 已异步保存历史到 JSON 文件：" + historyCopy.size() + " 条");
+        FileLogger.d(TAG, "💾 [ASYNC_SAVE] 已异步保存历史到 JSON 文件：" + historyCopy.size() + " 条");
       }
       catch (Exception e)
       {
