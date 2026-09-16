@@ -128,10 +128,18 @@ public class VideoStitcherTool implements Tool {
 
     @Override
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
+        // 🆕 #895164334399 v2 诊断：工具执行入口
+        FileLogger.i(TAG, "🎬 [STITCH_EXEC_ENTER] thread=" + Thread.currentThread().getName() + " | inputCount=" + (arguments.optJSONArray("inputPaths") != null ? arguments.optJSONArray("inputPaths").length() : -1) + " | outputPath=" + arguments.optString("outputPath"));
         try {
-            callback.onResult(stitch(arguments));
+            JSONObject result = stitch(arguments);
+            // 🆕 #895164334399 v2 诊断：工具执行成功，即将回调给上层
+            FileLogger.i(TAG, "🎬 [STITCH_EXEC_BEFORE_ONRESULT] thread=" + Thread.currentThread().getName() + " | resultStatus=" + result.optString("status") + " | resultSize=" + (result.has("outputSize") ? result.optLong("outputSize") : -1));
+            callback.onResult(result);
+            // 🆕 #895164334399 v2 诊断：回调已完成
+            FileLogger.i(TAG, "🎬 [STITCH_EXEC_AFTER_ONRESULT] thread=" + Thread.currentThread().getName() + " | callback returned normally");
         } catch (Exception e) {
             FileLogger.e(TAG, "视频拼接失败", e);
+            FileLogger.e(TAG, "❌ [STITCH_EXEC_ERROR] exception thrown, calling onError | thread=" + Thread.currentThread().getName() + " | err=" + e.getClass().getSimpleName() + ": " + e.getMessage());
             callback.onError(e);
         }
     }
