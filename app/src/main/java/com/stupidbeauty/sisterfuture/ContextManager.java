@@ -921,11 +921,12 @@ public class ContextManager
    * 标准化工具调用消息，支持严厉模式
    * 
    * @param oldHistory 原始历史记录
-   * @param strictMode 严厉模式：true=移除所有未匹配的 assistant+tool_calls；false=保留等待后续回复
+   * @param strictMode 严厉模式：true=移除所有匹配的 assistant+tool_calls；false=保留等待后续回复
    * @return 标准化后的历史记录
   */
   public List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory, boolean strictMode)
   {
+    FileLogger.i(TAG, "🔬 [NORM_ENTER] normalizeToolCallMessages | inputSize=" + oldHistory.size() + " | strictMode=" + strictMode);
     List<JSONObject> history = oldHistory;
     List<JSONObject> list = new ArrayList<>();
     int cleanedCount = 0;
@@ -940,6 +941,7 @@ public class ContextManager
       {
         JSONObject currentObject =  history.get(i);
         String roleString = currentObject.getString("role");
+        FileLogger.d(TAG, "🔬 [NORM_LOOP] i=" + i + " | role=" + roleString + " | pendingAssistant=" + (pendingToolCallsObject != null) + " | matchedSoFar=" + matchedToolCallIds.size() + " | bufferedToolMsgs=" + matchedToolMessages.size());
         
         if (roleString.equals("assistant"))
         {
@@ -953,6 +955,7 @@ public class ContextManager
         else if (roleString.equals("tool"))
         {
           String answeringtoolCAllId = currentObject.optString("tool_call_id", "none");
+          FileLogger.d(TAG, "🔬 [NORM_TOOL_MSG] i=" + i + " | tool_call_id=" + answeringtoolCAllId + " | pendingNotNull=" + (pendingToolCallsObject != null) + " | matchedToolCallIds=" + matchedToolCallIds.toString() + " | bufferedSize=" + matchedToolMessages.size());
           
           if (pendingToolCallsObject!=null)
           {
@@ -1000,6 +1003,7 @@ public class ContextManager
         list.add(currentObject);
       }
       
+      FileLogger.i(TAG, "🔬 [NORM_EXIT] strictMode=" + strictMode + " | pendingAssistantAtEnd=" + (pendingToolCallsObject != null) + " | cleanedCount=" + cleanedCount + " | outputSize=" + list.size() + " | strictModePendingKept=" + (pendingToolCallsObject != null && !strictMode));
       // 严厉模式：移除所有未匹配的 assistant+tool_calls 消息
       if (strictMode && pendingToolCallsObject != null)
       {
@@ -1125,7 +1129,7 @@ public class ContextManager
         writer.flush();
         writer.close();
         
-        FileLogger.d(TAG, "💾 [ASYNC_SAVE] 已异步保存历史到 JSON 文件：" + historyCopy.size() + " 条");
+        FileLogger.d(TAG, "🔬 [ASYNC_SAVE] 已异步保存历史到 JSON 文件：" + historyCopy.size() + " 条");
       }
       catch (Exception e)
       {
