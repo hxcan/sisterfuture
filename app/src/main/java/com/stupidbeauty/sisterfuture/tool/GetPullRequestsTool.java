@@ -112,6 +112,47 @@ public class GetPullRequestsTool implements Tool {
     }
   }
 
+  /** Reuse the shared scalar tolerance without changing the caller's JSON. */
+  static JSONObject parseArguments(JSONObject arguments) throws org.json.JSONException {
+    JSONObject parsed = new JSONObject();
+    for (String key : new String[]{"owner", "repo", "start_time", "end_time"}) {
+      String value = readText(arguments, key, "");
+      if (value.isEmpty()) {
+        throw new IllegalArgumentException("缺少或无效的必填参数: " + key);
+      }
+      parsed.put(key, value);
+    }
+    parsed.put("state", readText(arguments, "state", "all").toLowerCase(Locale.ROOT));
+    parsed.put("token", readText(arguments, "token", ""));
+    parsed.put("include_merged", ToolArgumentUtils.safeGetBoolean(arguments, "include_merged", true));
+    parsed.put("save_to_phone", ToolArgumentUtils.safeGetBoolean(arguments, "save_to_phone", true));
+    int perPage = ToolArgumentUtils.safeGetInt(arguments, "per_page", 30);
+    parsed.put("per_page", perPage < 1 || perPage > 100 ? 30 : perPage);
+    return parsed;
+  }
+
+  private static String readText(JSONObject arguments, String key, String fallback) {
+    if (arguments == null) return fallback;
+    String actualKey = key;
+    if (!arguments.has(key)) {
+      java.util.Iterator<String> keys = arguments.keys();
+      while (keys.hasNext()) {
+        String candidate = keys.next();
+        if (candidate.equalsIgnoreCase(key)) {
+          actualKey = candidate;
+          break;
+        }
+      }
+    }
+    Object raw = arguments.opt(actualKey);
+    // Do not turn JSON null or a nested object into a repository/token string.
+    if (raw == null || raw == JSONObject.NULL || raw instanceof JSONObject || raw instanceof JSONArray) {
+      return fallback;
+    }
+    String value = ToolArgumentUtils.safeGetString(arguments, actualKey, fallback).trim();
+    return value.isEmpty() ? fallback : value;
+  }
+
   @Override
   public boolean shouldInclude() {
     return true;
@@ -126,15 +167,16 @@ public class GetPullRequestsTool implements Tool {
   public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
     executor.execute(() -> {
       try {
-        String owner = arguments.getString("owner");
-        String repo = arguments.getString("repo");
-        String startTime = arguments.getString("start_time");
-        String endTime = arguments.getString("end_time");
-        String state = arguments.optString("state", "all");
-        boolean includeMerged = arguments.optBoolean("include_merged", true);
-        int perPage = arguments.optInt("per_page", 30);
-        boolean saveToPhone = arguments.optBoolean("save_to_phone", true);
-        String token = arguments.optString("token", "").trim();
+        JSONObject parsed = parseArguments(arguments);
+        String owner = parsed.getString("owner");
+        String repo = parsed.getString("repo");
+        String startTime = parsed.getString("start_time");
+        String endTime = parsed.getString("end_time");
+        String state = parsed.getString("state");
+        boolean includeMerged = parsed.getBoolean("include_merged");
+        int perPage = parsed.getInt("per_page");
+        boolean saveToPhone = parsed.getBoolean("save_to_phone");
+        String token = parsed.getString("token");
 
         FileLogger.d(TAG, "获取 PR：owner=" + owner + ", repo=" + repo + ", 时间窗口=" + startTime + " ~ " + endTime + ", state=" + state);
 
