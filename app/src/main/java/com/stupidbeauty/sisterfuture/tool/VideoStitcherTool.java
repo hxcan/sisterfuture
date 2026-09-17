@@ -123,7 +123,7 @@ public class VideoStitcherTool implements Tool {
 
     @Override
     public boolean isAsync() {
-        return true;
+        return false;  // 🆕 #895164334399 v5: stitchVideos 实际是同步执行（MediaMuxer API 设计简单），诚实标注为同步工具
     }
 
     @Override
