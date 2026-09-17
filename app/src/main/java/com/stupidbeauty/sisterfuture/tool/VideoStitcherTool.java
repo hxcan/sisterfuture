@@ -257,6 +257,11 @@ public class VideoStitcherTool implements Tool {
         result.put("totalDurationMs", totalDurationUs / 1000);
         result.put("elapsedMs", elapsedMs);
         result.put("note", "使用 MediaMuxer 零损失拼接（流复制模式）。如需转码或滤镜，请改用 FFmpeg 方案。");
+        // 🆕 #896208581817: 把拼接产出的视频作为附件返回，让用户可以在聊天界面直接播放
+        JSONObject videoAttachment = buildVideoAttachment(output);
+        if (videoAttachment != null) {
+            result.put("attachments", new JSONArray().put(videoAttachment));
+        }
         return result;
     }
 
@@ -370,6 +375,47 @@ public class VideoStitcherTool implements Tool {
             default:
                 return MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4;
         }
+    }
+
+    /**
+     * 🆕 #896208581817: 根据拼接产出的视频文件构造一个 video 附件 JSON。
+     * 格式仿照 HttpFileDownloadTool.buildMediaAttachment()，让上层聊天界面识别为本地视频附件并直接播放。
+     * 仅处理 video/* 类型；返回 null 表示当前输出格式不支持作为附件返回。
+     */
+    private JSONObject buildVideoAttachment(File outputFile) throws Exception {
+        String mimeType = resolveVideoMimeType(outputFile.getName());
+        if (mimeType == null) {
+            return null;
+        }
+        JSONObject metadata = new JSONObject();
+        metadata.put("size", outputFile.length());
+        metadata.put("mimeType", mimeType);
+        JSONObject attachment = new JSONObject();
+        attachment.put("type", "video");
+        attachment.put("url", "file://" + outputFile.getAbsolutePath());
+        attachment.put("metadata", metadata);
+        return attachment;
+    }
+
+    /**
+     * 🆕 #896208581817: 根据文件名后缀推断视频 MIME 类型。
+     * 覆盖 stitchVideos 工具当前支持的输出格式：mp4 / webm / 3gp。
+     */
+    private String resolveVideoMimeType(String fileName) {
+        if (fileName == null) {
+            return null;
+        }
+        String lower = fileName.toLowerCase(Locale.US);
+        if (lower.endsWith(".mp4") || lower.endsWith(".m4v")) {
+            return "video/mp4";
+        }
+        if (lower.endsWith(".webm")) {
+            return "video/webm";
+        }
+        if (lower.endsWith(".3gp") || lower.endsWith(".3gpp")) {
+            return "video/3gpp";
+        }
+        return null;
     }
 
     @Override
