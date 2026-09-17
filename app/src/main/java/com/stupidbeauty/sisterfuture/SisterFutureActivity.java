@@ -1522,6 +1522,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               }
             }
 
+            assistantMessage.put("tool_calls", toolCallsArray);
+            contextManager.addRawMessage(assistantMessage);
             contextManager.discardReservedMessageId(responseMessageId);
             contextManager.increaseMaxRounds();
 
@@ -1685,9 +1687,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // 这样 tool 消息进入 history 时，对应的 assistant+tool_calls 一定已经在前面，
     // normalize 算法能正确配对，避免"快速返回的工具 callback 抢先 addToolMessage"导致的 NORM_NO_MATCH 误丢弃。
     if (assistantMessage != null && !assistantMessage.has("tool_calls")) {
-      assistantMessage.put("tool_calls", toolCallsArray);
-      contextManager.addRawMessage(assistantMessage);
-      FileLogger.i(TAG, "🩹 [V5_ASSISTANT_FIRST] assistant 消息先入 history（在 postProcessToolResults 入口）");
+      try {
+        assistantMessage.put("tool_calls", toolCallsArray);
+        contextManager.addRawMessage(assistantMessage);
+        FileLogger.i(TAG, "🩹 [V5_ASSISTANT_FIRST] assistant 消息先入 history（在 postProcessToolResults 入口）");
+      } catch (JSONException v5e) {
+        FileLogger.e(TAG, "❌ [V5_ASSISTANT_FIRST] 写入失败", v5e);
+      }
     }
     runOnUiThread(() ->
     {
