@@ -1096,6 +1096,49 @@ public class ContextManager
           }
           else
           {
+                        // 🆕 #895164334399 v4 修复：动态归属查找（方案 E）
+            // 当 pendingToolCallsObject 为 null（说明当前没有等待结果的 assistant），
+            // 回溯扫描 history 找包含此 tool_call_id 的 assistant，挽救被错位吞掉的消息
+            {
+              boolean v4FoundOwner = false;
+              try
+              {
+                for (int j = i - 1; j >= 0; j--)
+                {
+                  JSONObject pastMsg = history.get(j);
+                  if ("assistant".equals(pastMsg.optString("role")) && pastMsg.has("tool_calls"))
+                  {
+                    JSONArray pastTc = pastMsg.optJSONArray("tool_calls");
+                    if (pastTc != null)
+                    {
+                      for (int k = 0; k < pastTc.length(); k++)
+                      {
+                        JSONObject ptoolCall = pastTc.optJSONObject(k);
+                        if (ptoolCall != null && answeringtoolCAllId.equals(ptoolCall.optString("id", "")))
+                        {
+                          v4FoundOwner = true;
+                          FileLogger.w(TAG, "🩹 [V4_DYNAMIC_FOUND] i=" + i + " | tool_call_id=" + answeringtoolCAllId + " | ownerAssistantIndex=" + j + " | 🩹 挽救错位 tool 消息！");
+                          break;
+                        }
+                      }
+                    }
+                    if (v4FoundOwner) break;
+                  }
+                }
+              }
+              catch (Exception v4e) { FileLogger.e(TAG, "❌ [V4_DYNAMIC_ERROR] 动态归属查找异常", v4e); }
+              if (v4FoundOwner)
+              {
+                list.add(currentObject);
+                FileLogger.w(TAG, "🩹 [V4_DYNAMIC_APPENDED] i=" + i + " | tool_call_id=" + answeringtoolCAllId + " | 🩹 tool 消息已挽救到 list！");
+                continue;
+              }
+              else
+              {
+                FileLogger.w(TAG, "❌ [V4_DYNAMIC_NOT_FOUND] i=" + i + " | tool_call_id=" + answeringtoolCAllId + " | ❌ 整个 history 都找不到归属，按原行为丢弃");
+              }
+            }
+            
             FileLogger.w(TAG, "[normalizeToolCallMessages] Tool message tool_call_id=" + answeringtoolCAllId + " found but pendingToolCallsObject is null, skipping! historySize=" + history.size() + " | i=" + i);
             continue;
           }
