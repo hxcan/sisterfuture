@@ -122,6 +122,16 @@ public class VideoStitcherTool implements Tool {
     }
 
     @Override
+    public JSONObject execute(JSONObject arguments) throws Exception {
+        // 🆕 #895164334399 v6: stitchVideos 完全同步执行（MediaMuxer API 设计简单），
+        // 把原本在 executeAsync 里的 stitch() 调用提到这里，适配 isAsync=false 的同步路径。
+        FileLogger.i(TAG, "🎬 [STITCH_EXEC_ENTER] thread=" + Thread.currentThread().getName() + " | inputCount=" + (arguments.optJSONArray("inputPaths") != null ? arguments.optJSONArray("inputPaths").length() : -1) + " | outputPath=" + arguments.optString("outputPath"));
+        JSONObject result = stitch(arguments);
+        FileLogger.i(TAG, "🎬 [STITCH_EXEC_DONE] thread=" + Thread.currentThread().getName() + " | resultStatus=" + result.optString("status"));
+        return result;
+    }
+
+    @Override
     public boolean isAsync() {
         return false;  // 🆕 #895164334399 v5: stitchVideos 实际是同步执行（MediaMuxer API 设计简单），诚实标注为同步工具
     }
