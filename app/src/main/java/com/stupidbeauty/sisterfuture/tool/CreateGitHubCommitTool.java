@@ -94,7 +94,7 @@ public class CreateGitHubCommitTool implements Tool
           )
           .put
           (
-            "commit_message",
+            "commitMessage",
             new JSONObject()
               .put("type", "string")
               .put("description", "提交信息")
@@ -108,17 +108,17 @@ public class CreateGitHubCommitTool implements Tool
           )
           .put
           (
-            "read_from_phone",
+            "readFromPhone",
             new JSONObject()
               .put("type", "boolean")
-              .put("description", "是否从手机读取文件内容（true 时忽略 content 参数，使用 phone_path）")
+              .put("description", "是否从手机读取文件内容（true 时忽略 content 参数，使用 phonePath）")
           )
           .put
           (
-            "phone_path",
+            "phonePath",
             new JSONObject()
               .put("type", "string")
-              .put("description", "当 read_from_phone=true 时，指定要读取的手机文件路径")
+              .put("description", "当 readFromPhone=true 时，指定要读取的手机文件路径")
           )
           .put
           (
@@ -128,7 +128,7 @@ public class CreateGitHubCommitTool implements Tool
               .put("description", "是否删除文件（true 时执行删除操作，忽略 content 和 encoding 参数）")
           )
       );
-      parameters.put("required", new JSONArray(new String[]{"owner", "repo", "branch", "path", "commit_message"}));
+      parameters.put("required", new JSONArray(new String[]{"owner", "repo", "branch", "path", "commitMessage"}));
 
       functionDef.put("parameters", parameters);
       return new JSONObject().put("type", "function").put("function", functionDef);
@@ -150,6 +150,19 @@ public class CreateGitHubCommitTool implements Tool
   public boolean isAsync()
   {
     return true;
+  }
+
+  static JSONObject normalizeArguments(JSONObject arguments) throws org.json.JSONException
+  {
+    return ToolParameterAliases.normalize(arguments, "commitMessage", "readFromPhone", "phonePath");
+  }
+
+  @Override
+  public String getDefaultSystemPromptEnhancement()
+  {
+    return "参数使用小驼峰 commitMessage、readFromPhone、phonePath。兼容旧的下划线参数名，"
+        + "新旧同时传入时以小驼峰为准。readFromPhone=true 时通过 phonePath 指定手机文件。"
+        + "只有在用户授权修改仓库时提交代码；delete=true 会删除目标文件，应确认删除属于用户要求的范围。";
   }
 
 
@@ -187,7 +200,7 @@ public class CreateGitHubCommitTool implements Tool
   }
 
   @Override
-  public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback)
+  public void executeAsync(@NonNull JSONObject suppliedArguments, @NonNull OnResultCallback callback)
   {
     executor.execute
     (
@@ -195,18 +208,19 @@ public class CreateGitHubCommitTool implements Tool
       {
         try
         {
+          JSONObject arguments = normalizeArguments(suppliedArguments);
           // 1. 获取参数 - 让 getString 自然抛出 JSONException
           String owner = arguments.getString("owner");
           String repo = arguments.getString("repo");
           String branch = arguments.getString("branch");
           String path = arguments.getString("path");
-          String commitMessage = arguments.getString("commit_message");
+          String commitMessage = arguments.getString("commitMessage");
           String token = arguments.optString("token", "").trim();
           String encoding = arguments.optString("encoding", "text");
 
           // 新增参数
-          boolean readFromPhone = arguments.optBoolean("read_from_phone", false);
-          String phonePath = arguments.optString("phone_path", "");
+          boolean readFromPhone = arguments.optBoolean("readFromPhone", false);
+          String phonePath = arguments.optString("phonePath", "");
           boolean deleteFile = arguments.optBoolean("delete", false);
 
           String content = "";
@@ -324,7 +338,7 @@ public class CreateGitHubCommitTool implements Tool
           {
             if (phonePath.isEmpty())
             {
-              throw new IllegalArgumentException("Missing required parameter: phone_path");
+              throw new IllegalArgumentException("Missing required parameter: phonePath");
             }
 
             File phoneFile = new File(phonePath);

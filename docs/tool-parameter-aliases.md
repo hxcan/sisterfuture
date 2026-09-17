@@ -42,9 +42,25 @@ JSONObject arguments = ToolParameterAliases.normalize(suppliedArguments,
 
 转换仅针对显式声明的顶层参数，自动接受相应 snake_case 别名并删除副本中的旧键。
 不改变未知参数、嵌套 JSON、远端 API 字段或其他工具的现有行为。
-这次仅接入 createRedmineTask，未全局批量改变工具接口。
+已接入 createRedmineTask 和 createGithubCommit，未全局批量改变工具接口。
 `parent_task_id` 不是历史参数，也不是 parentIssueId 的风格别名，故不额外接受。
 
 验证包括定义一致性、新旧请求等价、长整型、混用与冲突优先级、空值、输入不变性、
 嵌套 JSON 不改写，以及两种备注命名和 Basic/API Key 认证兼容。
 所有请求测试使用 MockWebServer，不创建真实任务。
+
+## 在线代码提交工具
+
+`createGithubCommit`（工具名保持不变）也复用同一个别名类：
+
+| 对外参数 | 兼容旧名称 |
+|---|---|
+| commitMessage | commit_message |
+| readFromPhone | read_from_phone |
+| phonePath | phone_path |
+
+执行入口在文本、手机文件、二进制和删除处理之前统一归一化。其他参数不变，
+文件内容不做字符串替换；token 和工具备注 `github_token` 的认证方式不变。
+原有返回字段（包括 `read_from_phone`）保留，不改变结果协议。
+该工具的测试覆盖 schema、实际入口使用的归一化方法、新旧混用与优先级、
+false/空字符串及内容和删除参数透传；未在 GitHub 提交真实代码，也未实机测试手机文件读取。
