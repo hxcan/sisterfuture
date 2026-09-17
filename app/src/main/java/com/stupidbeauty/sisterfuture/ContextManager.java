@@ -484,8 +484,25 @@ public class ContextManager
 
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
-    // 🆕 #895164334399 v2 诊断：工具消息加入入口
-    FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_ENTER] toolCallId=" + toolCallId + " | toolName=" + toolName + " | contentLen=" + (content == null ? 0 : content.length()) + " | thread=" + Thread.currentThread().getName());
+    // 🆕 #895164334399 v3 诊断：工具消息加入入口 + 扫描当前所有未匹配的 pending tool_call.id
+    StringBuilder currentPending = new StringBuilder("[");
+    for (int pi = 0; pi < memoryHistory.size(); pi++) {
+      JSONObject pm = memoryHistory.get(pi);
+      if ("assistant".equals(pm.optString("role")) && pm.has("tool_calls")) {
+        JSONArray ptc = pm.optJSONArray("tool_calls");
+        if (ptc != null) {
+          for (int tci = 0; tci < ptc.length(); tci++) {
+            JSONObject ptoolCall = ptc.optJSONObject(tci);
+            if (ptoolCall != null) {
+              if (currentPending.length() > 1) currentPending.append(",");
+              currentPending.append(ptoolCall.optString("id", "<EMPTY>"));
+            }
+          }
+        }
+      }
+    }
+    currentPending.append("]");
+    FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_ENTER] toolCallId=" + toolCallId + " | toolName=" + toolName + " | contentLen=" + (content == null ? 0 : content.length()) + " | thread=" + Thread.currentThread().getName() + " | existingPendingIds=" + currentPending.toString());
     List<JSONObject> history = getHistory();
     int sizeBefore = history.size();
     JSONObject toolMessage = new JSONObject();
@@ -508,7 +525,6 @@ public class ContextManager
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_AFTER_ADD] toolCallId=" + toolCallId + " | historySize=" + sizeBefore + "->" + history.size());
     history = removeOldHistoryEntries(history);
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_AFTER_REMOVE_OLD] toolCallId=" + toolCallId + " | historySize=" + history.size());
-    history = normalizeToolCallMessages(history, false);
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_AFTER_NORMALIZE] toolCallId=" + toolCallId + " | historySize=" + history.size());
     saveHistory(history);
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_EXIT] toolCallId=" + toolCallId + " | finalHistorySize=" + history.size());
@@ -658,7 +674,6 @@ public class ContextManager
     FileLogger.i(TAG, "📥 [RAW_MSG_ADD_AFTER_ADD] role=" + msgRole + " | historySize=" + historyBefore.size() + "->" + history.size());
     history = removeOldHistoryEntries(history);
     FileLogger.i(TAG, "📥 [RAW_MSG_ADD_AFTER_REMOVE_OLD] role=" + msgRole + " | historySize=" + history.size());
-    saveHistory(history);
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
     FileLogger.i(TAG, "📥 [RAW_MSG_ADD_EXIT] role=" + msgRole + " | finalHistorySize=" + history.size());
   }
@@ -947,6 +962,26 @@ public class ContextManager
   public List<JSONObject> normalizeToolCallMessages(List<JSONObject> oldHistory, boolean strictMode)
   {
     FileLogger.i(TAG, "🔬 [NORM_ENTER] normalizeToolCallMessages | inputSize=" + oldHistory.size() + " | strictMode=" + strictMode);
+    // 🆕 #895164334399 v3 诊断：扫描整个历史，列出当前所有未匹配的 pending tool_call.id
+    StringBuilder allPendingIds = new StringBuilder("[");
+    for (int pi = 0; pi < oldHistory.size(); pi++) {
+      JSONObject pm = oldHistory.get(pi);
+      if ("assistant".equals(pm.optString("role")) && pm.has("tool_calls")) {
+        JSONArray ptc = pm.optJSONArray("tool_calls");
+        if (ptc != null) {
+          for (int tci = 0; tci < ptc.length(); tci++) {
+            JSONObject ptoolCall = ptc.optJSONObject(tci);
+            if (ptoolCall != null) {
+              if (allPendingIds.length() > 1) allPendingIds.append(",");
+              allPendingIds.append(ptoolCall.optString("id", "<EMPTY>"));
+            }
+          }
+        }
+      }
+    }
+    allPendingIds.append("]");
+    FileLogger.i(TAG, "🔬 [NORM_PENDING_SCAN] inputSize=" + oldHistory.size() + " | allPendingIds=" + allPendingIds.toString());
+
     List<JSONObject> history = oldHistory;
     List<JSONObject> list = new ArrayList<>();
     int cleanedCount = 0;
@@ -967,6 +1002,22 @@ public class ContextManager
         {
           if (currentObject.has("tool_calls"))
           {
+            // 🆕 #895164334399 v3 诊断：pending 被覆盖前记录 old → new 轨迹
+            if (pendingToolCallsObject != null) {
+              StringBuilder oldIds = new StringBuilder("[");
+              JSONArray oldTcs = pendingToolCallsObject.optJSONArray("tool_calls");
+              if (oldTcs != null) {
+                for (int oc = 0; oc < oldTcs.length(); oc++) {
+                  JSONObject oldTc = oldTcs.optJSONObject(oc);
+                  if (oldTc != null) {
+                    if (oc > 0) oldIds.append(",");
+                    oldIds.append(oldTc.optString("id", "<EMPTY>"));
+                  }
+                }
+              }
+              oldIds.append("]");
+              FileLogger.w(TAG, "🔬 [PENDING_REPLACED] i=" + i + " | oldPendingIds=" + oldIds.toString() + " | matchedSoFar=" + matchedToolCallIds.size() + " | bufferedToolMsgs=" + matchedToolMessages.size() + " | ⚠️ pending 被新的 assistant+tool_calls 覆盖！");
+            }
             pendingToolCallsObject = currentObject;
             matchedToolCallIds.clear();
             continue;
@@ -1020,7 +1071,7 @@ public class ContextManager
             }
             if (!matched && toolCallsArray.length() > 0)
             {
-              FileLogger.w(TAG, "🔬 [NORM_NO_MATCH] i=" + i + " | answeringtoolCAllId=" + answeringtoolCAllId + " | availableIds=" + pendingIds.toString());
+              FileLogger.w(TAG, "🔬 [NORM_NO_MATCH] i=" + i + " | answeringtoolCAllId=" + answeringtoolCAllId + " | availableIds=" + pendingIds.toString() + " | currentMatched=" + (pendingToolCallsObject != null ? matchedToolCallIds.size() : 0) + "/" + (pendingToolCallsObject != null ? pendingToolCallsObject.optJSONArray("tool_calls").length() : 0) + " | bufferedToolMsgs=" + matchedToolMessages.size());
             }
             if (matched)
             {
@@ -1045,7 +1096,7 @@ public class ContextManager
           }
           else
           {
-            FileLogger.w(TAG, "[normalizeToolCallMessages] Tool message tool_call_id=" + answeringtoolCAllId + " found but pendingToolCallsObject is null, skipping!");
+            FileLogger.w(TAG, "[normalizeToolCallMessages] Tool message tool_call_id=" + answeringtoolCAllId + " found but pendingToolCallsObject is null, skipping! historySize=" + history.size() + " | i=" + i);
             continue;
           }
         }
