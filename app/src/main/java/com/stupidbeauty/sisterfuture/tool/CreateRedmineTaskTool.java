@@ -53,7 +53,7 @@ public class CreateRedmineTaskTool implements Tool
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
       parameters.put("properties", new JSONObject()
-        .put("redmine_url", new JSONObject()
+        .put("redmineUrl", new JSONObject()
           .put("type", "string")
           .put("description", "Redmine 实例的完整 URL，例如 https://your-redmine.com"))
         .put("username", new JSONObject()
@@ -62,31 +62,31 @@ public class CreateRedmineTaskTool implements Tool
         .put("password", new JSONObject()
           .put("type", "string")
           .put("description", "登录密码"))
-        .put("api_key", new JSONObject()
+        .put("apiKey", new JSONObject()
           .put("type", "string")
           .put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"))
-        .put("project_id", new JSONObject()
+        .put("projectId", new JSONObject()
           .put("type", "integer")
           .put("description", "目标项目 ID（支持长整型，如 JoyMan 生成的 750160066086）"))
         .put("subject", new JSONObject()
           .put("type", "string")
           .put("description", "任务标题"))
-        .put("parent_issue_id", new JSONObject()
+        .put("parentIssueId", new JSONObject()
           .put("type", "integer")
           .put("description", "可选：父任务 ID，用于创建子任务（支持长整型）"))
         .put("description", new JSONObject()
           .put("type", "string")
           .put("description", "任务描述，可选"))
         .put("priority", priorityEnum)
-        .put("tracker_id", new JSONObject()
+        .put("trackerId", new JSONObject()
           .put("type", "integer")
           .put("description", "可选：任务类型 ID（1=Bug, 2=Feature, 3=Support），默认为项目默认值"))
-        .put("assigned_to_id", new JSONObject()
+        .put("assignedToId", new JSONObject()
           .put("type", "integer")
           .put("minimum", 1)
           .put("description", "可选：任务指派人的用户 ID，必须为正整数"))
       );
-      parameters.put("required", new JSONArray(new String[]{"project_id", "subject"}));
+      parameters.put("required", new JSONArray(new String[]{"projectId", "subject"}));
 
       functionDef.put("parameters", parameters);
       return new JSONObject().put("type", "function").put("function", functionDef);
@@ -111,21 +111,24 @@ public class CreateRedmineTaskTool implements Tool
   }
 
   @Override
-  public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback)
+  public void executeAsync(@NonNull JSONObject suppliedArguments, @NonNull OnResultCallback callback)
   {
       executor.execute(() ->
       {
           try
           {
+              // Canonicalize before authentication and parsing; direct callers also get aliases.
+              JSONObject arguments = ToolParameterAliases.normalize(suppliedArguments,
+                      "redmineUrl", "apiKey", "projectId", "parentIssueId", "trackerId", "assignedToId");
               // 1. 解析参数
               RedmineAuth auth = RedmineAuth.resolve(arguments, getNote(context));
               String redmineUrl = auth.getRedmineUrl();
               
               // ✅ 修复：支持长整型 project_id（JoyMan 生成的 12-14 位数字）
               long projectId;
-              Object projectIdObj = arguments.opt("project_id");
+              Object projectIdObj = arguments.opt("projectId");
               if (projectIdObj == null) {
-                  throw new IllegalArgumentException("缺少必需参数：project_id");
+                  throw new IllegalArgumentException("缺少必需参数：projectId");
               }
               if (projectIdObj instanceof Number) {
                   projectId = ((Number) projectIdObj).longValue();
@@ -133,7 +136,7 @@ public class CreateRedmineTaskTool implements Tool
                   try {
                           projectId = Long.parseLong(projectIdObj.toString().trim());
                   } catch (NumberFormatException e) {
-                      throw new IllegalArgumentException("project_id 必须为有效的整数或长整型");
+                      throw new IllegalArgumentException("projectId 必须为有效的整数或长整型");
                   }
               }
               
@@ -142,11 +145,11 @@ public class CreateRedmineTaskTool implements Tool
               String priority = arguments.optString("priority", "Normal");
               
               // ✅ 同步修复：parent_issue_id 也改为 long 类型
-              long parentIssueId = arguments.optLong("parent_issue_id", -1);
-              long trackerId = arguments.optLong("tracker_id", -1);
+              long parentIssueId = arguments.optLong("parentIssueId", -1);
+              long trackerId = arguments.optLong("trackerId", -1);
 
               if (projectId <= 0)
-                  throw new IllegalArgumentException("project_id 必须大于 0");
+                  throw new IllegalArgumentException("projectId 必须大于 0");
 
               // 4. 构建请求体
               JSONObject issueJson = new JSONObject();
@@ -163,10 +166,10 @@ public class CreateRedmineTaskTool implements Tool
                   issueJson.put("tracker_id", trackerId);
               }
 
-              if (arguments.has("assigned_to_id")) {
-                  long assignedToId = arguments.getLong("assigned_to_id");
+              if (arguments.has("assignedToId")) {
+                  long assignedToId = arguments.getLong("assignedToId");
                   if (assignedToId <= 0) {
-                      throw new IllegalArgumentException("assigned_to_id 必须为正整数");
+                      throw new IllegalArgumentException("assignedToId 必须为正整数");
                   }
                   issueJson.put("assigned_to_id", assignedToId);
               }
@@ -228,7 +231,10 @@ public class CreateRedmineTaskTool implements Tool
   @Override
   public String getDefaultSystemPromptEnhancement()
   {
-      return "必须在用户明确要求创建 Redmine 任务时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。project_id 支持长整型。可通过 assigned_to_id 指定指派人的用户 ID，不支持按姓名指派。";
+      return "必须在用户明确要求创建 Redmine 任务时才调用此工具。参数统一使用小驼峰：redmineUrl、apiKey、projectId、parentIssueId、trackerId、assignedToId。"
+              + "认证支持 apiKey，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。"
+              + "projectId 与 parentIssueId 支持长整型。创建子任务时直接传 parentIssueId。可通过 assignedToId 指定指派人的用户 ID，不支持按姓名指派。"
+              + "兼容旧的下划线参数名；新旧名称同时出现时以小驼峰参数为准。";
   }
   
   // 获取工具备注
