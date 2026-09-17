@@ -484,8 +484,25 @@ public class ContextManager
 
   public void addToolMessage(String toolCallId, String toolName, String content)
   {
-    // 🆕 #895164334399 v2 诊断：工具消息加入入口
-    FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_ENTER] toolCallId=" + toolCallId + " | toolName=" + toolName + " | contentLen=" + (content == null ? 0 : content.length()) + " | thread=" + Thread.currentThread().getName());
+    // 🆕 #895164334399 v3 诊断：工具消息加入入口 + 扫描当前所有未匹配的 pending tool_call.id
+    StringBuilder currentPending = new StringBuilder("[");
+    for (int pi = 0; pi < memoryHistory.size(); pi++) {
+      JSONObject pm = memoryHistory.get(pi);
+      if ("assistant".equals(pm.optString("role")) && pm.has("tool_calls")) {
+        JSONArray ptc = pm.optJSONArray("tool_calls");
+        if (ptc != null) {
+          for (int tci = 0; tci < ptc.length(); tci++) {
+            JSONObject ptoolCall = ptc.optJSONObject(tci);
+            if (ptoolCall != null) {
+              if (currentPending.length() > 1) currentPending.append(",");
+              currentPending.append(ptoolCall.optString("id", "<EMPTY>"));
+            }
+          }
+        }
+      }
+    }
+    currentPending.append("]");
+    FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_ENTER] toolCallId=" + toolCallId + " | toolName=" + toolName + " | contentLen=" + (content == null ? 0 : content.length()) + " | thread=" + Thread.currentThread().getName() + " | existingPendingIds=" + currentPending.toString());
     List<JSONObject> history = getHistory();
     int sizeBefore = history.size();
     JSONObject toolMessage = new JSONObject();
