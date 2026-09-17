@@ -525,7 +525,6 @@ public class ContextManager
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_AFTER_ADD] toolCallId=" + toolCallId + " | historySize=" + sizeBefore + "->" + history.size());
     history = removeOldHistoryEntries(history);
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_AFTER_REMOVE_OLD] toolCallId=" + toolCallId + " | historySize=" + history.size());
-    history = normalizeToolCallMessages(history, false);
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_AFTER_NORMALIZE] toolCallId=" + toolCallId + " | historySize=" + history.size());
     saveHistory(history);
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_EXIT] toolCallId=" + toolCallId + " | finalHistorySize=" + history.size());
@@ -675,7 +674,6 @@ public class ContextManager
     FileLogger.i(TAG, "📥 [RAW_MSG_ADD_AFTER_ADD] role=" + msgRole + " | historySize=" + historyBefore.size() + "->" + history.size());
     history = removeOldHistoryEntries(history);
     FileLogger.i(TAG, "📥 [RAW_MSG_ADD_AFTER_REMOVE_OLD] role=" + msgRole + " | historySize=" + history.size());
-    saveHistory(history);
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
     FileLogger.i(TAG, "📥 [RAW_MSG_ADD_EXIT] role=" + msgRole + " | finalHistorySize=" + history.size());
   }
