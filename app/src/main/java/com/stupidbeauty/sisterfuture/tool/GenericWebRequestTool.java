@@ -98,6 +98,47 @@ public class GenericWebRequestTool implements Tool {
         return null;
     }
 
+    /** Normalize only known top-level keys; never rewrite user payload keys. */
+    static JSONObject normalizeArguments(JSONObject raw) throws JSONException {
+        JSONObject args = new JSONObject();
+        if (raw == null) raw = new JSONObject();
+        for (String key : new String[]{"method", "url", "headers", "body", "params",
+                "auth_type", "auth_value", "timeout_sec", "return_cookies", "session_id"}) {
+            String actual = key;
+            if (!raw.has(key)) {
+                java.util.Iterator<String> keys = raw.keys();
+                while (keys.hasNext()) {
+                    String candidate = keys.next();
+                    if (candidate.equalsIgnoreCase(key)) { actual = candidate; break; }
+                }
+            }
+            if (raw.has(actual) && !raw.isNull(actual)) args.put(key, raw.get(actual));
+        }
+        for (String key : new String[]{"method", "url", "auth_type", "auth_value", "session_id"}) {
+            if (args.has(key) && !(args.get(key) instanceof String))
+                throw new IllegalArgumentException(key + " 必须是字符串");
+        }
+        if (args.has("method")) args.put("method", args.getString("method").trim().toUpperCase(java.util.Locale.ROOT));
+        if (args.has("headers") && args.get("headers") instanceof String) {
+            try { args.put("headers", new JSONObject(args.getString("headers"))); }
+            catch (JSONException e) { throw new IllegalArgumentException("headers 必须是 JSON 对象或对象的 JSON 字符串"); }
+        }
+        if (args.has("headers")) {
+            if (!(args.get("headers") instanceof JSONObject))
+                throw new IllegalArgumentException("headers 必须是 JSON 对象或对象的 JSON 字符串");
+            JSONObject headers = args.getJSONObject("headers");
+            java.util.Iterator<String> keys = headers.keys();
+            while (keys.hasNext()) {
+                Object value = headers.get(keys.next());
+                if (value == JSONObject.NULL || value instanceof JSONObject || value instanceof JSONArray)
+                    throw new IllegalArgumentException("headers 的值必须是字符串、数字或布尔值，不能为 null 或嵌套结构");
+            }
+        }
+        Object body = args.opt("body");
+        args.put("body", body == null ? "" : String.valueOf(body));
+        return args;
+    }
+
     @Override
     public JSONObject getDefinition() {
         try {
@@ -245,9 +286,10 @@ public class GenericWebRequestTool implements Tool {
     }
 
     @Override
-    public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
+    public void executeAsync(@NonNull JSONObject rawArguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
             try {
+                JSONObject arguments = normalizeArguments(rawArguments);
                 // 1. 解析参数（容错版：LLM 序列化的参数可能 JSON 结构轻微异常）
                 String method = safeGetString(arguments, "method");
                 String url = safeGetString(arguments, "url");
@@ -257,9 +299,7 @@ public class GenericWebRequestTool implements Tool {
                 if (method == null || method.isEmpty()) {
                     throw new IllegalArgumentException("缺少必需参数: method（GET/POST/PUT/DELETE/PATCH）");
                 }
-                // 🆕 Bug1 修复：method 值白名单校验。问题：method 值非法时（如 "get" 小写、"INVALID"），
-                // OkHttp 的 Request.Builder.method() 内部用 equals() 比对合法值，传非合法值进去会抛 NPE。
-                // 修复：在调用 OkHttp 前显式校验 method 值，避免 NPE 抛到外层让 LLM 难以排查。
+                // 大小写和首尾空白已归一化，仍限制为工具声明的方法。
                 if (!"GET".equals(method) && !"POST".equals(method) && !"PUT".equals(method)
                         && !"DELETE".equals(method) && !"PATCH".equals(method)) {
                     throw new IllegalArgumentException("method 必须是 GET/POST/PUT/DELETE/PATCH 之一，当前值: " + method);
@@ -267,26 +307,8 @@ public class GenericWebRequestTool implements Tool {
                 if (url == null || url.isEmpty()) {
                     throw new IllegalArgumentException("缺少必需参数: url");
                 }
-                if (url.isEmpty()) {
-                    throw new IllegalArgumentException("URL 不能为空");
-                }
-                if (url.isEmpty()) {
-                    throw new IllegalArgumentException("URL 不能为空");
-                }
-
-                // 🆕 Bug2 修复：headers 解析失败时报清晰错误。
-                // 问题：arguments.optJSONObject("headers") 在 headers 字段是字符串但 JSON 解析失败时
-                // 静默返回 null，后续代码 if (headers != null && ...) 直接跳过，表现为请求不带任何 headers
-                // 但仍然返回 200，LLM 难以排查。
-                // 修复：用 try-catch 包裹 getJSONObject，解析失败时抛清晰 IllegalArgumentException。
-                JSONObject headers = null;
-                if (arguments.has("headers") && !arguments.isNull("headers")) {
-                    try {
-                        headers = arguments.getJSONObject("headers");
-                    } catch (JSONException e) {
-                        throw new IllegalArgumentException("headers 格式错误，必须是 JSON 对象: " + e.getMessage());
-                    }
-                }
+                // headers 已在入口恢复为对象并校验，不能静默丢弃无效认证头。
+                JSONObject headers = arguments.optJSONObject("headers");
                 String bodyStr = arguments.optString("body", null);
                 JSONObject paramsObj = arguments.optJSONObject("params");
                 String authType = arguments.optString("auth_type", "none");
@@ -313,21 +335,12 @@ public class GenericWebRequestTool implements Tool {
                 }
 
                 // 添加自定义 Headers
-                if (headers != null && !headers.isNull("Content-Type")) {
-                    String contentType = headers.getString("Content-Type");
-                    builder.header("Content-Type", contentType);
-                }
-                if (headers != null && headers.has("Accept")) {
-                    builder.header("Accept", headers.getString("Accept"));
-                }
                 // 其他自定义 Header
                 if (headers != null) {
-                    JSONArray keys = headers.names();
-                    for (int i = 0; i < keys.length(); i++) {
-                        String key = keys.getString(i);
-                        if (!key.equals("Content-Type") && !key.equals("Accept")) {
-                            builder.header(key, headers.getString(key));
-                        }
+                    java.util.Iterator<String> keys = headers.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        builder.header(key, String.valueOf(headers.get(key)));
                     }
                 }
 
@@ -362,8 +375,8 @@ public class GenericWebRequestTool implements Tool {
                 RequestBody requestBody = null;
                 if (!method.equals("GET") && !method.equals("DELETE")) {
                     String contentType = "application/json";
-                    if (headers != null && headers.has("Content-Type")) {
-                        contentType = headers.getString("Content-Type");
+                    if (builder.build().header("Content-Type") != null) {
+                        contentType = builder.build().header("Content-Type");
                     } else if (bodyStr != null && (bodyStr.startsWith("{") || bodyStr.startsWith("["))) {
                         contentType = "application/json";
                     } else if (bodyStr != null && bodyStr.contains("=") && !bodyStr.startsWith("{")) {
@@ -393,7 +406,7 @@ public class GenericWebRequestTool implements Tool {
 
                     if (requestBody == null) {
                         final MediaType mediaType = MediaType.parse(contentType);
-                        final String content = bodyStr;
+                        final String content = bodyStr == null ? "" : bodyStr;
                         requestBody = new RequestBody() {
                             @Override
                             public MediaType contentType() {
