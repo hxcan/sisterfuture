@@ -42,7 +42,7 @@ JSONObject arguments = ToolParameterAliases.normalize(suppliedArguments,
 
 转换仅针对显式声明的顶层参数，自动接受相应 snake_case 别名并删除副本中的旧键。
 不改变未知参数、嵌套 JSON、远端 API 字段或其他工具的现有行为。
-已接入 createRedmineTask 和 createGithubCommit，未全局批量改变工具接口。
+已接入 createRedmineTask、createGithubCommit 和 updateRedmineIssue，未全局批量改变工具接口。
 `parent_task_id` 不是历史参数，也不是 parentIssueId 的风格别名，故不额外接受。
 
 验证包括定义一致性、新旧请求等价、长整型、混用与冲突优先级、空值、输入不变性、
@@ -64,3 +64,21 @@ JSONObject arguments = ToolParameterAliases.normalize(suppliedArguments,
 原有返回字段（包括 `read_from_phone`）保留，不改变结果协议。
 该工具的测试覆盖 schema、实际入口使用的归一化方法、新旧混用与优先级、
 false/空字符串及内容和删除参数透传；未在 GitHub 提交真实代码，也未实机测试手机文件读取。
+
+## 更新 Redmine 任务工具
+
+`updateRedmineIssue` 复用同一个别名类。以下小驼峰参数均接受相应下划线别名：
+`redmineUrl`、`apiKey`、`taskId`、`trackerId`、`statusId`、`assignedToId`、
+`fixedVersionId`、`parentIssueId`、`projectId`、`blockedByIds`、`blockingIds`。
+例如 `task_id` 等价于 `taskId`，`tracker_id` 等价于 `trackerId`。
+
+新增可选的 `trackerId` 用来修改任务类型，必须大于 0；不传则不修改类型。
+实例认证已配置在工具备注时，调用示例（类型 ID 应以该项目实际配置为准）：
+
+```json
+{"taskId":123,"trackerId":2}
+```
+
+新旧键冲突时小驼峰优先，包括显式 null 和 0；原有清空指派人、目标版本、父任务的行为保持不变。
+HTTP 请求仍使用 Redmine 的下划线字段，返回字段保持不变。
+测试通过本地 MockWebServer 验证真实异步入口及 PUT 请求，不修改真实 Redmine 任务。
