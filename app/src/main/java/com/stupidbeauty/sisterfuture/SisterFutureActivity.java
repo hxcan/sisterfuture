@@ -553,7 +553,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
 
     // A real user message starts a new autonomous tool-call chain.
-    resetToolCallHopGuard();
+    resetToolCallHopGuard("user_message", activeUsageTurnId);
 
     boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
     boolean hasVideo = (currentVideoPath != null && !currentVideoPath.isEmpty()
@@ -819,6 +819,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void sendChatRequest()
   {
+    logToolHopDiagnostic("alternate_send_entry", activeUsageTurnId, null, "");
     recognizeResulttextView.setText("");
 
     if (guideManager != null && guideManager.isEmptyAccessPointList())
@@ -929,6 +930,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       : turnUsageTracker.startTurn();
     final long requestId = System.currentTimeMillis();
     currentRequestId = requestId;
+    logToolHopDiagnostic("request_start", requestUsageTurnId, null,
+      "requestId=" + requestId);
 
     SisterFutureService.updateNotificationStatus(this, "正在发送请求...");
 
@@ -1103,6 +1106,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       // 生成预留消息 ID
       String currentReservedMessageId = contextManager.reserveMessageId();
+      logToolHopDiagnostic("request_bound", requestUsageTurnId, currentReservedMessageId,
+        "requestId=" + requestId);
       FileLogger.i(TAG, "🔗 [RESERVE_ID] 已生成预留消息 ID | requestId=" + requestId + " | messageId=" + currentReservedMessageId);
 
       turnUsageTracker.beginRequest(requestUsageTurnId);
@@ -1327,7 +1332,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           responseAccumulator.append(delta.getContent());
         }
         final String toolCallPreamble = responseAccumulator.toString();
+        logToolHopDiagnostic("model_tool_finish_before_increment", responseUsageTurnId,
+          responseMessageId, "preambleChars=" + toolCallPreamble.length());
         toolCallHopCount++;
+        logToolHopDiagnostic("model_tool_finish_after_increment", responseUsageTurnId,
+          responseMessageId, "");
         FileLogger.i(TAG, "🔗 [TOOL_HOP] 当前工具调用跳数：" + toolCallHopCount
           + " / " + MAX_TOOL_CALL_HOPS);
 
@@ -1613,6 +1622,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         runOnUiThread(() ->
         {
           String fullAnswer = responseAccumulator.toString();
+          logToolHopDiagnostic("model_text_finish", responseUsageTurnId, responseMessageId,
+            "textChars=" + fullAnswer.length()
+            + " lengthLimited=" + "length".equals(finishReason)
+            + " mentionsHopLimit=" + (fullAnswer.contains("连续")
+              && (fullAnswer.contains("安全上限") || fullAnswer.contains("跳"))));
 
           if ("length".equals(finishReason))
           {
@@ -1666,7 +1680,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           modelAccessPointManager.resetFailureCount();
           rateLimitRetryCount = 0;
-          resetToolCallHopGuard();
+          resetToolCallHopGuard("model_reply_complete", responseUsageTurnId);
         });
       }
     }
@@ -1755,6 +1769,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         clearAccumulatedToolCalls();
 
         consecutiveToolErrorHops = hopHasError ? consecutiveToolErrorHops + 1 : 0;
+        logToolHopDiagnostic("tool_results_guard_check", usageTurnId,
+          assistantMessage.optString("id", ""),
+          "callCount=" + toolCallsArray.length() + " hasError=" + hopHasError);
         FileLogger.i(TAG, "🔗 [TOOL_HOP_RESULT] hop=" + toolCallHopCount
           + ", hasError=" + hopHasError
           + ", consecutiveErrorHops=" + consecutiveToolErrorHops);
@@ -1805,8 +1822,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         + "请告诉我要继续、调整方案，还是停止这个任务？";
     }
 
+    message = com.stupidbeauty.sisterfuture.utils.ToolHopPolicy.markClientNotice(message);
     FileLogger.w(TAG, "🛑 [TOOL_HOP_LIMIT] " + message);
     MessageItem messageItem = new MessageItem(message, MessageType.AI);
+    logToolHopDiagnostic("app_generated_limit_message", usageTurnId,
+      messageItem.getMessageId(), "errorLimit="
+        + (consecutiveToolErrorHops >= MAX_CONSECUTIVE_TOOL_ERROR_HOPS));
     ModelUsage modelUsage = turnUsageTracker.hasOutstandingRequests(usageTurnId)
       ? null
       : turnUsageTracker.snapshot(usageTurnId);
@@ -1820,15 +1841,33 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     ttsSayReply(message);
   }
 
-  private void resetToolCallHopGuard()
+  // Metadata only: never include prompts, tool arguments/results, or credentials.
+  private void logToolHopDiagnostic(String event, long sourceTurnId, String messageId,
+                                    String details)
   {
+    FileLogger.i(TAG, "[TOOL_HOP_DIAG] event=" + event
+      + " activity=" + Integer.toHexString(System.identityHashCode(this))
+      + " sourceTurn=" + sourceTurnId + " activeTurn=" + activeUsageTurnId
+      + " staleTurn=" + (sourceTurnId != activeUsageTurnId)
+      + " messageId=" + (messageId == null ? "none" : messageId)
+      + " hop=" + toolCallHopCount + " errorHops=" + consecutiveToolErrorHops
+      + " mainThread=" + (Looper.myLooper() == Looper.getMainLooper())
+      + " " + details);
+  }
+
+  private void resetToolCallHopGuard(String reason, long sourceTurnId)
+  {
+    logToolHopDiagnostic("reset_before", sourceTurnId, null, "reason=" + reason);
     toolCallHopCount = 0;
     consecutiveToolErrorHops = 0;
+    logToolHopDiagnostic("reset_after", sourceTurnId, null, "reason=" + reason);
   }
 
   private void startNewUsageTurn()
   {
+    logToolHopDiagnostic("new_turn_before", activeUsageTurnId, null, "");
     activeUsageTurnId = turnUsageTracker.startTurn();
+    logToolHopDiagnostic("new_turn_after", activeUsageTurnId, null, "");
     FileLogger.d(TAG, "📊 [MODEL_USAGE] 开始用户轮次 | turnId=" + activeUsageTurnId);
   }
 
@@ -2055,7 +2094,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       promptBuilder.append("\n/no_think\n");
     }
-    return promptBuilder.toString();
+    return com.stupidbeauty.sisterfuture.utils.ToolHopPolicy.appendToSystemPrompt(
+      promptBuilder.toString());
   }
 
   @Override
