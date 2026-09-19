@@ -32,14 +32,16 @@ import java.util.concurrent.TimeUnit;
  *
  * 核心能力：
  * - 文生图（text-to-image）
- * - 图生图（image-to-image / 风格迁移）
+ * - 图生图（image-to-image ／ 风格迁移）
  * - 接受本地图片路径或公网 URL
  * - 本地图片自动转 base64 上传
+ * - 🆕 多参考图支持（referenceImages：多张图同时参考，保证角色/场景一致性）
  *
  * 调用方式：异步任务（提交任务 + 轮询结果）
  *
  * @author 未来姐姐
  * @date 2026-07-31
+ * @update 2026-09-19 增加多参考图支持（referenceImages 参数）
  */
 public class WanxiangTool implements Tool {
     private static final String TAG = "WanxiangTool";
@@ -63,6 +65,11 @@ public class WanxiangTool implements Tool {
     private static final int MAX_IMAGE_SIZE_MB = 10;
     private static final int POLL_INTERVAL_MS = 2000;
     private static final int POLL_MAX_ATTEMPTS = 60; // 最多等 120 秒
+
+    /**
+     * 🆕 多参考图最大数量限制（防止超过 API 限制）
+     */
+    private static final int MAX_REFERENCE_IMAGES = 4;
 
     private static final String NOTE_KEY_API_KEY = "dashscope_api_key";
     private static final String NOTE_KEY_DEFAULT_MODEL = "wanxiang_default_model";
@@ -98,7 +105,7 @@ public class WanxiangTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "wanxiangImage");
-            functionDef.put("description", "调用阿里云百炼通义万相（wan2.7-image）生成或编辑图片。支持文生图、图生图、风格迁移。需要传入参考图（本地路径或公网 URL）时，会自动转 base64 上传。返回图片自动下载到手机存储并扫描到相册。典型场景：照片转动漫/油画/水彩、商品图、头像、插画。");
+            functionDef.put("description", "调用阿里云百炼通义万相（wan2.7-image）生成或编辑图片。支持文生图、图生图、风格迁移。需要传入参考图（本地路径或公网 URL）时，会自动转 base64 上传。🆕 支持多张参考图（referenceImages：最多 4 张），可用于多角色同框、角色+场景同时参考等场景，保证人物/场景一致性。返回图片自动下载到手机存储并扫描到相册。典型场景：照片转动漫／油画／水彩、商品图、头像、插画。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -106,7 +113,7 @@ public class WanxiangTool implements Tool {
 
             JSONObject promptParam = new JSONObject();
             promptParam.put("type", "string");
-            promptParam.put("description", "文本提示词，描述想生成或转换的图片内容/风格。中文友好，例如：'转成动漫风格'、'梵高油画风格'、'水墨画风格'");
+            promptParam.put("description", "文本提示词，描述想生成或转换的图片内容／风格。中文友好，例如：'转成动漫风格'、'梵高油画风格'、'水墨画风格'");
             properties.put("prompt", promptParam);
 
             JSONObject apiKeyParam = new JSONObject();
@@ -116,8 +123,22 @@ public class WanxiangTool implements Tool {
 
             JSONObject referenceImageParam = new JSONObject();
             referenceImageParam.put("type", "string");
-            referenceImageParam.put("description", "【图生图必填】参考图本地路径（如 /sdcard/Download/原图.jpg）或公网 URL。如果是本地路径，会自动转 base64 上传");
+            referenceImageParam.put("description", "【图生图必填，单图模式】参考图本地路径（如 /sdcard/Download/原图.jpg）或公网 URL。如果是本地路径，会自动转 base64 上传。⚠️ 与 referenceImages 二选一：如果同时传，referenceImages 优先");
             properties.put("referenceImage", referenceImageParam);
+
+            // 🆕 多参考图参数（数组类型，最多 4 张）
+            JSONObject referenceImagesParam = new JSONObject();
+            referenceImagesParam.put("type", "array");
+            JSONArray refItems = new JSONArray();
+            JSONObject refItemSchema = new JSONObject();
+            refItemSchema.put("type", "string");
+            refItemSchema.put("description", "参考图本地路径或公网 URL");
+            refItems.put(refItemSchema);
+            referenceImagesParam.put("items", refItems);
+            referenceImagesParam.put("minItems", 1);
+            referenceImagesParam.put("maxItems", MAX_REFERENCE_IMAGES);
+            referenceImagesParam.put("description", "🆕【多参考图模式】参考图数组（1-4 张），每张是本地路径或公网 URL。本地图片自动转 base64 上传。适用于：多角色同框（角色 A 参考图 + 角色 B 参考图）、角色+场景同框（人物参考图 + 场景参考图）、道具+角色+场景。⚠️ 与 referenceImage 二选一：如果同时传，referenceImages 优先");
+            properties.put("referenceImages", referenceImagesParam);
 
             JSONObject sizeParam = new JSONObject();
             sizeParam.put("type", "string");
@@ -177,6 +198,8 @@ public class WanxiangTool implements Tool {
                     throw new IllegalArgumentException("prompt 不能为空");
                 }
                 String referenceImage = arguments.optString("referenceImage", null);
+                // 🆕 读取多参考图参数（JSONArray）
+                JSONArray referenceImagesArray = arguments.optJSONArray("referenceImages");
                 String size = arguments.optString("size", "2K");
                 int n = arguments.optInt("n", 1);
                 String saveDir = arguments.optString("saveDir", null);
@@ -206,10 +229,29 @@ public class WanxiangTool implements Tool {
 
                 validateParams(n);
 
-                String imageContent = null;
-                if (referenceImage != null && !referenceImage.trim().isEmpty()) {
-                    imageContent = processReferenceImage(referenceImage);
-                    FileLogger.i(TAG, "[2/10] 参考图处理完成，长度: " + imageContent.length() + " 字符");
+                // 🆕 多参考图处理：优先使用 referenceImages；如果未传则回退到单图 referenceImage
+                java.util.List<String> imageContentList = new java.util.ArrayList<>();
+                if (referenceImagesArray != null && referenceImagesArray.length() > 0) {
+                    if (referenceImagesArray.length() > MAX_REFERENCE_IMAGES) {
+                        throw new IllegalArgumentException(
+                            "referenceImages 最多支持 " + MAX_REFERENCE_IMAGES + " 张，当前: "
+                            + referenceImagesArray.length());
+                    }
+                    FileLogger.i(TAG, "[2/10] 多参考图模式，共 " + referenceImagesArray.length() + " 张图");
+                    for (int i = 0; i < referenceImagesArray.length(); i++) {
+                        String imgPath = referenceImagesArray.optString(i, null);
+                        if (imgPath != null && !imgPath.trim().isEmpty()) {
+                            String content = processReferenceImage(imgPath);
+                            imageContentList.add(content);
+                            FileLogger.i(TAG, "  [2/10] 参考图 " + (i + 1) + "/" + referenceImagesArray.length()
+                                + " 处理完成，长度: " + content.length() + " 字符");
+                        }
+                    }
+                } else if (referenceImage != null && !referenceImage.trim().isEmpty()) {
+                    // 向后兼容：单图模式
+                    String content = processReferenceImage(referenceImage);
+                    imageContentList.add(content);
+                    FileLogger.i(TAG, "[2/10] 单参考图模式（向后兼容），长度: " + content.length() + " 字符");
                 } else {
                     FileLogger.i(TAG, "[2/10] 无参考图，纯文生图模式");
                 }
@@ -220,22 +262,41 @@ public class WanxiangTool implements Tool {
                 JSONObject input = new JSONObject();
                 JSONArray messages = new JSONArray();
 
-                JSONObject message = new JSONObject();
-                message.put("role", "user");
-
-                JSONArray content = new JSONArray();
-                if (imageContent != null) {
-                    JSONObject imageItem = new JSONObject();
-                    imageItem.put("image", imageContent);
-                    content.put(imageItem);
+                // 🆕 构建 messages 数组（支持多参考图）
+                // 通义万相的 messages 数组天然支持多轮对话，每条 message 可以带一张图
+                // 多图方案：把每张图作为独立的 user message，最后一条 message 携带最终 prompt
+                if (!imageContentList.isEmpty()) {
+                    for (int i = 0; i < imageContentList.size(); i++) {
+                        String imgContent = imageContentList.get(i);
+                        JSONObject imgMessage = new JSONObject();
+                        imgMessage.put("role", "user");
+                        JSONArray imgContentArr = new JSONArray();
+                        JSONObject imageItem = new JSONObject();
+                        imageItem.put("image", imgContent);
+                        imgContentArr.put(imageItem);
+                        imgMessage.put("content", imgContentArr);
+                        messages.put(imgMessage);
+                    }
                 }
 
-                JSONObject textItem = new JSONObject();
-                textItem.put("text", prompt);
-                content.put(textItem);
+                // 最后一条 message 携带 prompt（如果是多图模式，可以加一句说明引导模型参考前面的图）
+                JSONObject promptMessage = new JSONObject();
+                promptMessage.put("role", "user");
+                JSONArray promptContent = new JSONArray();
+                if (imageContentList.size() > 1) {
+                    // 多图模式：在 prompt 前加一句"参考前面 X 张图"
+                    String enhancedPrompt = "请参考前面提供的 " + imageContentList.size() + " 张参考图。" + prompt;
+                    JSONObject textItem = new JSONObject();
+                    textItem.put("text", enhancedPrompt);
+                    promptContent.put(textItem);
+                } else {
+                    JSONObject textItem = new JSONObject();
+                    textItem.put("text", prompt);
+                    promptContent.put(textItem);
+                }
+                promptMessage.put("content", promptContent);
+                messages.put(promptMessage);
 
-                message.put("content", content);
-                messages.put(message);
                 input.put("messages", messages);
 
                 requestBody.put("input", input);
@@ -352,6 +413,8 @@ public class WanxiangTool implements Tool {
                 result.put("task_id", taskId);
                 result.put("total_duration_ms", totalDurationMs);
                 result.put("timestamp", timestamp);
+                // 🆕 在 result 中标记使用的参考图数量
+                result.put("reference_images_used", imageContentList.size());
                 result.put("attachments", attachmentsArray);
 
                 callback.onResult(result);
@@ -476,7 +539,7 @@ public class WanxiangTool implements Tool {
         if (note == null || note.isEmpty()) {
             return null;
         }
-        String[] lines = note.split("\\n");
+        String[] lines = note.split("\n");
         for (String line : lines) {
             line = line.trim();
             if (line.startsWith(NOTE_KEY_API_KEY + "=")) {
@@ -495,7 +558,7 @@ public class WanxiangTool implements Tool {
         if (note == null || note.isEmpty()) {
             return null;
         }
-        String[] lines = note.split("\\n");
+        String[] lines = note.split("\n");
         for (String line : lines) {
             line = line.trim();
             if (line.startsWith(NOTE_KEY_DEFAULT_MODEL + "=")) {
@@ -627,14 +690,21 @@ public class WanxiangTool implements Tool {
     @Override
     public String getDefaultSystemPromptEnhancement() {
         return "调用 wanxiangImage 工具时：\n"
-            + "1. 必传参数：prompt（描述图片内容/风格）\n"
-            + "2. 可选参数：referenceImage（图生图时必传，支持本地路径或公网 URL）、size（如 '2K'/'1024*1024'）、n（1-4）、model（默认 wan2.7-image）\n"
+            + "1. 必传参数：prompt（描述图片内容／风格）\n"
+            + "2. 可选参数：\n"
+            + "   - referenceImage（图生图时必传，支持本地路径或公网 URL，单图模式）\n"
+            + "   - 🆕 referenceImages（多参考图模式，1-4 张图数组，优先级高于 referenceImage）\n"
+            + "   - size（如 '2K'/'1024*1024'）、n（1-4）、model（默认 wan2.7-image）\n"
             + "3. API Key：优先用调用时传入的 apiKey，否则从工具备注 dashscope_api_key 读取\n"
-            + "4. 典型场景：照片转动漫/油画/水彩风格、商品图生成、头像定制、插画创作\n"
-            + "5. 与 generateImage 工具的差异：wanxiangImage 支持图生图和风格迁移，但需要主人已有 Token Plan 订阅\n"
-            + "6. 中文 prompt 友好，建议详细描述想要的风格、场景、变换效果\n"
-            + "7. 返回的图片会自动下载到 /sdcard/Download/ 并扫描到系统相册\n"
-            + "8. 注意：通义万相速度比 MiniMax 慢，n 建议不超过 2\n"
-            + "9. 该工具使用异步调用，提交任务后会自动轮询直到完成";
+            + "4. 典型场景：照片转动漫／油画／水彩风格、商品图生成、头像定制、插画创作\n"
+            + "5. 🆕 多参考图典型场景（保证角色／场景一致性）：\n"
+            + "   - 角色同框：王生参考图 + 姑娘参考图 + 场景参考图 一起传入\n"
+            + "   - 角色一致性：同一角色多镜头时复用同一张标准形象图\n"
+            + "   - 道具参考：角色参考图 + 道具参考图 + 场景参考图\n"
+            + "6. 与 generateImage 工具的差异：wanxiangImage 支持图生图和风格迁移，但需要主人已有 Token Plan 订阅\n"
+            + "7. 中文 prompt 友好，建议详细描述想要的风格、场景、变换效果\n"
+            + "8. 返回的图片会自动下载到 /sdcard/Download/ 并扫描到系统相册\n"
+            + "9. 注意：通义万相速度比 MiniMax 慢，n 建议不超过 2\n"
+            + "10. 该工具使用异步调用，提交任务后会自动轮询直到完成";
     }
 }
