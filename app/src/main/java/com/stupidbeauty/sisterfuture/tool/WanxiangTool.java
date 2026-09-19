@@ -35,13 +35,14 @@ import java.util.concurrent.TimeUnit;
  * - 图生图（image-to-image ／ 风格迁移）
  * - 接受本地图片路径或公网 URL
  * - 本地图片自动转 base64 上传
- * - 🆕 多参考图支持（referenceImages：多张图同时参考，保证角色/场景一致性）
+ * - 🆕 多参考图支持（referenceImages：多张图同时参考，保证角色／场景一致性）
  *
  * 调用方式：异步任务（提交任务 + 轮询结果）
  *
  * @author 未来姐姐
  * @date 2026-07-31
  * @update 2026-09-19 增加多参考图支持（referenceImages 参数）
+ * @update 2026-09-19 修复多参考图 API 调用格式（单 message + content 数组）
  */
 public class WanxiangTool implements Tool {
     private static final String TAG = "WanxiangTool";
@@ -105,7 +106,7 @@ public class WanxiangTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "wanxiangImage");
-            functionDef.put("description", "调用阿里云百炼通义万相（wan2.7-image）生成或编辑图片。支持文生图、图生图、风格迁移。需要传入参考图（本地路径或公网 URL）时，会自动转 base64 上传。🆕 支持多张参考图（referenceImages：最多 4 张），可用于多角色同框、角色+场景同时参考等场景，保证人物/场景一致性。返回图片自动下载到手机存储并扫描到相册。典型场景：照片转动漫／油画／水彩、商品图、头像、插画。");
+            functionDef.put("description", "调用阿里云百炼通义万相（wan2.7-image）生成或编辑图片。支持文生图、图生图、风格迁移。需要传入参考图（本地路径或公网 URL）时，会自动转 base64 上传。🆕 支持多张参考图（referenceImages：最多 4 张），可用于多角色同框、角色+场景同时参考等场景，保证人物／场景一致性。返回图片自动下载到手机存储并扫描到相册。典型场景：照片转动漫／油画／水彩、商品图、头像、插画。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -262,40 +263,36 @@ public class WanxiangTool implements Tool {
                 JSONObject input = new JSONObject();
                 JSONArray messages = new JSONArray();
 
-                // 🆕 构建 messages 数组（支持多参考图）
-                // 通义万相的 messages 数组天然支持多轮对话，每条 message 可以带一张图
-                // 多图方案：把每张图作为独立的 user message，最后一条 message 携带最终 prompt
-                if (!imageContentList.isEmpty()) {
-                    for (int i = 0; i < imageContentList.size(); i++) {
-                        String imgContent = imageContentList.get(i);
-                        JSONObject imgMessage = new JSONObject();
-                        imgMessage.put("role", "user");
-                        JSONArray imgContentArr = new JSONArray();
-                        JSONObject imageItem = new JSONObject();
-                        imageItem.put("image", imgContent);
-                        imgContentArr.put(imageItem);
-                        imgMessage.put("content", imgContentArr);
-                        messages.put(imgMessage);
-                    }
+                // 🆕 构建 messages 数组（修复后的多参考图格式）
+                // 🔴 关键修复（2026-09-19 主人实机验证后）：
+                // 通义万相的 messages 数组只支持【单轮对话】，即只能有 1 个 message
+                // 多张图必须放在【同一个 message 的 content 数组】里（按数组顺序定义图像顺序）
+                // 之前的实现错误地把每张图作为独立 message，导致 API 报错：
+                //   "messages list must contain exactly 1 message, got 2"
+                JSONObject singleMessage = new JSONObject();
+                singleMessage.put("role", "user");
+                JSONArray content = new JSONArray();
+
+                // 1. 先放文本（如果有多图，在 prompt 前加引导语）
+                JSONObject textItem = new JSONObject();
+                String finalPrompt = prompt;
+                if (imageContentList.size() > 1) {
+                    finalPrompt = "请参考下面 " + imageContentList.size() + " 张参考图。" + prompt;
+                }
+                textItem.put("text", finalPrompt);
+                content.put(textItem);
+
+                // 2. 再放所有图片（按数组顺序）
+                for (int i = 0; i < imageContentList.size(); i++) {
+                    JSONObject imageItem = new JSONObject();
+                    imageItem.put("image", imageContentList.get(i));
+                    content.put(imageItem);
+                    FileLogger.i(TAG, "  [2/10] 多参考图 " + (i + 1) + "/" + imageContentList.size()
+                        + " 已加入 content 数组");
                 }
 
-                // 最后一条 message 携带 prompt（如果是多图模式，可以加一句说明引导模型参考前面的图）
-                JSONObject promptMessage = new JSONObject();
-                promptMessage.put("role", "user");
-                JSONArray promptContent = new JSONArray();
-                if (imageContentList.size() > 1) {
-                    // 多图模式：在 prompt 前加一句"参考前面 X 张图"
-                    String enhancedPrompt = "请参考前面提供的 " + imageContentList.size() + " 张参考图。" + prompt;
-                    JSONObject textItem = new JSONObject();
-                    textItem.put("text", enhancedPrompt);
-                    promptContent.put(textItem);
-                } else {
-                    JSONObject textItem = new JSONObject();
-                    textItem.put("text", prompt);
-                    promptContent.put(textItem);
-                }
-                promptMessage.put("content", promptContent);
-                messages.put(promptMessage);
+                singleMessage.put("content", content);
+                messages.put(singleMessage); // 🆕 只 put 一次！
 
                 input.put("messages", messages);
 
