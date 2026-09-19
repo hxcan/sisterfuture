@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
  * - 支持 16:9 / 9:16 / 1:1 三种比例
  * - 支持 3-15 秒时长
  * - 文生视频和首帧模式支持多镜头 Prompt: "镜头 n, m, words; 镜头 n, m, words;"
+ * - 🆕 多参考图支持（referenceImages：多张图同时参考，保证角色/场景一致性）
  *
  * 使用方式:
  * 1. 在工具备注中设置 kling_api_key=xxx
@@ -49,6 +50,7 @@ import java.util.concurrent.TimeUnit;
  *
  * @author 未来姐姐
  * @date 2026-08-11
+ * @update 2026-09-19 增加多参考图支持（referenceImages 参数）
  */
 public class KlingVideoGenerationTool implements Tool {
     private static final String TAG = "KlingVideoGenTool";
@@ -71,6 +73,11 @@ public class KlingVideoGenerationTool implements Tool {
     private static final int DEFAULT_MAX_WAIT_MS = 600000;        // 最长等 10 分钟
     private static final int MAX_IMAGE_TO_VIDEO_PROMPT_LENGTH = 2500;
     private static final long MAX_REFERENCE_IMAGE_BYTES = 50L * 1024L * 1024L;
+
+    /**
+     * 🆕 多参考图最大数量限制（Kling 3.0 Omni 官方支持）
+     */
+    private static final int MAX_REFERENCE_IMAGES = 4;
 
     private final Context context;
     private final OssManager ossManager;
@@ -105,7 +112,7 @@ public class KlingVideoGenerationTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "klingVideoGenerate");
-            functionDef.put("description", "调用可灵 AI 生成短视频片段。可选传入一张图片，并明确选择保留原构图的首帧模式，或允许重新构图的 3.0 Omni 图片参考模式；不传图片时保持原有 3.0 Turbo 文生视频。支持 720p/1080p 分辨率和 3-15 秒时长。异步任务，自动轮询到完成并下载视频到 /sdcard/Download/。");
+            functionDef.put("description", "调用可灵 AI 生成短视频片段。可选传入一张图片，并明确选择保留原构图的首帧模式，或允许重新构图的 3.0 Omni 图片参考模式；不传图片时保持原有 3.0 Turbo 文生视频。🆕 支持多张参考图（referenceImages：1-4 张，仅 image_reference 模式支持），可在视频生成时同时参考多个角色/场景，保证一致性。支持 720p/1080p 分辨率和 3-15 秒时长。异步任务，自动轮询到完成并下载视频到 /sdcard/Download/。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -113,13 +120,27 @@ public class KlingVideoGenerationTool implements Tool {
 
             JSONObject promptParam = new JSONObject();
             promptParam.put("type", "string");
-            promptParam.put("description", "文本提示词，描述想生成的视频内容（文生视频最长 3072 字符，图生视频最长 2500 字符）。文生视频和 first_frame 支持多镜头格式：'镜头 1, 3, 描述1; 镜头 2, 3, 描述2;' （每个分镜时长≥1，所有分镜时长之和等于总时长）；image_reference 当前按单镜头生成");
+            promptParam.put("description", "文本提示词，描述想生成的视频内容（文生视频最长 3072 字符，图生视频最长 2500 字符）。文生视频和 first_frame 支持多镜头格式：'镜头 1, 3, 描述1; 镜头 2, 3, 描述2;' （每个分镜时长≥1，所有分镜时长之和等于总时长）；image_reference 当前按单镜头生成。多参考图模式时，可在 prompt 里用 @image_1、@image_2 等引用对应位置的参考图");
             properties.put("prompt", promptParam);
 
             JSONObject referenceImageParam = new JSONObject();
             referenceImageParam.put("type", "string");
-            referenceImageParam.put("description", "可选图片，可传入聊天上下文中的图片本地绝对路径或 http(s) 公网 URL。本地图片会自动上传到已配置的 OSS；省略时使用文生视频。图片的用途由 referenceMode 明确指定。");
+            referenceImageParam.put("description", "可选图片，可传入聊天上下文中的图片本地绝对路径或 http(s) 公网 URL。本地图片会自动上传到已配置的 OSS；省略时使用文生视频。图片的用途由 referenceMode 明确指定。⚠️ 与 referenceImages 二选一：如果同时传，referenceImages 优先");
             properties.put("referenceImage", referenceImageParam);
+
+            // 🆕 多参考图参数（数组类型，最多 4 张，仅 image_reference 模式生效）
+            JSONObject referenceImagesParam = new JSONObject();
+            referenceImagesParam.put("type", "array");
+            JSONArray refItems = new JSONArray();
+            JSONObject refItemSchema = new JSONObject();
+            refItemSchema.put("type", "string");
+            refItemSchema.put("description", "参考图本地路径或公网 URL");
+            refItems.put(refItemSchema);
+            referenceImagesParam.put("items", refItems);
+            referenceImagesParam.put("minItems", 1);
+            referenceImagesParam.put("maxItems", MAX_REFERENCE_IMAGES);
+            referenceImagesParam.put("description", "🆕【多参考图模式，仅 image_reference 模式生效】参考图数组（1-4 张），每张是本地路径或公网 URL。本地图片自动经 OSS 上传生成签名 URL。适用于：多角色同框（角色 A 参考图 + 角色 B 参考图）、角色+场景同框（人物参考图 + 场景参考图）。⚠️ 与 referenceImage 二选一：如果同时传，referenceImages 优先");
+            properties.put("referenceImages", referenceImagesParam);
 
             JSONObject referenceModeParam = new JSONObject();
             referenceModeParam.put("type", "string");
@@ -127,7 +148,7 @@ public class KlingVideoGenerationTool implements Tool {
             referenceModeParam.put("enum", new JSONArray()
                 .put(REFERENCE_MODE_FIRST_FRAME)
                 .put(REFERENCE_MODE_IMAGE_REFERENCE));
-            referenceModeParam.put("description", "referenceImage 的用途：first_frame 表示原图作为视频起始画面并保留构图；image_reference 表示通过 Kling 3.0 Omni 把图片作为主体、物体、场景或风格参考，允许重新构图。默认 first_frame");
+            referenceModeParam.put("description", "referenceImage / referenceImages 的用途：first_frame 表示原图作为视频起始画面并保留构图（仅支持单图）；image_reference 表示通过 Kling 3.0 Omni 把图片作为主体、物体、场景或风格参考，允许重新构图（支持多图）。默认 first_frame");
             properties.put("referenceMode", referenceModeParam);
 
             JSONObject apiKeyParam = new JSONObject();
@@ -228,6 +249,8 @@ public class KlingVideoGenerationTool implements Tool {
                 boolean watermark = arguments.optBoolean("watermark", false);
                 String saveDir = arguments.optString("saveDir", null);
                 String referenceImage = arguments.optString("referenceImage", null);
+                // 🆕 读取多参考图参数
+                JSONArray referenceImagesArray = arguments.optJSONArray("referenceImages");
                 String referenceMode = arguments.optString("referenceMode",
                     REFERENCE_MODE_FIRST_FRAME);
                 if (!REFERENCE_MODE_FIRST_FRAME.equals(referenceMode)
@@ -236,43 +259,99 @@ public class KlingVideoGenerationTool implements Tool {
                         + referenceMode);
                 }
 
-                boolean hasReferenceImage = referenceImage != null
-                    && !referenceImage.trim().isEmpty();
+                // 🆕 合并 referenceImages 和 referenceImage，优先使用 referenceImages
+                java.util.List<String> referenceImagePaths = new java.util.ArrayList<>();
+                if (referenceImagesArray != null && referenceImagesArray.length() > 0) {
+                    if (referenceImagesArray.length() > MAX_REFERENCE_IMAGES) {
+                        throw new IllegalArgumentException(
+                            "referenceImages 最多支持 " + MAX_REFERENCE_IMAGES + " 张，当前: "
+                            + referenceImagesArray.length());
+                    }
+                    // 多参考图模式：仅支持 image_reference（first_frame 模式只能单图）
+                    if (!REFERENCE_MODE_IMAGE_REFERENCE.equals(referenceMode)) {
+                        throw new IllegalArgumentException(
+                            "referenceImages 多参考图模式仅支持 image_reference 模式，不支持 first_frame");
+                    }
+                    FileLogger.i(TAG, "  [ref] 多参考图模式，共 " + referenceImagesArray.length() + " 张图");
+                    for (int i = 0; i < referenceImagesArray.length(); i++) {
+                        String imgPath = referenceImagesArray.optString(i, null);
+                        if (imgPath != null && !imgPath.trim().isEmpty()) {
+                            referenceImagePaths.add(imgPath.trim());
+                        }
+                    }
+                } else if (referenceImage != null && !referenceImage.trim().isEmpty()) {
+                    // 向后兼容：单图模式
+                    referenceImagePaths.add(referenceImage.trim());
+                    FileLogger.i(TAG, "  [ref] 单参考图模式（向后兼容）");
+                }
+
+                boolean hasReferenceImage = !referenceImagePaths.isEmpty();
                 boolean firstFrameMode = hasReferenceImage
                     && REFERENCE_MODE_FIRST_FRAME.equals(referenceMode);
                 boolean imageReferenceMode = hasReferenceImage
                     && REFERENCE_MODE_IMAGE_REFERENCE.equals(referenceMode);
                 if (!hasReferenceImage && arguments.has("referenceMode")
                     && REFERENCE_MODE_IMAGE_REFERENCE.equals(referenceMode)) {
-                    throw new IllegalArgumentException("image_reference 模式必须提供 referenceImage");
+                    throw new IllegalArgumentException("image_reference 模式必须提供 referenceImage 或 referenceImages");
+                }
+                if (firstFrameMode && referenceImagePaths.size() > 1) {
+                    throw new IllegalArgumentException(
+                        "first_frame 模式仅支持单张参考图（referenceImage），不支持 referenceImages 数组");
                 }
 
                 FileLogger.i(TAG, "[3/8] 参数 - duration: " + duration + "s, resolution: "
                     + resolution + ", aspect: " + aspectRatio + ", watermark: " + watermark
-                    + ", referenceMode: " + (hasReferenceImage ? referenceMode : "none"));
+                    + ", referenceMode: " + (hasReferenceImage ? referenceMode : "none")
+                    + ", referenceImageCount: " + referenceImagePaths.size());
 
+                // 🆕 自动补充 @image_N 引用（如果 prompt 里没有显式引用）
                 String effectivePrompt = prompt;
-                if (imageReferenceMode
-                    && !effectivePrompt.matches("(?s).*@image_1(?![A-Za-z0-9_]).*")) {
-                    effectivePrompt = "参考 @image_1，" + effectivePrompt;
+                if (imageReferenceMode && referenceImagePaths.size() == 1) {
+                    if (!effectivePrompt.matches("(?s).*@image_1(?![A-Za-z0-9_]).*")) {
+                        effectivePrompt = "参考 @image_1，" + effectivePrompt;
+                    }
+                } else if (imageReferenceMode && referenceImagePaths.size() > 1) {
+                    // 多参考图：如果 prompt 里没有任何 @image_N 引用，自动加上
+                    boolean hasAnyRef = false;
+                    for (int i = 1; i <= referenceImagePaths.size(); i++) {
+                        if (effectivePrompt.contains("@image_" + i)) {
+                            hasAnyRef = true;
+                            break;
+                        }
+                    }
+                    if (!hasAnyRef) {
+                        StringBuilder refBuilder = new StringBuilder("参考");
+                        for (int i = 1; i <= referenceImagePaths.size(); i++) {
+                            refBuilder.append(" @image_").append(i);
+                        }
+                        refBuilder.append("，").append(effectivePrompt);
+                        effectivePrompt = refBuilder.toString();
+                    }
                 }
 
                 // 可灵服务无法访问应用私有路径。本地参考图片先经共享 OSS 管理器上传，
                 // 再把短期签名 URL 交给对应的视频生成接口。
-                String referenceImageUrl = null;
+                java.util.List<String> referenceImageUrls = new java.util.ArrayList<>();
                 if (hasReferenceImage) {
                     if (effectivePrompt.length() > MAX_IMAGE_TO_VIDEO_PROMPT_LENGTH) {
                         throw new IllegalArgumentException("图生视频 prompt 最长 2500 字符，当前: "
                             + effectivePrompt.length());
                     }
-                    referenceImageUrl = resolveReferenceImageUrl(referenceImage.trim());
-                    FileLogger.i(TAG, "参考图片已准备完成，将使用 " + referenceMode + " 模式");
+                    FileLogger.i(TAG, "  [ref] 准备上传 " + referenceImagePaths.size() + " 张参考图...");
+                    for (int i = 0; i < referenceImagePaths.size(); i++) {
+                        String url = resolveReferenceImageUrl(referenceImagePaths.get(i));
+                        referenceImageUrls.add(url);
+                        FileLogger.i(TAG, "  [ref] 参考图 " + (i + 1) + "/" + referenceImagePaths.size()
+                            + " 已上传完成");
+                    }
+                    FileLogger.i(TAG, "  [ref] 共 " + referenceImageUrls.size() + " 张参考图准备完成，将使用 "
+                        + referenceMode + " 模式");
                 }
 
                 // 3. 提交任务
                 stepStart = System.currentTimeMillis();
                 String taskId = submitTask(apiKey, effectivePrompt, duration, resolution, aspectRatio,
-                    watermark, referenceImageUrl, referenceMode);
+                    watermark, referenceImageUrls, referenceMode);
                 FileLogger.i(TAG, "[4/8] 任务已提交 - task_id: " + taskId + "，耗时: " + (System.currentTimeMillis() - stepStart) + "ms");
 
                 // 4. 轮询等待
@@ -319,6 +398,8 @@ public class KlingVideoGenerationTool implements Tool {
                     : imageReferenceMode ? "image_reference_to_video" : "image_to_video");
                 if (hasReferenceImage) {
                     result.put("reference_mode", referenceMode);
+                    // 🆕 在 result 中标记使用的参考图数量
+                    result.put("reference_images_used", referenceImageUrls.size());
                 }
                 result.put("total_duration_ms", totalDurationMs);
                 result.put("timestamp", timestamp);
@@ -341,10 +422,10 @@ public class KlingVideoGenerationTool implements Tool {
      */
     private String submitTask(String apiKey, String prompt, int duration, String resolution,
                                String aspectRatio, boolean watermark,
-                               String referenceImageUrl, String referenceMode) throws IOException {
+                               java.util.List<String> referenceImageUrls, String referenceMode) throws IOException {
         try {
             JSONObject requestBody = new JSONObject();
-            boolean hasReferenceImage = referenceImageUrl != null && !referenceImageUrl.isEmpty();
+            boolean hasReferenceImage = referenceImageUrls != null && !referenceImageUrls.isEmpty();
             boolean firstFrameMode = hasReferenceImage
                 && REFERENCE_MODE_FIRST_FRAME.equals(referenceMode);
             boolean imageReferenceMode = hasReferenceImage
@@ -355,13 +436,25 @@ public class KlingVideoGenerationTool implements Tool {
             if (hasReferenceImage) {
                 JSONArray contents = new JSONArray();
                 contents.put(new JSONObject().put("type", "prompt").put("text", prompt));
-                JSONObject imageContent = new JSONObject()
-                    .put("type", imageReferenceMode ? "refer_image" : "first_frame")
-                    .put("url", referenceImageUrl);
+
+                // 🆕 多参考图模式：遍历 referenceImageUrls，每个 refer_image 分配 image_N id
                 if (imageReferenceMode) {
-                    imageContent.put("id", "image_1");
+                    for (int i = 0; i < referenceImageUrls.size(); i++) {
+                        String url = referenceImageUrls.get(i);
+                        String imageId = "image_" + (i + 1);
+                        JSONObject imageContent = new JSONObject()
+                            .put("type", "refer_image")
+                            .put("url", url)
+                            .put("id", imageId);
+                        contents.put(imageContent);
+                    }
+                } else {
+                    // first_frame 模式：单图（已经验证过）
+                    JSONObject imageContent = new JSONObject()
+                        .put("type", "first_frame")
+                        .put("url", referenceImageUrls.get(0));
+                    contents.put(imageContent);
                 }
-                contents.put(imageContent);
                 requestBody.put("contents", contents);
                 endpoint = imageReferenceMode ? OMNI_SUBMIT_ENDPOINT : IMAGE_SUBMIT_ENDPOINT;
                 generationMode = imageReferenceMode
@@ -405,7 +498,8 @@ public class KlingVideoGenerationTool implements Tool {
 
             // 图生视频请求体含 OSS 签名 URL，不可完整写入日志。
             FileLogger.d(TAG, "  [submit] 模式: " + generationMode
-                + ", duration: " + duration + ", resolution: " + resolution);
+                + ", duration: " + duration + ", resolution: " + resolution
+                + ", referenceImageCount: " + (hasReferenceImage ? referenceImageUrls.size() : 0));
 
             try (Response response = getClient().newCall(request).execute()) {
                 int code = response.code();
@@ -475,7 +569,7 @@ public class KlingVideoGenerationTool implements Tool {
 
         String extension = "image/png".equals(mimeType) ? ".png" : ".jpg";
         String objectKey = "sisterfuture/kling-reference-images/"
-            + System.currentTimeMillis() + extension;
+            + System.currentTimeMillis() + "_" + System.nanoTime() + extension;
         JSONObject uploadOverrides = new JSONObject().put("contentType", mimeType);
         JSONObject uploadResult = ossManager.uploadFile(imageFile, objectKey, false,
             OssManager.DEFAULT_URL_EXPIRY_SECONDS, uploadOverrides);
@@ -723,7 +817,7 @@ public class KlingVideoGenerationTool implements Tool {
             return null;
         }
 
-        String[] lines = note.split("\\n");
+        String[] lines = note.split("\n");
         for (String line : lines) {
             line = line.trim();
             if (line.startsWith(NOTE_KEY_API_KEY + "=")) {
@@ -742,15 +836,21 @@ public class KlingVideoGenerationTool implements Tool {
         return "调用 klingVideoGenerate 时：\n"
             + "1. 必传参数：prompt（视频描述；文生视频和 first_frame 支持多镜头格式，image_reference 当前按单镜头生成）\n"
             + "2. 有图片时，把上下文中本次相关图片的本地绝对路径原样传给 referenceImage，并按用户意图选择 referenceMode；不要虚构路径，也不要擅自复用无关旧图\n"
-            + "3. 用户说“让这张图动起来”“保持原构图”“从这个画面开始”时，选择 first_frame；原图会作为视频起始画面，此模式不会自动美化图片\n"
+            + "3. 用户说\"让这张图动起来\"\"保持原构图\"\"从这个画面开始\"时，选择 first_frame；原图会作为视频起始画面，此模式不会自动美化图片\n"
             + "4. 用户希望保留图片中的人物、物体、场景或风格，但允许新场景或重新构图时，选择 image_reference；这是本次调用的一次性图片参考，不是持久化 Element Library\n"
             + "5. 用户明确要求先美化、换背景或精修，再从成片画面开始生成视频时，应先调用图片编辑工具（如 wanxiangImage），再把编辑结果 saved_paths 中的本地路径作为 referenceImage，并选择 first_frame\n"
-            + "6. 仅凭图片来自手机相机或看起来不够精致，不能擅自美化；意图不明确时先询问用户是保留原画面，还是把主体/风格作为参考重新创作\n"
+            + "6. 仅凭图片来自手机相机或看起来不够精致，不能擅自美化；意图不明确时先询问用户是保留原画面，还是把主体／风格作为参考重新创作\n"
             + "7. referenceImage 也支持 http(s) 公网 URL；本地图片会自动经 OSS 上传，因此需先配置 ossUploadFile 工具备注。省略 referenceImage 时仍为文生视频\n"
             + "8. image_reference 会改用 Kling 3.0 Omni，可能与 3.0 Turbo 使用不同配额；只有用户意图需要自由重构时才选择它\n"
-            + "9. 可选参数：duration(3-15秒)、resolution(720p/1080p)、aspectRatio(文生视频及 image_reference 可用，16:9/9:16/1:1)、watermark\n"
-            + "10. API Key：运行时传入，或在工具备注中设置 kling_api_key=xxx\n"
-            + "11. 视频生成通常 30 秒-3 分钟；完成后自动下载到 /sdcard/Download/ 并扫描到相册\n"
-            + "12. 注意：可灵生成的视频 30 天后失效，需要及时转存";
+            + "9. 🆕 多参考图模式（referenceImages：1-4 张，仅 image_reference 模式支持）：\n"
+            + "   - referenceImages 是图片路径数组，每张图自动经 OSS 上传\n"
+            + "   - 多参考图时，prompt 中可用 @image_1、@image_2 等引用对应位置的图\n"
+            + "   - 如果 prompt 里没有显式引用，会自动在前面加上\"参考 @image_1 @image_2 @image_3 ...\"\n"
+            + "   - 典型场景：多角色同框视频（角色 A 参考图 + 角色 B 参考图）、角色+场景视频\n"
+            + "   - ⚠️ first_frame 模式仅支持单图，不支持 referenceImages 数组\n"
+            + "10. 可选参数：duration(3-15秒)、resolution(720p/1080p)、aspectRatio(文生视频及 image_reference 可用，16:9/9:16/1:1)、watermark\n"
+            + "11. API Key：运行时传入，或在工具备注中设置 kling_api_key=xxx\n"
+            + "12. 视频生成通常 30 秒-3 分钟；完成后自动下载到 /sdcard/Download/ 并扫描到相册\n"
+            + "13. 注意：可灵生成的视频 30 天后失效，需要及时转存";
     }
 }
