@@ -153,6 +153,18 @@ public class GetPullRequestsTool implements Tool {
     return value.isEmpty() ? fallback : value;
   }
 
+  /** Optional note credentials: invalid notes are equivalent to a missing value. */
+  static String tokenFromNote(String note) {
+    if (note == null || note.trim().isEmpty()) return "";
+    try {
+      Object value = new JSONObject(note).opt("github_token");
+      return value instanceof String ? ((String) value).trim() : "";
+    } catch (org.json.JSONException ignored) {
+      // Same fallback as GetGitHubFileTool; never expose credential-bearing notes.
+      return "";
+    }
+  }
+
   @Override
   public boolean shouldInclude() {
     return true;
@@ -182,14 +194,7 @@ public class GetPullRequestsTool implements Tool {
 
         // 如果未提供 token，尝试从工具备注读取
         if (token.isEmpty()) {
-          String noteJson = getNote(context);
-          if (!noteJson.isEmpty()) {
-            JSONObject saved = new JSONObject(noteJson);
-            if (saved.has("github_token")) {
-              token = saved.getString("github_token");
-              FileLogger.d(TAG, "从备注中读取到 github_token");
-            }
-          }
+          token = tokenFromNote(getNote(context));
         }
 
         if (token.isEmpty()) {
