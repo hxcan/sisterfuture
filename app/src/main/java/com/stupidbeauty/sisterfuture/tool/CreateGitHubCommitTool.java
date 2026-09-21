@@ -157,6 +157,32 @@ public class CreateGitHubCommitTool implements Tool
     return ToolParameterAliases.normalize(arguments, "commitMessage", "readFromPhone", "phonePath");
   }
 
+  String resolveToken(JSONObject arguments)
+  {
+    Object supplied = arguments.opt("token");
+    String token = supplied instanceof String ? ((String) supplied).trim() : "";
+    if (!token.isEmpty()) return token;
+
+    String note = getNote(context);
+    if (note != null && !note.trim().isEmpty())
+    {
+      try
+      {
+        Object saved = new JSONObject(note).opt("github_token");
+        if (saved instanceof String) token = ((String) saved).trim();
+      }
+      catch (org.json.JSONException ignored)
+      {
+        // Optional notes may be plain text. Never expose credential-bearing input.
+      }
+    }
+    if (token.isEmpty())
+    {
+      throw new IllegalArgumentException("缺少 GitHub 访问令牌 (token)，且未在备注中配置");
+    }
+    return token;
+  }
+
   @Override
   public String getDefaultSystemPromptEnhancement()
   {
@@ -215,7 +241,7 @@ public class CreateGitHubCommitTool implements Tool
           String branch = arguments.getString("branch");
           String path = arguments.getString("path");
           String commitMessage = arguments.getString("commitMessage");
-          String token = arguments.optString("token", "").trim();
+          String token = resolveToken(arguments);
           String encoding = arguments.optString("encoding", "text");
 
           // 新增参数
@@ -229,24 +255,6 @@ public class CreateGitHubCommitTool implements Tool
           if (deleteFile)
           {
             FileLogger.d(TAG, "CreateGitHubCommit: 执行删除文件操作，path=" + path);
-
-            if (token.isEmpty())
-            {
-              String noteJson = getNote(context);
-              if (!noteJson.isEmpty())
-              {
-                JSONObject saved = new JSONObject(noteJson);
-                if (saved.has("github_token"))
-                {
-                  token = saved.getString("github_token");
-                }
-              }
-            }
-
-            if (token.isEmpty())
-            {
-              throw new IllegalArgumentException("Missing required parameter: token");
-            }
 
             OkHttpClient client = new OkHttpClient();
 
@@ -389,24 +397,6 @@ public class CreateGitHubCommitTool implements Tool
           int contentLength = content.length();
           FileLogger.d(TAG, "CreateGitHubCommit DEBUG: Received content length: " + contentLength + " chars");
           FileLogger.d(TAG, "CreateGitHubCommit DEBUG: Encoding type: " + encoding);
-
-          if (token.isEmpty())
-          {
-            String noteJson = getNote(context);
-            if (!noteJson.isEmpty())
-            {
-              JSONObject saved = new JSONObject(noteJson);
-              if (saved.has("github_token"))
-              {
-                token = saved.getString("github_token");
-              }
-            }
-          }
-
-          if (token.isEmpty())
-          {
-            throw new IllegalArgumentException("Missing required parameter: token");
-          }
 
           OkHttpClient client = new OkHttpClient();
 
