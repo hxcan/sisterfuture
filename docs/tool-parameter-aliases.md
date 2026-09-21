@@ -1,5 +1,15 @@
 # 工具参数小驼峰与旧参数别名
 
+## 获取 Redmine 任务详情
+
+`getRedmineTaskInfo` 使用 `redmineUrl`、`apiKey`、`taskId`，通过
+`ToolParameterAliases` 兼容 `redmine_url`、`api_key`、`task_id`。
+新旧键同时传入时小驼峰优先，不修改输入对象。
+任务编号接受正整数及首尾带空白的数字字符串，保留 long 精度；拒绝小数、越界、
+对象、数组和 null，不猜测编号。可选地址/认证参数的错误类型按缺失处理，继续备注回退。
+备注继续复用 RedmineAuth 的既有容错；不改其他工具或返回字段 `task_info`。
+参数 schema 用标准 `integer` 表示编号，并不将 Java long 降为 int。
+
 `createRedmineTask` 的参数定义、必填字段和默认增强提示词使用小驼峰。
 已有单词参数 `username`、`password`、`subject`、`description`、`priority` 不变。
 

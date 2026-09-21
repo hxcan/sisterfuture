@@ -46,7 +46,7 @@ public class GetRedmineTaskInfoTool implements Tool
       JSONObject parameters = new JSONObject();
       parameters.put("type", "object");
       parameters.put("properties", new JSONObject()
-        .put("redmine_url", new JSONObject()
+        .put("redmineUrl", new JSONObject()
           .put("type", "string")
           .put("description", "Redmine 实例的完整 URL，例如 https://your-redmine.com"))
         .put("username", new JSONObject()
@@ -55,14 +55,15 @@ public class GetRedmineTaskInfoTool implements Tool
         .put("password", new JSONObject()
           .put("type", "string")
           .put("description", "登录密码"))
-        .put("api_key", new JSONObject()
+        .put("apiKey", new JSONObject()
           .put("type", "string")
           .put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"))
-        .put("task_id", new JSONObject()
-          .put("type", "long")
+        .put("taskId", new JSONObject()
+          .put("type", "integer")
+          .put("minimum", 1)
           .put("description", "要查询的任务编号（支持长整型 ID，如 JoyMan 生成的 12-14 位数字）"))
       );
-      parameters.put("required", new JSONArray(new String[]{"task_id"}));
+      parameters.put("required", new JSONArray(new String[]{"taskId"}));
 
       functionDef.put("parameters", parameters);
 
@@ -88,14 +89,15 @@ public class GetRedmineTaskInfoTool implements Tool
   }
 
   @Override
-  public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback)
+  public void executeAsync(@NonNull JSONObject suppliedArguments, @NonNull OnResultCallback callback)
   {
     executor.execute(() ->
     {
       try
       {
         // 1. 获取参数
-        long taskId = arguments.getLong("task_id");
+        JSONObject arguments = normalizeArguments(suppliedArguments);
+        long taskId = parseTaskId(arguments);
         RedmineAuth auth = RedmineAuth.resolve(arguments, getNote(context));
         String redmineUrl = auth.getRedmineUrl();
 
@@ -144,9 +146,31 @@ public class GetRedmineTaskInfoTool implements Tool
   }
 
   // --- 工具备注支持 ---
+  static JSONObject normalizeArguments(JSONObject supplied) throws org.json.JSONException {
+    JSONObject args = ToolParameterAliases.normalize(supplied,
+        "redmineUrl", "apiKey", "taskId");
+    // Invalid optional credential structures count as absent, allowing note fallback.
+    for (String key : new String[]{"redmineUrl", "apiKey", "redmine_api_key", "username", "password"}) {
+      if (args.has(key) && !(args.opt(key) instanceof String)) args.remove(key);
+    }
+    return args;
+  }
+
+  static long parseTaskId(JSONObject args) {
+    Object raw = args.opt("taskId");
+    if (raw instanceof String || raw instanceof Number) {
+      try {
+        long value = new java.math.BigDecimal(raw.toString().trim()).longValueExact();
+        if (value > 0) return value;
+      } catch (NumberFormatException | ArithmeticException ignored) {
+      }
+    }
+    throw new IllegalArgumentException("缺少或无效的 taskId：必须是正整数任务编号（兼容 task_id 和数字字符串）");
+  }
+
   @Override
   public String getDefaultSystemPromptEnhancement()
   {
-    return "必须在用户明确要求获取 Redmine 任务信息时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。API Key 不得输出到回复或日志。";
+    return "必须在用户明确要求获取 Redmine 任务信息时才调用此工具。使用 taskId 指定任务编号，redmineUrl 指定实例地址，认证支持 apiKey，或 username 与 password。兼容旧参数 task_id、redmine_url、api_key；新旧名称同时提供时小驼峰优先。调用参数缺失时会自动从工具备注读取认证信息。API Key 不得输出到回复或日志。";
   }
 }
