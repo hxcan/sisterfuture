@@ -37,6 +37,7 @@ public class ToolRegistry {
         toolManager.registerTool(new GetRedmineTaskInfoTool(context));
         toolManager.registerTool(new CreateRedmineTaskTool(context));
         toolManager.registerTool(new UpdateRedmineIssueTool(context));
+        toolManager.registerTool(new UploadRedmineAttachmentTool(context));
         toolManager.registerTool(new SearchRedmineTasksTool(context));
         toolManager.registerTool(new GetIssuesListTool(context));
         toolManager.registerTool(new ListRedmineProjectsTool(context));
