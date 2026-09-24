@@ -1,11 +1,5 @@
 package com.stupidbeauty.sisterfuture;
 
-import com.stupidbeauty.codeposition.CodePosition;
-import java.io.File;
-import java.io.FileDescriptor;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.BufferedReader;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -16,9 +10,7 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 import java.io.IOException;
 import butterknife.OnClick;
-import com.iflytek.cloud.SpeechRecognizer;
 import android.content.Context;
-import android.content.SharedPreferences;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
@@ -32,24 +24,16 @@ import java.util.regex.Matcher;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class ContextManager
 {
   private static final String TAG = "ContextManager";
-  private static final String CONTEXT_FILE_NAME = "conversation_context.json";
-  private static final String PREF_NAME = "context_manager";
-  private static final String KEY_HISTORY = "history";
-  private static final String KEY_MAX_ROUNDS = "current_max_rounds";
   private static final int INITIAL_MAX_ROUNDS = 5;
 
   // 🆕 #819154835086 重复"上下文超长"提示清理阈值
   private static final int CONTEXT_ALERT_CLEANUP_THRESHOLD = 5;
 
-  private Context context;
-  private File contextFile;
-  private SharedPreferences sharedPreferences;
+  private final ConversationStore conversationStore;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
   private int MAX_ARGUMENTS_STR_LENGTH = 226810;
 
@@ -59,22 +43,16 @@ public class ContextManager
   // 🔗 预留的消息 ID 集合（用于追踪尚未确认的消息）
   private Set<String> reservedMessageIds = new HashSet<>();
 
-  // ✅ 异步写入 executor
-  private final ExecutorService writeExecutor = Executors.newSingleThreadExecutor();
-
   public ContextManager(Context context)
   {
-    this.context = context;
+    this(new FileConversationStore(context));
+  }
 
-    // ✅ 初始化 SP（只用于 max_rounds）
-    sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-    currentMaxRounds = sharedPreferences.getInt(KEY_MAX_ROUNDS, INITIAL_MAX_ROUNDS);
-
-    // ✅ 初始化 JSON 文件路径
-    contextFile = new File(context.getFilesDir(), CONTEXT_FILE_NAME);
-
-    // ✅ 从 JSON 文件加载历史到内存（同步读取）
-    loadHistoryFromFile();
+  public ContextManager(ConversationStore conversationStore)
+  {
+    this.conversationStore = java.util.Objects.requireNonNull(conversationStore, "conversationStore");
+    currentMaxRounds = conversationStore.loadMaxRounds(INITIAL_MAX_ROUNDS);
+    memoryHistory = conversationStore.loadHistory();
 
     // 🆕 #821166321034 为历史消息补上 id（兼容老数据）
     backfillMessageIds();
@@ -151,103 +129,6 @@ public class ContextManager
     else
     {
       FileLogger.d(TAG, "🔧 [BACKFILL] 所有消息都已有 id，无需补齐（共 " + alreadyHasId + " 条）");
-    }
-  }
-
-  // ✅ 从 JSON 文件加载历史到内存（同步读取），支持向下兼容
-  private void loadHistoryFromFile()
-  {
-    boolean shouldFallbackToSP = false;
-
-    if (!contextFile.exists())
-    {
-      FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：文件不存在");
-      shouldFallbackToSP = true;
-    }
-    else
-    {
-      try
-      {
-        BufferedReader reader = new BufferedReader(new FileReader(contextFile));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null)
-        {
-          sb.append(line);
-        }
-        reader.close();
-
-        String fileContent = sb.toString();
-        if (fileContent.isEmpty())
-        {
-          FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：空文件");
-          shouldFallbackToSP = true;
-        }
-        else
-        {
-          JSONObject rootObj = new JSONObject(fileContent);
-
-          // 读取 history
-          if (rootObj.has(KEY_HISTORY))
-          {
-            JSONArray array = rootObj.getJSONArray(KEY_HISTORY);
-            memoryHistory = new ArrayList<>();
-
-            for (int i = 0; i < array.length(); i++)
-            {
-              memoryHistory.add(array.getJSONObject(i));
-            }
-
-            FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：" + memoryHistory.size() + " 条");
-            return; // ✅ 成功加载，直接返回
-          }
-          else
-          {
-            FileLogger.d(TAG, "📥 [LOAD] 从 JSON 文件加载历史：无 history 字段");
-            shouldFallbackToSP = true;
-          }
-        }
-      }
-      catch (Exception e)
-      {
-        FileLogger.e(TAG, "❌ [LOAD] 加载 JSON 文件失败：" + e.getMessage() + "，尝试回退到 SP", e);
-        shouldFallbackToSP = true;
-      }
-    }
-
-    // 🔙 向下兼容：从 SharedPreferences 读取旧数据
-    if (shouldFallbackToSP)
-    {
-      FileLogger.d(TAG, "🔙 [FALLBACK] JSON 文件不可用，尝试从 SharedPreferences 读取旧历史");
-      try
-      {
-        String spHistoryJson = sharedPreferences.getString(KEY_HISTORY, null);
-        if (spHistoryJson != null && !spHistoryJson.isEmpty())
-        {
-          JSONArray array = new JSONArray(spHistoryJson);
-          memoryHistory = new ArrayList<>();
-
-          for (int i = 0; i < array.length(); i++)
-          {
-            memoryHistory.add(array.getJSONObject(i));
-          }
-
-          FileLogger.i(TAG, "🔙 [FALLBACK] 从 SP 成功加载历史：" + memoryHistory.size() + " 条（下次将自动使用 JSON 格式）");
-          return;
-        }
-        else
-        {
-          FileLogger.d(TAG, "🔙 [FALLBACK] SP 中也无历史数据");
-        }
-      }
-      catch (Exception e)
-      {
-        FileLogger.e(TAG, "❌ [FALLBACK] 从 SP 加载历史失败：" + e.getMessage(), e);
-      }
-
-      // 最终方案：空历史
-      memoryHistory = new ArrayList<>();
-      FileLogger.d(TAG, "📥 [LOAD] 最终结果：空历史");
     }
   }
 
@@ -806,7 +687,7 @@ public class ContextManager
     if (memoryHistory == null)
     {
       FileLogger.w(TAG, "⚠️ [GET] 内存历史未初始化，重新加载");
-      loadHistoryFromFile();
+      memoryHistory = conversationStore.loadHistory();
     }
     return memoryHistory;
   }
@@ -1257,29 +1138,8 @@ public class ContextManager
   {
     // 1. 同步更新内存（唯一真相源）
     memoryHistory = new ArrayList<>(history);
-    // 2. 异步写入 JSON 文件（历史持久化）
-    final List<JSONObject> historyCopy = new ArrayList<>(history);
-
-    writeExecutor.execute(() ->
-    {
-      try
-      {
-        JSONObject rootObj = new JSONObject();
-        rootObj.put(KEY_HISTORY, new JSONArray(historyCopy));
-
-        // 同步写入文件（已在后台线程）
-        FileWriter writer = new FileWriter(contextFile);
-        writer.write(rootObj.toString());
-        writer.flush();
-        writer.close();
-
-        FileLogger.d(TAG, "💾 [ASYNC_SAVE] 已异步保存历史到 JSON 文件：" + historyCopy.size() + " 条");
-      }
-      catch (Exception e)
-      {
-        FileLogger.e(TAG, "❌ [ASYNC_SAVE] 异步保存历史失败：" + e.getMessage(), e);
-      }
-    });
+    // Persistence owns the serial writer, but not a second live history.
+    conversationStore.saveHistory(memoryHistory);
   }
 
   private JSONObject createMessage(String role, String content)
@@ -1305,7 +1165,7 @@ public class ContextManager
     {
       currentMaxRounds++;
       // max_rounds 保持写入 SP
-      sharedPreferences.edit().putInt(KEY_MAX_ROUNDS, currentMaxRounds).apply();
+      conversationStore.saveMaxRounds(currentMaxRounds);
       saveHistory(getHistory());
     }
   }
@@ -1318,7 +1178,7 @@ public class ContextManager
     {
       currentMaxRounds = idealMaxRounds;
       // max_rounds 保持写入 SP
-      sharedPreferences.edit().putInt(KEY_MAX_ROUNDS, currentMaxRounds).apply();
+      conversationStore.saveMaxRounds(currentMaxRounds);
       history = removeOldHistoryEntries(history);
       saveHistory(history);
     }
