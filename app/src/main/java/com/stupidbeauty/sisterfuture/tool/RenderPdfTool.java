@@ -35,6 +35,10 @@ import java.util.regex.Pattern;
  * 坐标系：1920×1080 像素。
  * PDF PageInfo 用 Point（1/72 英寸），所以内部按 72/96 = 0.75 比例转换。
  * Canvas 在画元素前 scale(0.75, 0.75)，元素 JSON 继续用像素坐标。
+ *
+ * 性能：单页 PDF 毫秒级生成（典型 <100ms）。
+ * 不自动打开 PDF viewer（之前 openAfter 参数导致 PDF reader 启动阻塞主线程触发 ANR）。
+ * 如需打开，请用 launchApp 工具串起来调用。
  */
 public class RenderPdfTool implements Tool {
 
@@ -111,8 +115,7 @@ public class RenderPdfTool implements Tool {
                         .put("description", "页面列表")
                         .put("items", pageObject))
                     .put("outputFilename", new JSONObject().put("type", "string").put("description", "输出 PDF 文件名，默认根据标题自动生成"))
-                    .put("paperSize", new JSONObject().put("type", "string").put("description", "纸张尺寸字符串，默认 1920x1080（16:9 横向）"))
-                    .put("openAfter", new JSONObject().put("type", "boolean").put("description", "是否生成完后自动打开，默认 true")))
+                    .put("paperSize", new JSONObject().put("type", "string").put("description", "纸张尺寸字符串，默认 1920x1080（16:9 横向）")))
                 .put("required", new JSONArray().put("pages"));
 
             functionDef.put("parameters", parameters);
@@ -202,9 +205,6 @@ public class RenderPdfTool implements Tool {
             result.put("fileSizeKb", outputFile.length() / 1024);
             result.put("generationTimeSec", elapsed / 1000.0);
 
-            boolean openAfter = arguments.optBoolean("openAfter", true);
-            result.put("openAfter", openAfter);
-
         } catch (Exception e) {
             try {
                 result.put("status", "failed");
@@ -277,6 +277,12 @@ public class RenderPdfTool implements Tool {
         }
     }
 
+    /**
+     * text 元素。文字垂直居中算法：
+     * 1. 用 Paint.FontMetrics 算出"一行文字"的视觉高度（ascent 到 descent）
+     * 2. 多行情况下，第一行 baseline 在 box 顶部下移 (box 中心 - 总文字视觉高度一半 + 单行视觉高度一半)
+     * 3. 后续行 baseline = 上一行 baseline + lineHeight
+     */
     private void drawTextElement(Canvas canvas, JSONObject el, int x, int y, int w, int h) {
         String content = el.optString("content", "");
         if (content.isEmpty()) return;
@@ -297,8 +303,19 @@ public class RenderPdfTool implements Tool {
 
         String[] lines = content.split("\n");
         float lineHeight = paint.getTextSize() * 1.2f;
-        float totalHeight = lines.length * lineHeight;
-        float startY = y + (h > 0 ? (h - totalHeight) / 2f : 0) + paint.getTextSize();
+
+        // 用 FontMetrics 算单行文字的视觉高度
+        Paint.FontMetrics fm = paint.getFontMetrics();
+        float singleLineVisualHeight = fm.descent - fm.ascent;
+        float totalVisualHeight = singleLineVisualHeight + (lines.length - 1) * lineHeight;
+
+        // 第一行 baseline 位置：让文字垂直居中于 box
+        // 中心 Y = box 顶部 y + box 高度 / 2
+        // 第一行 baseline = 中心 Y - 总视觉高度 / 2 + ascent（ascent 是负数）
+        // 等价于：中心 Y + ascent - (totalVisualHeight - singleLineVisualHeight) / 2
+        float firstBaselineY = (h > 0 ? y + h / 2f : y + singleLineVisualHeight / 2f)
+                              - totalVisualHeight / 2f
+                              - fm.ascent;
 
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
@@ -313,7 +330,7 @@ public class RenderPdfTool implements Tool {
                     drawX = x + w - textWidth;
                 }
             }
-            float drawY = startY + i * lineHeight;
+            float drawY = firstBaselineY + i * lineHeight;
             canvas.drawText(line, drawX, drawY, paint);
         }
     }
@@ -493,7 +510,7 @@ public class RenderPdfTool implements Tool {
                     x1 = bounds.left; y1 = (bounds.top + bounds.bottom) / 2f;
                 } else if (first.equals("to bottom")) {
                     x0 = (bounds.left + bounds.right) / 2f; y0 = bounds.top;
-                    x1 = (bounds.left + bounds.right) / 2f; y1 = bounds.bottom;
+                    x1 = (box.left + bounds.right) / 2f; y1 = bounds.bottom;
                 } else if (first.equals("to top")) {
                     x0 = (bounds.left + bounds.right) / 2f; y0 = bounds.bottom;
                     x1 = (bounds.left + bounds.right) / 2f; y1 = bounds.top;
