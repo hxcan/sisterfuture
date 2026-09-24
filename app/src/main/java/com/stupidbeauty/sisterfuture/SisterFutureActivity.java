@@ -149,6 +149,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private static final Gson gson = new Gson();
 
+  private SessionManager sessionManager;
+  // Bound to the sole session for this Activity lifetime (no session switching yet).
   private ContextManager contextManager;
   private MessageAdapter messageAdapter;
   @BindView(R.id.articleListmy_recycler_view) RecyclerView articleListmyRecyclerView;
@@ -2165,7 +2167,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void initData()
   {
-    contextManager = new ContextManager(this);
+    sessionManager = new SessionManager(this);
+    contextManager = sessionManager.getCurrentContextManager();
     modelAccessPointManager = new ModelAccessPointManager(this);
     memoryManager = new MemoryManager(this);
     repeatDetectionManager = new RepeatDetectionManager();
