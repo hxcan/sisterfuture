@@ -29,17 +29,6 @@ import java.net.URL;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * PDF 生成工具（展示型 / 融资路演向）
- *
- * 坐标系：1920×1080 像素。
- * PDF PageInfo 用 Point（1/72 英寸），所以内部按 72/96 = 0.75 比例转换。
- * Canvas 在画元素前 scale(0.75, 0.75)，元素 JSON 继续用像素坐标。
- *
- * 性能：单页 PDF 毫秒级生成（典型 <100ms）。
- * 不自动打开 PDF viewer（之前 openAfter 参数导致 PDF reader 启动阻塞主线程触发 ANR）。
- * 如需打开，请用 launchApp 工具串起来调用。
- */
 public class RenderPdfTool implements Tool {
 
     private static final String TAG = "RenderPdf";
@@ -73,14 +62,14 @@ public class RenderPdfTool implements Tool {
                     .put("y", new JSONObject().put("type", "number").put("description", "左上角 Y 坐标（像素）"))
                     .put("width", new JSONObject().put("type", "number"))
                     .put("height", new JSONObject().put("type", "number"))
-                    .put("content", new JSONObject().put("type", "string").put("description", "text 元素的内容"))
+                    .put("content", new JSONObject().put("type", "string").put("description", "text 元素的内容。多行用 \\n 分隔，工具会自动转换为换行。"))
                     .put("fontSize", new JSONObject().put("type", "number").put("description", "text 元素的字号（像素）"))
                     .put("color", new JSONObject().put("type", "string").put("description", "颜色，支持 #RRGGBB 或 rgba(...)"))
                     .put("fontWeight", new JSONObject().put("type", "string").put("description", "text 元素的字重（normal/bold）"))
                     .put("textAlign", new JSONObject().put("type", "string").put("description", "text 元素的对齐（left/center/right）"))
                     .put("rotate", new JSONObject().put("type", "number").put("description", "旋转角度（度）"))
                     .put("src", new JSONObject().put("type", "string").put("description", "image 元素的图片路径或 URL；可用 file:// 或 content:// 前缀"))
-                    .put("svg", new JSONObject().put("type", "string").put("description", "svg 元素的内联 SVG 字符串"))
+                    .put("svg", new JSONObject().put("type", "string").put("description", "svg 元素的内联 SVG 字符串（支持 <path d=\\\"...\\\"/>，可省略外层 <svg> 包装）"))
                     .put("fill", new JSONObject().put("type", "string").put("description", "rect/shape 的填充色或渐变"))
                     .put("stroke", new JSONObject().put("type", "string").put("description", "rect/shape 的描边色"))
                     .put("strokeWidth", new JSONObject().put("type", "number").put("description", "描边宽度"))
@@ -277,11 +266,6 @@ public class RenderPdfTool implements Tool {
         }
     }
 
-    /**
-     * text 元素。文字垂直居中算法：
-     * 1. 用 Paint.FontMetrics 算出"一行文字"的视觉高度（ascent 到 descent）
-     * 2. 多行情况下，第一行 baseline 在 box 中心下移
-     */
     private void drawTextElement(Canvas canvas, JSONObject el, int x, int y, int w, int h) {
         String content = el.optString("content", "");
         if (content.isEmpty()) return;
@@ -300,7 +284,9 @@ public class RenderPdfTool implements Tool {
         }
         paint.setTypeface(Typeface.create(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL));
 
-        String[] lines = content.split("\n");
+        // 修复：把字面 "\n" 转成真换行符
+        String normalizedContent = content.replace("\\n", "\n");
+        String[] lines = normalizedContent.split("\n");
         float lineHeight = paint.getTextSize() * 1.2f;
 
         Paint.FontMetrics fm = paint.getFontMetrics();
@@ -406,35 +392,38 @@ public class RenderPdfTool implements Tool {
         if (svg.isEmpty() || w <= 0 || h <= 0) return;
 
         Path path = parseSimpleSvgPath(svg);
-        if (path != null) {
-            String fill = el.optString("fill", "#000000");
-            String stroke = el.optString("stroke", "transparent");
-            int strokeWidth = el.optInt("strokeWidth", 1);
+        if (path == null) {
+            Log.w(TAG, "SVG path parsing returned null");
+            return;
+        }
 
-            Matrix matrix = new Matrix();
-            RectF bounds = new RectF();
-            path.computeBounds(bounds, true);
-            if (bounds.width() > 0 && bounds.height() > 0) {
-                float scale = Math.min(w / bounds.width(), h / bounds.height());
-                matrix.postScale(scale, scale);
-                matrix.postTranslate(x + w / 2f - bounds.width() * scale / 2f,
-                                     y + h / 2f - bounds.height() * scale / 2f);
-                path.transform(matrix);
-            }
+        String fill = el.optString("fill", "#000000");
+        String stroke = el.optString("stroke", "transparent");
+        int strokeWidth = el.optInt("strokeWidth", 1);
 
-            if (!"transparent".equalsIgnoreCase(fill) && !fill.isEmpty()) {
-                Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                fillPaint.setStyle(Paint.Style.FILL);
-                fillPaint.setColor(parseColor(fill));
-                canvas.drawPath(path, fillPaint);
-            }
-            if (strokeWidth > 0 && !"transparent".equalsIgnoreCase(stroke) && !stroke.isEmpty()) {
-                Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                strokePaint.setStyle(Paint.Style.STROKE);
-                strokePaint.setStrokeWidth(strokeWidth);
-                strokePaint.setColor(parseColor(stroke));
-                canvas.drawPath(path, strokePaint);
-            }
+        Matrix matrix = new Matrix();
+        RectF bounds = new RectF();
+        path.computeBounds(bounds, true);
+        if (bounds.width() > 0 && bounds.height() > 0) {
+            float scale = Math.min(w / bounds.width(), h / bounds.height());
+            matrix.postScale(scale, scale);
+            matrix.postTranslate(x + w / 2f - bounds.width() * scale / 2f,
+                                 y + h / 2f - bounds.height() * scale / 2f);
+            path.transform(matrix);
+        }
+
+        if (!"transparent".equalsIgnoreCase(fill) && !fill.isEmpty()) {
+            Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            fillPaint.setStyle(Paint.Style.FILL);
+            fillPaint.setColor(parseColor(fill));
+            canvas.drawPath(path, fillPaint);
+        }
+        if (strokeWidth > 0 && !"transparent".equalsIgnoreCase(stroke) && !stroke.isEmpty()) {
+            Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            strokePaint.setStyle(Paint.Style.STROKE);
+            strokePaint.setStrokeWidth(strokeWidth);
+            strokePaint.setColor(parseColor(stroke));
+            canvas.drawPath(path, strokePaint);
         }
     }
 
@@ -586,9 +575,13 @@ public class RenderPdfTool implements Tool {
 
     private Path parseSimpleSvgPath(String svg) {
         try {
-            Pattern pathPattern = Pattern.compile("<path[^>]*\\bd\\s*=\\s*\"([^\"]+)\"");
+            // 修复：放宽正则，兼容外层 <svg> 包装、单/双引号、宽松属性匹配
+            Pattern pathPattern = Pattern.compile("<path[^>]*?\\bd\\s*=\\s*[\"']([^\"']+)[\"']");
             Matcher m = pathPattern.matcher(svg);
-            if (!m.find()) return null;
+            if (!m.find()) {
+                Log.w(TAG, "parseSimpleSvgPath: no <path d=\"...\"> found");
+                return null;
+            }
 
             String d = m.group(1);
             Path path = new Path();
