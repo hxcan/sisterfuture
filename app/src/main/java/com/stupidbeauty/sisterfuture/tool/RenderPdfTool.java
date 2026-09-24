@@ -280,8 +280,7 @@ public class RenderPdfTool implements Tool {
     /**
      * text 元素。文字垂直居中算法：
      * 1. 用 Paint.FontMetrics 算出"一行文字"的视觉高度（ascent 到 descent）
-     * 2. 多行情况下，第一行 baseline 在 box 顶部下移 (box 中心 - 总文字视觉高度一半 + 单行视觉高度一半)
-     * 3. 后续行 baseline = 上一行 baseline + lineHeight
+     * 2. 多行情况下，第一行 baseline 在 box 中心下移
      */
     private void drawTextElement(Canvas canvas, JSONObject el, int x, int y, int w, int h) {
         String content = el.optString("content", "");
@@ -304,15 +303,10 @@ public class RenderPdfTool implements Tool {
         String[] lines = content.split("\n");
         float lineHeight = paint.getTextSize() * 1.2f;
 
-        // 用 FontMetrics 算单行文字的视觉高度
         Paint.FontMetrics fm = paint.getFontMetrics();
         float singleLineVisualHeight = fm.descent - fm.ascent;
         float totalVisualHeight = singleLineVisualHeight + (lines.length - 1) * lineHeight;
 
-        // 第一行 baseline 位置：让文字垂直居中于 box
-        // 中心 Y = box 顶部 y + box 高度 / 2
-        // 第一行 baseline = 中心 Y - 总视觉高度 / 2 + ascent（ascent 是负数）
-        // 等价于：中心 Y + ascent - (totalVisualHeight - singleLineVisualHeight) / 2
         float firstBaselineY = (h > 0 ? y + h / 2f : y + singleLineVisualHeight / 2f)
                               - totalVisualHeight / 2f
                               - fm.ascent;
@@ -510,7 +504,7 @@ public class RenderPdfTool implements Tool {
                     x1 = bounds.left; y1 = (bounds.top + bounds.bottom) / 2f;
                 } else if (first.equals("to bottom")) {
                     x0 = (bounds.left + bounds.right) / 2f; y0 = bounds.top;
-                    x1 = (box.left + bounds.right) / 2f; y1 = bounds.bottom;
+                    x1 = (bounds.left + bounds.right) / 2f; y1 = bounds.bottom;
                 } else if (first.equals("to top")) {
                     x0 = (bounds.left + bounds.right) / 2f; y0 = bounds.bottom;
                     x1 = (bounds.left + bounds.right) / 2f; y1 = bounds.top;
