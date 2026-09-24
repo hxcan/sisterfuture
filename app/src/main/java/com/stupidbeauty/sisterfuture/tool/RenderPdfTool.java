@@ -32,27 +32,14 @@ import java.util.regex.Pattern;
 /**
  * PDF 生成工具（展示型 / 融资路演向）
  *
- * 核心能力：支持绝对坐标自由布局，通过 freeform 模式
- * + 5 种基础元素（text / image / svg / rect / line），
- * 理论上可以画出任何复杂的 PDF。
- *
- * 技术路线：android.graphics.pdf.PdfDocument + Canvas 直接绘制，
- * 元素 → 对应的 drawXxx() 调用，无需 WebView 中间层。
- * 性能：单页 PDF 毫秒级生成（典型页面 < 100ms）。
- *
- * 零第三方依赖，仅使用安卓原生 API。
- *
- * 与旧版差异：
- * - 移除 WebView/WebViewClient/WebSettings
- * - 移除 CountDownLatch/TimeUnit/AtomicReference（无异步）
- * - 移除 HTML 字符串构造（buildPageHtml、renderElement、escapeHtml）
- * - 移除 alignToFlex
- * - 新增 renderPageToCanvas：直接调 canvas.drawText/drawBitmap/drawRoundRect/drawLine
- * - 新增 parseColor、parseLinearGradient、loadBitmap、parseSimpleSvgPath 等辅助方法
+ * 坐标系：1920×1080 像素。
+ * PDF PageInfo 用 Point（1/72 英寸），所以内部按 72/96 = 0.75 比例转换。
+ * Canvas 在画元素前 scale(0.75, 0.75)，元素 JSON 继续用像素坐标。
  */
 public class RenderPdfTool implements Tool {
 
     private static final String TAG = "RenderPdf";
+    private static final float PX_TO_PT = 72f / 96f;
 
     private final Context context;
 
@@ -70,7 +57,7 @@ public class RenderPdfTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "renderPdf");
-            functionDef.put("description", "把姐姐设计的内容渲染成 PDF 文件。支持的 pageType 仅 freeform（绝对坐标自由布局），每页可用 elements 自由摆位，元素支持 text/image/svg/rect/line 五种。坐标系 1920×1080（默认 16:9 横向），输出到手机 Download 目录。");
+            functionDef.put("description", "把姐姐设计的内容渲染成 PDF 文件。pageType 仅 freeform（绝对坐标自由布局），每页可用 elements 自由摆位，元素支持 text/image/svg/rect/line 五种。坐标系 1920×1080（默认 16:9 横向），输出到手机 Download 目录。");
 
             JSONObject elementsItem = new JSONObject()
                 .put("type", "object")
@@ -88,7 +75,7 @@ public class RenderPdfTool implements Tool {
                     .put("fontWeight", new JSONObject().put("type", "string").put("description", "text 元素的字重（normal/bold）"))
                     .put("textAlign", new JSONObject().put("type", "string").put("description", "text 元素的对齐（left/center/right）"))
                     .put("rotate", new JSONObject().put("type", "number").put("description", "旋转角度（度）"))
-                    .put("src", new JSONObject().put("type", "string").put("description", "image 元素的图片路径或 URL；可用 file:// 或 content:// 前缀；也支持 auto:提示词 让姐姐自动调 generateImage 出图后嵌入"))
+                    .put("src", new JSONObject().put("type", "string").put("description", "image 元素的图片路径或 URL；可用 file:// 或 content:// 前缀"))
                     .put("svg", new JSONObject().put("type", "string").put("description", "svg 元素的内联 SVG 字符串"))
                     .put("fill", new JSONObject().put("type", "string").put("description", "rect/shape 的填充色或渐变"))
                     .put("stroke", new JSONObject().put("type", "string").put("description", "rect/shape 的描边色"))
@@ -171,11 +158,9 @@ public class RenderPdfTool implements Tool {
             int pageHeight = Integer.parseInt(dims[1]);
             int numPages = pages.length();
 
-            // 准备输出文件
             File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
             File outputFile = new File(downloadDir, outputFilename);
 
-            // 创建 PdfDocument
             PdfDocument pdfDocument = new PdfDocument();
 
             for (int i = 0; i < numPages; i++) {
@@ -183,23 +168,27 @@ public class RenderPdfTool implements Tool {
                 int w = pageJson.optInt("width", pageWidth);
                 int h = pageJson.optInt("height", pageHeight);
 
-                PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(w, h, i + 1).create();
+                int pageW_pt = Math.round(w * PX_TO_PT);
+                int pageH_pt = Math.round(h * PX_TO_PT);
+
+                PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(pageW_pt, pageH_pt, i + 1).create();
                 PdfDocument.Page pdfPage = pdfDocument.startPage(pageInfo);
 
-                // 直接画到 PDF page 的 canvas（无 WebView 中间层）
                 Canvas canvas = pdfPage.getCanvas();
+                canvas.save();
+                canvas.scale(PX_TO_PT, PX_TO_PT);
+
                 renderPageToCanvas(pageJson, canvas, w, h);
 
+                canvas.restore();
                 pdfDocument.finishPage(pdfPage);
             }
 
-            // 写入文件
             FileOutputStream fos = new FileOutputStream(outputFile);
             pdfDocument.writeTo(fos);
             fos.close();
             pdfDocument.close();
 
-            // 扫描到相册
             MediaScannerConnection.scanFile(context,
                 new String[]{outputFile.getAbsolutePath()},
                 new String[]{"application/pdf"},
@@ -227,12 +216,7 @@ public class RenderPdfTool implements Tool {
         return result;
     }
 
-    /**
-     * 把单页内容直接绘制到 Canvas（无 WebView，毫秒级完成）。
-     * 坐标系：左上角 (0,0)，单位像素。
-     */
     private void renderPageToCanvas(JSONObject pageJson, Canvas canvas, int width, int height) {
-        // 背景
         String bg = pageJson.optString("background", "#FFFFFF");
         if (!bg.isEmpty()) {
             Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -240,7 +224,6 @@ public class RenderPdfTool implements Tool {
             canvas.drawRect(0, 0, width, height, bgPaint);
         }
 
-        // 元素
         JSONArray elements = pageJson.optJSONArray("elements");
         if (elements != null) {
             for (int i = 0; i < elements.length(); i++) {
@@ -254,9 +237,6 @@ public class RenderPdfTool implements Tool {
         }
     }
 
-    /**
-     * 绘制单个元素到 canvas。
-     */
     private void drawElement(Canvas canvas, JSONObject el) throws JSONException {
         String type = el.optString("type", "");
         int x = el.optInt("x", 0);
@@ -265,7 +245,6 @@ public class RenderPdfTool implements Tool {
         int h = el.optInt("height", 0);
         int rotate = el.optInt("rotate", 0);
 
-        // 保存 canvas 状态以处理旋转
         if (rotate != 0 && w > 0 && h > 0) {
             int cx = x + w / 2;
             int cy = y + h / 2;
@@ -298,9 +277,6 @@ public class RenderPdfTool implements Tool {
         }
     }
 
-    /**
-     * text 元素。
-     */
     private void drawTextElement(Canvas canvas, JSONObject el, int x, int y, int w, int h) {
         String content = el.optString("content", "");
         if (content.isEmpty()) return;
@@ -319,11 +295,8 @@ public class RenderPdfTool implements Tool {
         }
         paint.setTypeface(Typeface.create(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL));
 
-        // 处理多行（按 \n 分割）
         String[] lines = content.split("\n");
         float lineHeight = paint.getTextSize() * 1.2f;
-
-        // 计算垂直居中起始 Y
         float totalHeight = lines.length * lineHeight;
         float startY = y + (h > 0 ? (h - totalHeight) / 2f : 0) + paint.getTextSize();
 
@@ -345,9 +318,6 @@ public class RenderPdfTool implements Tool {
         }
     }
 
-    /**
-     * rect 元素。支持圆角和填充/渐变/描边。
-     */
     private void drawRectElement(Canvas canvas, JSONObject el, int x, int y, int w, int h) {
         if (w <= 0 || h <= 0) return;
 
@@ -358,7 +328,6 @@ public class RenderPdfTool implements Tool {
 
         RectF rect = new RectF(x, y, x + w, y + h);
 
-        // 填充
         if (!"transparent".equalsIgnoreCase(fill) && !fill.isEmpty()) {
             Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             fillPaint.setStyle(Paint.Style.FILL);
@@ -370,7 +339,6 @@ public class RenderPdfTool implements Tool {
             }
         }
 
-        // 描边
         if (strokeWidth > 0 && !"transparent".equalsIgnoreCase(stroke) && !stroke.isEmpty()) {
             Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             strokePaint.setStyle(Paint.Style.STROKE);
@@ -384,9 +352,6 @@ public class RenderPdfTool implements Tool {
         }
     }
 
-    /**
-     * line 元素。
-     */
     private void drawLineElement(Canvas canvas, JSONObject el) {
         int x = el.optInt("x", 0);
         int y = el.optInt("y", 0);
@@ -406,9 +371,6 @@ public class RenderPdfTool implements Tool {
         canvas.drawLine(x1, y1, x2, y2, paint);
     }
 
-    /**
-     * image 元素。支持 file://, content://, http(s):// 和本地路径。
-     */
     private void drawImageElement(Canvas canvas, JSONObject el, int x, int y, int w, int h) {
         if (w <= 0 || h <= 0) return;
 
@@ -418,7 +380,6 @@ public class RenderPdfTool implements Tool {
         Bitmap bmp = loadBitmap(src);
         if (bmp != null) {
             try {
-                // 等比缩放到目标矩形，居中绘制
                 RectF dst = fitImageRect(bmp, x, y, w, h);
                 Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
                 paint.setFilterBitmap(true);
@@ -429,10 +390,6 @@ public class RenderPdfTool implements Tool {
         }
     }
 
-    /**
-     * svg 元素。当前简化处理：尝试解析 <path d="..."/> 并用 Path 绘制。
-     * 复杂的 SVG（嵌套、滤镜、渐变定义）暂不支持。
-     */
     private void drawSvgElement(Canvas canvas, JSONObject el, int x, int y, int w, int h) {
         String svg = el.optString("svg", "");
         if (svg.isEmpty() || w <= 0 || h <= 0) return;
@@ -443,7 +400,6 @@ public class RenderPdfTool implements Tool {
             String stroke = el.optString("stroke", "transparent");
             int strokeWidth = el.optInt("strokeWidth", 1);
 
-            // SVG 默认 viewBox 假设 100x100，把 path 缩放到 (x, y, w, h)
             Matrix matrix = new Matrix();
             RectF bounds = new RectF();
             path.computeBounds(bounds, true);
@@ -468,15 +424,9 @@ public class RenderPdfTool implements Tool {
                 strokePaint.setColor(parseColor(stroke));
                 canvas.drawPath(path, strokePaint);
             }
-        } else {
-            Log.w(TAG, "SVG parsing failed or unsupported - element skipped");
         }
     }
 
-    /**
-     * 解析 CSS 颜色字符串。
-     * 支持 #RRGGBB、#RGB、rgb(r,g,b)、rgba(r,g,b,a)、CSS 命名颜色、transparent。
-     */
     private int parseColor(String colorStr) {
         if (colorStr == null || colorStr.isEmpty()) return Color.BLACK;
         String s = colorStr.trim();
@@ -503,10 +453,6 @@ public class RenderPdfTool implements Tool {
         }
     }
 
-    /**
-     * 应用纯色或线性渐变到 Paint。
-     * 支持："#RRGGBB"、"rgba(...)"、"linear-gradient(...)"。
-     */
     private void applyFillOrGradient(Paint paint, String value, RectF bounds) {
         if (value == null || value.isEmpty()) return;
         String s = value.trim();
@@ -522,11 +468,6 @@ public class RenderPdfTool implements Tool {
         paint.setColor(parseColor(s));
     }
 
-    /**
-     * 解析 linear-gradient 字符串。
-     * 支持：linear-gradient(direction, color1, color2, ...)
-     * direction: "to right" / "to bottom" / "to bottom right" / 角度 "45deg"
-     */
     private LinearGradient parseLinearGradient(String value, RectF bounds) {
         try {
             int p1 = value.indexOf('(');
@@ -545,20 +486,23 @@ public class RenderPdfTool implements Tool {
             if (first.startsWith("to ") || first.endsWith("deg")) {
                 colorStartIdx = 1;
                 if (first.equals("to right")) {
-                    x0 = bounds.left; y0 = bounds.top;
-                    x1 = bounds.right; y1 = bounds.top;
+                    x0 = bounds.left; y0 = (bounds.top + bounds.bottom) / 2f;
+                    x1 = bounds.right; y1 = (bounds.top + bounds.bottom) / 2f;
                 } else if (first.equals("to left")) {
-                    x0 = bounds.right; y0 = bounds.top;
-                    x1 = bounds.left; y1 = bounds.top;
+                    x0 = bounds.right; y0 = (bounds.top + bounds.bottom) / 2f;
+                    x1 = bounds.left; y1 = (bounds.top + bounds.bottom) / 2f;
                 } else if (first.equals("to bottom")) {
-                    x0 = bounds.left; y0 = bounds.top;
-                    x1 = bounds.left; y1 = bounds.bottom;
+                    x0 = (bounds.left + bounds.right) / 2f; y0 = bounds.top;
+                    x1 = (bounds.left + bounds.right) / 2f; y1 = bounds.bottom;
                 } else if (first.equals("to top")) {
-                    x0 = bounds.left; y0 = bounds.bottom;
-                    x1 = bounds.left; y1 = bounds.top;
+                    x0 = (bounds.left + bounds.right) / 2f; y0 = bounds.bottom;
+                    x1 = (bounds.left + bounds.right) / 2f; y1 = bounds.top;
                 } else if (first.equals("to bottom right") || first.equals("to right bottom")) {
                     x0 = bounds.left; y0 = bounds.top;
                     x1 = bounds.right; y1 = bounds.bottom;
+                } else if (first.equals("to top left") || first.equals("to left top")) {
+                    x0 = bounds.right; y0 = bounds.bottom;
+                    x1 = bounds.left; y1 = bounds.top;
                 } else if (first.endsWith("deg")) {
                     try {
                         float angle = Float.parseFloat(first.replace("deg", "").trim());
@@ -588,9 +532,6 @@ public class RenderPdfTool implements Tool {
         }
     }
 
-    /**
-     * 加载图片。支持 file://、content://、http(s)://、本地路径。
-     */
     private Bitmap loadBitmap(String src) {
         try {
             if (src.startsWith("http://") || src.startsWith("https://")) {
@@ -619,9 +560,6 @@ public class RenderPdfTool implements Tool {
         }
     }
 
-    /**
-     * 计算图片在目标矩形内的等比适配矩形。
-     */
     private RectF fitImageRect(Bitmap bmp, int x, int y, int w, int h) {
         int bw = bmp.getWidth();
         int bh = bmp.getHeight();
@@ -635,11 +573,6 @@ public class RenderPdfTool implements Tool {
         return new RectF(drawX, drawY, drawX + drawW, drawY + drawH);
     }
 
-    /**
-     * 简单 SVG path 解析：提取 <path d="..."/> 中的内容构造 android.graphics.Path。
-     * 支持：M/m, L/l, H/h, V/v, C/c, Z/z（基础指令）。
-     * 复杂 SVG（嵌套组、滤镜、text 等）暂不支持。
-     */
     private Path parseSimpleSvgPath(String svg) {
         try {
             Pattern pathPattern = Pattern.compile("<path[^>]*\\bd\\s*=\\s*\"([^\"]+)\"");
