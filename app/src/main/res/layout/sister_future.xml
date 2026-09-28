@@ -84,9 +84,9 @@
     android:layout_alignParentBottom="true"
     android:layout_margin="5dp"
     android:layout_toLeftOf="@+id/uploadImageButton"
-    android:contentDescription="强制重置对话上下文"
+    android:contentDescription="新建或切换会话"
     android:padding="0dp"
-    android:text="重置"
+    android:text="会话"
     android:textSize="12sp" />
 
   <EditText

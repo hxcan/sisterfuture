@@ -1,5 +1,7 @@
 # 会话管理
 
+最新阶段已加入会话选择界面，见 [会话切换](session-switching.md)；下文保留此前阶段说明。
+
 ## 当前阶段：重置创建新会话
 
 - 重置按钮及 `resetConversationContext` 创建 UUID 标识的新空会话，旧 SQLite 历史不删除。

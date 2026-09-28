@@ -150,8 +150,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final Gson gson = new Gson();
 
   private SessionManager sessionManager;
+  private long sessionGeneration;
   private final java.util.Map<Long, ContextManager> turnContexts = new java.util.concurrent.ConcurrentHashMap<>();
   private static final class RequestState {
+    final long generation;
     final com.stupidbeauty.sisterfuture.utils.PerformanceStats arrival = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
     final com.stupidbeauty.sisterfuture.utils.PerformanceStats queue = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
     final com.stupidbeauty.sisterfuture.utils.PerformanceStats handling = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
@@ -169,9 +171,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     final ToolManager tools;
     final Map<Integer, String> originalIds = new HashMap<>();
     final Map<String, Function> arguments = new java.util.LinkedHashMap<>();
-    RequestState(ContextManager context, ToolManager tools) { this.context = context; this.tools = tools; }
+    RequestState(ContextManager context, ToolManager tools, long generation) {
+      this.context = context; this.tools = tools; this.generation = generation;
+    }
   }
-  // Bound to the sole session for this Activity lifetime (no session switching yet).
+  // UI-facing context; in-flight requests retain their original owner and generation.
   private ContextManager contextManager;
   private MessageAdapter messageAdapter;
   @BindView(R.id.articleListmy_recycler_view) RecyclerView articleListmyRecyclerView;
@@ -780,12 +784,47 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   @OnClick(R.id.resetContextButton)
   public void resetConversationContextFromUi()
   {
-    new AlertDialog.Builder(this)
-      .setTitle("开启新会话")
-      .setMessage("将开启新的空会话，旧历史保留。旧请求不再自动续接。")
+    final long generation = sessionGeneration;
+    final java.util.List<SessionManager.Session> sessions = sessionManager.getSessions();
+    final String currentId = sessionManager.getCurrentSession().getId();
+    resetContextButton.setEnabled(false);
+    new Thread(() -> {
+      final String[] labels = new String[sessions.size()];
+      for (int i = 0; i < sessions.size(); i++) {
+        SessionManager.Session session = sessions.get(i);
+        try { labels[i] = session.getTitle(); }
+        catch (Exception e) { labels[i] = "会话 " + session.getId(); }
+        if (currentId.equals(session.getId())) labels[i] = "✓ 当前 · " + labels[i];
+      }
+      runOnUiThread(() -> {
+        resetContextButton.setEnabled(true);
+        if (isFinishing() || isDestroyed() || generation != sessionGeneration) return;
+        new AlertDialog.Builder(this).setTitle("会话")
+          .setItems(labels, (dialog, which) -> {
+            if (generation != sessionGeneration || currentId.equals(sessions.get(which).getId())) return;
+            confirmSessionChange(() -> {
+              try {
+                activateSession(sessionManager.switchSession(sessions.get(which).getId()));
+                Toast.makeText(this, "已切换会话", Toast.LENGTH_SHORT).show();
+              } catch (Exception e) { Toast.makeText(this, "切换失败，原历史保留", Toast.LENGTH_LONG).show(); }
+            });
+          })
+          .setPositiveButton("新建会话", (dialog, which) -> {
+            if (generation == sessionGeneration) confirmSessionChange(this::forceResetConversationContext);
+          })
+          .setNegativeButton("取消", null).show();
+      });
+    }, "session-titles").start();
+  }
+
+  private void confirmSessionChange(Runnable action) {
+    final long generation = sessionGeneration;
+    new AlertDialog.Builder(this).setTitle("切换会话")
+      .setMessage("历史会保留，旧请求不再自动续接。未发送的文字和附件将清空。")
       .setNegativeButton("取消", null)
-      .setPositiveButton("开启新会话", (dialog, which) -> forceResetConversationContext())
-      .show();
+      .setPositiveButton("继续", (dialog, which) -> {
+        if (generation == sessionGeneration) action.run();
+      }).show();
   }
 
   private void forceResetConversationContext()
@@ -797,6 +836,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private String startNewSessionFrom(ContextManager source)
   {
     SessionManager.Session next = sessionManager.startNewSession(source);
+    activateSession(next);
+    Toast.makeText(this, "已开启新会话，旧历史保留", Toast.LENGTH_SHORT).show();
+    return next.getId();
+  }
+
+  private void activateSession(SessionManager.Session next)
+  {
+    sessionGeneration++;
     contextManager = next.getContextManager();
     initTools();
     messageAdapter.setContextManager(contextManager);
@@ -821,12 +868,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     voiceRecognizeResultString = "";
     recognizeResulttextView.setText("");
-    resetToolCallHopGuard("new_session", 0L);
+    resetToolCallHopGuard("session_changed", 0L);
     rateLimitRetryCount = 0;
     repeatDetectionManager.reset();
     hideThinkingOverlay();
-    Toast.makeText(this, "已开启新会话，旧历史保留", Toast.LENGTH_SHORT).show();
-    return next.getId();
   }
 
   @OnClick(R.id.uploadImageButton)
@@ -934,7 +979,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     runOnUiThread(() ->
     {
-      if (turnContexts.get(usageTurnId) != contextManager) return;
+      if (usageTurnId != activeUsageTurnId || turnContexts.get(usageTurnId) != contextManager) return;
       String displayMessage = errorMessage + "\n⚠️ 上下文超长，自动缩短后重试";
       messageAdapter.addMessage(new MessageItem(displayMessage, MessageType.AI));
       scrollToBottom();
@@ -968,7 +1013,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     if (usageTurnId > 0L && usageTurnId != activeUsageTurnId) return;
     if (usageTurnId > 0L && turnContexts.containsKey(usageTurnId)
         && turnContexts.get(usageTurnId) != contextManager) return;
-    final RequestState requestState = new RequestState(contextManager, toolManager);
+    final RequestState requestState = new RequestState(contextManager, toolManager, sessionGeneration);
     final long requestUsageTurnId = usageTurnId > 0L
       ? usageTurnId
       : turnUsageTracker.startTurn();
@@ -990,7 +1035,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
           @Override
           public void onResponse(String message) {
-            if (contextManager != requestState.context) return;
+            if ((contextManager != requestState.context || requestState.generation != sessionGeneration)) return;
             messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
             scrollToBottom();
             ttsSayReply(message);
@@ -1003,7 +1048,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           @Override
           public void onError(String error) {
-            if (contextManager != requestState.context) return;
+            if ((contextManager != requestState.context || requestState.generation != sessionGeneration)) return;
             messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
             scrollToBottom();
           }
@@ -1169,7 +1214,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             long startedAt = System.nanoTime();
             requestState.queue.record(startedAt - receivedAt);
             try {
-            if (contextManager == requestState.context) {
+            if ((contextManager == requestState.context && requestState.generation == sessionGeneration)) {
               hideThinkingOverlay();
               SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
               lastSuccessRequestId = requestId;
@@ -1200,7 +1245,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
           runOnUiThread(() -> {
           requestState.report(true);
-          if (contextManager != requestState.context) {
+          if ((contextManager != requestState.context || requestState.generation != sessionGeneration)) {
             requestState.context.discardReservedMessageId(currentReservedMessageId);
             runOnUiThread(() -> finishUsageTurnWithoutFinalMessage(requestUsageTurnId));
             return;
@@ -1320,7 +1365,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     new Handler(Looper.getMainLooper()).postDelayed(() ->
     {
-      if (turnContexts.get(usageTurnId) != contextManager) return;
+      if (usageTurnId != activeUsageTurnId || turnContexts.get(usageTurnId) != contextManager) return;
       rateLimitRetryCount++;
       sendChatRequestTongYi(usageTurnId);
     }, delayMs);
@@ -1343,7 +1388,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   protected void parseTongYiResponse(String jsonString)
   {
-    parseTongYiResponse(jsonString, null, activeUsageTurnId, accumulatedAnswer, new RequestState(contextManager, toolManager));
+    parseTongYiResponse(jsonString, null, activeUsageTurnId, accumulatedAnswer, new RequestState(contextManager, toolManager, sessionGeneration));
   }
 
   private void parseTongYiResponse(String jsonString, String responseMessageId,
@@ -1359,7 +1404,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       if (response != null && response.getError() != null)
       {
         String errorMessage = response.getError().getMessage();
-        if (contextManager != SisterFutureActivity.this.contextManager) {
+        if (contextManager != SisterFutureActivity.this.contextManager || requestState.generation != sessionGeneration) {
           contextManager.addAssistantMessage(errorMessage, responseMessageId, null);
           contextManager.discardReservedMessageId(responseMessageId);
           finishUsageTurnWithoutFinalMessage(responseUsageTurnId);
@@ -1403,7 +1448,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         accumulateToolCalls(delta.getToolCalls(), requestState.originalIds, requestState.arguments);
       }
 
-      if (contextManager != SisterFutureActivity.this.contextManager) {
+      if (contextManager != SisterFutureActivity.this.contextManager || requestState.generation != sessionGeneration) {
         if (delta != null && delta.getContent() != null) responseAccumulator.append(delta.getContent());
         String finish = choice.getFinishReason();
         if ("tool_calls".equals(finish)) {
@@ -1561,7 +1606,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                       {
                         FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成，准备调用 postProcessToolResults");
                         postProcessToolResults(pendingResults, assistantMessage, toolCallsArray,
-                          responseUsageTurnId, contextManager, toolManager);
+                          responseUsageTurnId, contextManager, toolManager, requestState.generation);
                       }
                     }
                   }
@@ -1593,7 +1638,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         {
                           FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成（含错误），准备调用 postProcessToolResults");
                           postProcessToolResults(pendingResults, assistantMessage, toolCallsArray,
-                            responseUsageTurnId, contextManager, toolManager);
+                            responseUsageTurnId, contextManager, toolManager, requestState.generation);
                         }
                       }
                       catch (Exception ex)
@@ -1653,7 +1698,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
             runOnUiThread(() ->
             {
-              if (contextManager != SisterFutureActivity.this.contextManager) return;
+              if (contextManager != SisterFutureActivity.this.contextManager || requestState.generation != sessionGeneration) return;
               StringBuilder callText = new StringBuilder();
               if (!toolCallPreamble.trim().isEmpty())
               {
@@ -1688,7 +1733,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             {
               FileLogger.d(TAG, "🔧 [TOOL_SYNC_ALL_COMPLETE] 同步工具全部完成，准备调用 postProcessToolResults");
               postProcessToolResults(pendingResults, assistantMessage, toolCallsArray,
-                responseUsageTurnId, contextManager, toolManager);
+                responseUsageTurnId, contextManager, toolManager, requestState.generation);
             }
           }
           catch (Exception e)
@@ -1809,7 +1854,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void postProcessToolResults(java.util.Map<String, JSONObject> pendingResults,
                                     JSONObject assistantMessage,
                                     JSONArray toolCallsArray,
-                                    long usageTurnId, ContextManager contextManager, ToolManager toolManager)
+                                    long usageTurnId, ContextManager contextManager, ToolManager toolManager, long generation)
   {
     FileLogger.d(TAG, "🔧 [POST_PROCESS_ENTER] 进入 postProcessToolResults | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
 
@@ -1884,7 +1929,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           if (contextManager == SisterFutureActivity.this.contextManager) messageAdapter.addMessage(messageItem);
         }
 
-        if (!continueAfterResults || contextManager != SisterFutureActivity.this.contextManager) {
+        if (!continueAfterResults || contextManager != SisterFutureActivity.this.contextManager || generation != sessionGeneration) {
           finishUsageTurnWithoutFinalMessage(usageTurnId);
           return;
         }
