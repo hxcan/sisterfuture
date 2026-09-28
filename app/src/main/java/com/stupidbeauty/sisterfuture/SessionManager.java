@@ -28,6 +28,17 @@ public final class SessionManager {
     }
     public synchronized ContextManager getCurrentContextManager() { return currentSession.getContextManager(); }
 
+    public synchronized Session switchSession(String id) {
+        Session target = sessions.get(id);
+        if (target == null) throw new IllegalArgumentException("会话不存在");
+        if (target == currentSession) return target;
+        target.getContextManager(); // Load successfully before changing the durable selection.
+        if (!navigation.edit().putString("current_session_id", id).commit())
+            throw new IllegalStateException("保存当前会话失败");
+        currentSession = target;
+        return target;
+    }
+
     /** Called on the UI thread; rejects late reset tools belonging to a different session. */
     public synchronized Session startNewSession(ContextManager expectedSource) {
         if (currentSession.getContextManager() != expectedSource)
@@ -47,7 +58,11 @@ public final class SessionManager {
         private ContextManager contextManager;
         private Session(String id) { this.id = id; }
         public String getId() { return id; }
-        public String getTitle() { return DEFAULT_SESSION_ID.equals(id) ? "默认会话" : "新会话"; }
+        public String getTitle() {
+            String preview = new SqliteConversationStore(context, id).loadFirstUserText();
+            String prefix = DEFAULT_SESSION_ID.equals(id) ? "默认会话" : "会话 " + id.substring(0, 8);
+            return preview.isEmpty() ? prefix : prefix + " · " + preview;
+        }
         public synchronized ContextManager getContextManager() {
             if (contextManager == null) contextManager = new ContextManager(new SqliteConversationStore(context, id));
             return contextManager;

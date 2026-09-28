@@ -14,6 +14,26 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class SessionManagerTest {
+    @Test public void switchBackRetainsHistoryAndRestoresSelection() throws Exception {
+        Context context = isolatedContext();
+        SessionManager manager = new SessionManager(context);
+        ContextManager first = manager.getCurrentContextManager();
+        first.addUserMessage("first session question");
+        SessionManager.Session second = manager.startNewSession(first);
+        second.getContextManager().addUserMessage("second session question");
+        manager.switchSession("default");
+        assertSame(first, manager.getCurrentContextManager());
+        assertEquals("first session question", first.getHistory().get(0).getString("content"));
+        assertTrue(manager.getCurrentSession().getTitle().contains("first session question"));
+        SessionManager restored = new SessionManager(context);
+        assertEquals("default", restored.getCurrentSession().getId());
+        restored.switchSession(second.getId());
+        assertEquals("second session question", restored.getCurrentContextManager().getHistory().get(0).getString("content"));
+        try { restored.switchSession("missing"); fail("Unknown session must not be selected"); }
+        catch (IllegalArgumentException expected) { }
+        assertEquals(second.getId(), restored.getCurrentSession().getId());
+    }
+
     @Test public void newSessionIsEmptyAndSelectionSurvivesRestart() throws Exception {
         Context context = isolatedContext();
         SessionManager manager = new SessionManager(context);

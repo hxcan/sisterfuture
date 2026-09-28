@@ -111,6 +111,35 @@ public final class SqliteConversationStore implements ConversationStore {
         });
     }
 
+    /** Read-only preview: do not instantiate/normalize every session's ContextManager. */
+    public String loadFirstUserText() {
+        return run(() -> {
+            try (Helper helper = new Helper(context, databasePath);
+                 Cursor cursor = helper.getReadableDatabase().rawQuery(
+                     "SELECT message_json FROM messages WHERE session_id=? ORDER BY position", new String[]{sessionId})) {
+                while (cursor.moveToNext()) {
+                    JSONObject message = new JSONObject(cursor.getString(0));
+                    if (!"user".equals(message.optString("role"))) continue;
+                    Object content = message.opt("content");
+                    String text = "";
+                    if (content instanceof String) text = (String) content;
+                    else if (content instanceof org.json.JSONArray) {
+                        org.json.JSONArray parts = (org.json.JSONArray) content;
+                        for (int i = 0; i < parts.length(); i++) {
+                            JSONObject part = parts.optJSONObject(i);
+                            if (part != null && "text".equals(part.optString("type"))) {
+                                text = part.optString("text"); break;
+                            }
+                        }
+                    }
+                    text = text.replaceAll("\\s+", " ").trim();
+                    return text.length() > 32 ? text.substring(0, 32) + "…" : text;
+                }
+                return "";
+            }
+        });
+    }
+
     @Override public void saveHistory(List<JSONObject> history) {
         long started = System.nanoTime();
         List<String> messages = snapshot(history);
