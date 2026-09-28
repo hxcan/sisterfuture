@@ -45,7 +45,7 @@ public class ContextManager
 
   public ContextManager(Context context)
   {
-    this(new FileConversationStore(context));
+    this(new SqliteConversationStore(context));
   }
 
   public ContextManager(ConversationStore conversationStore)

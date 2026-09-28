@@ -15,10 +15,10 @@ public final class SessionManager {
     private final List<Session> sessions;
 
     public SessionManager(Context context) {
-        // Keep the legacy file/preferences and startup recovery behavior unchanged.
+        // Import legacy storage once; keep ContextManager startup recovery unchanged.
         // Do not create another ContextManager in UI, tools or request callbacks.
         currentSession = new Session(DEFAULT_SESSION_ID, "默认会话",
-                new ContextManager(new FileConversationStore(Objects.requireNonNull(context, "context"))));
+                new ContextManager(new SqliteConversationStore(Objects.requireNonNull(context, "context"))));
         sessions = Collections.singletonList(currentSession);
     }
 
