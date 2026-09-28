@@ -1,4 +1,24 @@
-# 会话管理：第一阶段
+# 会话管理
+
+## 当前阶段：重置创建新会话
+
+- 重置按钮及 `resetConversationContext` 创建 UUID 标识的新空会话，旧 SQLite 历史不删除。
+- `SessionManager` 从 SQLite 会话表读取目录；`session_navigation/current_session_id`
+  偏好设置持久化当前选择。先创建数据库记录，再同步保存选择，最后发布新上下文。
+- 请求捕获原始 ContextManager、ToolManager 和流式工具参数缓冲；已开始的工具批次
+  全部回复仍写入原会话。切换后才收到的尚未执行工具调用记录为取消，不启动新副作用。
+- `Tool.shouldContinueAfterResult(result)` 默认 true。重置成功返回 false，失败仍为 true；
+  决策依据单次结果，不使用共享可变标志。同批任一工具要求停止，就在全部结果写入后停止续接。
+- 批次完成门闩要求调用注册及 assistant 工具调用消息写入完成，且全部结果齐全，
+  才能收尾一次；避免同步回调提前续接。
+- 尚无切换旧会话的界面；旧记录保留，下一阶段增加会话选择。
+
+验证：修改的 Java 源码及 Android 会话测试通过本地编译检查；
+13 项 JVM 测试通过。Android 测试仅编译，尚未在设备执行；完整 APK 构建仍需 CI。
+真机验收应覆盖按钮重置、工具重置、同批多个异步工具、重置后立即发送、
+重启恢复新会话，以及失败时旧历史不被清空。
+
+## 第一阶段记录（历史方案）
 
 更新：存储实现已演进为 SQLite，见 [SQLite 存储与迁移](sqlite-conversation-storage.md)。
 下文描述首次职责拆分时的文件存储方案；界面仍为默认单会话。

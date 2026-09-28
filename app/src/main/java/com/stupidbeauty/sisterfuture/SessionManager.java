@@ -1,47 +1,56 @@
 package com.stupidbeauty.sisterfuture;
 
 import android.content.Context;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
+import android.content.SharedPreferences;
+import java.util.*;
 
-/**
- * Session ownership boundary. Phase one deliberately exposes only the existing session.
- * Activity-scoped, like the previous ContextManager; not a process singleton.
- */
+/** Owns session identity; a context always stays bound to its original session. */
 public final class SessionManager {
     public static final String DEFAULT_SESSION_ID = "default";
-    private final Session currentSession;
-    private final List<Session> sessions;
+    private final Context context;
+    private final SharedPreferences navigation;
+    private final Map<String, Session> sessions = new LinkedHashMap<>();
+    private Session currentSession;
 
     public SessionManager(Context context) {
-        // Import legacy storage once; keep ContextManager startup recovery unchanged.
-        // Do not create another ContextManager in UI, tools or request callbacks.
-        currentSession = new Session(DEFAULT_SESSION_ID, "默认会话",
-                new ContextManager(new SqliteConversationStore(Objects.requireNonNull(context, "context"))));
-        sessions = Collections.singletonList(currentSession);
+        this.context = Objects.requireNonNull(context, "context");
+        navigation = context.getSharedPreferences("session_navigation", Context.MODE_PRIVATE);
+        SqliteConversationStore catalog = new SqliteConversationStore(context);
+        for (String id : catalog.listSessionIds()) sessions.put(id, new Session(id));
+        String activeId = navigation.getString("current_session_id", DEFAULT_SESSION_ID);
+        currentSession = sessions.get(activeId);
+        if (currentSession == null) throw new IllegalStateException("当前会话不存在，未自动覆盖会话选择");
     }
 
-    public Session getCurrentSession() { return currentSession; }
+    public synchronized Session getCurrentSession() { return currentSession; }
+    public synchronized List<Session> getSessions() {
+        return Collections.unmodifiableList(new ArrayList<>(sessions.values()));
+    }
+    public synchronized ContextManager getCurrentContextManager() { return currentSession.getContextManager(); }
 
-    /** Read-only inventory; no create/switch/delete until storage and callbacks are isolated. */
-    public List<Session> getSessions() { return sessions; }
+    /** Called on the UI thread; rejects late reset tools belonging to a different session. */
+    public synchronized Session startNewSession(ContextManager expectedSource) {
+        if (currentSession.getContextManager() != expectedSource)
+            throw new IllegalStateException("原会话已不再是当前会话，忽略过期重置");
+        String id = UUID.randomUUID().toString();
+        Session next = new Session(id);
+        next.getContextManager(); // Creates the durable DB row before publishing selection.
+        if (!navigation.edit().putString("current_session_id", id).commit())
+            throw new IllegalStateException("保存当前会话失败，仍保留原会话");
+        sessions.put(id, next);
+        currentSession = next;
+        return next;
+    }
 
-    public ContextManager getCurrentContextManager() { return currentSession.getContextManager(); }
-
-    public static final class Session {
+    public final class Session {
         private final String id;
-        private final String title;
-        private final ContextManager contextManager;
-
-        private Session(String id, String title, ContextManager contextManager) {
-            this.id = id;
-            this.title = title;
-            this.contextManager = contextManager;
-        }
-
+        private ContextManager contextManager;
+        private Session(String id) { this.id = id; }
         public String getId() { return id; }
-        public String getTitle() { return title; }
-        public ContextManager getContextManager() { return contextManager; }
+        public String getTitle() { return DEFAULT_SESSION_ID.equals(id) ? "默认会话" : "新会话"; }
+        public synchronized ContextManager getContextManager() {
+            if (contextManager == null) contextManager = new ContextManager(new SqliteConversationStore(context, id));
+            return contextManager;
+        }
     }
 }
