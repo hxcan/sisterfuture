@@ -1,5 +1,8 @@
 # 会话管理：第一阶段
 
+更新：存储实现已演进为 SQLite，见 [SQLite 存储与迁移](sqlite-conversation-storage.md)。
+下文描述首次职责拆分时的文件存储方案；界面仍为默认单会话。
+
 当前只有 `ContextManager` 管理历史/持久化，没有多会话隔离。本阶段引入
 Activity 生命周期内的 `SessionManager`，持有唯一 `default` 会话及其
 `ContextManager`。`getSessions()` 返回只读列表，供后续会话 UI 演进使用。
