@@ -799,8 +799,28 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       runOnUiThread(() -> {
         resetContextButton.setEnabled(true);
         if (isFinishing() || isDestroyed() || generation != sessionGeneration) return;
-        new AlertDialog.Builder(this).setTitle("会话")
-          .setItems(labels, (dialog, which) -> {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(
+          builder.getContext(), android.R.layout.simple_list_item_1, labels) {
+          @Override public android.view.View getView(int position, android.view.View recycled,
+                                                    android.view.ViewGroup parent) {
+            android.widget.TextView row = (android.widget.TextView) super.getView(position, recycled, parent);
+            float density = row.getResources().getDisplayMetrics().density;
+            row.setSingleLine(true);
+            row.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            row.setMinHeight(Math.round(56 * density));
+            row.setPadding(Math.round(20 * density), Math.round(12 * density),
+              Math.round(20 * density), Math.round(12 * density));
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            // Reset both states because ListView recycles rows.
+            row.setBackgroundColor(currentId.equals(sessions.get(position).getId())
+              ? 0x243F8CFF : android.graphics.Color.TRANSPARENT);
+            row.setContentDescription(labels[position]);
+            return row;
+          }
+        };
+        AlertDialog sessionDialog = builder.setTitle("会话（共 " + sessions.size() + " 个）")
+          .setAdapter(adapter, (dialog, which) -> {
             if (generation != sessionGeneration || currentId.equals(sessions.get(which).getId())) return;
             confirmSessionChange(() -> {
               try {
@@ -812,7 +832,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           .setPositiveButton("新建会话", (dialog, which) -> {
             if (generation == sessionGeneration) confirmSessionChange(this::forceResetConversationContext);
           })
-          .setNegativeButton("取消", null).show();
+          .setNegativeButton("取消", null).create();
+        sessionDialog.show();
+        android.widget.ListView list = sessionDialog.getListView();
+        list.setDivider(new android.graphics.drawable.ColorDrawable(0x40808080));
+        list.setDividerHeight(Math.max(1, Math.round(getResources().getDisplayMetrics().density)));
       });
     }, "session-titles").start();
   }
