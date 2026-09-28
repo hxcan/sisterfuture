@@ -152,6 +152,19 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private SessionManager sessionManager;
   private final java.util.Map<Long, ContextManager> turnContexts = new java.util.concurrent.ConcurrentHashMap<>();
   private static final class RequestState {
+    final com.stupidbeauty.sisterfuture.utils.PerformanceStats arrival = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
+    final com.stupidbeauty.sisterfuture.utils.PerformanceStats queue = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
+    final com.stupidbeauty.sisterfuture.utils.PerformanceStats handling = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
+    long lastArrival;
+    synchronized void received(long now) {
+      if (lastArrival != 0) arrival.record(now - lastArrival);
+      lastArrival = now;
+    }
+    void report(boolean force) {
+      arrival.report("stream_callback_gap", force);
+      queue.report("stream_ui_queue", force);
+      handling.report("stream_ui_handling", force);
+    }
     final ContextManager context;
     final ToolManager tools;
     final Map<Integer, String> originalIds = new HashMap<>();
@@ -1150,7 +1163,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         @Override
         public void onResponse(String response)
         {
+          final long receivedAt = System.nanoTime();
+          requestState.received(receivedAt);
           runOnUiThread(() -> {
+            long startedAt = System.nanoTime();
+            requestState.queue.record(startedAt - receivedAt);
+            try {
             if (contextManager == requestState.context) {
               hideThinkingOverlay();
               SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
@@ -1158,6 +1176,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             }
             parseTongYiResponse(response, currentReservedMessageId,
               requestUsageTurnId, responseAccumulator, requestState);
+            } finally {
+              requestState.handling.record(System.nanoTime() - startedAt);
+              requestState.report(false);
+            }
           });
         }
 
@@ -1167,13 +1189,17 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           ModelUsage aggregateUsage = turnUsageTracker.completeRequest(requestUsageTurnId, usage);
           FileLogger.i(TAG, "📊 [MODEL_USAGE] turnId=" + requestUsageTurnId
             + " | " + (aggregateUsage != null ? aggregateUsage.buildCompactSummary() : "无数据"));
-          runOnUiThread(() -> attachTurnUsageToFinalMessage(requestUsageTurnId));
+          runOnUiThread(() -> {
+            attachTurnUsageToFinalMessage(requestUsageTurnId);
+            requestState.report(true);
+          });
         }
 
         @Override
         public void onError(Exception error)
         {
           runOnUiThread(() -> {
+          requestState.report(true);
           if (contextManager != requestState.context) {
             requestState.context.discardReservedMessageId(currentReservedMessageId);
             runOnUiThread(() -> finishUsageTurnWithoutFinalMessage(requestUsageTurnId));
