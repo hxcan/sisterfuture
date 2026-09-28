@@ -150,6 +150,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private static final Gson gson = new Gson();
 
   private SessionManager sessionManager;
+  private final java.util.Map<Long, ContextManager> turnContexts = new java.util.concurrent.ConcurrentHashMap<>();
+  private static final class RequestState {
+    final ContextManager context;
+    final ToolManager tools;
+    final Map<Integer, String> originalIds = new HashMap<>();
+    final Map<String, Function> arguments = new java.util.LinkedHashMap<>();
+    RequestState(ContextManager context, ToolManager tools) { this.context = context; this.tools = tools; }
+  }
   // Bound to the sole session for this Activity lifetime (no session switching yet).
   private ContextManager contextManager;
   private MessageAdapter messageAdapter;
@@ -224,7 +232,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   }
 
-  private void accumulateToolCalls(List<ToolCall> calls)
+  private void accumulateToolCalls(List<ToolCall> calls, Map<Integer, String> indexToOriginalIdMap, Map<String, Function> partialToolArgs)
   {
     for (ToolCall call : calls)
     {
@@ -260,7 +268,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
   }
 
-  private List<ToolCall> getFinalToolCalls()
+  private List<ToolCall> getFinalToolCalls(Map<Integer, String> indexToOriginalIdMap, Map<String, Function> partialToolArgs)
   {
     List<ToolCall> result = new ArrayList<>();
     for (Map.Entry<String, Function> entry : partialToolArgs.entrySet())
@@ -760,19 +768,25 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   public void resetConversationContextFromUi()
   {
     new AlertDialog.Builder(this)
-      .setTitle("强制重置上下文")
-      .setMessage("将清空当前全部对话记录，此操作无法撤销。")
+      .setTitle("开启新会话")
+      .setMessage("将开启新的空会话，旧历史保留。旧请求不再自动续接。")
       .setNegativeButton("取消", null)
-      .setPositiveButton("确认重置", (dialog, which) -> forceResetConversationContext())
+      .setPositiveButton("开启新会话", (dialog, which) -> forceResetConversationContext())
       .show();
   }
 
   private void forceResetConversationContext()
   {
-    contextManager.clearHistory();
-    toolManager.clearTrackedCalls();
-    turnUsageTracker.clear();
-    finalAssistantMessageIds.clear();
+    try { startNewSessionFrom(contextManager); }
+    catch (Exception e) { Toast.makeText(this, "创建会话失败，原历史保留", Toast.LENGTH_LONG).show(); }
+  }
+
+  private String startNewSessionFrom(ContextManager source)
+  {
+    SessionManager.Session next = sessionManager.startNewSession(source);
+    contextManager = next.getContextManager();
+    initTools();
+    messageAdapter.setContextManager(contextManager);
     activeUsageTurnId = 0L;
     messageAdapter.refreshFromDataSource();
 
@@ -792,8 +806,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     mediaSelectionGeneration++;
     uploadImageButton.setAlpha(1.0f);
 
-    Toast.makeText(this, "上下文已强制重置", Toast.LENGTH_SHORT).show();
-    FileLogger.i(TAG, "🧹 [FORCE_RESET] 用户通过界面强制重置了上下文");
+    voiceRecognizeResultString = "";
+    recognizeResulttextView.setText("");
+    resetToolCallHopGuard("new_session", 0L);
+    rateLimitRetryCount = 0;
+    repeatDetectionManager.reset();
+    hideThinkingOverlay();
+    Toast.makeText(this, "已开启新会话，旧历史保留", Toast.LENGTH_SHORT).show();
+    return next.getId();
   }
 
   @OnClick(R.id.uploadImageButton)
@@ -901,6 +921,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     runOnUiThread(() ->
     {
+      if (turnContexts.get(usageTurnId) != contextManager) return;
       String displayMessage = errorMessage + "\n⚠️ 上下文超长，自动缩短后重试";
       messageAdapter.addMessage(new MessageItem(displayMessage, MessageType.AI));
       scrollToBottom();
@@ -927,9 +948,18 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void sendChatRequestTongYi(long usageTurnId)
   {
+    if (Looper.myLooper() != Looper.getMainLooper()) {
+      runOnUiThread(() -> sendChatRequestTongYi(usageTurnId));
+      return;
+    }
+    if (usageTurnId > 0L && usageTurnId != activeUsageTurnId) return;
+    if (usageTurnId > 0L && turnContexts.containsKey(usageTurnId)
+        && turnContexts.get(usageTurnId) != contextManager) return;
+    final RequestState requestState = new RequestState(contextManager, toolManager);
     final long requestUsageTurnId = usageTurnId > 0L
       ? usageTurnId
       : turnUsageTracker.startTurn();
+    turnContexts.putIfAbsent(requestUsageTurnId, requestState.context);
     final long requestId = System.currentTimeMillis();
     currentRequestId = requestId;
     logToolHopDiagnostic("request_start", requestUsageTurnId, null,
@@ -947,6 +977,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         guideManager.showAddAccessPointGuideForDeadlock(new GuideManager.ChatCallback() {
           @Override
           public void onResponse(String message) {
+            if (contextManager != requestState.context) return;
             messageAdapter.addMessage(new MessageItem(message, MessageType.AI));
             scrollToBottom();
             ttsSayReply(message);
@@ -959,6 +990,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           @Override
           public void onError(String error) {
+            if (contextManager != requestState.context) return;
             messageAdapter.addMessage(new MessageItem(error, MessageType.AI));
             scrollToBottom();
           }
@@ -1118,13 +1150,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         @Override
         public void onResponse(String response)
         {
-          hideThinkingOverlay();
-          SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
-
-          lastSuccessRequestId = requestId;
-
-          parseTongYiResponse(response, currentReservedMessageId,
-            requestUsageTurnId, responseAccumulator);
+          runOnUiThread(() -> {
+            if (contextManager == requestState.context) {
+              hideThinkingOverlay();
+              SisterFutureService.updateNotificationStatus(SisterFutureActivity.this, "正在生成回复...");
+              lastSuccessRequestId = requestId;
+            }
+            parseTongYiResponse(response, currentReservedMessageId,
+              requestUsageTurnId, responseAccumulator, requestState);
+          });
         }
 
         @Override
@@ -1139,6 +1173,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         @Override
         public void onError(Exception error)
         {
+          runOnUiThread(() -> {
+          if (contextManager != requestState.context) {
+            requestState.context.discardReservedMessageId(currentReservedMessageId);
+            runOnUiThread(() -> finishUsageTurnWithoutFinalMessage(requestUsageTurnId));
+            return;
+          }
           FileLogger.d(TAG, "❌ [ERROR_CHECK] 请求 #" + requestId + " 错误 | lastSuccessRequestId=" + lastSuccessRequestId + " | 忽略=" + (requestId < lastSuccessRequestId));
 
           if (requestId < lastSuccessRequestId) {
@@ -1222,6 +1262,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             modelAccessPointManager.resetFailureCount();
             runOnUiThread(() -> finishUsageTurnWithoutFinalMessage(requestUsageTurnId));
           }
+          });
         }
       },
       () ->
@@ -1253,6 +1294,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     new Handler(Looper.getMainLooper()).postDelayed(() ->
     {
+      if (turnContexts.get(usageTurnId) != contextManager) return;
       rateLimitRetryCount++;
       sendChatRequestTongYi(usageTurnId);
     }, delayMs);
@@ -1275,13 +1317,15 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   protected void parseTongYiResponse(String jsonString)
   {
-    parseTongYiResponse(jsonString, null, activeUsageTurnId, accumulatedAnswer);
+    parseTongYiResponse(jsonString, null, activeUsageTurnId, accumulatedAnswer, new RequestState(contextManager, toolManager));
   }
 
   private void parseTongYiResponse(String jsonString, String responseMessageId,
                                    long responseUsageTurnId,
-                                   StringBuilder responseAccumulator)
+                                   StringBuilder responseAccumulator, RequestState requestState)
   {
+    final ContextManager contextManager = requestState.context;
+    final ToolManager toolManager = requestState.tools;
     try
     {
       TongYiResponse response = new Gson().fromJson(jsonString, TongYiResponse.class);
@@ -1289,6 +1333,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       if (response != null && response.getError() != null)
       {
         String errorMessage = response.getError().getMessage();
+        if (contextManager != SisterFutureActivity.this.contextManager) {
+          contextManager.addAssistantMessage(errorMessage, responseMessageId, null);
+          contextManager.discardReservedMessageId(responseMessageId);
+          finishUsageTurnWithoutFinalMessage(responseUsageTurnId);
+          return;
+        }
         boolean isContextTooLong = ContextLengthUtils.isContextLengthError(errorMessage);
 
         if (isContextTooLong)
@@ -1324,7 +1374,37 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
       if (delta != null && delta.getToolCalls() != null && !delta.getToolCalls().isEmpty())
       {
-        accumulateToolCalls(delta.getToolCalls());
+        accumulateToolCalls(delta.getToolCalls(), requestState.originalIds, requestState.arguments);
+      }
+
+      if (contextManager != SisterFutureActivity.this.contextManager) {
+        if (delta != null && delta.getContent() != null) responseAccumulator.append(delta.getContent());
+        String finish = choice.getFinishReason();
+        if ("tool_calls".equals(finish)) {
+          // Do not start new side effects after a UI reset. Preserve the calls with cancellation results.
+          JSONArray cancelled = new JSONArray();
+          for (ToolCall call : getFinalToolCalls(requestState.originalIds, requestState.arguments)) {
+            cancelled.put(new JSONObject().put("id", call.getId()).put("type", "function")
+              .put("function", new JSONObject().put("name", call.getFunction().getName())
+                .put("arguments", call.getFunction().getArguments())));
+          }
+          JSONObject message = new JSONObject().put("role", "assistant")
+            .put("content", responseAccumulator.toString()).put("tool_calls", cancelled);
+          if (responseMessageId != null) message.put("id", responseMessageId);
+          contextManager.addRawMessage(message);
+          for (int i = 0; i < cancelled.length(); i++) {
+            JSONObject call = cancelled.getJSONObject(i);
+            contextManager.addToolMessage(call.getString("id"), call.getJSONObject("function").getString("name"),
+              "{\"status\":\"cancelled\",\"message\":\"会话已切换，此工具未执行\"}");
+          }
+        } else if (finish != null && !finish.isEmpty()) {
+          contextManager.addAssistantMessage(responseAccumulator.toString(), responseMessageId, null);
+        }
+        if (finish != null && !finish.isEmpty()) {
+          contextManager.discardReservedMessageId(responseMessageId);
+          finishUsageTurnWithoutFinalMessage(responseUsageTurnId);
+        }
+        return;
       }
 
       if ("tool_calls".equals(choice.getFinishReason()))
@@ -1346,7 +1426,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         {
           try
           {
-            List<ToolCall> finalCalls = getFinalToolCalls();
+            List<ToolCall> finalCalls = getFinalToolCalls(requestState.originalIds, requestState.arguments);
 
             if (finalCalls == null || finalCalls.isEmpty())
             {
@@ -1366,7 +1446,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             }
 
             JSONArray toolCallsArray = new JSONArray();
-            java.util.Map<String, JSONObject> pendingResults = new java.util.HashMap<>();
+            java.util.Map<String, JSONObject> pendingResults = new java.util.concurrent.ConcurrentHashMap<>();
+            com.stupidbeauty.sisterfuture.tool.ToolBatchCompletion batch = new com.stupidbeauty.sisterfuture.tool.ToolBatchCompletion();
+            java.util.Set<String> registeredCallIds = new java.util.HashSet<>();
 
             for (ToolCall call : finalCalls)
             {
@@ -1381,6 +1463,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 FileLogger.w(TAG, "工具调用无效：name 或 id 为空");
                 continue;
               }
+              if (!registeredCallIds.add(toolCallId)) continue;
 
               if (argsJsonStr == null || argsJsonStr.trim().isEmpty())
               {
@@ -1439,7 +1522,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         wrapper.put("id", toolCallId);
                         wrapper.put("name", toolName);
                         wrapper.put("result", result);
-                        pendingResults.put(toolCallId, wrapper);
+                        wrapper.put("continueAfterResult", shouldContinueToolResult(toolManager, toolName, result));
+                        pendingResults.putIfAbsent(toolCallId, wrapper);
                         FileLogger.d(TAG, "🔧 [TOOL_PENDING_UPDATE] pendingResults 大小：" + pendingResults.size() + " / total=" + toolCallsArray.length());
                       }
                       catch (Exception e)
@@ -1447,11 +1531,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         FileLogger.e(TAG, "封装异步结果失败", e);
                       }
 
-                      if (pendingResults.size() == toolCallsArray.length())
+                      if (batch.claim(pendingResults.size(), toolCallsArray.length()))
                       {
                         FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成，准备调用 postProcessToolResults");
                         postProcessToolResults(pendingResults, assistantMessage, toolCallsArray,
-                          responseUsageTurnId);
+                          responseUsageTurnId, contextManager, toolManager);
                       }
                     }
                   }
@@ -1474,15 +1558,16 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                         wrapper.put("id", toolCallId);
                         wrapper.put("name", toolName);
                         wrapper.put("result", errorResult);
-                        pendingResults.put(toolCallId, wrapper);
+                        wrapper.put("continueAfterResult", shouldContinueToolResult(toolManager, toolName, errorResult));
+                        pendingResults.putIfAbsent(toolCallId, wrapper);
 
                         FileLogger.d(TAG, "🔧 [TOOL_ERROR_HANDLER] 错误处理器触发 | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
 
-                        if (pendingResults.size() == toolCallsArray.length())
+                        if (batch.claim(pendingResults.size(), toolCallsArray.length()))
                         {
                           FileLogger.d(TAG, "🔧 [TOOL_ALL_COMPLETE] 所有工具完成（含错误），准备调用 postProcessToolResults");
                           postProcessToolResults(pendingResults, assistantMessage, toolCallsArray,
-                            responseUsageTurnId);
+                            responseUsageTurnId, contextManager, toolManager);
                         }
                       }
                       catch (Exception ex)
@@ -1529,7 +1614,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 wrapper.put("id", toolCallId);
                 wrapper.put("name", toolName);
                 wrapper.put("result", toolResult);
-                pendingResults.put(toolCallId, wrapper);
+                wrapper.put("continueAfterResult", shouldContinueToolResult(toolManager, toolName, toolResult));
+                pendingResults.putIfAbsent(toolCallId, wrapper);
               }
             }
 
@@ -1537,9 +1623,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             contextManager.addRawMessage(assistantMessage);
             contextManager.discardReservedMessageId(responseMessageId);
             contextManager.increaseMaxRounds();
+            batch.finishRegistration();
 
             runOnUiThread(() ->
             {
+              if (contextManager != SisterFutureActivity.this.contextManager) return;
               StringBuilder callText = new StringBuilder();
               if (!toolCallPreamble.trim().isEmpty())
               {
@@ -1570,11 +1658,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
               scrollToBottom();
             });
 
-            if (pendingResults.size() == toolCallsArray.length())
+            if (batch.claim(pendingResults.size(), toolCallsArray.length()))
             {
               FileLogger.d(TAG, "🔧 [TOOL_SYNC_ALL_COMPLETE] 同步工具全部完成，准备调用 postProcessToolResults");
               postProcessToolResults(pendingResults, assistantMessage, toolCallsArray,
-                responseUsageTurnId);
+                responseUsageTurnId, contextManager, toolManager);
             }
           }
           catch (Exception e)
@@ -1695,7 +1783,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private void postProcessToolResults(java.util.Map<String, JSONObject> pendingResults,
                                     JSONObject assistantMessage,
                                     JSONArray toolCallsArray,
-                                    long usageTurnId)
+                                    long usageTurnId, ContextManager contextManager, ToolManager toolManager)
   {
     FileLogger.d(TAG, "🔧 [POST_PROCESS_ENTER] 进入 postProcessToolResults | pendingResultsSize=" + pendingResults.size() + " | toolCallsCount=" + toolCallsArray.length());
 
@@ -1716,6 +1804,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       try
       {
         boolean hopHasError = false;
+        boolean continueAfterResults = true;
         JSONArray failedTools = new JSONArray();
 
         for (int i = 0; i < toolCallsArray.length(); i++)
@@ -1732,6 +1821,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
           String name = wrapper.getString("name");
           JSONObject result = wrapper.getJSONObject("result");
+          continueAfterResults &= wrapper.optBoolean("continueAfterResult", true);
 
           if (isToolErrorResult(result))
           {
@@ -1744,7 +1834,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           if (isDuplicate)
           {
             FileLogger.w(TAG, "⚠️ [DUPLICATE] 发现重复工具 | id=" + id + " | name=" + name + " | 说明已处理过，跳过本次请求触发");
-            return;
+            continue;
           }
 
           FileLogger.d(TAG, "🔧 [PROCESS] 处理工具消息 | id=" + id + " | name=" + name);
@@ -1765,9 +1855,13 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
             FileLogger.i(TAG, "🔥 [ATTACHMENT] 工具结果包含 " + attachments.size() + " 个附件 | toolName=" + name);
           }
 
-          messageAdapter.addMessage(messageItem);
+          if (contextManager == SisterFutureActivity.this.contextManager) messageAdapter.addMessage(messageItem);
         }
 
+        if (!continueAfterResults || contextManager != SisterFutureActivity.this.contextManager) {
+          finishUsageTurnWithoutFinalMessage(usageTurnId);
+          return;
+        }
         clearAccumulatedToolCalls();
 
         consecutiveToolErrorHops = hopHasError ? consecutiveToolErrorHops + 1 : 0;
@@ -1793,6 +1887,12 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         FileLogger.e(TAG, "postProcessToolResults 出错", e);
       }
     });
+  }
+
+  private boolean shouldContinueToolResult(ToolManager manager, String name, JSONObject result)
+  {
+    Tool tool = manager.getTool(name);
+    return tool == null || tool.shouldContinueAfterResult(result);
   }
 
   private boolean isToolErrorResult(JSONObject result)
@@ -1883,11 +1983,14 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
     if (modelUsage != null)
     {
-      contextManager.updateAssistantMessageUsage(messageId, modelUsage);
-      messageAdapter.updateAiUsageByMessageId(messageId, modelUsage);
+      ContextManager owner = turnContexts.get(turnId);
+      if (owner == null) return;
+      owner.updateAssistantMessageUsage(messageId, modelUsage);
+      if (owner == contextManager) messageAdapter.updateAiUsageByMessageId(messageId, modelUsage);
     }
     finalAssistantMessageIds.remove(turnId);
     turnUsageTracker.finishTurn(turnId);
+    turnContexts.remove(turnId);
     if (activeUsageTurnId == turnId) activeUsageTurnId = 0L;
   }
 
@@ -1901,6 +2004,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     }
 
     turnUsageTracker.finishTurn(turnId);
+    turnContexts.remove(turnId);
     if (activeUsageTurnId == turnId) activeUsageTurnId = 0L;
   }
 
@@ -2183,7 +2287,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       contextManager,
       modelAccessPointManager,
       memoryManager,
-      this
+      this,
+      this::startNewSessionFrom
     );
   }
 

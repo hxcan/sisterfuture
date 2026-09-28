@@ -74,6 +74,17 @@ public final class SqliteConversationStore implements ConversationStore {
         return result;
     }
 
+    public List<String> listSessionIds() {
+        return run(() -> {
+            List<String> ids = new ArrayList<>();
+            try (Helper helper = new Helper(context, databasePath);
+                 Cursor cursor = helper.getReadableDatabase().rawQuery("SELECT session_id FROM sessions ORDER BY rowid", null)) {
+                while (cursor.moveToNext()) ids.add(cursor.getString(0));
+            }
+            return ids;
+        });
+    }
+
     private void replace(SQLiteDatabase db, List<String> messages) {
         db.delete("messages", "session_id=?", new String[]{sessionId});
         for (int i = 0; i < messages.size(); i++) {

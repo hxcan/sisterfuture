@@ -14,6 +14,27 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class SessionManagerTest {
+    @Test public void newSessionIsEmptyAndSelectionSurvivesRestart() throws Exception {
+        Context context = isolatedContext();
+        SessionManager manager = new SessionManager(context);
+        ContextManager old = manager.getCurrentContextManager();
+        old.addUserMessage("old question");
+        old.addRawMessage(new org.json.JSONObject("{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"reset-call\",\"type\":\"function\",\"function\":{\"name\":\"resetConversationContext\",\"arguments\":\"{}\"}}]}"));
+        String id = manager.startNewSession(old).getId();
+        assertTrue(manager.getCurrentContextManager().getHistory().isEmpty());
+        old.addToolMessage("reset-call", "resetConversationContext", "{\"status\":\"success\"}");
+        assertTrue(manager.getCurrentContextManager().getHistory().isEmpty());
+        try { manager.startNewSession(old); fail("Stale reset must be rejected"); }
+        catch (IllegalStateException expected) { }
+        SessionManager restored = new SessionManager(context);
+        assertEquals(id, restored.getCurrentSession().getId());
+        assertTrue(restored.getCurrentContextManager().getHistory().isEmpty());
+        assertEquals(2, restored.getSessions().size());
+        java.util.List<org.json.JSONObject> previous = restored.getSessions().get(0).getContextManager().getHistory();
+        assertEquals(3, previous.size());
+        assertEquals("reset-call", previous.get(2).getString("tool_call_id"));
+    }
+
     /** Never load, clear or overwrite the user's actual conversation/preferences. */
     private Context isolatedContext() {
         Context base = InstrumentationRegistry.getInstrumentation().getTargetContext();

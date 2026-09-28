@@ -95,6 +95,12 @@ public interface Tool
   }
 
   // 原始同步方法（保留）
+  /** Policy for this invocation only. Do not keep a mutable shared continuation flag. */
+  default boolean shouldContinueAfterResult(JSONObject result)
+  {
+    return true;
+  }
+
   default JSONObject execute(JSONObject arguments) throws Exception
   {
     throw new UnsupportedOperationException("Synchronous execution not supported");

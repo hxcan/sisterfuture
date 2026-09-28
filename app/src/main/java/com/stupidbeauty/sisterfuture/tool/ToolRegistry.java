@@ -14,9 +14,10 @@ public class ToolRegistry {
         ContextManager contextManager,
         ModelAccessPointManager modelAccessPointManager,
         MemoryManager memoryManager,
-        Context context) {
+        Context context,
+        ResetConversationContextTool.ResetAction resetAction) {
 
-        toolManager.registerTool(new ResetConversationContextTool(contextManager, toolManager));
+        toolManager.registerTool(new ResetConversationContextTool(contextManager, resetAction));
         toolManager.registerTool(new GetCurrentTimeTool());
         toolManager.registerTool(new GetLocationTool(context));
         toolManager.registerTool(new PlanRouteTool(context));
