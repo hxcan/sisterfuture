@@ -28,11 +28,19 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class RenderPdfTool implements Tool {
 
     private static final String TAG = "RenderPdf";
     private static final float PX_TO_PT = 72f / 96f;
+    // Shared across session/tool recreation. Serial rendering limits PDF/bitmap memory pressure.
+    private static final ExecutorService RENDER_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "render-pdf");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final Context context;
 
@@ -123,7 +131,26 @@ public class RenderPdfTool implements Tool {
     }
 
     @Override
-    public JSONObject execute(JSONObject arguments) {
+    public boolean isAsync() {
+        return true;
+    }
+
+    @Override
+    public void executeAsync(JSONObject arguments, OnResultCallback callback) {
+        RENDER_EXECUTOR.execute(() -> {
+            final JSONObject result;
+            try {
+                result = render(arguments);
+            } catch (Exception error) {
+                callback.onError(error);
+                return;
+            }
+            // Outside the catch: a consumer error must not deliver a second callback.
+            callback.onResult(result);
+        });
+    }
+
+    protected JSONObject render(JSONObject arguments) {
         long startTime = System.currentTimeMillis();
         JSONObject result = new JSONObject();
 
