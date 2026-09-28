@@ -22,6 +22,9 @@ public final class SqliteConversationStore implements ConversationStore {
     private final Context context;
     private final String databasePath;
     private final String sessionId;
+    private static final com.stupidbeauty.sisterfuture.utils.PerformanceStats SNAPSHOT = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
+    private static final com.stupidbeauty.sisterfuture.utils.PerformanceStats WRITE_QUEUE = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
+    private static final com.stupidbeauty.sisterfuture.utils.PerformanceStats WRITE = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
 
     public SqliteConversationStore(Context context) {
         this(context, SessionManager.DEFAULT_SESSION_ID);
@@ -109,8 +112,14 @@ public final class SqliteConversationStore implements ConversationStore {
     }
 
     @Override public void saveHistory(List<JSONObject> history) {
+        long started = System.nanoTime();
         List<String> messages = snapshot(history);
+        SNAPSHOT.record(System.nanoTime() - started);
+        SNAPSHOT.report("history_snapshot", false);
+        final long queued = System.nanoTime();
         IO.execute(() -> {
+            long writing = System.nanoTime();
+            WRITE_QUEUE.record(writing - queued);
             try (Helper helper = new Helper(context, databasePath)) {
                 SQLiteDatabase db = helper.getWritableDatabase();
                 db.beginTransaction();
@@ -119,6 +128,10 @@ public final class SqliteConversationStore implements ConversationStore {
             } catch (Exception e) {
                 // Do not log SQL bind values or message contents.
                 FileLogger.e("SqliteConversationStore", "历史保存失败，数据库保留上次已提交状态");
+            } finally {
+                WRITE.record(System.nanoTime() - writing);
+                WRITE_QUEUE.report("history_write_queue", false);
+                WRITE.report("history_sqlite_write", false);
             }
         });
     }

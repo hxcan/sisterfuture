@@ -38,6 +38,7 @@ import org.json.JSONObject;
 import com.stupidbeauty.sisterfuture.ContextManager;
 
 public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+    private static final com.stupidbeauty.sisterfuture.utils.PerformanceStats MARKDOWN_PERF = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
     private static final int TYPE_USER = 0;
     private static final int TYPE_AI = 1;
     private static final int TYPE_TOOL_CALL_RESULT = 2;
@@ -745,7 +746,13 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         }
 
         public void bind(MessageItem message) {
-            markwon.setMarkdown(textView, message.getText());
+            long started = System.nanoTime();
+            try {
+                markwon.setMarkdown(textView, message.getText());
+            } finally {
+                MARKDOWN_PERF.record(System.nanoTime() - started);
+                MARKDOWN_PERF.report("message_markdown_bind", false);
+            }
             ModelUsage usage = message.getModelUsage();
             if (usage != null && usage.hasAnyUsage()) {
                 usageView.setText(usage.buildCompactSummary());
