@@ -124,5 +124,6 @@ public class ToolRegistry {
 
         // PDF 生成工具（renderPdf）- 任务 #1897
         toolManager.registerTool(new RenderPdfTool(context));
+        toolManager.registerTool(new MergePdfTool(context));
     }
 }
