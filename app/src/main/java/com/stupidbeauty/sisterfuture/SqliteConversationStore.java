@@ -5,6 +5,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.database.sqlite.SQLiteStatement;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import java.io.File;
 import java.util.ArrayList;
@@ -17,6 +18,9 @@ import org.json.JSONObject;
 
 /** One session's persistent history. UI and in-memory history remain in ContextManager. */
 public final class SqliteConversationStore implements ConversationStore {
+    // SQLite substr/length count Unicode code points, not Java UTF-16 code units.
+    // Even four-byte characters keep each returned chunk comfortably below CursorWindow limits.
+    static final int MESSAGE_CHUNK_CHARACTERS = 16 * 1024;
     // Shared across Activity recreations: reads wait for already queued writes.
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
     private final Context context;
@@ -104,11 +108,34 @@ public final class SqliteConversationStore implements ConversationStore {
             List<JSONObject> history = new ArrayList<>();
             try (Helper helper = new Helper(context, databasePath);
                  Cursor cursor = helper.getReadableDatabase().rawQuery(
-                         "SELECT message_json FROM messages WHERE session_id=? ORDER BY position", new String[]{sessionId})) {
-                while (cursor.moveToNext()) history.add(new JSONObject(cursor.getString(0)));
+                         "SELECT position, length(message_json) FROM messages WHERE session_id=? ORDER BY position", new String[]{sessionId})) {
+                SQLiteDatabase db = helper.getReadableDatabase();
+                while (cursor.moveToNext()) history.add(new JSONObject(
+                    readMessage(db, cursor.getLong(0), cursor.getLong(1))));
             }
             return history;
         });
+    }
+
+    /** Read existing rows without ever materializing the whole JSON in a CursorWindow. */
+    private String readMessage(SQLiteDatabase db, long position, long characters) {
+        if (characters < 0) throw new IllegalStateException("Invalid message length");
+        StringBuilder json = new StringBuilder();
+        try (SQLiteStatement query = db.compileStatement(
+                "SELECT substr(message_json, ?, ?) FROM messages WHERE session_id=? AND position=?")) {
+            query.bindString(3, sessionId);
+            query.bindLong(4, position);
+            for (long offset = 0; offset < characters; offset += MESSAGE_CHUNK_CHARACTERS) {
+                int count = (int) Math.min(MESSAGE_CHUNK_CHARACTERS, characters - offset);
+                query.bindLong(1, offset + 1); // SQLite is one-based.
+                query.bindLong(2, count);
+                String chunk = query.simpleQueryForString();
+                if (chunk == null || chunk.codePointCount(0, chunk.length()) != count)
+                    throw new IllegalStateException("Incomplete message read; original data retained");
+                json.append(chunk);
+            }
+        }
+        return json.toString();
     }
 
     /** Read-only preview: do not instantiate/normalize every session's ContextManager. */
@@ -116,9 +143,10 @@ public final class SqliteConversationStore implements ConversationStore {
         return run(() -> {
             try (Helper helper = new Helper(context, databasePath);
                  Cursor cursor = helper.getReadableDatabase().rawQuery(
-                     "SELECT message_json FROM messages WHERE session_id=? ORDER BY position", new String[]{sessionId})) {
+                     "SELECT position, length(message_json) FROM messages WHERE session_id=? ORDER BY position", new String[]{sessionId})) {
                 while (cursor.moveToNext()) {
-                    JSONObject message = new JSONObject(cursor.getString(0));
+                    JSONObject message = new JSONObject(readMessage(helper.getReadableDatabase(),
+                        cursor.getLong(0), cursor.getLong(1)));
                     if (!"user".equals(message.optString("role"))) continue;
                     Object content = message.opt("content");
                     String text = "";
