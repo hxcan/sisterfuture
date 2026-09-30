@@ -6,6 +6,50 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
 public class ChunkedSummaryTest {
+    @Test public void emptyResponseRetriesSameInputAndLogsOnlyStatistics() throws Exception {
+        List<String> logs = new ArrayList<>();
+        AtomicInteger calls = new AtomicInteger();
+        String result = ChunkedSummary.run(Arrays.asList("PRIVATE SOURCE"), (previous, fragment, index, total) -> {
+            assertEquals("PRIVATE SOURCE", fragment);
+            return calls.incrementAndGet() == 1 ? "" : "PRIVATE SUMMARY";
+        }, logs::add);
+        assertEquals("PRIVATE SUMMARY", result);
+        assertEquals(2, calls.get());
+        assertTrue(logs.toString().contains("reason=empty"));
+        assertFalse(logs.toString().contains("PRIVATE"));
+    }
+    @Test public void oversizedResponseIsRefinedAndThenCarriedToNextSegment() throws Exception {
+        String longSummary = String.join("", Collections.nCopies(12001,"x"));
+        AtomicInteger calls = new AtomicInteger();
+        String result = ChunkedSummary.run(Arrays.asList("first","second"), (previous, fragment, index, total) -> {
+            int call = calls.incrementAndGet();
+            if(call==1) return longSummary;
+            if(call==2) {
+                assertEquals("",previous);
+                assertTrue(fragment.endsWith(longSummary));
+                return "short";
+            }
+            assertEquals("short",previous);
+            return "final";
+        });
+        assertEquals("final",result);
+        assertEquals(3,calls.get());
+    }
+    @Test public void persistentOversizeStopsAfterThreeAttemptsWithSpecificError() throws Exception {
+        AtomicInteger calls=new AtomicInteger();
+        try {
+            ChunkedSummary.run(Arrays.asList("first","never processed"),(previous,fragment,index,total)->{
+                calls.incrementAndGet();
+                return String.join("",Collections.nCopies(12001,"x"));
+            });
+            fail();
+        } catch(IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("1/2"));
+            assertTrue(expected.getMessage().contains("12001"));
+            assertTrue(expected.getMessage().contains("过长"));
+        }
+        assertEquals(3,calls.get());
+    }
     @Test public void hugeMessageIsSplitWithoutLosingUnicodeOrCharacters() throws Exception {
         StringBuilder value = new StringBuilder();
         for (int i=0;i<100000;i++) value.append("中文😀abc");

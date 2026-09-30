@@ -10,12 +10,40 @@ public final class ChunkedSummary {
     public interface Summarizer { String summarize(String previous, String fragment, int index, int total) throws Exception; }
 
     public static String run(List<String> chunks, Summarizer summarizer) throws Exception {
+        return run(chunks, summarizer, event -> { });
+    }
+
+    public static String run(List<String> chunks, Summarizer summarizer,
+                             java.util.function.Consumer<String> diagnostic) throws Exception {
         String summary = "";
         for (int i = 0; i < chunks.size(); i++) {
-            String next = summarizer.summarize(summary, chunks.get(i), i + 1, chunks.size());
-            if (next == null || next.trim().isEmpty() || next.length() > RequestContext.MAX_SUMMARY_CHARS)
-                throw new IllegalArgumentException("分段摘要为空或过长，未应用任何压缩结果");
-            summary = next.trim();
+            String oversized = null;
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                String label = "segment=" + (i + 1) + "/" + chunks.size() + " attempt=" + attempt;
+                diagnostic.accept(label + " phase=start mode=" + (oversized == null ? "summarize" : "refine")
+                    + " sourceChars=" + chunks.get(i).length() + " previousChars=" + summary.length());
+                long start = System.nanoTime();
+                String next;
+                try {
+                    next = oversized == null
+                        ? summarizer.summarize(summary, chunks.get(i), i + 1, chunks.size())
+                        : summarizer.summarize("", "请精简以下累计摘要，保留关键决定、约束、待办和不确定性，"
+                            + "不要添加事实。仅输出精简后的完整累计摘要，目标1500字以内：\n" + oversized, i + 1, chunks.size());
+                } catch (Exception e) {
+                    diagnostic.accept(label + " phase=failed reason=request_error errorType=" + e.getClass().getSimpleName());
+                    throw new java.io.IOException("摘要第 " + (i + 1) + "/" + chunks.size()
+                        + " 段请求失败（" + e.getClass().getSimpleName() + "）；未应用任何压缩结果", e);
+                }
+                next = next == null ? "" : next.trim();
+                String reason = next.isEmpty() ? "empty" : next.length() > RequestContext.MAX_SUMMARY_CHARS ? "too_long" : "ok";
+                diagnostic.accept(label + " phase=result reason=" + reason + " summaryChars=" + next.length()
+                    + " elapsedMs=" + ((System.nanoTime() - start) / 1000000));
+                if ("ok".equals(reason)) { summary = next; break; }
+                if (attempt == 3) throw new IllegalArgumentException("摘要第 " + (i + 1) + "/" + chunks.size()
+                    + " 段在3次尝试后仍" + (next.isEmpty() ? "为空" : "过长（" + next.length() + "字符，上限"
+                    + RequestContext.MAX_SUMMARY_CHARS + "）") + "；未应用任何压缩结果");
+                if (!next.isEmpty()) oversized = next;
+            }
         }
         return summary;
     }
