@@ -34,6 +34,9 @@ public class ContextManager
   private static final int CONTEXT_ALERT_CLEANUP_THRESHOLD = 5;
 
   private final ConversationStore conversationStore;
+  private JSONObject compressionState;
+  private boolean compressionInProgress;
+  private int requestTurnLimit = Integer.MAX_VALUE;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
   private int MAX_ARGUMENTS_STR_LENGTH = 226810;
 
@@ -53,16 +56,15 @@ public class ContextManager
     this.conversationStore = java.util.Objects.requireNonNull(conversationStore, "conversationStore");
     currentMaxRounds = conversationStore.loadMaxRounds(INITIAL_MAX_ROUNDS);
     memoryHistory = conversationStore.loadHistory();
+    compressionState = conversationStore.loadCompression();
 
     // 🆕 #821166321034 为历史消息补上 id（兼容老数据）
     backfillMessageIds();
 
 // 🆕 #819154835086 启动时清理重复的"上下文超长"提示
-    cleanupDuplicateContextAlertsOnStartup();
+    // Archive preservation: cleanup belongs to the request projection, not startup persistence.
     // ✅ 启动时清理无效的工具调用
-    cleanupInvalidToolCallsOnStartup();
     // 🆕 #820049914004 检测并恢复 Tool Avoidance
-    recoverFromToolAvoidanceOnStartup();
   }
 
   /**
@@ -404,7 +406,7 @@ public class ContextManager
     }
     history.add(toolMessage);
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_AFTER_ADD] toolCallId=" + toolCallId + " | historySize=" + sizeBefore + "->" + history.size());
-    history = removeOldHistoryEntries(history);
+    // Preserve the archive; request window limits are applied only when sending.
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_AFTER_REMOVE_OLD] toolCallId=" + toolCallId + " | historySize=" + history.size());
     FileLogger.i(TAG, "🔧 [TOOL_MSG_ADD_AFTER_NORMALIZE] toolCallId=" + toolCallId + " | historySize=" + history.size());
     saveHistory(history);
@@ -414,10 +416,6 @@ public class ContextManager
   public void addUserMessage(String message)
   {
     addMessage("user", message);
-
-    List<JSONObject> history = getHistory();
-    history = normalizeToolCallMessages(history, false);
-    saveHistory(history);
   }
 
   public void addAssistantMessage(String message)
@@ -553,7 +551,7 @@ public class ContextManager
     history.add(message);
     FileLogger.i(TAG, "[addRawMessage] Message added: " + historyBefore.size() + " -> " + history.size());
     FileLogger.i(TAG, "📥 [RAW_MSG_ADD_AFTER_ADD] role=" + msgRole + " | historySize=" + historyBefore.size() + "->" + history.size());
-    history = removeOldHistoryEntries(history);
+    saveHistory(history);
     FileLogger.i(TAG, "📥 [RAW_MSG_ADD_AFTER_REMOVE_OLD] role=" + msgRole + " | historySize=" + history.size());
     FileLogger.i(TAG, "[addRawMessage DONE] Final count: " + history.size());
     FileLogger.i(TAG, "📥 [RAW_MSG_ADD_EXIT] role=" + msgRole + " | finalHistorySize=" + history.size());
@@ -1038,7 +1036,7 @@ public class ContextManager
         FileLogger.i(TAG, "📝 [INFO] 当前历史长度：" + list.size());
 
         // 严厉模式下需要显式保存清理后的历史
-        saveHistory(list);
+        // Normalization is read-only with respect to the archive.
       }
       else if (pendingToolCallsObject != null)
       {
@@ -1115,10 +1113,6 @@ public class ContextManager
 
   public void replaceHistory(List<JSONObject> newHistory)
   {
-    if (newHistory.size() > currentMaxRounds * 2)
-    {
-      newHistory = new ArrayList<>(newHistory.subList(newHistory.size() - (currentMaxRounds * 2), newHistory.size()));
-    }
     saveHistory(newHistory);
   }
 
@@ -1170,17 +1164,51 @@ public class ContextManager
     }
   }
 
-  public void decreaseMaxRounds()
-  {
-    List<JSONObject> history = getHistory();
-    int idealMaxRounds = history.size() /2 -1 ;
-    if (idealMaxRounds > INITIAL_MAX_ROUNDS)
-    {
-      currentMaxRounds = idealMaxRounds;
-      // max_rounds 保持写入 SP
-      conversationStore.saveMaxRounds(currentMaxRounds);
-      history = removeOldHistoryEntries(history);
-      saveHistory(history);
+  public boolean decreaseMaxRounds() {
+    int turns = 0;
+    for (JSONObject message : getRequestMessages())
+      if ("user".equals(message.optString("role"))) turns++;
+    if (turns <= 1) return false;
+    requestTurnLimit = turns - 1;
+    return true;
+  }
+
+  /** Full history remains the UI/storage source. Only this detached list is sent to the model. */
+  public List<JSONObject> getRequestMessages() {
+    List<JSONObject> projected = RequestContext.project(getHistory(), compressionState);
+    int users = 0, start = 0;
+    for (int i = projected.size() - 1; i >= 0; i--) {
+      if ("user".equals(projected.get(i).optString("role")) && ++users > requestTurnLimit) {
+        for (int j = i + 1; j < projected.size(); j++)
+          if ("user".equals(projected.get(j).optString("role"))) { start = j; break; }
+        break;
+      }
     }
+    if (start > 0) {
+      JSONObject summary = RequestContext.valid(getHistory(), compressionState) ? projected.get(0) : null;
+      projected = new ArrayList<>(projected.subList(start, projected.size()));
+      if (summary != null) projected.add(0, summary);
+    }
+    return normalizeToolCallMessages(projected, true);
+  }
+
+  /** These lifecycle methods are called on the UI thread, like archive mutations. */
+  public List<JSONObject> beginCompression() {
+    if (compressionInProgress) throw new IllegalStateException("当前会话正在压缩，请等待完成");
+    List<JSONObject> snapshot = RequestContext.copy(getHistory());
+    compressionInProgress = true;
+    return snapshot;
+  }
+  public void endCompression() { compressionInProgress = false; }
+  public JSONObject getCompressionState() {
+    try { return compressionState == null ? null : new JSONObject(compressionState.toString()); }
+    catch (JSONException e) { throw new IllegalStateException(e); }
+  }
+  public void installCompression(JSONObject candidate) {
+    if (!RequestContext.valid(getHistory(), candidate))
+      throw new IllegalStateException("摘要生成期间原历史已改变，未应用压缩");
+    conversationStore.saveCompression(candidate);
+    compressionState = candidate;
+    requestTurnLimit = Integer.MAX_VALUE;
   }
 }

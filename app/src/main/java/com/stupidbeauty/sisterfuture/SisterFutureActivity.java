@@ -1009,8 +1009,11 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       scrollToBottom();
       ttsSayReply("上下文超长，自动缩短后重试");
 
-      contextManager.addAssistantMessage("⚠️ 上下文超长，已自动缩短");
-      contextManager.decreaseMaxRounds();
+      if (!contextManager.decreaseMaxRounds()) {
+        messageAdapter.addMessage(new MessageItem("当前完整轮次仍超限，已停止重试；原历史保留。可新建会话或减少本次输入。", MessageType.AI));
+        finishUsageTurnWithoutFinalMessage(usageTurnId);
+        return;
+      }
 
       if (isRetry)
       {
@@ -1088,8 +1091,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
       final StringBuilder responseAccumulator = new StringBuilder();
       showThinkingOverlay();
 
-      List<JSONObject> history = contextManager.getHistory();
-      List<JSONObject> cleanedHistory = contextManager.normalizeToolCallMessages(history, true);
+      List<JSONObject> cleanedHistory = contextManager.getRequestMessages();
       JSONArray historyArray = new JSONArray(cleanedHistory);
       JSONArray messagesArray = new JSONArray();
 
