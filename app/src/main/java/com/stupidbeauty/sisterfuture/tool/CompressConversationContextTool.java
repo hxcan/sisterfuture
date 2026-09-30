@@ -39,7 +39,9 @@ public final class CompressConversationContextTool implements Tool {
         } catch (JSONException e) { throw new IllegalStateException(e); }
     }
     @Override public void executeAsync(JSONObject arguments, OnResultCallback callback) {
+        final CompressionTimings timings = new CompressionTimings();
         main.post(() -> {
+            timings.phase("snapshot");
             final List<JSONObject> archive;
             final ModelAccessPoint snapshot;
             final JSONObject previous;
@@ -50,13 +52,16 @@ public final class CompressConversationContextTool implements Tool {
                     current.getChatEndpoint(), current.getModelName(), current.getApiKey());
                 previous = context.getCompressionState();
                 archive = context.beginCompression();
-            } catch (Exception e) { callback.onError(e); return; }
+            } catch (Exception e) { reportFailure(callback, e, timings); return; }
+            timings.phase("workerQueue");
             WORKER.execute(() -> {
                 try {
-                    JSONObject candidate = summarize(archive, previous, snapshot);
+                    JSONObject candidate = summarize(archive, previous, snapshot, timings);
+                    timings.phase("commitQueue");
                     main.post(() -> {
                         JSONObject result;
                         try {
+                            timings.phase("commit");
                             context.installCompression(candidate);
                             result = new JSONObject().put("status", "success")
                                 .put("coveredMessages", candidate.getInt("coveredCount"))
@@ -64,20 +69,33 @@ public final class CompressConversationContextTool implements Tool {
                                 .put("summaryRequests", candidate.getInt("summaryRequests"))
                                 .put("sourceCharacters", candidate.getLong("sourceCharacters"))
                                 .put("model", snapshot.getModelName())
+                                .put("timings", timings.finish())
                                 .put("message", "已压缩后续请求上下文，原始历史完整保留。");
                         } catch (Exception e) {
-                            context.endCompression(); callback.onError(e); return;
+                            context.endCompression(); reportFailure(callback, e, timings); return;
                         }
                         context.endCompression();
                         callback.onResult(result);
                     });
                 } catch (Exception e) {
-                    main.post(() -> { context.endCompression(); callback.onError(e); });
+                    timings.phase("failureCallbackQueue");
+                    main.post(() -> { context.endCompression(); reportFailure(callback, e, timings); });
                 }
             });
         });
     }
-    static JSONObject summarize(List<JSONObject> archive, JSONObject previous, ModelAccessPoint model) throws Exception {
+    private static void reportFailure(OnResultCallback callback, Exception error, CompressionTimings timings) {
+        JSONObject result;
+        try {
+            result = new JSONObject().put("status", "error").put("message", error.getMessage())
+                .put("type", error.getClass().getSimpleName()).put("timings", timings.finish());
+        } catch (Exception failure) { callback.onError(failure); return; }
+        callback.onResult(result);
+    }
+
+    static JSONObject summarize(List<JSONObject> archive, JSONObject previous, ModelAccessPoint model,
+                                CompressionTimings timings) throws Exception {
+        timings.phase("planning");
         int boundary = RequestContext.compressionBoundary(archive);
         int alreadyCovered = RequestContext.valid(archive, previous) ? previous.getInt("coveredCount") : 0;
         if (boundary <= alreadyCovered)
@@ -88,14 +106,39 @@ public final class CompressConversationContextTool implements Tool {
         long sourceCharacters = 0;
         for (String chunk : chunks) sourceCharacters += chunk.length();
         JSONObject usage = new JSONObject();
+        java.util.concurrent.atomic.AtomicInteger requests = new java.util.concurrent.atomic.AtomicInteger();
+        final String operation = Long.toHexString(System.nanoTime());
+        final Map<Integer, Integer> attempts = new HashMap<>();
+        timings.phase("summarizing");
         String summary = ChunkedSummary.run(chunks, (previousSummary, fragment, index, total) ->
-            requestSummary(model, previousSummary, fragment, index, total, usage));
+        {
+            requests.incrementAndGet();
+            int attempt = attempts.getOrDefault(index, 0) + 1;
+            attempts.put(index, attempt);
+            JSONObject measurement = new JSONObject().put("segment", index).put("totalSegments", total)
+                .put("attempt", attempt).put("inputCharacters", previousSummary.length() + fragment.length());
+            long started = System.nanoTime();
+            try {
+                String answer = requestSummary(model, previousSummary, fragment, index, total, usage);
+                measurement.put("summaryCharacters", answer.length())
+                    .put("result", answer.isEmpty() ? "empty" : answer.length() > RequestContext.MAX_SUMMARY_CHARS ? "too_long" : "ok");
+                return answer;
+            } catch (Exception error) {
+                measurement.put("result", "request_error").put("errorType", error.getClass().getSimpleName());
+                throw error;
+            } finally {
+                measurement.put("elapsedMs", (System.nanoTime() - started)/1000000);
+                timings.requests.put(measurement);
+            }
+        }, event -> com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
+            "[CONTEXT_COMPRESSION] operation=" + operation + " " + event));
+        timings.phase("validation");
         if (summary.length() >= sourceCharacters)
             throw new java.io.IOException("摘要未缩短，未应用");
         JSONObject state = new JSONObject().put("summary", summary).put("coveredCount", boundary)
             .put("fingerprint", RequestContext.fingerprint(archive, boundary))
             .put("model", model.getModelName()).put("createdAt", System.currentTimeMillis())
-            .put("summaryRequests", chunks.size()).put("sourceCharacters", sourceCharacters);
+            .put("summaryRequests", requests.get()).put("sourceCharacters", sourceCharacters);
         if (usage.length() > 0) state.put("usage", usage);
         return state;
     }
@@ -123,12 +166,18 @@ public final class CompressConversationContextTool implements Tool {
             builder.header("Authorization", "Bearer " + model.getApiKey());
         String summary;
         try (Response response = CLIENT.newCall(builder.build()).execute()) {
+            com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
+                "[CONTEXT_COMPRESSION] segment=" + index + "/" + total + " httpStatus=" + response.code());
             if (!response.isSuccessful()) throw new java.io.IOException("摘要请求失败，HTTP " + response.code() + "；原上下文未改变");
             if (response.body() == null) throw new java.io.IOException("摘要响应为空");
             okio.BufferedSource responseSource = response.body().source();
             if (responseSource.request(256 * 1024 + 1)) throw new java.io.IOException("摘要响应过大，未应用");
             JSONObject payload = new JSONObject(responseSource.readUtf8());
             JSONObject choice = payload.getJSONArray("choices").getJSONObject(0);
+            String finish = choice.optString("finish_reason");
+            String finishLabel = java.util.Arrays.asList("stop", "length", "tool_calls", "content_filter").contains(finish) ? finish : "other";
+            com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
+                "[CONTEXT_COMPRESSION] segment=" + index + "/" + total + " finish=" + finishLabel);
             if (!"stop".equals(choice.optString("finish_reason")))
                 throw new java.io.IOException("摘要未正常完成，未应用");
             JSONObject message = choice.getJSONObject("message");
