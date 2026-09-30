@@ -58,7 +58,7 @@ public class SqliteConversationStoreTest {
                  "SELECT count(*) FROM messages WHERE session_id='default' AND position=80 AND message_json=?")) {
             query.bindString(1, originalJson);
             assertEquals(1, query.simpleQueryForLong());
-            assertEquals(1, db.getVersion());
+            assertEquals(2, db.getVersion());
         }
     }
 

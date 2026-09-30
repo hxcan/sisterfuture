@@ -18,6 +18,7 @@ public class ToolRegistry {
         ResetConversationContextTool.ResetAction resetAction) {
 
         toolManager.registerTool(new ResetConversationContextTool(contextManager, resetAction));
+        toolManager.registerTool(new CompressConversationContextTool(contextManager, modelAccessPointManager));
         toolManager.registerTool(new GetCurrentTimeTool());
         toolManager.registerTool(new GetLocationTool(context));
         toolManager.registerTool(new PlanRouteTool(context));

@@ -203,6 +203,30 @@ public final class SqliteConversationStore implements ConversationStore {
         });
     }
 
+    @Override public JSONObject loadCompression() {
+        return run(() -> {
+            try (Helper helper = new Helper(context, databasePath);
+                 Cursor cursor = helper.getReadableDatabase().rawQuery(
+                     "SELECT state_json FROM request_context WHERE session_id=?", new String[]{sessionId})) {
+                return cursor.moveToFirst() ? new JSONObject(cursor.getString(0)) : null;
+            }
+        });
+    }
+
+    @Override public void saveCompression(JSONObject state) {
+        final String json = state.toString();
+        run(() -> {
+            try (Helper helper = new Helper(context, databasePath)) {
+                ContentValues row = new ContentValues();
+                row.put("session_id", sessionId); row.put("state_json", json);
+                if (helper.getWritableDatabase().insertWithOnConflict(
+                    "request_context", null, row, SQLiteDatabase.CONFLICT_REPLACE) == -1)
+                    throw new IllegalStateException("保存摘要失败，保留原请求上下文");
+            }
+            return null;
+        });
+    }
+
     @Override public void saveMaxRounds(int value) {
         IO.execute(() -> {
             try (Helper helper = new Helper(context, databasePath)) {
@@ -227,7 +251,7 @@ public final class SqliteConversationStore implements ConversationStore {
     private static final class Helper extends SQLiteOpenHelper {
         Helper(Context context, String path) {
             // Android's default corruption handler can delete database files. Preserve evidence/data instead.
-            super(context, path, null, 1, db -> {
+            super(context, path, null, 2, db -> {
                 throw new IllegalStateException("会话数据库损坏；已停止访问，未自动删除数据库");
             });
         }
@@ -236,9 +260,15 @@ public final class SqliteConversationStore implements ConversationStore {
             db.execSQL("CREATE TABLE sessions (session_id TEXT PRIMARY KEY NOT NULL, max_rounds INTEGER NOT NULL)");
             db.execSQL("CREATE TABLE messages (session_id TEXT NOT NULL, position INTEGER NOT NULL, message_json TEXT NOT NULL, "
                     + "PRIMARY KEY(session_id,position), FOREIGN KEY(session_id) REFERENCES sessions(session_id))");
+            createRequestContext(db);
+        }
+        private static void createRequestContext(SQLiteDatabase db) {
+            db.execSQL("CREATE TABLE request_context (session_id TEXT PRIMARY KEY NOT NULL, state_json TEXT NOT NULL, "
+                + "FOREIGN KEY(session_id) REFERENCES sessions(session_id))");
         }
         @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            throw new IllegalStateException("Unsupported conversation database upgrade");
+            if (oldVersion == 1 && newVersion == 2) createRequestContext(db);
+            else throw new IllegalStateException("Unsupported conversation database upgrade");
         }
     }
 }
