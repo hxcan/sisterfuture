@@ -7,7 +7,8 @@ import java.util.UUID;
 public class MessageItem {
     public String text;
     private MessageType type;
-    public String imageUrl; // 🖼️ 新增：存储图片的 Base64 数据（如果有）
+    public String imageUrl; // 🖼️ 存储图片内容：base64 数据 或 远程 https URL
+    private boolean imageUrlIsRemote; // 🔥 新增：标记 imageUrl 是远程 URL（true）还是 base64（false）
     private String messageId; // 🔗 新增：消息唯一 ID，用于 UI 与上下文关联
     private List<Attachment> attachments; // 🔥 新增：工具生成的多媒体附件
     private ModelUsage modelUsage; // 本地展示用，不发送给模型
@@ -59,6 +60,22 @@ public class MessageItem {
     // 🔗 新增：设置消息 ID
     public void setMessageId(String messageId) {
         this.messageId = messageId;
+    }
+
+    // 🔥 新增：判断 imageUrl 是否为远程 https URL
+    public boolean isImageUrlRemote() {
+        return imageUrlIsRemote;
+    }
+
+    // 🔥 新增：设置 imageUrl 为远程 URL
+    public void setImageUrlRemote(boolean remote) {
+        this.imageUrlIsRemote = remote;
+    }
+
+    // 🔥 新增：便捷方法，同时设置 imageUrl 和 remote 标记
+    public void setImageUrl(String url, boolean remote) {
+        this.imageUrl = url;
+        this.imageUrlIsRemote = remote;
     }
 
     // 🔥 新增：获取附件列表
