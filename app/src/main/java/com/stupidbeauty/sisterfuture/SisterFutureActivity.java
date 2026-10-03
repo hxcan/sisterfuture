@@ -441,6 +441,24 @@ private String currentVideoPath = null;
               if ("text".equals(type))
               {
                 textBuilder.append(item.optString("text"));
+        if (contentObj instanceof JSONArray)
+        {
+          JSONArray contentArray = (JSONArray) contentObj;
+          StringBuilder textBuilder = new StringBuilder();
+          String imageUrl = null;
+          boolean imageUrlIsRemote = false;
+
+          for (int i = 0; i < contentArray.length(); i++)
+          {
+            try
+            {
+              JSONObject item = contentArray.optJSONObject(i);
+              if (item == null) continue;
+
+              String type = item.optString("type");
+              if ("text".equals(type))
+              {
+                textBuilder.append(item.optString("text"));
               }
               else if ("image_url".equals(type))
               {
@@ -448,13 +466,22 @@ private String currentVideoPath = null;
                 if (imageUrlObj != null)
                 {
                   String url = imageUrlObj.optString("url");
-                  if (url != null && url.startsWith("data:image/jpeg;base64,"))
+                  if (url != null)
                   {
-                    int commaIndex = url.lastIndexOf(',');
-                    if (commaIndex > 0) {
-                      imageUrl = url.substring(commaIndex + 1);
-                    } else {
+                    if (url.startsWith("https://") || url.startsWith("http://"))
+                    {
+                      // 🔥 新增：识别 https URL（任务 #910050720382）
                       imageUrl = url;
+                      imageUrlIsRemote = true;
+                    }
+                    else if (url.startsWith("data:image/jpeg;base64,"))
+                    {
+                      int commaIndex = url.lastIndexOf(',');
+                      if (commaIndex > 0) {
+                        imageUrl = url.substring(commaIndex + 1);
+                      } else {
+                        imageUrl = url;
+                      }
                     }
                   }
                 }
@@ -467,10 +494,11 @@ private String currentVideoPath = null;
           }
 
           MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
-          item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
-          if (messageId != null && !messageId.isEmpty()) {
-            item.setMessageId(messageId);
+          if (imageUrlIsRemote)
+          {
+            item.setImageUrlRemote(true);
           }
+          item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
           messageAdapter.addMessage(item);
         }
         else
