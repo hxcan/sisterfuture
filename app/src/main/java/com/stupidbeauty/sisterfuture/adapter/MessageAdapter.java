@@ -103,8 +103,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                     if (contentObj instanceof JSONArray) {
                         JSONArray contentArray = (JSONArray) contentObj;
                         StringBuilder textBuilder = new StringBuilder();
+                        JSONArray contentArray = (JSONArray) contentObj;
+                        StringBuilder textBuilder = new StringBuilder();
                         String imageUrl = null;
-                        
+                        boolean imageUrlIsRemote = false; // 🔥 新增（任务 #910050720382）
                         for (int j = 0; j < contentArray.length(); j++) {
                             try {
                                 JSONObject item = contentArray.optJSONObject(j);
@@ -112,18 +114,32 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                                 
                                 String type = item.optString("type");
                                 if ("text".equals(type)) {
-                                    textBuilder.append(item.optString("text"));
-                                }
-                                else if ("image_url".equals(type)) {
+                                else if ("image_url".equals(type))
+                                {
                                     JSONObject imageUrlObj = item.optJSONObject("image_url");
-                                    if (imageUrlObj != null) {
+                                    if (imageUrlObj != null)
+                                    {
                                         String url = imageUrlObj.optString("url");
-                                        if (url != null && url.startsWith("data:image/jpeg;base64,")) {
-                                            int commaIndex = url.lastIndexOf(',');
-                                            if (commaIndex > 0) {
-                                                imageUrl = url.substring(commaIndex + 1);
-                                            } else {
+                                        if (url != null)
+                                        {
+                                            // 🔥 双格式识别（任务 #910050720382）
+                                            if (url.startsWith("https://") || url.startsWith("http://"))
+                                            {
                                                 imageUrl = url;
+                                                imageUrlIsRemote = true;
+                                            }
+                                            else if (url.startsWith("data:image/jpeg;base64,"))
+                                            {
+                                                int commaIndex = url.lastIndexOf(',');
+                                                if (commaIndex > 0) {
+                                                    imageUrl = url.substring(commaIndex + 1);
+                                                } else {
+                                                    imageUrl = url;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                             }
                                         }
                                     }
@@ -135,8 +151,12 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                         }
                         
                         MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
+                        MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
+                        if (imageUrlIsRemote)
+                        {
+                            item.setImageUrlRemote(true); // 🔥 新增（任务 #910050720382）
+                        }
                         item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
-                        // 🆕 设置 messageId
                         if (messageId != null && !messageId.isEmpty()) {
                             item.setMessageId(messageId);
                         }
@@ -573,6 +593,38 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
           }
 
           @Override
+        // 🔥 新增：远程 https 图片分支（任务 #910050720382）
+        if (message.isImageUrlRemote())
+        {
+          final String remoteUrl = message.getImageUrl();
+          final android.widget.ImageView targetImageView = imageView;
+          new Thread(() -> {
+            try {
+              java.net.URL imageUrl = new java.net.URL(remoteUrl);
+              java.net.HttpURLConnection conn = (java.net.HttpURLConnection) imageUrl.openConnection();
+              conn.setConnectTimeout(10 * 1000);
+              conn.setReadTimeout(30 * 1000);
+              conn.setDoInput(true);
+              conn.connect();
+              java.io.InputStream is = conn.getInputStream();
+              final android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(is);
+              is.close();
+              conn.disconnect();
+              if (bitmap != null) {
+                targetImageView.post(() -> {
+                  targetImageView.setImageBitmap(bitmap);
+                  targetImageView.setVisibility(android.view.View.VISIBLE);
+                });
+              }
+            } catch (Exception e) {
+              FileLogger.e(TAG, "❌ [REMOTE_IMAGE_LOAD_ERROR] 加载远程图片失败 | url=" + remoteUrl, e);
+            }
+          }, "RemoteImageLoader").start();
+          textView.setText(message.getText());
+          return;
+        }
+
+
           public void onDestroyActionMode(ActionMode mode) 
           {
             Spannable spannable = (Spannable)textView.getText();
