@@ -1,13 +1,26 @@
-private String currentImageBase64 = null;
-    private String currentImagePath = null;  // WanxiangImage 工具支持参考图片：图片本地缓存路径
-    private String currentImageRemoteUrl = null; // 🔥 新增（任务 #910050720382）：图片 OSS 签名 URL
-    private String currentImageOssObjectKey = null; // 🔥 新增（任务 #910050720382）：图片 OSS 对象 key
-    private long currentImageUrlExpiresAt = 0L; // 🔥 新增（任务 #910050720382）：图片 URL 过期时间戳
-    private volatile boolean isImageProcessing = false; // 🔥 新增（任务 #910050720382）：图片 OSS 上传中标志
-    private String currentVideoPath = null;
-    private String currentVideoMimeType = null;
-    private String currentVideoRemoteUrl = null;
-    private String currentVideoOssObjectKey = null;
-    private long currentVideoUrlExpiresAt = 0L;
-    private volatile boolean isVideoProcessing = false;
-    private volatile int mediaSelectionGeneration = 0;
+@OnClick(R.id.uploadImageButton)
+  public void onUploadImageButton()
+  {
+    if (isVideoProcessing)
+    {
+      Toast.makeText(this, "视频仍在处理中，请稍候", Toast.LENGTH_SHORT).show();
+      return;
+    }
+    deletePendingVideo();
+    mediaSelectionGeneration++;
+    if (currentImageBase64 != null)
+    {
+      currentImageBase64 = null;
+    }
+    currentImagePath = null;
+    currentImageRemoteUrl = null; // 🔥 新增（任务 #910050720382）：清图片 OSS URL
+    currentImageOssObjectKey = null; // 🔥 新增（任务 #910050720382）：清图片 OSS 对象 key
+    currentImageUrlExpiresAt = 0L; // 🔥 新增（任务 #910050720382）：清 URL 过期时间
+    isImageProcessing = false; // 🔥 新增（任务 #910050720382）：清上传中标志
+    currentVideoPath = null;
+    currentVideoMimeType = null;
+    currentVideoRemoteUrl = null;
+    currentVideoOssObjectKey = null;
+    currentVideoUrlExpiresAt = 0L;
+    openMediaPicker();
+  }
