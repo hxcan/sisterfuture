@@ -587,7 +587,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // A real user message starts a new autonomous tool-call chain.
     resetToolCallHopGuard("user_message", activeUsageTurnId);
 
-    boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
+    // 🔥 修改（任务 #910050720382）：优先用 OSS URL，没有则兑底用 base64
+    boolean hasImage = (currentImageRemoteUrl != null && !currentImageRemoteUrl.isEmpty())
+        || (currentImageBase64 != null && !currentImageBase64.isEmpty());
+
     boolean hasVideo = (currentVideoPath != null && !currentVideoPath.isEmpty()
         && currentVideoRemoteUrl != null && !currentVideoRemoteUrl.isEmpty());
 
@@ -604,13 +607,24 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           textContent.put("text", message);
           contentArray.put(textContent);
         }
-
         if (hasImage)
         {
           JSONObject imageContent = new JSONObject();
           imageContent.put("type", "image_url");
 
           JSONObject imageUrl = new JSONObject();
+          // 🔥 修改（任务 #910050720382）：优先用 OSS URL，没有则兑底用 base64
+          if (currentImageRemoteUrl != null && !currentImageRemoteUrl.isEmpty())
+          {
+            imageUrl.put("url", currentImageRemoteUrl);
+          }
+          else
+          {
+            imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+          }
+          imageContent.put("image_url", imageUrl);
+          contentArray.put(imageContent);
+        }
           imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
           imageContent.put("image_url", imageUrl);
           contentArray.put(imageContent);
@@ -627,17 +641,39 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
         }
 
         JSONObject userMessage = new JSONObject();
+        else if (hasImage && currentImageOssObjectKey != null)
+        {
+          // 🔥 新增（任务 #910050720382）：图片使用 OSS 时也保存 local_attachments
+          JSONObject imageAttachmentJson = buildLocalImageAttachment(currentImagePath,
+            currentImageOssObjectKey, currentImageUrlExpiresAt);
+          userMessage.put("local_attachments", new JSONArray().put(imageAttachmentJson));
+          uiAttachments = Attachment.fromJsonArray(userMessage.optJSONArray("local_attachments"));
+        }
+
         userMessage.put("role", "user");
         userMessage.put("content", contentArray);
+        // 🔥 修改（任务 #910050720382）：优先用 OSS URL，同时标记 imageUrlIsRemote
+        MessageItem displayedMessage = new MessageItem(message != null ? message : "", MessageType.USER,
+          hasImage && currentImageRemoteUrl != null && !currentImageRemoteUrl.isEmpty() ? currentImageRemoteUrl :
+            (hasImage ? currentImageBase64 : null));
+        if (hasImage && currentImageRemoteUrl != null && !currentImageRemoteUrl.isEmpty())
+        {
+          displayedMessage.setImageUrlRemote(true);
+        }
+        displayedMessage.setAttachments(uiAttachments);
 
-        List<Attachment> uiAttachments = new ArrayList<>();
-        if (hasVideo)
         {
           JSONObject videoAttachmentJson = buildLocalVideoAttachment(currentVideoPath, currentVideoMimeType,
             currentVideoOssObjectKey, currentVideoUrlExpiresAt);
           userMessage.put("local_attachments", new JSONArray().put(videoAttachmentJson));
           uiAttachments = Attachment.fromJsonArray(userMessage.optJSONArray("local_attachments"));
         }
+
+        currentImageBase64 = null;
+        currentImagePath = null;
+        currentImageRemoteUrl = null; // 🔥 新增（任务 #910050720382）
+        currentImageOssObjectKey = null;
+        currentImageUrlExpiresAt = 0L;
 
         contextManager.addRawMessage(userMessage);
 
@@ -2626,6 +2662,25 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   {
     if (currentVideoPath == null || currentVideoPath.isEmpty()) return;
     try
+
+  // 🔥 新增（任务 #910050720382）：参考 buildLocalVideoAttachment，为图片创建 local_attachments
+  private JSONObject buildLocalImageAttachment(String path, String ossObjectKey,
+                                               long ossUrlExpiresAt) throws JSONException
+  {
+    File imageFile = new File(path);
+    JSONObject metadata = new JSONObject();
+    metadata.put("size", imageFile.length());
+    metadata.put("mimeType", "image/jpeg");
+
+    JSONObject attachment = new JSONObject();
+    attachment.put("type", "image");
+    attachment.put("url", Uri.fromFile(imageFile).toString());
+    attachment.put("ossObjectKey", ossObjectKey);
+    attachment.put("ossUrlExpiresAt", ossUrlExpiresAt);
+    attachment.put("metadata", metadata);
+    return attachment;
+  }
+
     {
       File videoDirectory = new File(getFilesDir(), "message_videos").getCanonicalFile();
       File pendingVideo = new File(currentVideoPath).getCanonicalFile();
