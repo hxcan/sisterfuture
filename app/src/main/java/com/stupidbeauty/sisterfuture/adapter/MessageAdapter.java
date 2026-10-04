@@ -75,69 +75,99 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             List<JSONObject> history = contextManager.getHistory();
             messages.clear();
             
-            for (int i = 0; i < history.size(); i++) {
-                JSONObject msg = history.get(i);
-if (contentObj instanceof JSONArray)
-                {
-                  JSONArray contentArray = (JSONArray) contentObj;
-                  StringBuilder textBuilder = new StringBuilder();
-                  String imageUrl = null;
-                  boolean imageUrlIsRemote = false; // 🔥 新增：任务 #910050720382
+String role = msg.optString("role");
+                Object contentObj = msg.opt("content");
+                String toolCallId = msg.optString("tool_call_id");
+                String messageId = msg.optString("id"); // 🆕 从数据源读取 messageId
+                JSONArray toolCalls = msg.optJSONArray("tool_calls");
 
-                  for (int j = 0; j < contentArray.length(); j++) {
+                if ("tool".equals(role) && !toolCallId.isEmpty())
+                {
+                    String toolName = msg.optString("name", "unknown_tool");
+                    String content = msg.optString("content");
+                    String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
+                    MessageItem item = new MessageItem(displayText, MessageType.TOOL_CALL_RESULT);
+                    try {
                         JSONObject result = new JSONObject(content);
                         item.setAttachments(Attachment.fromJsonArray(result.optJSONArray("attachments")));
-                        else if ("image_url".equals(type))
-                {
-                  JSONObject imageUrlObj = item.optJSONObject("image_url");
-                  if (imageUrlObj != null)
-                  {
-                    String url = imageUrlObj.optString("url");
-                    if (url != null)
-                    {
-                      if (url.startsWith("https://") || url.startsWith("http://"))
-                      {
-                        // 🔥 新增：https URL（任务 #910050720382）
-                        imageUrl = url;
-                        imageUrlIsRemote = true;
-                      }
-                      else if (url.startsWith("data:image/jpeg;base64,"))
-                      {
-                        int commaIndex = url.lastIndexOf(',');
-                        if (commaIndex > 0)
-                        {
-                          imageUrl = url.substring(commaIndex + 1);
-                        } else
-                        {
-                          imageUrl = url;
-                        }
-                      }
+                    } catch (Exception ignored) {
                     }
-                  }
+                    // 🆕 设置 messageId
+                    if (messageId != null && !messageId.isEmpty()) {
+                        item.setMessageId(messageId);
+                    }
+                    messages.add(item);
                 }
-                                            } else {
+                else if ("user".equals(role))
+                {
+                    if (contentObj instanceof JSONArray)
+                    {
+                        JSONArray contentArray = (JSONArray) contentObj;
+                        StringBuilder textBuilder = new StringBuilder();
+                        String imageUrl = null;
+                        boolean imageUrlIsRemote = false; // 🔥 新增：任务 #910050720382
+
+                        for (int j = 0; j < contentArray.length(); j++) {
+                            try {
+                                JSONObject item = contentArray.optJSONObject(j);
+                                if (item == null) continue;
+
+                                String type = item.optString("type");
+                                if ("text".equals(type))
+                                {
+                                    textBuilder.append(item.optString("text"));
+                                }
+                                else if ("image_url".equals(type))
+                                {
+                                    JSONObject imageUrlObj = item.optJSONObject("image_url");
+                                    if (imageUrlObj != null)
+                                    {
+                                        String url = imageUrlObj.optString("url");
+                                        if (url != null)
+                                        {
+                                            if (url.startsWith("https://") || url.startsWith("http://"))
+                                            {
+                                                // 🔥 新增：https URL（任务 #910050720382）
                                                 imageUrl = url;
+                                                imageUrlIsRemote = true;
+                                            }
+                                            else if (url.startsWith("data:image/jpeg;base64,"))
+                                            {
+                                                int commaIndex = url.lastIndexOf(',');
+                                                if (commaIndex > 0) {
+                                                    imageUrl = url.substring(commaIndex + 1);
+                                                } else {
+                                                    imageUrl = url;
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                            catch (Exception e) {
+                            catch (Exception e)
+                            {
                                 FileLogger.e(TAG, "解析多模态消息失败", e);
                             }
                         }
-                        
+
                         MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
+                        if (imageUrlIsRemote)
+                        {
+                            item.setImageUrlRemote(true); // 🔥 新增：任务 #910050720382
+                        }
                         item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
                         // 🆕 设置 messageId
                         if (messageId != null && !messageId.isEmpty()) {
                             item.setMessageId(messageId);
-MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
-                        if (imageUrlIsRemote)
-                        {
-                          item.setImageUrlRemote(true); // 🔥 新增：任务 #910050720382
                         }
-                        item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
+                        messages.add(item);
+                    }
+                    else
+                    {
+                        String content = msg.optString("content");
+                        if (!content.isEmpty())
+                        {
+                            MessageItem item = new MessageItem(content, MessageType.USER);
                             // 🆕 设置 messageId
                             if (messageId != null && !messageId.isEmpty()) {
                                 item.setMessageId(messageId);
@@ -145,6 +175,7 @@ MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, ima
                             messages.add(item);
                         }
                     }
+                }
                 }
                 else if ("assistant".equals(role)) {
                     if (toolCalls != null && toolCalls.length() > 0) {
