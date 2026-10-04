@@ -477,6 +477,12 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
 
+                FileLogger.e(TAG, "❌ [REMOTE_IMAGE_LOAD_ERROR] 加载远程图片失败 | url=" + url, e);
+            }
+        }, "RemoteImageLoader").start();
+    }
+
+
             BitmapFactory.Options bounds = new BitmapFactory.Options();
             bounds.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(localPath, bounds);
