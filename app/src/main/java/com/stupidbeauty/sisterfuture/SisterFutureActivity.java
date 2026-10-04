@@ -185,6 +185,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private ActivityResultLauncher<Intent> imagePickerLauncher;
   private String currentImageBase64 = null;
+    private String currentImageRemoteUrl = null; // 🔥 新增（任务 #910050720382）：图片 OSS 签名 URL
+    private String currentImageOssObjectKey = null; // 🔥 新增（任务 #910050720382）：图片 OSS 对象 key
+    private long currentImageUrlExpiresAt = 0L; // 🔥 新增（任务 #910050720382）：图片 URL 过期时间戳
+    private volatile boolean isImageProcessing = false; // 🔥 新增（任务 #910050720382）：图片 OSS 上传中标志
   private String currentImagePath = null;  // WanxiangImage 工具支持参考图片：图片本地缓存路径
   private String currentVideoPath = null;
   private String currentVideoMimeType = null;
@@ -443,8 +447,9 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
                 if (imageUrlObj != null)
                 {
                   String url = imageUrlObj.optString("url");
-                  if (url != null && url.startsWith("data:image/jpeg;base64,"))
-                  {
+                  if (url != null && (url.startsWith("https://") || url.startsWith("http://") || url.startsWith("data:image/jpeg;base64,")))
+                  { // 🔥 双格式识别（任务 #910050720382）
+                    if (url.startsWith("https://") || url.startsWith("http://")) { imageUrl = url; imageUrlIsRemote = true; } else if (url.startsWith("data:image/jpeg;base64,"))
                     int commaIndex = url.lastIndexOf(',');
                     if (commaIndex > 0) {
                       imageUrl = url.substring(commaIndex + 1);
@@ -582,7 +587,8 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     // A real user message starts a new autonomous tool-call chain.
     resetToolCallHopGuard("user_message", activeUsageTurnId);
 
-    boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty());
+    boolean hasImage = (currentImageBase64 != null && !currentImageBase64.isEmpty())
+        || (currentImageRemoteUrl != null && !currentImageRemoteUrl.isEmpty());
     boolean hasVideo = (currentVideoPath != null && !currentVideoPath.isEmpty()
         && currentVideoRemoteUrl != null && !currentVideoRemoteUrl.isEmpty());
 
@@ -606,7 +612,7 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
           imageContent.put("type", "image_url");
 
           JSONObject imageUrl = new JSONObject();
-          imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+          imageUrl.put("url", currentImageRemoteUrl != null && !currentImageRemoteUrl.isEmpty() ? currentImageRemoteUrl : ("data:image/jpeg;base64," + currentImageBase64)); // 🔥 新增（任务 #910050720382）：优先用 OSS URL，没有则降级 base64
           imageContent.put("image_url", imageUrl);
           contentArray.put(imageContent);
         }
@@ -878,6 +884,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     partialToolArgs.clear();
     indexToOriginalIdMap.clear();
     currentImageBase64 = null;
+    currentImageRemoteUrl = null; // 🔥 新增（任务 #910050720382）：清图片 OSS URL（切换会话时）
+    currentImageOssObjectKey = null; // 🔥 新增（任务 #910050720382）：清图片 OSS 对象 key
+    currentImageUrlExpiresAt = 0L; // 🔥 新增（任务 #910050720382）：清 URL 过期时间
+    isImageProcessing = false; // 🔥 新增（任务 #910050720382）：清上传中标志
     currentImagePath = null;
     deletePendingVideo();
     currentVideoPath = null;
@@ -912,6 +922,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     {
       currentImageBase64 = null;
     }
+    currentImageRemoteUrl = null; // 🔥 新增（任务 #910050720382）：清图片 OSS URL
+    currentImageOssObjectKey = null; // 🔥 新增（任务 #910050720382）：清图片 OSS 对象 key
+    currentImageUrlExpiresAt = 0L; // 🔥 新增（任务 #910050720382）：清 URL 过期时间
+    isImageProcessing = false; // 🔥 新增（任务 #910050720382）：清上传中标志
     currentImagePath = null;
     currentVideoPath = null;
     currentVideoMimeType = null;
@@ -2651,60 +2665,109 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
     attachment.put("ossUrlExpiresAt", ossUrlExpiresAt);
     attachment.put("metadata", metadata);
     return attachment;
+
+  // 🔥 新增（任务 #910050720382）：仿照 buildLocalVideoAttachment，为图片创建 local_attachments
+  private JSONObject buildLocalImageAttachment(String path, String ossObjectKey,
+                                               long ossUrlExpiresAt) throws JSONException
+  {
+    File imageFile = path != null ? new File(path) : null;
+    JSONObject metadata = new JSONObject();
+    if (imageFile != null && imageFile.exists())
+    {
+      metadata.put("size", imageFile.length());
+    }
+    metadata.put("mimeType", "image/jpeg");
+
+    JSONObject attachment = new JSONObject();
+    attachment.put("type", "image");
+    if (imageFile != null)
+    {
+      attachment.put("url", Uri.fromFile(imageFile).toString());
+    }
+    attachment.put("ossObjectKey", ossObjectKey);
+    attachment.put("ossUrlExpiresAt", ossUrlExpiresAt);
+    attachment.put("metadata", metadata);
+    return attachment;
+  }
   }
 
   private void handleSelectedImage(Intent data)
   {
-    try
-    {
-      Uri imageUri = data.getData();
-      if (imageUri == null) return;
-
-      InputStream inputStream = getContentResolver().openInputStream(imageUri);
-      if (inputStream == null) return;
-
-      ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-      byte[] buffer = new byte[4096];
-      int bytesRead;
-      while ((bytesRead = inputStream.read(buffer)) != -1)
-      {
-        byteArrayOutputStream.write(buffer, 0, bytesRead);
-      }
-      inputStream.close();
-
-      byte[] imageBytes = byteArrayOutputStream.toByteArray();
-      currentImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
-
-      // 🔥 新增：复制图片到应用私有缓存目录（系统会自动清理，节省存储空间）
+    final int selectionGeneration = mediaSelectionGeneration;
+    isImageProcessing = true;
+    sendButtonn2.setEnabled(false);
+    new Thread(() -> {
+      File cacheFile = null;
       try
       {
-        String fileName = "temp_image_" + System.currentTimeMillis() + ".jpg";
-        File cacheFile = new File(getCacheDir(), fileName);
-        FileOutputStream fos = new FileOutputStream(cacheFile);
-        fos.write(imageBytes);
-        fos.close();
-        currentImagePath = cacheFile.getAbsolutePath();
-        FileLogger.i(TAG, "✅ [CACHE_FILE] 图片已缓存 | path=" + currentImagePath);
+        Uri imageUri = data.getData();
+        if (imageUri == null) throw new IOException("无法读取所选图片");
+
+        InputStream inputStream = getContentResolver().openInputStream(imageUri);
+        if (inputStream == null) throw new IOException("无法读取所选图片");
+
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buffer)) != -1)
+        {
+          byteArrayOutputStream.write(buffer, 0, bytesRead);
+        }
+        inputStream.close();
+
+        byte[] imageBytes = byteArrayOutputStream.toByteArray();
+
+        try
+        {
+          String fileName = "temp_image_" + System.currentTimeMillis() + ".jpg";
+          cacheFile = new File(getCacheDir(), fileName);
+          FileOutputStream fos = new FileOutputStream(cacheFile);
+          fos.write(imageBytes);
+          fos.close();
+        }
+        catch (Exception cacheEx)
+        {
+          FileLogger.e(TAG, "⚠️ [CACHE_FILE_ERROR] 缓存图片失败", cacheEx);
+          cacheFile = null;
+        }
+
+        OssManager ossManager = new OssManager(this);
+        ossManager.validateConfiguration();
+
+        File uploadFile = cacheFile != null ? cacheFile : new File(getCacheDir(), "stub_image.jpg");
+        String objectKey = "sisterfuture/image-messages/" + System.currentTimeMillis() + "_" + uploadFile.getName();
+        JSONObject uploadResult = ossManager.uploadFile(uploadFile, objectKey, false, OssManager.DEFAULT_URL_EXPIRY_SECONDS, null);
+
+        if (selectionGeneration != mediaSelectionGeneration)
+        {
+          isImageProcessing = false;
+          runOnUiThread(() -> sendButtonn2.setEnabled(true));
+          return;
+        }
+
+        currentImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
+        currentImagePath = cacheFile != null ? cacheFile.getAbsolutePath() : null;
+        currentImageRemoteUrl = uploadResult.getString("signedUrl");
+        currentImageOssObjectKey = uploadResult.getString("objectKey");
+        currentImageUrlExpiresAt = uploadResult.getLong("expiresAt");
+        isImageProcessing = false;
+
+        runOnUiThread(() -> {
+          sendButtonn2.setEnabled(true);
+          Toast.makeText(this, "✅ 图片已上传，可以发送", Toast.LENGTH_SHORT).show();
+        });
+        FileLogger.i(TAG, "✅ [IMAGE_SELECTED] path=" + currentImagePath + " | ossObjectKey=" + currentImageOssObjectKey);
       }
-      catch (Exception cacheEx)
+      catch (Exception e)
       {
-        FileLogger.e(TAG, "⚠️ [CACHE_FILE_ERROR] 缓存图片失败，但不影响 base64 流程", cacheEx);
-        currentImagePath = null;
+        isImageProcessing = false;
+        FileLogger.e(TAG, "❌ [IMAGE_ERROR] 处理图片失败", e);
+        runOnUiThread(() -> {
+          sendButtonn2.setEnabled(true);
+          Toast.makeText(this, "❌ 图片处理失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        });
       }
-
-      runOnUiThread(() -> {
-        Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
-      });
-
-      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [IMAGE_ERROR] 加载图片失败", e);
-      runOnUiThread(() -> {
-        Toast.makeText(this, "❌ 图片加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
-      });
-    }
+    }, "UserImageProcessor").start();
   }
 
   private void openMediaPicker()
