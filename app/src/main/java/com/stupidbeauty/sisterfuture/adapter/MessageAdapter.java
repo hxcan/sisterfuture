@@ -104,6 +104,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                         JSONArray contentArray = (JSONArray) contentObj;
                         StringBuilder textBuilder = new StringBuilder();
                         String imageUrl = null;
+                        boolean imageUrlIsRemote = false; // 🔥 新增（任务 #910050720382）：标记 imageUrl 是否为远程 URL
                         
                         for (int j = 0; j < contentArray.length(); j++) {
                             try {
@@ -118,12 +119,19 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                                     JSONObject imageUrlObj = item.optJSONObject("image_url");
                                     if (imageUrlObj != null) {
                                         String url = imageUrlObj.optString("url");
-                                        if (url != null && url.startsWith("data:image/jpeg;base64,")) {
-                                            int commaIndex = url.lastIndexOf(',');
-                                            if (commaIndex > 0) {
-                                                imageUrl = url.substring(commaIndex + 1);
-                                            } else {
+                                        if (url != null) {
+                                            // 🔥 双格式识别（任务 #910050720382）
+                                            if (url.startsWith("https://") || url.startsWith("http://")) {
                                                 imageUrl = url;
+                                                imageUrlIsRemote = true;
+                                            }
+                                            else if (url.startsWith("data:image/jpeg;base64,")) {
+                                                int commaIndex = url.lastIndexOf(',');
+                                                if (commaIndex > 0) {
+                                                    imageUrl = url.substring(commaIndex + 1);
+                                                } else {
+                                                    imageUrl = url;
+                                                }
                                             }
                                         }
                                     }
@@ -135,6 +143,10 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                         }
                         
                         MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
+                        // 🔥 新增（任务 #910050720382）：标记 imageUrl 是否为远程 URL
+                        if (imageUrlIsRemote) {
+                            item.setImageUrlRemote(true);
+                        }
                         item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
                         // 🆕 设置 messageId
                         if (messageId != null && !messageId.isEmpty()) {
@@ -598,6 +610,37 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         // 🖼️ 检测是否有图片
         if (message.getImageUrl() != null && !message.getImageUrl().isEmpty()) 
         {
+          // 🔥 新增（任务 #910050720382）：远程 https URL 分支
+          if (message.isImageUrlRemote()) 
+          {
+            final String remoteUrl = message.getImageUrl();
+            final android.widget.ImageView targetImageView = imageView;
+            new Thread(() -> {
+              try {
+                java.net.URL imageUrlObj = new java.net.URL(remoteUrl);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) imageUrlObj.openConnection();
+                conn.setConnectTimeout(10 * 1000);
+                conn.setReadTimeout(30 * 1000);
+                conn.setDoInput(true);
+                conn.connect();
+                java.io.InputStream is = conn.getInputStream();
+                final android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(is);
+                is.close();
+                conn.disconnect();
+                if (bitmap != null) {
+                  targetImageView.post(() -> {
+                    targetImageView.setImageBitmap(bitmap);
+                    targetImageView.setVisibility(View.VISIBLE);
+                  });
+                }
+              } catch (Exception e) {
+                FileLogger.e(TAG, "❌ [REMOTE_IMAGE_LOAD_ERROR] 加载远程图片失败 | url=" + remoteUrl, e);
+              }
+            }, "RemoteImageLoader").start();
+            textView.setText(message.getText());
+            return;
+          }
+          
           FileLogger.d(TAG, "🖼️ [IMAGE_FOUND] 检测到图片，开始解码");
           try 
           {
