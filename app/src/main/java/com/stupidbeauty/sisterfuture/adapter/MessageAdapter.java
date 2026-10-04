@@ -77,51 +77,44 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             
             for (int i = 0; i < history.size(); i++) {
                 JSONObject msg = history.get(i);
-                String role = msg.optString("role");
-                Object contentObj = msg.opt("content");
-                String toolCallId = msg.optString("tool_call_id");
-                String messageId = msg.optString("id"); // 🆕 从数据源读取 messageId
-                JSONArray toolCalls = msg.optJSONArray("tool_calls");
+if (contentObj instanceof JSONArray)
+                {
+                  JSONArray contentArray = (JSONArray) contentObj;
+                  StringBuilder textBuilder = new StringBuilder();
+                  String imageUrl = null;
+                  boolean imageUrlIsRemote = false; // 🔥 新增：任务 #910050720382
 
-                if ("tool".equals(role) && !toolCallId.isEmpty()) {
-                    String toolName = msg.optString("name", "unknown_tool");
-                    String content = msg.optString("content");
-                    String displayText = "🛠️ 工具调用结果：" + toolName + "\n" + content;
-                    MessageItem item = new MessageItem(displayText, MessageType.TOOL_CALL_RESULT);
-                    try {
+                  for (int j = 0; j < contentArray.length(); j++) {
                         JSONObject result = new JSONObject(content);
                         item.setAttachments(Attachment.fromJsonArray(result.optJSONArray("attachments")));
-                    } catch (Exception ignored) {
+                        else if ("image_url".equals(type))
+                {
+                  JSONObject imageUrlObj = item.optJSONObject("image_url");
+                  if (imageUrlObj != null)
+                  {
+                    String url = imageUrlObj.optString("url");
+                    if (url != null)
+                    {
+                      if (url.startsWith("https://") || url.startsWith("http://"))
+                      {
+                        // 🔥 新增：https URL（任务 #910050720382）
+                        imageUrl = url;
+                        imageUrlIsRemote = true;
+                      }
+                      else if (url.startsWith("data:image/jpeg;base64,"))
+                      {
+                        int commaIndex = url.lastIndexOf(',');
+                        if (commaIndex > 0)
+                        {
+                          imageUrl = url.substring(commaIndex + 1);
+                        } else
+                        {
+                          imageUrl = url;
+                        }
+                      }
                     }
-                    // 🆕 设置 messageId
-                    if (messageId != null && !messageId.isEmpty()) {
-                        item.setMessageId(messageId);
-                    }
-                    messages.add(item);
+                  }
                 }
-                else if ("user".equals(role)) {
-                    if (contentObj instanceof JSONArray) {
-                        JSONArray contentArray = (JSONArray) contentObj;
-                        StringBuilder textBuilder = new StringBuilder();
-                        String imageUrl = null;
-                        
-                        for (int j = 0; j < contentArray.length(); j++) {
-                            try {
-                                JSONObject item = contentArray.optJSONObject(j);
-                                if (item == null) continue;
-                                
-                                String type = item.optString("type");
-                                if ("text".equals(type)) {
-                                    textBuilder.append(item.optString("text"));
-                                }
-                                else if ("image_url".equals(type)) {
-                                    JSONObject imageUrlObj = item.optJSONObject("image_url");
-                                    if (imageUrlObj != null) {
-                                        String url = imageUrlObj.optString("url");
-                                        if (url != null && url.startsWith("data:image/jpeg;base64,")) {
-                                            int commaIndex = url.lastIndexOf(',');
-                                            if (commaIndex > 0) {
-                                                imageUrl = url.substring(commaIndex + 1);
                                             } else {
                                                 imageUrl = url;
                                             }
@@ -139,13 +132,12 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                         // 🆕 设置 messageId
                         if (messageId != null && !messageId.isEmpty()) {
                             item.setMessageId(messageId);
+MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
+                        if (imageUrlIsRemote)
+                        {
+                          item.setImageUrlRemote(true); // 🔥 新增：任务 #910050720382
                         }
-                        messages.add(item);
-                    }
-                    else {
-                        String content = msg.optString("content");
-                        if (!content.isEmpty()) {
-                            MessageItem item = new MessageItem(content, MessageType.USER);
+                        item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
                             // 🆕 设置 messageId
                             if (messageId != null && !messageId.isEmpty()) {
                                 item.setMessageId(messageId);
@@ -441,90 +433,145 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         } catch (OutOfMemoryError error) {
             FileLogger.e(TAG, "本地附件图片内存不足，已跳过显示");
             return null;
-        }
-    }
-
-    /** Keeps videos full-width and derives height from the video's own aspect ratio. */
-    private static class FullWidthVideoView extends android.widget.VideoView {
-        private int videoWidth;
-        private int videoHeight;
-        private final int initialHeight;
-
-        FullWidthVideoView(Context context) {
-            super(context);
-            initialHeight = Math.round(220 * context.getResources().getDisplayMetrics().density);
-        }
-
-        void setVideoSize(int width, int height) {
-            if (width > 0 && height > 0) {
-                videoWidth = width;
-                videoHeight = height;
-                requestLayout();
+// 🔥 新增：异步加载 https 图片（任务 #910050720382）
+      private void loadRemoteImage(final String url)
+      {
+        final android.widget.ImageView targetImageView = imageView;
+        final android.content.Context ctx = itemView.getContext();
+        new Thread(() -> {
+          try {
+            java.net.URL imageUrl = new java.net.URL(url);
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) imageUrl.openConnection();
+            conn.setConnectTimeout(10 * 1000);
+            conn.setReadTimeout(30 * 1000);
+            conn.setDoInput(true);
+            conn.connect();
+            int statusCode = conn.getResponseCode();
+            if (statusCode != 200) {
+              conn.disconnect();
+              return;
             }
-        }
-
-        @Override
-        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            int width = View.MeasureSpec.getSize(widthMeasureSpec);
-            if (videoWidth > 0 && videoHeight > 0 && width > 0) {
-                int height = Math.round((float) width * videoHeight / videoWidth);
-                setMeasuredDimension(width, height);
-            } else {
-                setMeasuredDimension(width, initialHeight);
+            java.io.InputStream is = conn.getInputStream();
+            final android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(is);
+            is.close();
+            conn.disconnect();
+            if (bitmap != null) {
+              targetImageView.post(() -> {
+                targetImageView.setImageBitmap(bitmap);
+                targetImageView.setVisibility(android.view.View.VISIBLE);
+              });
             }
-        }
-    }
+          } catch (Exception e) {
+            FileLogger.e(TAG, "❌ [REMOTE_IMAGE_LOAD_ERROR] 加载远程图片失败 | url=" + url, e);
+          }
+        }, "RemoteImageLoader").start();
+      }
 
-    private static void clearVideoViews(android.view.ViewGroup container) {
-        if (container == null) return;
-        for (int i = 0; i < container.getChildCount(); i++) {
-            View child = container.getChildAt(i);
-            if (child instanceof android.widget.VideoView) {
-                ((android.widget.VideoView) child).stopPlayback();
+      public void bind(MessageItem message)
+      {
+        clearVideoViews(videoContainer);
+        int videoCount = 0;
+        if (message.getAttachments() != null) {
+          for (Attachment attachment : message.getAttachments()) {
+            if (attachment != null && "video".equals(attachment.getType())
+                && addVideoView(videoContainer, attachment.getUrl(), itemView.getContext(), videoCount)) {
+              videoCount++;
             }
+          }
         }
-        container.removeAllViews();
-    }
-    
-    // 🗑️ 显示长按菜单（同时包含"删除"和"复制"选项）- 传递 messageId
-    private static void showLongPressMenuStatic(View anchorView, MessageItem message, int position, TextView textView, List<MessageItem> messagesList, OnMessageDeleteListener listener) {
-        PopupMenu popup = new PopupMenu(anchorView.getContext(), anchorView);
-        popup.getMenu().add(0, 1, 0, "删除");
-        popup.getMenu().add(0, 2, 1, "复制");
-        
-        // 获取 messageId
-        String messageId = message.getMessageId();
-        
-        popup.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == 1) {
-                // 删除消息 - 传递 messageId 以便精确删除
-                if (position >= 0 && position < messagesList.size()) {
-                    MessageItem removed = messagesList.remove(position);
-                    // 回调删除监听器，传递 messageId
-                    if (listener != null) {
-                        listener.onMessageDeleted(removed, position, messageId);
-                    }
-                }
-                return true;
-            } else if (item.getItemId() == 2) {
-                // 复制文本
-                String selectedText = textView.getText().toString();
-                ClipboardManager clipboard = (ClipboardManager)anchorView.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-                android.content.ClipData clip = android.content.ClipData.newPlainText("selected text", selectedText);
-                clipboard.setPrimaryClip(clip);
-                return true;
-            }
-            return false;
-        });
-        popup.show();
-    }
+        videoContainer.setVisibility(videoCount > 0 ? View.VISIBLE : View.GONE);
 
-    public static class UserMessageViewHolder extends RecyclerView.ViewHolder 
-    {
-      @BindView(R.id.user_text) TextView textView;
-      @BindView(R.id.user_image) ImageView imageView;
-      @BindView(R.id.user_videos_container) android.view.ViewGroup videoContainer;
-      private List<MessageItem> messagesRef;
+        // 🖼️ 检测是否有图片
+        if (message.getImageUrl() != null && !message.getImageUrl().isEmpty())
+        {
+          FileLogger.d(TAG, "🖼️ [IMAGE_FOUND] 检测到图片，开始加载 | remote=" + message.isImageUrlRemote());
+          try
+          {
+            // 🔥 新增：远程 https URL 分支（任务 #910050720382）
+            if (message.isImageUrlRemote())
+            {
+              final String remoteUrl = message.getImageUrl();
+              loadRemoteImage(remoteUrl);
+              textView.setText(message.getText());
+              return;
+            }
+
+            // 处理 Base64 前缀 - 支持多种格式
+            String base64Data = message.getImageUrl();
+
+            // 检查并去除 data:image/...;base64, 前缀
+            if (base64Data.startsWith("data:image"))
+            {
+              int commaIndex = base64Data.indexOf(',');
+              if (commaIndex > 0)
+              {
+                String prefix = base64Data.substring(0, commaIndex);
+                base64Data = base64Data.substring(commaIndex + 1);
+                FileLogger.d(TAG, "✂️ [PREFIX_REMOVED] 已去除 Base64 前缀：" + prefix);
+              }
+            }
+
+            // 清理可能存在的空白字符
+            base64Data = base64Data.trim();
+
+            // 验证 Base64 字符串是否有效
+            if (base64Data.isEmpty())
+            {
+              FileLogger.e(TAG, "❌ [BASE64_EMPTY] Base64 数据为空");
+              imageView.setImageBitmap(null);
+              imageView.setVisibility(View.GONE);
+              return;
+            }
+
+            FileLogger.d(TAG, "📦 [DECODE_START] 开始 Base64 解码 | 数据长度=" + base64Data.length());
+
+            // 解码 Base64 图片 - 使用 NO_WRAP 标志
+            byte[] decodedString = Base64.decode(base64Data, Base64.NO_WRAP);
+            FileLogger.d(TAG, "✅ [DECODED] Base64 解码完成 | 字节数组长度=" + decodedString.length);
+
+            Bitmap decodedBitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+
+            if (decodedBitmap != null)
+            {
+              FileLogger.d(TAG, "✅ [BITMAP_DECODED] 图片解码成功，尺寸：" + decodedBitmap.getWidth() + "x" + decodedBitmap.getHeight());
+              // 显示图片
+              imageView.setImageBitmap(decodedBitmap);
+              imageView.setVisibility(View.VISIBLE);
+            }
+            else
+            {
+              FileLogger.e(TAG, "❌ [BITMAP_NULL] BitmapFactory.decodeByteArray 返回 null");
+              imageView.setImageBitmap(null);
+              imageView.setVisibility(View.GONE);
+            }
+
+            // 文字部分只显示非图片内容（如果有）
+            textView.setText(message.getText());
+            FileLogger.d(TAG, "📝 [TEXT_SET] 文字已设置，长度：" + (message.getText() != null ? message.getText().length() : 0));
+          }
+          catch (IllegalArgumentException e)
+          {
+            FileLogger.e(TAG, "❌ [DECODE_ERROR] Base64 格式错误", e);
+            imageView.setImageBitmap(null);
+            imageView.setVisibility(View.GONE);
+            textView.setText(message.getText());
+          }
+          catch (Exception e)
+          {
+            FileLogger.e(TAG, "❌ [DECODE_ERROR] 图片解码失败", e);
+            imageView.setImageBitmap(null);
+            imageView.setVisibility(View.GONE);
+            textView.setText(message.getText());
+          }
+        }
+        else
+        {
+          // 没有图片，隐藏 ImageView，只显示文字
+          imageView.setImageBitmap(null); // 清除旧图片，防止复用
+          imageView.setVisibility(View.GONE);
+          textView.setText(message.getText());
+        }
+      }
       private MessageAdapter.OnMessageDeleteListener deleteListenerRef;
 
       public UserMessageViewHolder(View itemView, List<MessageItem> messages, MessageAdapter.OnMessageDeleteListener deleteListener) 
