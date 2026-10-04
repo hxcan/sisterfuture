@@ -2660,56 +2660,86 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
 
   private void handleSelectedImage(Intent data)
   {
-    try
-    {
-      Uri imageUri = data.getData();
-      if (imageUri == null) return;
-
-      InputStream inputStream = getContentResolver().openInputStream(imageUri);
-      if (inputStream == null) return;
-
-      ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-      byte[] buffer = new byte[4096];
-      int bytesRead;
-      while ((bytesRead = inputStream.read(buffer)) != -1)
-      {
-        byteArrayOutputStream.write(buffer, 0, bytesRead);
-      }
-      inputStream.close();
-
-      byte[] imageBytes = byteArrayOutputStream.toByteArray();
-      currentImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
-
-      // 🔥 新增：复制图片到应用私有缓存目录（系统会自动清理，节省存储空间）
+    final int selectionGeneration = mediaSelectionGeneration;
+    isImageProcessing = true;
+    sendButtonn2.setEnabled(false);
+    new Thread(() -> {
+      File target = null;
       try
       {
-        String fileName = "temp_image_" + System.currentTimeMillis() + ".jpg";
-        File cacheFile = new File(getCacheDir(), fileName);
-        FileOutputStream fos = new FileOutputStream(cacheFile);
-        fos.write(imageBytes);
-        fos.close();
-        currentImagePath = cacheFile.getAbsolutePath();
-        FileLogger.i(TAG, "✅ [CACHE_FILE] 图片已缓存 | path=" + currentImagePath);
+        OssManager ossManager = new OssManager(this);
+        ossManager.validateConfiguration();
+
+        File imageDirectory = new File(getFilesDir(), "message_images");
+        if (!imageDirectory.exists() && !imageDirectory.mkdirs())
+        {
+          throw new IOException("无法创建图片存储目录");
+        }
+
+        Uri imageUri = data.getData();
+        if (imageUri == null) throw new IOException("无法读取所选图片");
+
+        target = new File(imageDirectory, "user_image_" + System.currentTimeMillis() + ".jpg");
+        try (InputStream input = getContentResolver().openInputStream(imageUri);
+             FileOutputStream output = new FileOutputStream(target))
+        {
+          if (input == null) throw new IOException("无法读取所选图片");
+          byte[] buffer = new byte[8192];
+          int count;
+          while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+        }
+
+        // 生成 base64 作为 OSS 失败时的兑底
+        byte[] imageBytes;
+        try (FileInputStream fis = new FileInputStream(target)) {
+          ByteArrayOutputStream baos = new ByteArrayOutputStream();
+          byte[] b = new byte[4096];
+          int n;
+          while ((n = fis.read(b)) != -1) baos.write(b, 0, n);
+          imageBytes = baos.toByteArray();
+        }
+        currentImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
+        currentImagePath = target.getAbsolutePath();
+
+        String objectKey = "sisterfuture/image-messages/" + System.currentTimeMillis() + "_" + target.getName();
+        JSONObject uploadResult = ossManager.uploadFile(target, objectKey, false,
+          OssManager.DEFAULT_URL_EXPIRY_SECONDS, null);
+        long uploadedImageSize = uploadResult.getLong("size");
+
+        if (selectionGeneration != mediaSelectionGeneration)
+        {
+          if (!target.delete()) FileLogger.w(TAG, "⚠️ 无法删除已取消的图片文件: " + target.getAbsolutePath());
+          isImageProcessing = false;
+          runOnUiThread(() -> sendButtonn2.setEnabled(true));
+          return;
+        }
+
+        currentImageRemoteUrl = uploadResult.getString("signedUrl");
+        currentImageOssObjectKey = uploadResult.getString("objectKey");
+        currentImageUrlExpiresAt = uploadResult.getLong("expiresAt");
+        isImageProcessing = false;
+
+        runOnUiThread(() -> {
+          sendButtonn2.setEnabled(true);
+          Toast.makeText(this, "✅ 图片已上传，可以发送", Toast.LENGTH_SHORT).show();
+        });
+        FileLogger.i(TAG, "✅ [IMAGE_SELECTED] path=" + currentImagePath
+          + " | size=" + uploadedImageSize + " | ossObjectKey=" + currentImageOssObjectKey);
       }
-      catch (Exception cacheEx)
+      catch (Exception e)
       {
-        FileLogger.e(TAG, "⚠️ [CACHE_FILE_ERROR] 缓存图片失败，但不影响 base64 流程", cacheEx);
-        currentImagePath = null;
+        if (target != null && target.exists() && !target.delete())
+        {
+          FileLogger.w(TAG, "⚠️ 无法删除上传失败的图片文件: " + target.getAbsolutePath());
+        }
+        isImageProcessing = false;
+        FileLogger.e(TAG, "❌ [IMAGE_ERROR] 处理图片失败", e);
+        runOnUiThread(() -> {
+          sendButtonn2.setEnabled(true);
+          Toast.makeText(this, "❌ 图片处理失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        });
       }
-
-      runOnUiThread(() -> {
-        Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
-      });
-
-      FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
-    }
-    catch (Exception e)
-    {
-      FileLogger.e(TAG, "❌ [IMAGE_ERROR] 加载图片失败", e);
-      runOnUiThread(() -> {
-        Toast.makeText(this, "❌ 图片加载失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
-      });
-    }
+    }, "UserImageProcessor").start();
   }
 
   private void openMediaPicker()
