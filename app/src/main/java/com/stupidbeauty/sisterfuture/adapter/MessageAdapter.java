@@ -175,8 +175,6 @@ String role = msg.optString("role");
                             messages.add(item);
                         }
                     }
-                }
-                }
                 else if ("assistant".equals(role)) {
                     if (toolCalls != null && toolCalls.length() > 0) {
                         String assistantContent = msg.optString("content", "");
