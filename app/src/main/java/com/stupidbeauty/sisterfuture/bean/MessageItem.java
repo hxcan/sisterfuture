@@ -8,6 +8,7 @@ public class MessageItem {
     public String text;
     private MessageType type;
     public String imageUrl; // 🖼️ 新增：存储图片的 Base64 数据（如果有）
+    private boolean imageUrlIsRemote; // 🔥 新增（任务 #910050720382）：标记 imageUrl 是否为远程 https URL（OSS 上传后），false 表示仍是 base64 data URI
     private String messageId; // 🔗 新增：消息唯一 ID，用于 UI 与上下文关联
     private List<Attachment> attachments; // 🔥 新增：工具生成的多媒体附件
     private ModelUsage modelUsage; // 本地展示用，不发送给模型
@@ -49,6 +50,16 @@ public class MessageItem {
 
     public String getImageUrl() {
         return imageUrl;
+    }
+
+    // 🔥 新增（任务 #910050720382）：判断图片 URL 是否为远程 URL（OSS），false 表示 base64
+    public boolean isImageUrlRemote() {
+        return imageUrlIsRemote;
+    }
+
+    // 🔥 新增（任务 #910050720382）：设置图片 URL 是否为远程 URL
+    public void setImageUrlRemote(boolean imageUrlIsRemote) {
+        this.imageUrlIsRemote = imageUrlIsRemote;
     }
 
     // 🔗 新增：获取消息 ID
