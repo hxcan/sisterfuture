@@ -443,6 +443,40 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 return null;
             }
 
+    // 🔥 新增：异步加载 https 图片（任务 #910050720382）
+    private void loadRemoteImage(final String url)
+    {
+        final android.widget.ImageView targetImageView = imageView;
+        new Thread(() -> {
+            try {
+                java.net.URL imageUrl = new java.net.URL(url);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) imageUrl.openConnection();
+                conn.setConnectTimeout(10 * 1000);
+                conn.setReadTimeout(30 * 1000);
+                conn.setDoInput(true);
+                conn.connect();
+                int statusCode = conn.getResponseCode();
+                if (statusCode != 200) {
+                    conn.disconnect();
+                    return;
+                }
+                java.io.InputStream is = conn.getInputStream();
+                final android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(is);
+                is.close();
+                conn.disconnect();
+                if (bitmap != null) {
+                    targetImageView.post(() -> {
+                        targetImageView.setImageBitmap(bitmap);
+                        targetImageView.setVisibility(android.view.View.VISIBLE);
+                    });
+                }
+            } catch (Exception e) {
+                FileLogger.e(TAG, "❌ [REMOTE_IMAGE_LOAD_ERROR] 加载远程图片失败 | url=" + url, e);
+            }
+        }, "RemoteImageLoader").start();
+    }
+
+
             BitmapFactory.Options bounds = new BitmapFactory.Options();
             bounds.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(localPath, bounds);
@@ -503,7 +537,16 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 ((android.widget.VideoView) child).stopPlayback();
             }
         }
-        container.removeAllViews();
+        // 🔥 新增：远程 https 图片分支（任务 #910050720382）
+        if (message.isImageUrlRemote())
+        {
+          final String remoteUrl = message.getImageUrl();
+          loadRemoteImage(remoteUrl);
+          textView.setText(message.getText());
+          return;
+        }
+
+
     }
     
     // 🗑️ 显示长按菜单（同时包含"删除"和"复制"选项）- 传递 messageId
