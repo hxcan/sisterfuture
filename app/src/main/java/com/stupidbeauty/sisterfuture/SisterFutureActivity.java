@@ -1,66 +1,40 @@
-else if ("user".equals(role))
-      {
-        if (contentObj instanceof JSONArray)
-        {
-          JSONArray contentArray = (JSONArray) contentObj;
-          StringBuilder textBuilder = new StringBuilder();
-          String imageUrl = null;
-          boolean imageUrlIsRemote = false; // 🔥 新增（任务 #910050720382）：标记 imageUrl 是否为远程 URL
+private JSONObject buildLocalVideoAttachment(String path, String mimeType, String ossObjectKey,
+                                               long ossUrlExpiresAt) throws JSONException
+  {
+    File videoFile = new File(path);
+    JSONObject metadata = new JSONObject();
+    metadata.put("size", videoFile.length());
+    metadata.put("mimeType", mimeType != null ? mimeType : "video/mp4");
 
-          for (int i = 0; i < contentArray.length(); i++)
-          {
-            try
-            {
-              JSONObject item = contentArray.optJSONObject(i);
-              if (item == null) continue;
+    JSONObject attachment = new JSONObject();
+    attachment.put("type", "video");
+    attachment.put("url", Uri.fromFile(videoFile).toString());
+    attachment.put("ossObjectKey", ossObjectKey);
+    attachment.put("ossUrlExpiresAt", ossUrlExpiresAt);
+    attachment.put("metadata", metadata);
+    return attachment;
+  }
 
-              String type = item.optString("type");
-              if ("text".equals(type))
-              {
-                textBuilder.append(item.optString("text"));
-              }
-              else if ("image_url".equals(type))
-              {
-                JSONObject imageUrlObj = item.optJSONObject("image_url");
-                if (imageUrlObj != null)
-                {
-                  String url = imageUrlObj.optString("url");
-                  if (url != null)
-                  {
-                    // 🔥 双格式识别（任务 #910050720382）
-                    if (url.startsWith("https://") || url.startsWith("http://"))
-                    {
-                      imageUrl = url;
-                      imageUrlIsRemote = true;
-                    }
-                    else if (url.startsWith("data:image/jpeg;base64,"))
-                    {
-                      int commaIndex = url.lastIndexOf(',');
-                      if (commaIndex > 0) {
-                        imageUrl = url.substring(commaIndex + 1);
-                      } else {
-                        imageUrl = url;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            catch (Exception e)
-            {
-              Log.e(TAG, "解析多模态消息失败", e);
-            }
-          }
+  // 🔥 新增（任务 #910050720382）：仿照 buildLocalVideoAttachment，为图片创建 local_attachments
+  private JSONObject buildLocalImageAttachment(String path, String ossObjectKey,
+                                               long ossUrlExpiresAt) throws JSONException
+  {
+    File imageFile = path != null ? new File(path) : null;
+    JSONObject metadata = new JSONObject();
+    if (imageFile != null && imageFile.exists())
+    {
+      metadata.put("size", imageFile.length());
+    }
+    metadata.put("mimeType", "image/jpeg");
 
-          MessageItem item = new MessageItem(textBuilder.toString(), MessageType.USER, imageUrl);
-          // 🔥 新增（任务 #910050720382）：标记 imageUrl 是否为远程 URL（与 MessageAdapter 匹配）
-          if (imageUrlIsRemote)
-          {
-            item.setImageUrlRemote(true);
-          }
-          item.setAttachments(Attachment.fromJsonArray(msg.optJSONArray("local_attachments")));
-          if (messageId != null && !messageId.isEmpty()) {
-            item.setMessageId(messageId);
-          }
-          messageAdapter.addMessage(item);
-        }
+    JSONObject attachment = new JSONObject();
+    attachment.put("type", "image");
+    if (imageFile != null)
+    {
+      attachment.put("url", Uri.fromFile(imageFile).toString());
+    }
+    attachment.put("ossObjectKey", ossObjectKey);
+    attachment.put("ossUrlExpiresAt", ossUrlExpiresAt);
+    attachment.put("metadata", metadata);
+    return attachment;
+  }
