@@ -2704,6 +2704,41 @@ private volatile boolean isImageProcessing = false;
         Toast.makeText(this, "✅ 图片已加载", Toast.LENGTH_SHORT).show();
       });
 
+
+      // 🔥 新增：异步上传图片到 OSS（仿照 handleSelectedVideo 模式）
+      isImageProcessing = true;
+      final String pendingImagePath = currentImagePath;
+      if (pendingImagePath != null)
+      {
+        new Thread(() -> {
+          try
+          {
+            OssManager ossManager = new OssManager(SisterFutureActivity.this);
+            ossManager.validateConfiguration();
+            String objectKey = "sisterfuture/image-messages/" + System.currentTimeMillis() + "_" + new File(pendingImagePath).getName();
+            JSONObject uploadResult = ossManager.uploadFile(new File(pendingImagePath), objectKey, false,
+              OssManager.DEFAULT_URL_EXPIRY_SECONDS, null);
+            currentImageRemoteUrl = uploadResult.getString("signedUrl");
+            currentImageOssObjectKey = uploadResult.getString("objectKey");
+            currentImageUrlExpiresAt = uploadResult.getLong("expiresAt");
+            FileLogger.i(TAG, "✅ [IMAGE_OSS_UPLOAD] 图片已上传 OSS | url=" + currentImageRemoteUrl);
+            runOnUiThread(() -> {
+              Toast.makeText(SisterFutureActivity.this, "✅ 图片已上传OSS，可以发送", Toast.LENGTH_SHORT).show();
+            });
+          }
+          catch (Exception ossEx)
+          {
+            FileLogger.e(TAG, "⚠️ [IMAGE_OSS_UPLOAD_FAILED] OSS 上传失败，保留 base64 兜底", ossEx);
+            runOnUiThread(() -> {
+              Toast.makeText(SisterFutureActivity.this, "⚠️ OSS上传失败，使用本地base64", Toast.LENGTH_SHORT).show();
+            });
+          }
+          finally
+          {
+            isImageProcessing = false;
+          }
+        }, "UserImageProcessor").start();
+      }
       FileLogger.i(TAG, "✅ [PROCESS] 图片处理完成 | Base64长度：" + (currentImageBase64 != null ? currentImageBase64.length() : 0));
     }
     catch (Exception e)
