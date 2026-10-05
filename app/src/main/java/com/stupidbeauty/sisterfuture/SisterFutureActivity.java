@@ -610,7 +610,7 @@ private volatile boolean isImageProcessing = false;
           imageContent.put("type", "image_url");
 
           JSONObject imageUrl = new JSONObject();
-          imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64);
+          if (currentImageRemoteUrl != null && !currentImageRemoteUrl.isEmpty()) { imageUrl.put("url", currentImageRemoteUrl); } else { imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64); }
           imageContent.put("image_url", imageUrl);
           contentArray.put(imageContent);
         }
