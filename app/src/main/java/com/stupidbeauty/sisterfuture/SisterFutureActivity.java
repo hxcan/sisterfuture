@@ -456,7 +456,7 @@ private volatile boolean isImageProcessing = false;
                       imageUrl = url;
                     }
                   }
-else if (url.startsWith("http:\/\/") || url.startsWith("https:\/\/"))
+else if (url.startsWith("http:" + "/" + "/") || url.startsWith("https:" + "/" + "/"))
 {
 imageUrl = url;
 }
