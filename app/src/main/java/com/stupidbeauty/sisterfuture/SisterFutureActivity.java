@@ -917,6 +917,7 @@ private volatile boolean isImageProcessing = false;
       currentImageBase64 = null;
     }
     currentImagePath = null;
+    currentImageUrlExpiresAt = 0L;
     currentImageOssObjectKey = null;
     currentImageRemoteUrl = null;
     currentVideoPath = null;
