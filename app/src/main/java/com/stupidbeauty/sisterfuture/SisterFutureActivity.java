@@ -186,6 +186,10 @@ public class SisterFutureActivity extends Activity implements TextToSpeech.OnIni
   private ActivityResultLauncher<Intent> imagePickerLauncher;
   private String currentImageBase64 = null;
   private String currentImagePath = null;  // WanxiangImage 工具支持参考图片：图片本地缓存路径
+private String currentImageRemoteUrl = null;
+private String currentImageOssObjectKey = null;
+private long currentImageUrlExpiresAt = 0L;
+private volatile boolean isImageProcessing = false;
   private String currentVideoPath = null;
   private String currentVideoMimeType = null;
   private String currentVideoRemoteUrl = null;
