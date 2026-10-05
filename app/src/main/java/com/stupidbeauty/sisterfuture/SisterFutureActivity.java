@@ -610,12 +610,17 @@ imageUrl = url;
 
         if (hasImage)
         {
+FileLogger.i(TAG, \"🔍 [DEBUG] image state | hasImage=\" + hasImage
+  + \" | currentImageBase64=\" + (currentImageBase64 != null ? \"len=\" + currentImageBase64.length() : \"null\")
+  + \" | currentImageRemoteUrl=\" + (currentImageRemoteUrl != null ? \"len=\" + currentImageRemoteUrl.length() + \" prefix=\" + currentImageRemoteUrl.substring(0, Math.min(60, currentImageRemoteUrl.length())) : \"null\")
+  + \" | isImageProcessing=\" + isImageProcessing);
           JSONObject imageContent = new JSONObject();
           imageContent.put("type", "image_url");
 
           JSONObject imageUrl = new JSONObject();
           if (currentImageRemoteUrl != null && !currentImageRemoteUrl.isEmpty()) { imageUrl.put("url", currentImageRemoteUrl); } else { imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64); }
           imageContent.put("image_url", imageUrl);
+FileLogger.i(TAG, \"🔍 [DEBUG] FINAL image_url | \" + imageUrl.toString().substring(0, Math.min(200, imageUrl.toString().length())));
           contentArray.put(imageContent);
         }
 
