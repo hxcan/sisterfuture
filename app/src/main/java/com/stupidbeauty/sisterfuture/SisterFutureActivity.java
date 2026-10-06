@@ -610,10 +610,7 @@ imageUrl = url;
 
         if (hasImage)
         {
-          JSONObject imageContent = new JSONObject();
-          imageContent.put("type", "image_url");
-
-          JSONObject imageUrl = new JSONObject();
+String dbgPrefix = "DEBUG image state | hasImage=" + hasImage + " base64Len=" + (currentImageBase64 == null ? 0 : currentImageBase64.length()) + " remoteUrlLen=" + (currentImageRemoteUrl == null ? 0 : currentImageRemoteUrl.length()) + " processing=" + isImageProcessing; FileLogger.i(TAG, dbgPrefix);
           if (currentImageRemoteUrl != null && !currentImageRemoteUrl.isEmpty()) { imageUrl.put("url", currentImageRemoteUrl); } else { imageUrl.put("url", "data:image/jpeg;base64," + currentImageBase64); }
           imageContent.put("image_url", imageUrl);
           contentArray.put(imageContent);
@@ -622,8 +619,8 @@ imageUrl = url;
         if (hasVideo)
         {
           JSONObject videoContent = new JSONObject();
-          videoContent.put("type", "video_url");
-          videoContent.put("video_url", new JSONObject()
+// DEBUG: final image_url
+String dbgUrl = "DEBUG image_url=" + imageUrl.toString().substring(0, Math.min(200, imageUrl.toString().length())); FileLogger.i(TAG, dbgUrl);
             .put("url", currentVideoRemoteUrl)
             .put("fps", 5));
           contentArray.put(videoContent);
