@@ -199,6 +199,8 @@ public class ListPhoneDirectoryTool implements Tool
             // 检查普通读取权限
             if (!hasReadExternalStoragePermission())
             {
+                // 权限不足，引导用户授权
+                requestReadExternalStoragePermission();
                 try
                 {
                     JSONObject result = new JSONObject();
@@ -312,6 +314,37 @@ public class ListPhoneDirectoryTool implements Tool
                     // 无法打开权限页面，记录日志
                     e2.printStackTrace();
                 }
+            }
+        }
+    }
+
+    /**
+     * 请求 READ_EXTERNAL_STORAGE 权限。
+     * Android 6.0+ 优先用运行时权限请求框；context 不是 Activity 时降级到应用详情页。
+     */
+    private void requestReadExternalStoragePermission()
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+        {
+            try
+            {
+                if (context instanceof android.app.Activity)
+                {
+                    ((android.app.Activity) context).requestPermissions(
+                        new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE},
+                        1001);
+                }
+                else
+                {
+                    Intent intent = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    intent.setData(Uri.parse("package:" + context.getPackageName()));
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(intent);
+                }
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
             }
         }
     }
