@@ -479,6 +479,6 @@ public class ExecuteRemoteCommandTool implements Tool {
 
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求执行远程命令时才调用此工具.需要提供 hostname、username 和 command 参数.若需认证,可选提供 password 参数(推荐使用密码认证,私钥认证暂不通过大模型传递).\n\n当远程命令执行失败、连接超时或拒绝连接时,应该主动调用 get_network_info 和 get_location 工具,检查当前网络连接状况和地理位置,以便判断与目标电脑之间是否还具有网络连接,并将诊断结果告知主人.";
+return "必须在用户明确要求执行远程命令时才调用此工具.需要提供 hostname、username 和 command 参数.若需认证,可选提供 password 参数(推荐使用密码认证,私钥认证暂不通过大模型传递).\n\n当远程命令执行失败、连接超时或拒绝连接时,应该主动调用 get_network_info 和 get_location 工具,检查当前网络连接状况和地理位置,以便判断与目标电脑之间是否还具有网络连接,并将诊断结果告知主人.\n\n【搜索命令偏好 - ripgrep】\n当通过本工具执行文件内容搜索（grep、find 等）时：\n1. 默认优先使用 `rg`（ripgrep）而不是 `grep`\n - 速度快 5-50 倍（Rust + SIMD）\n   - 自动忽略 .gitignore（不搜 node_modules、.git 等）\n   - 默认递归、自动跳过二进制文件、默认带颜色高亮\n2. 常用参数：\n   - `rg -i \"pattern\"`：忽略大小写\n   - `rg -n \"pattern\"`：显示行号\n   - `rg -l \"pattern\"`：只列文件名\n   - `rg -A 3 -B 3 \"pattern\"`：显示上下文 3 行\n3. 降级方案：如果远程服务器没有 `rg`（用 `which rg` 检查），fall back 到 `grep -rn`\n4. **不适用场景**：单文件、单次、临时搜索——可保留 `grep` 不强求\n5. 服务器优先级（待姐姐确认 rg 安装状态）：\n   - 灵鹿 OPC (192.168.8.59)\n   - 家里电脑 (192.168.26.113)\n   - PP6 部署服务器 (Sealos)\n\n参考：任务 #915934044618（已对比过与 grep 的区别）";
     }
 }
