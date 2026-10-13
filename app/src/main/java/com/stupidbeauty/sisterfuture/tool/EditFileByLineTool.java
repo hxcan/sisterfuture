@@ -43,6 +43,11 @@ import java.util.List;
  * 5. **修复 schema bug**
  *    - 原 operations items properties 嵌套错误（多了一层 type）
  *
+ * 6. **🆕 自动保留缩进（fix #917665359922）**
+ *    - update 操作时，如果 newLine 完全没前导空白，自动从原行提取前导空白补回去
+ *    - 避免修改带缩进代码（Java/JS/Python/YAML）时缩进丢失
+ *    - 如果 newLine 有任何前导空白，尊重调用方意图，不补
+ *
  * @author 未来姐姐
  */
 public class EditFileByLineTool implements Tool
@@ -79,6 +84,7 @@ public class EditFileByLineTool implements Tool
                 "- **replace**: startLine=N, endLine=M 表示 **替换 [N, M) 半开区间**（不包含 M）\n" +
                 "- 示例：删除第 5 行 → startLine=5, endLine=6\n" +
                 "- 示例：删除第 5-7 行 → startLine=5, endLine=8\n\n" +
+                "🆕 **缩进自动保留**（v2.1）：update 操作时，如果 newLine 完全没前导空白，自动从原行补缩进，避免带缩进代码被改成无缩进。\n\n" +
                 "✅ 推荐：用 `find` 参数代替行号，避免歧义\n" +
                 "✅ 推荐：行号模式必须传 `expectedContent` 双重验证\n" +
                 "✅ 推荐：默认 `dryRun=true` 先预览，确认后再改 `dryRun=false` 真正写入");
@@ -148,7 +154,7 @@ public class EditFileByLineTool implements Tool
                         .put("description", "【delete/replace 用】结束行号，从 1 开始，⚠️ 不包含此行（半开区间 [startLine, endLine)）。删除第 5-7 行 → startLine=5, endLine=8"))
                     .put("newLine", new JSONObject()
                         .put("type", "string")
-                        .put("description", "【update 用】新的行内容（替换 lineNumber 指定的那一行）"))
+                        .put("description", "【update 用】新的行内容（替换 lineNumber 指定的那一行）。🆕 如果完全没前导空白，会自动从原行补缩进"))
                     .put("newLines", new JSONObject()
                         .put("type", "array")
                         .put("items", new JSONObject().put("type", "string"))
@@ -436,6 +442,27 @@ public class EditFileByLineTool implements Tool
     }
 
     /**
+     * 🆕 提取字符串的前导空白（空格 + Tab）
+     * 用于 update 操作时自动保留缩进
+     * 修复任务 #917665359922
+     *
+     * @param s 输入字符串
+     * @return 前导空白子串（如 "    " 或 "\t\t"），空字符串表示无前导空白
+     */
+    private String extractLeadingWhitespace(String s)
+    {
+        if (s == null || s.isEmpty()) return "";
+        int i = 0;
+        while (i < s.length())
+        {
+            char c = s.charAt(i);
+            if (c != ' ' && c != '\t') break;
+            i++;
+        }
+        return s.substring(0, i);
+    }
+
+    /**
      * 🆕 生成预览（前 N 行）
      */
     private String previewLines(String content, int maxLines)
@@ -550,6 +577,11 @@ public class EditFileByLineTool implements Tool
      *
      * 行号规则（1-based）：
      * - lineNumber=N → 修改第 N 行（替换为 newLine）
+     *
+     * 🆕 缩进自动保留（v2.1，修复 #917665359922）：
+     * - 如果 newLine 完全没前导空白，自动从被替换的原行提取前导空白补回去
+     * - 如果 newLine 有任何前导空白，尊重调用方意图，不补
+     * - 避免修改带缩进代码（Java/JS/Python/YAML）时缩进被吃掉
      */
     private List applyUpdate(List lines, JSONObject op) throws Exception
     {
@@ -563,6 +595,22 @@ public class EditFileByLineTool implements Tool
             throw new IllegalArgumentException(
                 "Invalid line number: " + lineNumber + ". File has " + lines.size() + " lines. Line numbers start from 1.");
         }
+
+        // 🆕 修复 #917665359922: 自动保留原行的前导空白（缩进）
+        // 如果 newLine 不带前导空白（说明调用方没手动加），从被替换的原行提取前导空白补回去
+        if (newLine != null && !newLine.isEmpty())
+        {
+            String originalLine = (String) lines.get(index);
+            String originalIndent = extractLeadingWhitespace(originalLine);
+            String newIndent = extractLeadingWhitespace(newLine);
+
+            // 只有当 newLine 完全没前导空白时才补（避免重复缩进或破坏调用方显式缩进）
+            if (newIndent.isEmpty() && !originalIndent.isEmpty())
+            {
+                newLine = originalIndent + newLine;
+            }
+        }
+
         lines.set(index, newLine);
         return lines;
     }
