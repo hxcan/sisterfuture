@@ -9,6 +9,7 @@ import android.util.Log;
 import android.content.Context;
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.manager.OssManager;
+import com.stupidbeauty.sisterfuture.manager.RequestParamCompatibilityManager;
 import com.stupidbeauty.sisterfuture.tool.Tool;
 import com.stupidbeauty.sisterfuture.utils.ContextLengthUtils;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
@@ -61,12 +62,12 @@ public class TongYiClient
     t.setDaemon(true);
     return t;
   });
-  
+
   // 队列统计
   private final AtomicInteger totalRequestsSubmitted = new AtomicInteger(0);
   private final AtomicLong totalWaitTimeMs = new AtomicLong(0);
   private final AtomicInteger queueSizeHighWaterMark = new AtomicInteger(0);
-  
+
   // 🔗 新增：requestId ↔ messageId 映射表（用于追踪请求与消息的关联）
   private final Map<Long, String> requestIdToMessageIdMap = new ConcurrentHashMap<>();
   private final AtomicLong requestIdCounter = new AtomicLong(0);
@@ -215,15 +216,15 @@ public class TongYiClient
     this.toolManager = toolManager;
     this.networkRequester = new OkHttpNetworkRequester(this.accessPointManager, this.toolManager, this,
       context == null ? null : new OssManager(context));
-    
+
     // === 🔒 #5028 启动队列处理器 ===
     startQueueProcessor();
   }
-  
+
   // === 🔒 #5028 队列处理器 ===
   private void startQueueProcessor() {
     executor.submit(() -> {
-      
+
       while (!Thread.currentThread().isInterrupted()) {
         try {
           Runnable request = requestQueue.take(); // 阻塞等待下一个请求
@@ -237,7 +238,7 @@ public class TongYiClient
           // 继续处理下一个请求，不退出循环
         }
       }
-      
+
       FileLogger.w(TAG, "🔒 [QUEUE_WORKER] 队列工作线程已退出");
     });
   }
@@ -249,22 +250,22 @@ public class TongYiClient
     final long submitTime = System.currentTimeMillis();
     final int queueSizeBefore = requestQueue.size();
     final int totalRequests = totalRequestsSubmitted.incrementAndGet();
-    
+
     // 🔗 记录 requestId ↔ messageId 映射
     if (reservedMessageId != null && !reservedMessageId.isEmpty())
     {
       requestIdToMessageIdMap.put(requestId, reservedMessageId);
       FileLogger.d(TAG, "🔗 [MAP_PUT] 请求 - 消息 ID 映射 | requestId=" + requestId + " | messageId=" + reservedMessageId);
     }
-    
+
     // === 🔒 #5028 将请求提交到队列 ===
     boolean queued = requestQueue.offer(() -> {
       final long startTime = System.currentTimeMillis();
       final long waitTime = startTime - submitTime;
       final int queueSizeNow = requestQueue.size();
-      
+
       totalWaitTimeMs.addAndGet(waitTime);
-      
+
       // 更新高水位标记
       int currentQueueSize = queueSizeBefore;
       int oldHighWaterMark = queueSizeHighWaterMark.get();
@@ -275,9 +276,9 @@ public class TongYiClient
         oldHighWaterMark = queueSizeHighWaterMark.get();
         currentQueueSize = queueSizeBefore;
       }
-      
+
       FileLogger.d(TAG, "🔒 [QUEUE_EXEC] 请求 #" + totalRequests + " (requestId=" + requestId + ") 开始执行 | 等待时间：" + waitTime + "ms | 当前队列长度：" + queueSizeNow + " | 线程：" + Thread.currentThread().getName());
-      
+
       try {
         // 执行实际的网络请求，传入 requestId 和 messageId
         networkRequester.sendRequest(messages, includeTools, listener, onStreamComplete, requestId, reservedMessageId);
@@ -286,7 +287,7 @@ public class TongYiClient
         final long executionTime = endTime - startTime;
 
         FileLogger.d(TAG, "🔒 [QUEUE_DONE] 请求 #" + totalRequests + " (requestId=" + requestId + ") 完成 | 执行时间：" + executionTime + "ms | 总耗时：" + (waitTime + executionTime) + "ms");
-        
+
         // 每 10 个请求输出一次统计
         if (totalRequests % 10 == 0) {
           long avgWaitTime = totalWaitTimeMs.get() / totalRequests;
@@ -308,7 +309,7 @@ public class TongYiClient
         removeRequestIdMapping(requestId);
       }
     });
-    
+
     if (!queued) {
       FileLogger.e(TAG, "🔒 [QUEUE_REJECTED] 请求 #" + totalRequests + " (requestId=" + requestId + ") 被队列拒绝（队列已满）");
       deliverTerminalUsage(listener, null, requestId);
@@ -338,13 +339,13 @@ public class TongYiClient
         callbackError);
     }
   }
-  
+
   // ✅ 保留旧方法，兼容现有调用（默认 messageId 为 null）
   public void sendChatRequest(JSONArray messages, boolean includeTools , OnResponseListener listener, Runnable onStreamComplete)
   {
     sendChatRequest(messages, includeTools, listener, onStreamComplete, null);
   }
-  
+
   // 🔗 新增：根据 requestId 获取对应的 messageId
   public String getMessageIdByRequestId(long requestId)
   {
@@ -359,7 +360,7 @@ public class TongYiClient
     }
     return messageId;
   }
-  
+
   // 🔗 新增：清除已完成的 requestId 映射（防止内存泄漏）
   public void removeRequestIdMapping(long requestId)
   {
@@ -395,6 +396,9 @@ public class TongYiClient
     private final OssManager ossManager;
     private final Set<String> streamOptionsUnsupportedEndpoints =
       ConcurrentHashMap.newKeySet();
+    // #919750362575：参数兼容性集中管理（含 thinking / reasoning_split / stream_options 等）
+    private final RequestParamCompatibilityManager paramCompat =
+      new RequestParamCompatibilityManager();
 
     public OkHttpNetworkRequester(ModelAccessPointManager accessPointManager, ToolManager toolManager,
                                   TongYiClient tongYiClient, OssManager ossManager)
@@ -415,19 +419,19 @@ public class TongYiClient
     {
       ModelAccessPoint currentAccessPoint = accessPointManager.getCurrentAccessPoint();
       String apiKey = null;
-      
+
       if (currentAccessPoint != null) {
           apiKey = currentAccessPoint.getApiKey();
       }
-      
+
       String effectiveApiKey = (apiKey != null && !apiKey.isEmpty()) ? apiKey : "";
-          
-      String apiKeyMasked = (apiKey != null && apiKey.length() > 12) 
+
+      String apiKeyMasked = (apiKey != null && apiKey.length() > 12)
           ? apiKey.substring(0, 8) + "..." + apiKey.substring(apiKey.length() - 4)
           : (apiKey != null ? "***" : "null");
       FileLogger.d(NETWORK_TAG, "[API Key] 接入点=\"" + (currentAccessPoint != null ? currentAccessPoint.getName() : "null") + "\", Key=\"" + apiKeyMasked + "\" (长度：" + (apiKey != null ? apiKey.length() : 0) + ")");
       FileLogger.d(NETWORK_TAG, "[API Key] 接入点=\"" + (currentAccessPoint != null ? currentAccessPoint.getName() : "null") + "\", Key=\"" + apiKeyMasked + "\" (长度：" + (apiKey != null ? apiKey.length() : 0) + ")");
-      
+
       // 🔗 记录请求信息
       FileLogger.d(NETWORK_TAG, "🔗 [REQUEST_INFO] requestId=" + requestId + " | messageId=" + reservedMessageId);
       RequestLifecycle lifecycle = new RequestLifecycle(listener, onStreamComplete, tongYiClient, requestId);
@@ -489,18 +493,20 @@ public class TongYiClient
         requestBody.put("model", accessPointManager.getCurrentModelName());
         requestBody.put("messages", stripLocalMessageMetadata(messages));
         requestBody.put("stream", true);
-        requestBody.put("enable_thinking", false);
-        
-        JSONObject thinkingParams = new JSONObject();
-        thinkingParams.put("type", "disabled");
-        thinkingParams.put("budget_tokens", 100);
-        requestBody.put("thinking", thinkingParams);
-        
-        JSONObject reasoningParams = new JSONObject();
-        reasoningParams.put("split", true);
-        requestBody.put("reasoning_split", reasoningParams.opt("split"));
-        
-        FileLogger.d(NETWORK_TAG, "🌐 [Minimax] 已添加 Minimax 思考控制参数：reasoning_split=true, thinking.budget_tokens=100");
+
+        String baseUrl = accessPointManager.getCurrentBaseUrl();
+        String endpoint = accessPointManager.getCurrentChatEndpoint();
+        String fullUrl = baseUrl + endpoint;
+
+        // #919750362575：按接入点能力决定是否注入 Minimax 私有思考控制参数
+        if (paramCompat.shouldInjectMinimaxThinkingParams(currentAccessPoint, fullUrl))
+        {
+          paramCompat.injectMinimaxThinkingParams(requestBody);
+        }
+        else
+        {
+          FileLogger.d(NETWORK_TAG, "🧠 [COMPAT] 当前接入点不支持 Minimax 私有思考控制参数，跳过注入");
+        }
 
         if (includeTools)
         {
@@ -523,10 +529,6 @@ public class TongYiClient
               requestBody.put("tool_choice", "auto");
             }
         }
-
-        String baseUrl = accessPointManager.getCurrentBaseUrl();
-        String endpoint = accessPointManager.getCurrentChatEndpoint();
-        String fullUrl = baseUrl + endpoint;
 
         if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
             FileLogger.w(NETWORK_TAG, "⚠️ Double slash in URL!");
@@ -598,6 +600,33 @@ public class TongYiClient
       originalBody.writeTo(buffer);
       JSONObject fallbackBody = new JSONObject(buffer.readUtf8());
       fallbackBody.remove("stream_options");
+
+      String requestJson = fallbackBody.toString();
+      long requestBodyBytes = requestJson.getBytes(StandardCharsets.UTF_8).length;
+      RequestBody body = RequestBody.create(
+        MediaType.parse("application/json; charset=utf-8"), requestJson);
+      Request request = originalAttempt.request.newBuilder().post(body).build();
+      return new RequestAttempt(request, requestJson.length(), preview(requestJson),
+        requestBodyBytes);
+    }
+
+    /**
+     * #919750362575：Minimax 思考控制参数回退用。
+     * 与 buildFallbackAttempt 对称：复用同 URL、Header、Auth，仅剥离思考控制参数。
+     */
+    private RequestAttempt buildThinkingParamsFallbackAttempt(RequestAttempt originalAttempt)
+      throws Exception
+    {
+      RequestBody originalBody = originalAttempt.request.body();
+      if (originalBody == null)
+      {
+        throw new IOException("Cannot build thinking-params fallback without a request body");
+      }
+
+      Buffer buffer = new Buffer();
+      originalBody.writeTo(buffer);
+      JSONObject fallbackBody = new JSONObject(buffer.readUtf8());
+      paramCompat.stripMinimaxThinkingParams(fallbackBody);
 
       String requestJson = fallbackBody.toString();
       long requestBodyBytes = requestJson.getBytes(StandardCharsets.UTF_8).length;
@@ -714,6 +743,29 @@ public class TongYiClient
         ? errorBody.substring(0, 2000) + "..."
         : errorBody;
       FileLogger.e(NETWORK_TAG, "Error Body Preview: " + errorPreview);
+
+      // #919750362575：先尝试"Minimax 私有思考控制参数不兼容"的就地回退。
+      // 与 stream_options 回退对称：同一 endpoint + 同一 lifecycle 内重发一次。
+      // 命中后记录到 manager 的"已知不支持"集合，避免下次请求再误带这些参数。
+      if (paramCompat.isUnsupportedThinkingParamsResponse(statusCode, errorBody))
+      {
+        paramCompat.markThinkingParamsUnsupported(endpointKey);
+        try
+        {
+          RequestAttempt fallbackAttempt = buildThinkingParamsFallbackAttempt(attemptedRequest);
+          FileLogger.w(NETWORK_TAG, "🧠 [COMPAT] 接入点不支持 Minimax 思考控制参数，已在同一请求生命周期内剥离并重试"
+            + " (requestId=" + requestId + ")");
+          enqueueAttempt(fallbackAttempt, allowStreamOptionsFallback, endpointKey, lifecycle, requestId,
+            reservedMessageId, modelName);
+        }
+        catch (Exception fallbackError)
+        {
+          FileLogger.e(NETWORK_TAG, "构建 Minimax 思考控制参数回退请求失败"
+            + " (requestId=" + requestId + ")", fallbackError);
+          lifecycle.fail(fallbackError);
+        }
+        return;
+      }
 
       if (allowStreamOptionsFallback
         && isUnsupportedStreamOptionsResponse(statusCode, errorBody))
@@ -896,7 +948,7 @@ public class TongYiClient
     {
       return false;
     }
-    
+
     String trimmedContent = content.trim();
     return trimmedContent.startsWith("<!DOCTYPE html") ||
            trimmedContent.startsWith("<html") ||
@@ -930,7 +982,7 @@ public class TongYiClient
       boolean isDone = false;
       boolean htmlChecked = false;
       StringBuilder firstLineBuffer = new StringBuilder();
-      
+
       int lineCount = 0;
       int contentLineCount = 0;
       StringBuilder allContentBuilder = new StringBuilder();
@@ -939,12 +991,12 @@ public class TongYiClient
       while ((line = bufferedReader.readLine()) != null)
       {
         lineCount++;
-        
+
         if (!htmlChecked)
         {
           htmlChecked = true;
           firstLineBuffer.append(line);
-          
+
           String preview = firstLineBuffer.length() > 500 ? firstLineBuffer.substring(0, 500) : firstLineBuffer.toString();
           if (isHtmlResponse(preview))
           {
@@ -958,7 +1010,7 @@ public class TongYiClient
         if (line.startsWith("data:"))
         {
           String dataPart = line.substring(5).trim();
-          
+
 
           if (!dataPart.isEmpty())
           {
@@ -989,16 +1041,16 @@ public class TongYiClient
                   }
                   if (choice.has("delta")) {
                     JSONObject delta = choice.getJSONObject("delta");
-                    
+
                     // 🔍 新增：打印 delta 中 tool_calls 的完整原始数据
                     if (delta.has("tool_calls")) {
                         JSONArray toolCallsInDelta = delta.getJSONArray("tool_calls");
                         String tcJson = toolCallsInDelta.toString();
                         FileLogger.d(TAG, "[SSE_TOOL_CALLS] delta.tool_calls: " + (tcJson.length() > 500 ? tcJson.substring(0, 500) + "..." : tcJson));
                     }
-                    
+
                     String content = delta.optString("content", "");
-                    
+
                     if (!content.isEmpty()) {
                       contentLineCount++;
                       allContentBuilder.append(content);
@@ -1010,7 +1062,7 @@ public class TongYiClient
               } catch (Exception e) {
                 FileLogger.e(TAG, "[SSE Parse Error] Failed to parse JSON (requestId=" + requestId + "): " + e.getMessage());
               }
-              
+
               if (!usageOnlyChunk)
               {
                 if (!lifecycle.deliverResponse(dataPart)) return;
@@ -1020,11 +1072,11 @@ public class TongYiClient
             {
               isDone = true;
               FileLogger.d(TAG, "SSE 流处理完成 [DONE] (requestId=" + requestId + ", messageId=" + reservedMessageId + ")");
-              
+
               FileLogger.d(TAG, "[SSE Summary] 总行数：" + lineCount);
               FileLogger.d(TAG, "[SSE Summary] content 行数：" + contentLineCount);
               FileLogger.d(TAG, "[SSE Summary] 总 content 长度：" + allContentBuilder.length());
-              
+
               String finalContent = allContentBuilder.toString();
               if (finalContent.isEmpty()) {
                 FileLogger.w(TAG, "[SSE Summary] ⚠️ 警告：模型返回空响应！(requestId=" + requestId + ")");
