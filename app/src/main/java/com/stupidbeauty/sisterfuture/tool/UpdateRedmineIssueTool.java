@@ -22,7 +22,11 @@ import java.util.concurrent.Executors;
  * 支持添加评论（notes）、修改标题（subject）、描述（description）、任务类型（trackerId）、优先级（priority）、状态（statusId）、指派人（assignedToId）和目标版本（fixedVersionId）等。
  * 新增支持修改上级任务编号（parentIssueId）和任务阻挡关系。
  * 一个工具，满足多种任务更新需求，具有高度的通用性和可扩展性。
- */
+ *
+ * 注意：所有原本声明为 long 类型的 ID 字段（taskId / statusId / fixedVersionId / parentIssueId / projectId / blockedByIds[] / blockingIds[]）在 schema 中改为 string，
+ * 以兼容 OpenAI Function Calling 协议（OpenAI 协议不接受 "type":"long"）。工具内部使用 RedmineIdUtil.parseLong / parseLongArray 兼容字符串和数字两种输入。
+ * 关联：Redmine 任务 #920250883721（sisterfuture 项目）
+ * */
 public class UpdateRedmineIssueTool implements Tool
 {
     private static final String TAG = "UpdateRedmineIssueTool";
@@ -47,12 +51,20 @@ public class UpdateRedmineIssueTool implements Tool
         {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "updateRedmineIssue");
-            functionDef.put("description", "更新 Redmine 任务的任意属性。支持添加评论、修改标题、描述、任务类型（trackerId）、优先级、状态、指派人和父子关系等。");
+            functionDef.put("description", "更新 Redmine 任务的任意属性。支持添加评论、修改标题、描述、任务类型（trackerId）、优先级、状态、指派人和父子关系等。所有 ID 字段均接受字符串形式的数字（兼容 OpenAI 协议）。");
 
             JSONObject priorityEnum = new JSONObject();
             priorityEnum.put("type", "string");
             priorityEnum.put("enum", new JSONArray(new String[]{"Low", "Normal", "High", "Urgent"}));
             priorityEnum.put("description", "可选：任务的新优先级");
+
+            // 数字 ID 字段统一为 string schema（OpenAI 协议兼容）。
+            // 客户端在收到参数时会用 RedmineIdUtil 统一把 "750160066086" 这类字符串转成 long，再调 Redmine API。
+            JSONObject idString = (description) -> {
+                JSONObject o = new JSONObject();
+                try { o.put("type", "string"); o.put("description", description); } catch (Exception ignored) {}
+                return o;
+            };
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -74,8 +86,8 @@ public class UpdateRedmineIssueTool implements Tool
                     .put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"))
 
                 .put("taskId", new JSONObject()
-                    .put("type", "long")
-                    .put("description", "要更新的目标任务 ID"))
+                    .put("type", "string")
+                    .put("description", "要更新的目标任务 ID（字符串形式的数字，例如 \"750160066086\"）"))
 
                 .put("subject", new JSONObject()
                     .put("type", "string")
@@ -93,8 +105,8 @@ public class UpdateRedmineIssueTool implements Tool
                     .put("description", "可选：新的任务类型（跟踪器）ID，必须是目标项目可用的类型 ID"))
 
                 .put("statusId", new JSONObject()
-                    .put("type", "long")
-                    .put("description", "可选：任务的新状态 ID"))
+                    .put("type", "string")
+                    .put("description", "可选：任务的新状态 ID（字符串形式的数字）"))
 
                 .put("assignedToId", new JSONObject()
                     .put("type", "integer")
@@ -102,30 +114,30 @@ public class UpdateRedmineIssueTool implements Tool
                     .put("description", "可选：新的指派人用户 ID；传 0 可清空指派人"))
 
                 .put("fixedVersionId", new JSONObject()
-                    .put("type", "long")
-                    .put("description", "可选：任务的新目标版本 ID；传 0 或 null 可清空目标版本"))
+                    .put("type", "string")
+                    .put("description", "可选：任务的新目标版本 ID（字符串形式的数字）；传 \"0\" 或 null 可清空目标版本"))
 
                 .put("notes", new JSONObject()
                     .put("type", "string")
                     .put("description", "可选：要添加的评论内容"))
 
                 .put("parentIssueId", new JSONObject()
-                    .put("type", "long")
-                    .put("description", "可选：新的上级任务 ID，用于调整任务父子关系"))
+                    .put("type", "string")
+                    .put("description", "可选：新的上级任务 ID（字符串形式的数字），用于调整任务父子关系"))
 
                 .put("projectId", new JSONObject()
-                    .put("type", "long")
-                    .put("description", "可选：新的项目 ID，用于将任务移动到其他项目"))
+                    .put("type", "string")
+                    .put("description", "可选：新的项目 ID（字符串形式的数字），用于将任务移动到其他项目"))
 
                 .put("blockedByIds", new JSONObject()
                     .put("type", "array")
-                    .put("items", new JSONObject().put("type", "long"))
-                    .put("description", "可选：此任务被哪些任务阻塞"))
+                    .put("items", new JSONObject().put("type", "string"))
+                    .put("description", "可选：此任务被哪些任务阻塞（字符串形式的数字 ID 数组）"))
 
                 .put("blockingIds", new JSONObject()
                     .put("type", "array")
-                    .put("items", new JSONObject().put("type", "long"))
-                    .put("description", "可选：此任务阻塞了哪些任务"))
+                    .put("items", new JSONObject().put("type", "string"))
+                    .put("description", "可选：此任务阻塞了哪些任务（字符串形式的数字 ID 数组）"))
             );
 
             parameters.put("required", new JSONArray(new String[]{"taskId"}));
@@ -160,18 +172,21 @@ public class UpdateRedmineIssueTool implements Tool
         {
             try
             {
-                // 1. 解析参数
+                // 1. 解析参数（兼容旧下划线别名）
                 JSONObject arguments = ToolParameterAliases.normalize(rawArguments,
                     "redmineUrl", "apiKey", "taskId", "trackerId", "statusId",
                     "assignedToId", "fixedVersionId", "parentIssueId", "projectId",
                     "blockedByIds", "blockingIds");
                 RedmineAuth auth = RedmineAuth.resolve(arguments, getNote(context));
-                String redmineUrl = auth.getRedmineUrl();
-                long taskId = arguments.getLong("taskId");
+
+                // 2. 关键改动：taskId 改为字符串 schema 后，用 RedmineIdUtil 统一解析
+                long taskId = RedmineIdUtil.parseLong(arguments, "taskId", true);
                 if (taskId <= 0)
                     throw new IllegalArgumentException("taskId 必须大于 0");
 
-                // 4. 构建请求体
+                String redmineUrl = auth.getRedmineUrl();
+
+                // 4. 构建请求体（ID 字段全部用 RedmineIdUtil 解析）
                 JSONObject issueJson = new JSONObject();
                 if (arguments.has("trackerId"))
                 {
@@ -180,7 +195,6 @@ public class UpdateRedmineIssueTool implements Tool
                         throw new IllegalArgumentException("trackerId 必须大于 0");
                     issueJson.put("tracker_id", trackerId);
                 }
-                // 只有当参数存在时才添加，避免发送空值
                 if (arguments.has("subject"))
                 {
                     issueJson.put("subject", arguments.getString("subject"));
@@ -195,7 +209,7 @@ public class UpdateRedmineIssueTool implements Tool
                 }
                 if (arguments.has("statusId"))
                 {
-                    issueJson.put("status_id", arguments.getLong("statusId"));
+                    issueJson.put("status_id", RedmineIdUtil.parseLong(arguments, "statusId", false));
                 }
                 if (arguments.has("assignedToId"))
                 {
@@ -222,13 +236,13 @@ public class UpdateRedmineIssueTool implements Tool
                 }
                 if (arguments.has("fixedVersionId"))
                 {
-                    if (arguments.isNull("fixedVersionId") || arguments.optLong("fixedVersionId", -1) == 0)
+                    if (arguments.isNull("fixedVersionId") || RedmineIdUtil.optLong(arguments, "fixedVersionId", -1) == 0)
                     {
                         issueJson.put("fixed_version_id", JSONObject.NULL);
                     }
                     else
                     {
-                        long fixedVersionId = arguments.getLong("fixedVersionId");
+                        long fixedVersionId = RedmineIdUtil.parseLong(arguments, "fixedVersionId", false);
                         if (fixedVersionId < 0)
                         {
                             throw new IllegalArgumentException("fixedVersionId 必须为正整数；传 0 或 null 可清空目标版本");
@@ -244,7 +258,7 @@ public class UpdateRedmineIssueTool implements Tool
                 {
                     if (!arguments.isNull("parentIssueId"))
                     {
-                        issueJson.put("parent_issue_id", arguments.getLong("parentIssueId"));
+                        issueJson.put("parent_issue_id", RedmineIdUtil.parseLong(arguments, "parentIssueId", false));
                     }
                     else
                     {
@@ -254,20 +268,20 @@ public class UpdateRedmineIssueTool implements Tool
                 }
                 if (arguments.has("projectId"))
                 {
-                    issueJson.put("project_id", arguments.getLong("projectId"));
+                    issueJson.put("project_id", RedmineIdUtil.parseLong(arguments, "projectId", false));
                 }
 
-                // 处理任务阻挡关系
+                // 处理任务阻挡关系（数组形式 ID）
                 if (arguments.has("blockedByIds"))
                 {
-                    JSONArray blockedByArray = arguments.getJSONArray("blockedByIds");
+                    JSONArray blockedByArray = RedmineIdUtil.parseLongArray(arguments.getJSONArray("blockedByIds"));
                     JSONObject relationsObj = new JSONObject();
                     relationsObj.put("blocked_by", blockedByArray);
                     issueJson.put("relations", relationsObj);
                 }
                 if (arguments.has("blockingIds"))
                 {
-                    JSONArray blockingArray = arguments.getJSONArray("blockingIds");
+                    JSONArray blockingArray = RedmineIdUtil.parseLongArray(arguments.getJSONArray("blockingIds"));
                     JSONObject relationsObj = issueJson.has("relations") ? issueJson.getJSONObject("relations") : new JSONObject();
                     relationsObj.put("blocks", blockingArray);
                     issueJson.put("relations", relationsObj);
@@ -318,7 +332,7 @@ public class UpdateRedmineIssueTool implements Tool
 
     /**
      * 根据优先级名称获取 ID（适配 Java 8）
-     */
+     * */
     private int getPriorityId(String priority)
     {
         String lowerPriority = priority.toLowerCase();
@@ -336,6 +350,7 @@ public class UpdateRedmineIssueTool implements Tool
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求更新 Redmine 任务信息时才调用此工具。参数使用小驼峰命名，兼容旧的下划线别名；两者同时传入时以小驼峰参数为准。用 taskId 指定任务，trackerId 修改任务类型，必须使用目标项目可用的类型 ID。认证支持 apiKey，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。支持添加评论、修改指派人（assignedToId）、目标版本（fixedVersionId）、父任务（parentIssueId）和任务依赖关系；指派人必须使用用户 ID，传 0 可清空，不支持按姓名指派；目标版本必须使用版本 ID，传 0 或 null 可清空。";
+        return "必须在用户明确要求更新 Redmine 任务信息时才调用此工具。参数使用小驼峰命名，兼容旧的下划线别名；两者同时传入时以小驼峰参数为准。用 taskId 指定任务，trackerId 修改任务类型，必须使用目标项目可用的类型 ID。认证支持 apiKey，或 username 与 password；调用参数缺失时会自动从工具备注读取。不得输出 API Key。支持添加评论、修改指派人（assignedToId）、目标版本（fixedVersionId）、父任务（parentIssueId）和任务依赖关系；指派人必须使用用户 ID，传 0 可清空，不支持按姓名指派；目标版本必须使用版本 ID，传 0 或 null 可清空。"
+            + "\n\n【重要】taskId / statusId / fixedVersionId / parentIssueId / projectId 以及 blockedByIds / blockingIds 数组元素均为字符串形式的数字 ID（例如 \"750160066086\"），不要传 JSON 数字；这是为了兼容 OpenAI Function Calling 协议。工具内部会自动转 long。";
     }
 }
