@@ -14,10 +14,12 @@ import java.util.concurrent.Executors;
 /**
  * 工具类：获取 Redmine 任务列表
  * 专门用于列出特定项目或全部项目的任务列表
- * 使用/issues.json 接口，符合官方 API 规范
+ * 使用 /issues.json 接口，符合官方 API 规范
  * 支持分页、project_id 过滤和缓存机制
+ *
+ * 注意：project_id 在 schema 中为 string（OpenAI 协议兼容），内部用 RedmineIdUtil 解析。
  * @author 未来姐姐
- */
+ * */
 public class GetIssuesListTool implements Tool {
     private static final String TAG = "GetIssuesListTool";
     private final Context context;
@@ -37,7 +39,7 @@ public class GetIssuesListTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "getIssuesList");
-            functionDef.put("description", "获取 Redmine 中指定项目或全部项目的任务列表。使用 /issues.json 接口，支持分页和项目过滤。");
+            functionDef.put("description", "获取 Redmine 中指定项目或全部项目的任务列表。使用 /issues.json 接口，支持分页和项目过滤。project_id 字段为字符串形式的数字以兼容 OpenAI 协议。");
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
@@ -55,8 +57,8 @@ public class GetIssuesListTool implements Tool {
                     .put("type", "string")
                     .put("description", "Redmine API Key，与 username/password 二选一；建议通过工具备注保存"))
                 .put("project_id", new JSONObject()
-                    .put("type", "long")
-                    .put("description", "可选：项目 ID，用于查询特定项目的任务列表（支持 64 位长整数）"))
+                    .put("type", "string")
+                    .put("description", "可选：项目 ID（字符串形式的数字），用于查询特定项目的任务列表（支持 64 位长整数）"))
                 .put("limit", new JSONObject()
                     .put("type", "integer")
                     .put("description", "每页数量，默认 25"))
@@ -90,7 +92,8 @@ public class GetIssuesListTool implements Tool {
                 // 1. 解析参数
                 RedmineAuth auth = RedmineAuth.resolve(arguments, getNote(context));
                 String redmineUrl = auth.getRedmineUrl();
-                long projectId = arguments.optLong("project_id", -1);
+                // 改用 RedmineIdUtil 兼容 string/number 两种输入
+                long projectId = RedmineIdUtil.optLong(arguments, "project_id", -1);
                 int limit = arguments.optInt("limit",25);
                 int offset = arguments.optInt("offset", 0);
 
@@ -98,11 +101,10 @@ public class GetIssuesListTool implements Tool {
                 OkHttpClient client = new OkHttpClient();
                 HttpUrl.Builder urlBuilder = HttpUrl.parse(redmineUrl + "/issues.json")
                     .newBuilder()
-                    .addQueryParameter("status_id", "*") // 获取所有状态的任务
+                    .addQueryParameter("status_id", "*")
                     .addQueryParameter("limit", String.valueOf(limit))
                     .addQueryParameter("offset", String.valueOf(offset));
 
-                // 添加项目过滤
                 if (projectId > 0) {
                     urlBuilder.addQueryParameter("project_id", String.valueOf(projectId));
                 }
@@ -123,7 +125,7 @@ public class GetIssuesListTool implements Tool {
 
                 String resultStr = body.string();
                 JSONObject result = new JSONObject();
-                result.put("tasks", new JSONObject(resultStr)); // 包装为标准响应
+                result.put("tasks", new JSONObject(resultStr));
                 result.put("status", "success");
                 result.put("fetched_at", System.currentTimeMillis());
 
@@ -135,16 +137,15 @@ public class GetIssuesListTool implements Tool {
                     error.put("status", "error");
                     error.put("message", e.getMessage());
                     error.put("type", e.getClass().getSimpleName());
-                    // ✅ 修复：调用 onError(e) 而非 onResult(error)，让 ToolManager 注入历史值推荐
                     callback.onError(e);
                 } catch (Exception ignored) {}
             }
         });
     }
 
-    // --- 工具备注支持 ---
     @Override
     public String getDefaultSystemPromptEnhancement() {
-        return "必须在用户明确要求获取 Redmine 任务列表时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。API Key 不得输出到回复或日志。";
+        return "必须在用户明确要求获取 Redmine 任务列表时才调用此工具。认证支持 api_key，或 username 与 password；调用参数缺失时会自动从工具备注读取。API Key 不得输出到回复或日志。"
+            + "\n\n【重要】project_id 是字符串形式的数字 ID，不要传 JSON 数字；这是为了兼容 OpenAI Function Calling 协议。";
     }
 }
