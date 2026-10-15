@@ -60,12 +60,6 @@ public class UpdateRedmineIssueTool implements Tool
 
             // 数字 ID 字段统一为 string schema（OpenAI 协议兼容）。
             // 客户端在收到参数时会用 RedmineIdUtil 统一把 "750160066086" 这类字符串转成 long，再调 Redmine API。
-            JSONObject idString = (description) -> {
-                JSONObject o = new JSONObject();
-                try { o.put("type", "string"); o.put("description", description); } catch (Exception ignored) {}
-                return o;
-            };
-
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()
