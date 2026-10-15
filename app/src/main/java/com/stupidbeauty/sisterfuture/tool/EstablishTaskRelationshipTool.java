@@ -16,10 +16,12 @@ import com.stupidbeauty.sisterfuture.utils.FileLogger;
 /**
  * 工具类：建立 Redmine 任务之间的阻塞关系
  * 专注于通过 Redmine 的 `/relations.json` API 端点创建'阻塞/被阻塞'关系。
- * 
+ *
+ * 注意：ID 字段在 schema 中统一为 string（OpenAI 协议兼容），内部用 RedmineIdUtil 解析。
+ *
  * @author 太极美术工程狮狮长
- * @version 2.0.6 - 修正 FileLogger 为静态方法调用
- */
+ * @version 2.0.7 - 改为 string ID 兼容 OpenAI 协议
+ * */
 public class EstablishTaskRelationshipTool implements Tool {
     private static final String TAG = "EstabTaskRel";
     private final Context context;
@@ -41,23 +43,23 @@ public class EstablishTaskRelationshipTool implements Tool {
         try {
             JSONObject functionDef = new JSONObject();
             functionDef.put("name", "establishTaskRelationship");
-            functionDef.put("description", "在两个或多个 Redmine 任务之间建立阻塞关系，如任务 A 阻塞了任务 B。\n注意：此工具仅管理阻塞关系，不支持父子关系。\n使用 `createRedmineTask` 工具来创建具有父子关系的任务。\n\n**重要**: 本工具支持长整型任务 ID（如 JoyMan 生成的 14 位数字 ID）。");
+            functionDef.put("description", "在两个或多个 Redmine 任务之间建立阻塞关系，如任务 A 阻塞了任务 B。\n注意：此工具仅管理阻塞关系，不支持父子关系。\n使用 `createRedmineTask` 工具来创建具有父子关系的任务。\n\n**重要**: 本工具支持长整型任务 ID（如 JoyMan 生成的 14 位数字 ID），ID 字段在调用时传字符串形式的数字。");
 
 
             JSONObject parameters = new JSONObject();
             parameters.put("type", "object");
             parameters.put("properties", new JSONObject()
                 .put("task_id", new JSONObject()
-                    .put("type", "number")
-                    .put("description", "目标任务的 ID（即被阻塞的任务），支持长整型"))
+                    .put("type", "string")
+                    .put("description", "目标任务的 ID（即被阻塞的任务），字符串形式的数字，支持长整型"))
                 .put("blocked_by_ids", new JSONObject()
                     .put("type", "array")
-                    .put("items", new JSONObject().put("type", "number"))
-                    .put("description", "可选：此任务被哪些任务阻塞（数组），支持长整型"))
+                    .put("items", new JSONObject().put("type", "string"))
+                    .put("description", "可选：此任务被哪些任务阻塞（数组，元素为字符串形式的数字 ID），支持长整型"))
                 .put("blocking_ids", new JSONObject()
                     .put("type", "array")
-                    .put("items", new JSONObject().put("type", "number"))
-                    .put("description", "可选：此任务阻塞了哪些任务（数组），支持长整型"))
+                    .put("items", new JSONObject().put("type", "string"))
+                    .put("description", "可选：此任务阻塞了哪些任务（数组，元素为字符串形式的数字 ID），支持长整型"))
                 .put("redmine_url", new JSONObject()
                     .put("type", "string")
                     .put("description", "Redmine 实例的完整 URL"))
@@ -104,8 +106,8 @@ public class EstablishTaskRelationshipTool implements Tool {
     public void executeAsync(@NonNull JSONObject arguments, @NonNull OnResultCallback callback) {
         executor.execute(() -> {
             try {
-                // 1. 解析参数 - ✅ 修复：使用 long 类型解析长整型 ID
-                long taskId = arguments.getLong("task_id");
+                // 1. 解析参数 - 用 RedmineIdUtil 兼容 string/number 两种输入
+                long taskId = RedmineIdUtil.parseLong(arguments, "task_id", true);
                 JSONArray blockedByIds = arguments.optJSONArray("blocked_by_ids");
                 JSONArray blockingIds = arguments.optJSONArray("blocking_ids");
 
@@ -119,18 +121,18 @@ public class EstablishTaskRelationshipTool implements Tool {
                 }
                 // 3. 构建请求体，直接调用 /issues/:issue_id/relations.json API 来创建关系
                 // 使用基本的 HttpURLConnection 实现 HTTP 请求
-                
+
                 // 创建被阻塞关系 (blocked_by_ids)
                 if (blockedByIds != null) {
-                    for (int i = 0; i < blockedByIds.length(); i++) {
-                        // ✅ 修复：使用 getLong 解析长整型 ID
-                        long blockerId = blockedByIds.getLong(i);
+                    JSONArray normalized = RedmineIdUtil.parseLongArray(blockedByIds);
+                    for (int i = 0; i < normalized.length(); i++) {
+                        long blockerId = normalized.getLong(i);
                         if (blockerId > 0) {
                             // 构建请求体
                             JSONObject requestBody = new JSONObject();
                             JSONObject relation = new JSONObject();
-                            relation.put("issue_to_id", blockerId); // 被阻塞的任务 ID (long)
-                            relation.put("relation_type", "blocked"); // 当前任务被其他任务阻挡
+                            relation.put("issue_to_id", blockerId);
+                            relation.put("relation_type", "blocked");
                             requestBody.put("relation", relation);
 
 
@@ -145,15 +147,15 @@ public class EstablishTaskRelationshipTool implements Tool {
 
                 // 创建阻塞关系 (blocking_ids)
                 if (blockingIds != null) {
-                    for (int i = 0; i < blockingIds.length(); i++) {
-                        // ✅ 修复：使用 getLong 解析长整型 ID
-                        long blockedId = blockingIds.getLong(i);
+                    JSONArray normalized = RedmineIdUtil.parseLongArray(blockingIds);
+                    for (int i = 0; i < normalized.length(); i++) {
+                        long blockedId = normalized.getLong(i);
                         if (blockedId > 0) {
                             // 构建请求体
                             JSONObject requestBody = new JSONObject();
                             JSONObject relation = new JSONObject();
-                            relation.put("issue_to_id", blockedId); // 被阻塞的任务 ID (long)
-                            relation.put("relation_type", "blocks"); // 当前任务阻塞了其他任务
+                            relation.put("issue_to_id", blockedId);
+                            relation.put("relation_type", "blocks");
                             requestBody.put("relation", relation);
 
 
@@ -166,11 +168,11 @@ public class EstablishTaskRelationshipTool implements Tool {
                 }
 
 
-                // 返回成功结果 - ✅ 修复：返回正确的长整型 ID
+                // 返回成功结果
                 JSONObject result = new JSONObject();
                 result.put("status", "success");
                 result.put("message", "任务阻塞关系已成功建立");
-                result.put("target_task_id", taskId); // 现在是 long 类型
+                result.put("target_task_id", taskId);
                 result.put("blocked_by_count", blockedByIds != null ? blockedByIds.length() : 0);
                 result.put("blocking_count", blockingIds != null ? blockingIds.length() : 0);
 
@@ -180,7 +182,6 @@ public class EstablishTaskRelationshipTool implements Tool {
 
             } catch (Exception e) {
                 FileLogger.e(TAG, "❌ 执行出错：" + e.getMessage(), e);
-                // ✅ 修复：直接调用 onError，让 ToolManager 的 handleParameterError 统一处理
                 callback.onError(e);
             }
         });
@@ -189,15 +190,11 @@ public class EstablishTaskRelationshipTool implements Tool {
 
     /**
      * 辅助方法：发送 POST 请求
-     * @param urlString 目标 URL
-     * @param auth Redmine 认证配置
-     * @param body 请求体 JSON 字符串
-     * @throws Exception 如果 HTTP 请求失败
-     */
+     * */
     private void sendPostRequest(String urlString, RedmineAuth auth, String body) throws Exception {
         FileLogger.d(TAG, "📡 发送 POST 请求到：" + urlString);
         FileLogger.d(TAG, "📝 请求体：" + body);
-        
+
         URL url = new URL(urlString);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
@@ -205,18 +202,16 @@ public class EstablishTaskRelationshipTool implements Tool {
         auth.apply(connection);
         connection.setDoOutput(true);
 
-        // 写入请求体
         try (OutputStream os = connection.getOutputStream()) {
             byte[] input = body.getBytes(StandardCharsets.UTF_8);
             os.write(input, 0, input.length);
         }
 
 
-        // 检查响应码
         int responseCode = connection.getResponseCode();
         FileLogger.d(TAG, "📊 响应码：" + responseCode);
-        
-        if (responseCode != 201) { // 201 Created
+
+        if (responseCode != 201) {
             throw new RuntimeException("HTTP 请求失败，响应码：" + responseCode + ", URL: " + urlString);
         }
 
@@ -229,6 +224,7 @@ public class EstablishTaskRelationshipTool implements Tool {
     @Override
     public String getDefaultSystemPromptEnhancement()
     {
-        return "必须在用户明确要求建立 Redmine 任务阻塞关系时才调用此工具。认证支持 api_key，或 username 与 password，并可从工具备注读取；API Key 不得输出到回复或日志。仅管理阻塞关系，不支持父子关系。";
+        return "必须在用户明确要求建立 Redmine 任务阻塞关系时才调用此工具。认证支持 api_key，或 username 与 password，并可从工具备注读取；API Key 不得输出到回复或日志。仅管理阻塞关系，不支持父子关系。"
+            + "\n\n【重要】task_id 以及 blocked_by_ids / blocking_ids 数组元素均为字符串形式的数字 ID，不要传 JSON 数字；这是为了兼容 OpenAI Function Calling 协议。工具内部会自动转 long。";
     }
 }
