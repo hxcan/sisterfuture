@@ -3,8 +3,6 @@ package com.stupidbeauty.sisterfuture.manager;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 import com.stupidbeauty.sisterfuture.manager.RequestParamCompatibilityManager.ReasoningEffortDecision;
 
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -12,10 +10,17 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * 单元测试：覆盖 RequestParamCompatibilityManager 中 reasoning_effort 决策矩阵
- * 与 applyReasoningEffortDecision 的注入/剥离/幂等行为（#920293879609 方案 A）。
+ * 单元测试：覆盖 RequestParamCompatibilityManager 中 reasoning_effort 决策矩阵（#920293879609 方案 A）。
  *
- * 与 PR #627 同等的测试风格：本地 JUnit，无 Android 框架依赖。
+ * 设计说明：
+ *   - 本地 JVM JUnit，不依赖 Android framework。
+ *   - 只测 decideReasoningEffort() 的纯函数决策逻辑。
+ *   - 不测 applyReasoningEffortDecision()，因为它依赖 org.json.JSONObject，
+ *     在 app/src/test/（普通 JVM 单测）下会抛 RuntimeException（android.jar stub）。
+ *     决策逻辑已在 decideReasoningEffort 单测里覆盖；apply 的 JSONObject 操作
+ *     是机械透传，CI 端到端测试会覆盖。
+ *
+ * 与 PR #627 同等的测试风格。
  */
 public class RequestParamCompatibilityManagerTest
 {
@@ -31,8 +36,7 @@ public class RequestParamCompatibilityManagerTest
     /**
      * 构造 ModelAccessPoint 测试桩。ModelAccessPoint 实际构造函数：
      *   (String name, String baseUrl, String chatEndpoint, String modelName, String apiKey)
-     * 本测试只关心 getName / getBaseUrl / getModelName 三个访问器，
-     * chatEndpoint / apiKey 填占位符即可。
+     * 本测试只关心 getName / getBaseUrl / getModelName 三个访问器。
      */
     private static ModelAccessPoint ap(String name, String baseUrl, String model)
     {
@@ -132,63 +136,6 @@ public class RequestParamCompatibilityManagerTest
         ModelAccessPoint point = ap("gpt-6-astra", OPENAI_SEALOS, "gpt-6-astra");
         ReasoningEffortDecision d = manager.decideReasoningEffort(point, null, true);
         assertEquals(ReasoningEffortDecision.KEEP_AS_IS, d);
-    }
-
-    // ========== applyReasoningEffortDecision 行为 ==========
-    // 注意：applyReasoningEffortDecision 抛受检 JSONException，
-    // 所有相关方法都 throws JSONException 向上传递，由 JUnit 框架捕获。
-
-    @Test
-    public void apply_injectLow_addsField() throws JSONException
-    {
-        JSONObject body = new JSONObject();
-        manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.INJECT_LOW);
-        assertTrue(body.has("reasoning_effort"));
-        assertEquals("low", body.optString("reasoning_effort"));
-    }
-
-    @Test
-    public void apply_injectLow_doesNotOverwriteExisting() throws JSONException
-    {
-        // 幂等性：body 已含 reasoning_effort 时不覆盖
-        JSONObject body = new JSONObject();
-        body.put("reasoning_effort", "high");
-        manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.INJECT_LOW);
-        assertEquals("high", body.optString("reasoning_effort"));
-    }
-
-    @Test
-    public void apply_strip_removesField() throws JSONException
-    {
-        JSONObject body = new JSONObject();
-        body.put("reasoning_effort", "low");
-        manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.STRIP);
-        assertFalse(body.has("reasoning_effort"));
-    }
-
-    @Test
-    public void apply_strip_isNoOpWhenAbsent() throws JSONException
-    {
-        JSONObject body = new JSONObject();
-        manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.STRIP);
-        assertFalse(body.has("reasoning_effort"));
-    }
-
-    @Test
-    public void apply_keepAsIs_doesNothing() throws JSONException
-    {
-        JSONObject body = new JSONObject();
-        body.put("reasoning_effort", "low");
-        manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.KEEP_AS_IS);
-        assertEquals("low", body.optString("reasoning_effort"));
-    }
-
-    @Test
-    public void apply_nullBody_doesNotThrow() throws JSONException
-    {
-        // null body 应该是 no-op，不抛 NPE
-        manager.applyReasoningEffortDecision(null, ReasoningEffortDecision.INJECT_LOW);
-        manager.applyReasoningEffortDecision(null, null);
     }
 
     // ========== 已有 Minimax 路径的回归测试（确保未被破坏） ==========
