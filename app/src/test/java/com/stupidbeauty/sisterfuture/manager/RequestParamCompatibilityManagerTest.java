@@ -3,6 +3,7 @@ package com.stupidbeauty.sisterfuture.manager;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 import com.stupidbeauty.sisterfuture.manager.RequestParamCompatibilityManager.ReasoningEffortDecision;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -134,9 +135,11 @@ public class RequestParamCompatibilityManagerTest
     }
 
     // ========== applyReasoningEffortDecision 行为 ==========
+    // 注意：applyReasoningEffortDecision 抛受检 JSONException，
+    // 所有相关方法都 throws JSONException 向上传递，由 JUnit 框架捕获。
 
     @Test
-    public void apply_injectLow_addsField()
+    public void apply_injectLow_addsField() throws JSONException
     {
         JSONObject body = new JSONObject();
         manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.INJECT_LOW);
@@ -145,34 +148,26 @@ public class RequestParamCompatibilityManagerTest
     }
 
     @Test
-    public void apply_injectLow_doesNotOverwriteExisting()
+    public void apply_injectLow_doesNotOverwriteExisting() throws JSONException
     {
         // 幂等性：body 已含 reasoning_effort 时不覆盖
         JSONObject body = new JSONObject();
-        try
-        {
-            body.put("reasoning_effort", "high");
-        }
-        catch (Exception ignored) { }
+        body.put("reasoning_effort", "high");
         manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.INJECT_LOW);
         assertEquals("high", body.optString("reasoning_effort"));
     }
 
     @Test
-    public void apply_strip_removesField()
+    public void apply_strip_removesField() throws JSONException
     {
         JSONObject body = new JSONObject();
-        try
-        {
-            body.put("reasoning_effort", "low");
-        }
-        catch (Exception ignored) { }
+        body.put("reasoning_effort", "low");
         manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.STRIP);
         assertFalse(body.has("reasoning_effort"));
     }
 
     @Test
-    public void apply_strip_isNoOpWhenAbsent()
+    public void apply_strip_isNoOpWhenAbsent() throws JSONException
     {
         JSONObject body = new JSONObject();
         manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.STRIP);
@@ -180,20 +175,16 @@ public class RequestParamCompatibilityManagerTest
     }
 
     @Test
-    public void apply_keepAsIs_doesNothing()
+    public void apply_keepAsIs_doesNothing() throws JSONException
     {
         JSONObject body = new JSONObject();
-        try
-        {
-            body.put("reasoning_effort", "low");
-        }
-        catch (Exception ignored) { }
+        body.put("reasoning_effort", "low");
         manager.applyReasoningEffortDecision(body, ReasoningEffortDecision.KEEP_AS_IS);
         assertEquals("low", body.optString("reasoning_effort"));
     }
 
     @Test
-    public void apply_nullBody_doesNotThrow()
+    public void apply_nullBody_doesNotThrow() throws JSONException
     {
         // null body 应该是 no-op，不抛 NPE
         manager.applyReasoningEffortDecision(null, ReasoningEffortDecision.INJECT_LOW);
