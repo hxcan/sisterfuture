@@ -396,7 +396,7 @@ public class TongYiClient
     private final OssManager ossManager;
     private final Set<String> streamOptionsUnsupportedEndpoints =
       ConcurrentHashMap.newKeySet();
-    // #919750362575：参数兼容性集中管理（含 thinking / reasoning_split / stream_options 等）
+    // #919750362575：参数兼容性集中管理（含 thinking / reasoning_split / stream_options / reasoning_effort 等）
     private final RequestParamCompatibilityManager paramCompat =
       new RequestParamCompatibilityManager();
 
@@ -508,6 +508,7 @@ public class TongYiClient
           FileLogger.d(NETWORK_TAG, "🧠 [COMPAT] 当前接入点不支持 Minimax 私有思考控制参数，跳过注入");
         }
 
+        boolean hasFunctionTools = false;
         if (includeTools)
         {
             JSONArray toolsArray = new JSONArray();
@@ -527,8 +528,17 @@ public class TongYiClient
             {
               requestBody.put("tools", toolsArray);
               requestBody.put("tool_choice", "auto");
+              hasFunctionTools = true;
             }
         }
+
+        // #920293879609 方案 A：OpenAI 协议 + gpt-5.x / gpt-6.x + function tools
+        // → 客户端主动注入 reasoning_effort="low"，避开服务端默认 "none" 与
+        //   function tools 互斥导致的 400。详见 RequestParamCompatibilityManager
+        //   中 ReasoningEffortDecision / decideReasoningEffort() 注释。
+        RequestParamCompatibilityManager.ReasoningEffortDecision effortDecision =
+          paramCompat.decideReasoningEffort(currentAccessPoint, fullUrl, hasFunctionTools);
+        paramCompat.applyReasoningEffortDecision(requestBody, effortDecision);
 
         if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
             FileLogger.w(NETWORK_TAG, "⚠️ Double slash in URL!");
