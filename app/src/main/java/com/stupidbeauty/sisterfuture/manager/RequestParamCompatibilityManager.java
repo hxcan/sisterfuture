@@ -10,12 +10,15 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 请求参数兼容性管理器（#919750362575）
+ * 请求参数兼容性管理器（#919750362575 / #920293879609）
  *
  * 集中处理不同模型服务在请求体参数上的差异：
  *  - 哪些私有参数（目前为 Minimax 的 enable_thinking / thinking / reasoning_split）
  *    在当前接入点上是合法的；
  *  - 当接入点明确拒绝这些参数时，是否需要就地回退到无参数版请求；
+ *  - 当 OpenAI 协议 + gpt-5.x / gpt-6.x + 含 function tools 时，
+ *    是否需要客户端主动注入 reasoning_effort="low" 以避开服务端默认
+ *    "none" 与 function tools 互斥的 400（#920293879609 评论 #83 决策）；
  *  - 与 stream_options 的兼容回退策略完全对称，复用同一套"已知不支持的接入点"记忆机制。
  *
  * 设计目标：保持对 TongYiClient 的最小侵入，让网络层只问"我该塞这些参数吗？
@@ -34,11 +37,32 @@ public class RequestParamCompatibilityManager
     private static final String PARAM_REASONING_SPLIT = "reasoning_split";
 
     /**
+     * OpenAI 协议推理控制参数：reasoning.effort / reasoning_effort。
+     * gpt-5 系列与 gpt-6 系列对该参数 + function tools 互斥规则不同。
+     */
+    private static final String PARAM_REASONING_EFFORT = "reasoning_effort";
+
+    /**
      * 已知不支持 Minimax 私有思考控制参数的接入点（按 baseUrl+endpoint 作 key）。
      * 一旦服务端返回 4xx 并指明 enable_thinking / thinking / reasoning_split 是 unknown parameter，
      * 后续请求将跳过这些参数，避免反复重试失败。
      */
     private final Set<String> thinkingParamsUnsupportedEndpoints = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 推理控制参数处置策略（#920293879609 评论 #83 决策方案 A）。
+     * 用于 gpt-5.x / gpt-6.x + function tools 在 /v1/chat/completions 端点下的
+     * reasoning_effort 字段处理决策。
+     */
+    public enum ReasoningEffortDecision
+    {
+        /** 不动：调用方保持原样（默认分支，非 OpenAI 协议 / 非 gpt-5/6 / 无 tools 等） */
+        KEEP_AS_IS,
+        /** 主动注入：客户端写入 reasoning_effort="low"，覆盖服务端默认值（gpt-6 + tools 推荐） */
+        INJECT_LOW,
+        /** 主动剥离：客户端移除 body 中已有 reasoning_effort（gpt-5 + tools 互斥时使用） */
+        STRIP
+    }
 
     /**
      * 根据当前接入点判断是否需要向请求体注入 Minimax 私有思考控制参数。
@@ -173,6 +197,100 @@ public class RequestParamCompatibilityManager
     public boolean isKnownUnsupported(String endpointKey)
     {
         return endpointKey != null && thinkingParamsUnsupportedEndpoints.contains(endpointKey);
+    }
+
+    /**
+     * 决定 OpenAI 协议下 gpt-5.x / gpt-6.x + function tools 时 reasoning_effort 字段如何处置（#920293879609 方案 A）。
+     *
+     * 背景：gpt-6 Astra / gpt-5.6-Sol 在 /v1/chat/completions 端点存在
+     *   "function tools + reasoning_effort" 互斥规则，但服务端默认注入的
+     *   reasoning_effort 值（常为 "none"）与两个系列均冲突：
+     *     - gpt-5.x：reasoning_effort 任意值 + tools → 400
+     *     - gpt-6.x：reasoning_effort="none" + tools → 400，但有效档位可共存
+     *   客户端未主动发送该字段时，服务端会按模型默认行为注入。
+     *
+     * 决策：
+     *   - gpt-5.x 或 gpt-6.x + OpenAI 协议 + /chat/completions + 含 tools → INJECT_LOW
+     *     （覆盖服务端默认值，让 gpt-5 直接拒绝更明确、让 gpt-6 拿到有效档位）
+     *   - 其它情形 → KEEP_AS_IS
+     *
+     * @param accessPoint       当前接入点（用于取 modelName / baseUrl）
+     * @param endpoint          完整 URL（baseUrl + chatEndpoint），用于判定 /chat/completions
+     * @param hasFunctionTools  本次请求是否携带 tools 数组
+     * @return 处置决策
+     */
+    public ReasoningEffortDecision decideReasoningEffort(
+        ModelAccessPoint accessPoint, String endpoint, boolean hasFunctionTools)
+    {
+        if (accessPoint == null || !hasFunctionTools)
+        {
+            return ReasoningEffortDecision.KEEP_AS_IS;
+        }
+
+        if (endpoint == null || !endpoint.endsWith("/chat/completions"))
+        {
+            return ReasoningEffortDecision.KEEP_AS_IS;
+        }
+
+        String model = safe(accessPoint.getModelName()).toLowerCase(Locale.ROOT);
+        String url = safe(accessPoint.getBaseUrl()).toLowerCase(Locale.ROOT);
+
+        // gpt-5.x 与 gpt-6.x 均在 OpenAI 协议 + /chat/completions 上有此约束
+        boolean isGpt5Or6 = model.startsWith("gpt-5") || model.startsWith("gpt-6");
+        // OpenAI 兼容接入点：自建中转（sealos.io）、官方、Azure 都算
+        boolean isOpenAiLike = url.contains("sealos.io")
+            || url.contains("openai.com")
+            || url.contains("azure.com")
+            || url.contains("api.openai.com");
+
+        if (isGpt5Or6 && isOpenAiLike)
+        {
+            return ReasoningEffortDecision.INJECT_LOW;
+        }
+
+        return ReasoningEffortDecision.KEEP_AS_IS;
+    }
+
+    /**
+     * 按决策向请求体应用 reasoning_effort 字段处理。
+     * 仅在调用方拿到非 KEEP_AS_IS 决策时才有动作；幂等：已有有效值不覆盖。
+     *
+     * @param requestBody  当前请求体（原地修改）
+     * @param decision     决策结果
+     */
+    public void applyReasoningEffortDecision(JSONObject requestBody, ReasoningEffortDecision decision) throws JSONException
+    {
+        if (requestBody == null || decision == null
+            || decision == ReasoningEffortDecision.KEEP_AS_IS)
+        {
+            return;
+        }
+
+        switch (decision)
+        {
+            case INJECT_LOW:
+                if (!requestBody.has(PARAM_REASONING_EFFORT))
+                {
+                    requestBody.put(PARAM_REASONING_EFFORT, "low");
+                    FileLogger.d(TAG, "🧠 [COMPAT-OPENAI] 主动注入 reasoning_effort=\"low\"（gpt-5/6 + tools，规避服务端默认 none 互斥）");
+                }
+                else
+                {
+                    FileLogger.d(TAG, "🧠 [COMPAT-OPENAI] 请求体已含 reasoning_effort，跳过注入（保持调用方原值）");
+                }
+                break;
+            case STRIP:
+                if (requestBody.has(PARAM_REASONING_EFFORT))
+                {
+                    requestBody.remove(PARAM_REASONING_EFFORT);
+                    FileLogger.d(TAG, "🧠 [COMPAT-OPENAI] 剥离 reasoning_effort（gpt-5 + tools 互斥）");
+                }
+                break;
+            case KEEP_AS_IS:
+            default:
+                // no-op
+                break;
+        }
     }
 
     private static String safe(String s)
