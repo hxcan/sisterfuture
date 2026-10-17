@@ -27,12 +27,15 @@ public class RequestParamCompatibilityManagerTest
 
     private final RequestParamCompatibilityManager manager = new RequestParamCompatibilityManager();
 
+    /**
+     * 构造 ModelAccessPoint 测试桩。ModelAccessPoint 实际构造函数：
+     *   (String name, String baseUrl, String chatEndpoint, String modelName, String apiKey)
+     * 本测试只关心 getName / getBaseUrl / getModelName 三个访问器，
+     * chatEndpoint / apiKey 填占位符即可。
+     */
     private static ModelAccessPoint ap(String name, String baseUrl, String model)
     {
-        // ModelAccessPoint 字段名取自实际类（见 sisterfuture source）。本测试只关心
-        // getName / getBaseUrl / getModelName 三个访问器，其它字段填占位符即可。
-        // 若构造函数有变化，编译期就会暴露。
-        return new ModelAccessPoint(name, baseUrl, "/v1/chat/completions", model, "sk-placeholder", true);
+        return new ModelAccessPoint(name, baseUrl, CHAT_COMPLETIONS, model, "sk-placeholder");
     }
 
     // ========== decideReasoningEffort 决策矩阵 ==========
