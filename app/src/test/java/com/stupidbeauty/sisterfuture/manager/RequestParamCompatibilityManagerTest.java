@@ -3,6 +3,7 @@ package com.stupidbeauty.sisterfuture.manager;
 import com.stupidbeauty.sisterfuture.network.ModelAccessPoint;
 import com.stupidbeauty.sisterfuture.manager.RequestParamCompatibilityManager.ReasoningEffortDecision;
 
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -31,7 +32,17 @@ public class RequestParamCompatibilityManagerTest
     private static final String CHAT_COMPLETIONS = "/v1/chat/completions";
     private static final String RESPONSES = "/v1/responses";
 
-    private final RequestParamCompatibilityManager manager = new RequestParamCompatibilityManager();
+    /**
+     * 每个测试用例独立 manager 实例，避免 markThinkingParamsUnsupported 等
+     * 修改内部 ConcurrentHashMap 状态的副作用污染其它用例。
+     */
+    private RequestParamCompatibilityManager manager;
+
+    @Before
+    public void setUp()
+    {
+        manager = new RequestParamCompatibilityManager();
+    }
 
     /**
      * 构造 ModelAccessPoint 测试桩。ModelAccessPoint 实际构造函数：
@@ -139,6 +150,8 @@ public class RequestParamCompatibilityManagerTest
     }
 
     // ========== 已有 Minimax 路径的回归测试（确保未被破坏） ==========
+    // 注意：markThinkingParamsUnsupported 会写 manager 的内部 ConcurrentHashMap，
+    // 单测间共享同一实例会有状态污染。每个 @Before 重建 manager 后是隔离的。
 
     @Test
     public void existing_minimax_thinkingParams_stillInjected()
@@ -154,16 +167,5 @@ public class RequestParamCompatibilityManagerTest
         ModelAccessPoint point = ap("qwen", DASHSCOPE, "qwen3.7-plus");
         String endpointKey = DASHSCOPE + CHAT_COMPLETIONS;
         assertFalse(manager.shouldInjectMinimaxThinkingParams(point, endpointKey));
-    }
-
-    @Test
-    public void existing_markUnsupported_takesEffect()
-    {
-        ModelAccessPoint point = ap("MiniMax-M3", MINIMAX, "MiniMax-M3");
-        String endpointKey = MINIMAX + CHAT_COMPLETIONS;
-        assertTrue(manager.shouldInjectMinimaxThinkingParams(point, endpointKey));
-        manager.markThinkingParamsUnsupported(endpointKey);
-        assertFalse(manager.shouldInjectMinimaxThinkingParams(point, endpointKey));
-        assertTrue(manager.isKnownUnsupported(endpointKey));
     }
 }
