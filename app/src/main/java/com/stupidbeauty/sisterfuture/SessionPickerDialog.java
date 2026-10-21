@@ -6,7 +6,6 @@ import android.content.Context;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
 import android.widget.ListView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -52,15 +51,11 @@ final class SessionPickerDialog {
         // Paging state lives with the dialog, so no callback outlives it.
         final Paging paging = new Paging(host);
         final SessionPickerAdapter adapter = new SessionPickerAdapter(host, currentId,
-            new SessionPickerAdapter.Listener() {
-                @Override public void onSessionChosen(String sessionId, String label) {
-                    if (sessionId.equals(currentId)) return;
-                    dialog.dismiss();
-                    onSelected.onSelected(sessionId);
-                }
-                @Override public void onNeedMorePages(boolean atEnd) {
-                    if (!atEnd) paging.loadNextPage(adapter);
-                }
+            (sessionId, label) -> {
+                // Tapping the active session is a no-op rather than a redundant reload.
+                if (sessionId.equals(currentId)) return;
+                dialog.dismiss();
+                onSelected.onSelected(sessionId);
             });
         list.setAdapter(adapter);
 
@@ -71,7 +66,7 @@ final class SessionPickerDialog {
         });
 
         dialog.setView(list);
-        // Intercept the positive button so creating a session does not auto-dismiss twice.
+        // Intercept the positive button so creating a session does not dismiss twice.
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             .setOnClickListener(v -> { dialog.dismiss(); onSelected.onSelected(null); }));
 
