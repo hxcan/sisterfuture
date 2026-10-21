@@ -792,61 +792,29 @@ imageUrl = url;
   @OnClick(R.id.resetContextButton)
   public void resetConversationContextFromUi()
   {
-    final long generation = sessionGeneration;
-    final java.util.List<SessionManager.Session> sessions = sessionManager.getSessions();
-    final String currentId = sessionManager.getCurrentSession().getId();
-    resetContextButton.setEnabled(false);
-    new Thread(() -> {
-      final String[] labels = new String[sessions.size()];
-      for (int i = 0; i < sessions.size(); i++) {
-        SessionManager.Session session = sessions.get(i);
-        try { labels[i] = session.getTitle(); }
-        catch (Exception e) { labels[i] = "会话 " + session.getId(); }
-        if (currentId.equals(session.getId())) labels[i] = "✓ 当前 · " + labels[i];
+    // #925477039795: open the paged picker immediately. It reads the first page in the
+    // background instead of computing every session title before any dialog appears,
+    // which is what made this button feel frozen once many sessions existed.
+    SessionPickerDialog.show(this, sessionManager.getCurrentSession().getId(), sessionId -> {
+      if (isFinishing() || isDestroyed()) return;
+      if (sessionId == null) {
+        // The positive button was pressed: create a new session.
+        confirmSessionChange(this::forceResetConversationContext);
+        return;
       }
-      runOnUiThread(() -> {
-        resetContextButton.setEnabled(true);
-        if (isFinishing() || isDestroyed() || generation != sessionGeneration) return;
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(
-          builder.getContext(), android.R.layout.simple_list_item_1, labels) {
-          @Override public android.view.View getView(int position, android.view.View recycled,
-                                                    android.view.ViewGroup parent) {
-            android.widget.TextView row = (android.widget.TextView) super.getView(position, recycled, parent);
-            float density = row.getResources().getDisplayMetrics().density;
-            row.setSingleLine(true);
-            row.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            row.setMinHeight(Math.round(56 * density));
-            row.setPadding(Math.round(20 * density), Math.round(12 * density),
-              Math.round(20 * density), Math.round(12 * density));
-            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            // Reset both states because ListView recycles rows.
-            row.setBackgroundColor(currentId.equals(sessions.get(position).getId())
-              ? 0x243F8CFF : android.graphics.Color.TRANSPARENT);
-            row.setContentDescription(labels[position]);
-            return row;
-          }
-        };
-        AlertDialog sessionDialog = builder.setTitle("会话（共 " + sessions.size() + " 个）")
-          .setAdapter(adapter, (dialog, which) -> {
-            if (generation != sessionGeneration || currentId.equals(sessions.get(which).getId())) return;
-            confirmSessionChange(() -> {
-              try {
-                activateSession(sessionManager.switchSession(sessions.get(which).getId()));
-                Toast.makeText(this, "已切换会话", Toast.LENGTH_SHORT).show();
-              } catch (Exception e) { Toast.makeText(this, "切换失败，原历史保留", Toast.LENGTH_LONG).show(); }
-            });
-          })
-          .setPositiveButton("新建会话", (dialog, which) -> {
-            if (generation == sessionGeneration) confirmSessionChange(this::forceResetConversationContext);
-          })
-          .setNegativeButton("取消", null).create();
-        sessionDialog.show();
-        android.widget.ListView list = sessionDialog.getListView();
-        list.setDivider(new android.graphics.drawable.ColorDrawable(0x40808080));
-        list.setDividerHeight(Math.max(1, Math.round(getResources().getDisplayMetrics().density)));
+      if (sessionId.equals(sessionManager.getCurrentSession().getId())) return;
+      confirmSessionChange(() -> {
+        // Re-check after the confirmation dialog: the session may have changed meanwhile.
+        if (isFinishing() || isDestroyed()) return;
+        try {
+          activateSession(sessionManager.switchSession(sessionId));
+          Toast.makeText(this, "已切换会话", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+          // switchSession only fails when the session is gone; keep the current history.
+          Toast.makeText(this, "切换失败，原历史保留", Toast.LENGTH_LONG).show();
+        }
       });
-    }, "session-titles").start();
+    });
   }
 
   private void confirmSessionChange(Runnable action) {
