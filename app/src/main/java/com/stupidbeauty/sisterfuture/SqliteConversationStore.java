@@ -29,6 +29,10 @@ public final class SqliteConversationStore implements ConversationStore {
     private static final com.stupidbeauty.sisterfuture.utils.PerformanceStats SNAPSHOT = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
     private static final com.stupidbeauty.sisterfuture.utils.PerformanceStats WRITE_QUEUE = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
     private static final com.stupidbeauty.sisterfuture.utils.PerformanceStats WRITE = new com.stupidbeauty.sisterfuture.utils.PerformanceStats();
+    /** Bounded work per write: summaries only need the newest few messages. */
+    private static final int MESSAGE_SUMMARY_SCAN_LIMIT = 32;
+    private static final int PREVIEW_MAX_CHARACTERS = 32;
+    private static final int SCHEMA_VERSION = 3;
 
     public SqliteConversationStore(Context context) {
         this(context, SessionManager.DEFAULT_SESSION_ID);
@@ -93,11 +97,11 @@ public final class SqliteConversationStore implements ConversationStore {
     }
 
     /**
-     * One page of list-ready session rows, newest activity first.
+     * One page of list-ready session rows, most recently active first.
      *
-     * Replaces the previous per-session {@code loadFirstUserText()} fan-out: the preview and the
-     * activity timestamp both come from indexed columns, so a page costs one query instead of
-     * one blocking database round trip per session. Callers page with {@code offset}/{@code limit}.
+     * Replaces the previous per-session {@code loadFirstUserText()} fan-out, where each session
+     * cost one blocking database round trip through {@code IO.submit().get()}. Preview and
+     * activity time are read from indexed columns, so a page costs a single query.
      */
     public List<SessionSummary> listSessionSummaries(int offset, int limit) {
         if (offset < 0) throw new IllegalArgumentException("offset must not be negative");
@@ -109,17 +113,25 @@ public final class SqliteConversationStore implements ConversationStore {
                      "SELECT session_id, preview_text, last_activity_at FROM sessions "
                          + "ORDER BY last_activity_at DESC, rowid DESC LIMIT ? OFFSET ?",
                      new String[]{Integer.toString(limit), Integer.toString(offset)})) {
-                SQLiteDatabase db = helper.getReadableDatabase();
                 while (cursor.moveToNext()) {
                     page.add(new SessionSummary(cursor.getString(0),
-                        nullToEmpty(cursor.getString(1)), cursor.getLong(2)));
+                        cursor.getString(1) == null ? "" : cursor.getString(1),
+                        cursor.getLong(2)));
                 }
             }
             return page;
         });
     }
 
-    private static String nullToEmpty(String value) { return value == null ? "" : value; }
+    /** Total session count, so the picker can tell whether another page exists without loading it. */
+    public int countSessions() {
+        return run(() -> {
+            try (Helper helper = new Helper(context, databasePath);
+                 Cursor cursor = helper.getReadableDatabase().rawQuery("SELECT COUNT(*) FROM sessions", null)) {
+                return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+            }
+        });
+    }
 
     private void replace(SQLiteDatabase db, List<String> messages) {
         db.delete("messages", "session_id=?", new String[]{sessionId});
@@ -136,15 +148,16 @@ public final class SqliteConversationStore implements ConversationStore {
     /**
      * Recompute the cached preview and activity timestamp for one session.
      *
-     * Both columns are derived from the last few messages only, so the cost does not grow with
-     * history length. Called on every replace(), keeping the listing query free of JSON parsing.
+     * Only the newest {@link #MESSAGE_SUMMARY_SCAN_LIMIT} rows are inspected, so the cost does not
+     * grow with history length. Called from every replace(), which keeps the listing query free of
+     * JSON parsing.
      */
     private static void refreshSessionSummary(SQLiteDatabase db, String sessionId) {
         long lastActivity = 0L;
         String preview = "";
         int scanned = 0;
-        // The first user message defines the title; activity comes from the newest message.
-        // Walk newest-first and stop as soon as both are known.
+        // Newest-first walk: activity comes from the newest message, the preview from the first
+        // user message. Stop as soon as both are known.
         try (Cursor cursor = db.rawQuery(
                 "SELECT position, message_json FROM messages WHERE session_id=? ORDER BY position DESC",
                 new String[]{sessionId})) {
@@ -152,8 +165,10 @@ public final class SqliteConversationStore implements ConversationStore {
                 if (scanned++ >= MESSAGE_SUMMARY_SCAN_LIMIT) break;
                 String json = cursor.getString(1);
                 if (json == null) continue;
-                long recorded = readRecordedTime(json);
-                if (lastActivity == 0L && recorded > 0L) lastActivity = recorded;
+                if (lastActivity == 0L) {
+                    long recorded = readRecordedTime(json);
+                    if (recorded > 0L) lastActivity = recorded;
+                }
                 if (preview.isEmpty()) {
                     String userText = extractUserText(json);
                     if (!userText.isEmpty()) preview = collapsePreview(userText);
@@ -167,19 +182,34 @@ public final class SqliteConversationStore implements ConversationStore {
         db.update("sessions", row, "session_id=?", new String[]{sessionId});
     }
 
-    /** Messages newer than this many rows are not summarised; the cost stays bounded per write. */
-    private static final int MESSAGE_SUMMARY_SCAN_LIMIT = 32;
-    private static final int PREVIEW_MAX_CHARACTERS = 32;
-
-    /** Honour an explicit timestamp when the message carries one, without failing on malformed JSON. */
+    /**
+     * Recover a message's creation time.
+     *
+     * Prefers an explicit {@code created_at}, then falls back to the timestamp embedded in the
+     * message id ({@code msg_<millis>_<uuid>}). The id fallback means existing histories already
+     * yield real times without rewriting stored messages. Returns 0 when neither is available,
+     * which sorts that session last rather than dropping it.
+     */
     private static long readRecordedTime(String json) {
         try {
             JSONObject message = new JSONObject(json);
-            if (message.has("created_at")) {
-                Object value = message.opt("created_at");
-                if (value instanceof Number) return ((Number) value).longValue();
-                if (value instanceof String && !((String) value).trim().isEmpty())
-                    return Long.parseLong(((String) value).trim());
+            Object explicit = message.opt("created_at");
+            if (explicit instanceof Number) return ((Number) explicit).longValue();
+            if (explicit instanceof String && !((String) explicit).trim().isEmpty()) {
+                try { return Long.parseLong(((String) explicit).trim()); }
+                catch (NumberFormatException ignored) { }
+            }
+            String id = message.optString("id", "");
+            if (id.startsWith("msg_")) {
+                int underscore = id.indexOf('_', 4);
+                if (underscore > 4) {
+                    String millis = id.substring(4, underscore);
+                    try {
+                        long parsed = Long.parseLong(millis);
+                        // Sanity bound: reject values that are not plausible wall-clock times.
+                        if (parsed > 1_000_000_000_000L && parsed < 10_000_000_000_000L) return parsed;
+                    } catch (NumberFormatException ignored) { }
+                }
             }
         } catch (Exception ignored) {
         }
@@ -208,6 +238,7 @@ public final class SqliteConversationStore implements ConversationStore {
         return "";
     }
 
+    /** Collapse to one line and truncate on code points, never splitting a surrogate pair. */
     private static String collapsePreview(String text) {
         String collapsed = text.replaceAll("\\s+", " ").trim();
         int codePoints = collapsed.codePointCount(0, collapsed.length());
@@ -382,26 +413,27 @@ public final class SqliteConversationStore implements ConversationStore {
                 + "FOREIGN KEY(session_id) REFERENCES sessions(session_id))");
         }
         @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            if (oldVersion == 1 && newVersion == 2) createRequestContext(db);
-            else if (oldVersion == 2 && newVersion == 3) {
-                db.execSQL("ALTER TABLE sessions ADD COLUMN preview_text TEXT NOT NULL DEFAULT ''");
-                db.execSQL("ALTER TABLE sessions ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0");
-                db.execSQL("CREATE INDEX sessions_activity_index ON sessions(last_activity_at DESC, rowid DESC)");
-                backfillSessionSummaries(db);
-            }
-            else if (oldVersion == 1 && newVersion == 3) {
-                db.execSQL("ALTER TABLE sessions ADD COLUMN preview_text TEXT NOT NULL DEFAULT ''");
-                db.execSQL("ALTER TABLE sessions ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0");
-                db.execSQL("CREATE INDEX sessions_activity_index ON sessions(last_activity_at DESC, rowid DESC)");
+            if (oldVersion == 1 && newVersion == 2) {
                 createRequestContext(db);
-                backfillSessionSummaries(db);
-            }
-            else throw new IllegalStateException("Unsupported conversation database upgrade");
+                addSummaryColumns(db);
+            } else if (oldVersion == 2 && newVersion == 3) {
+                addSummaryColumns(db);
+            } else if (oldVersion == 1 && newVersion == 3) {
+                addSummaryColumns(db);
+                createRequestContext(db);
+            } else throw new IllegalStateException("Unsupported conversation database upgrade");
+            backfillSessionSummaries(db);
+        }
+        private static void addSummaryColumns(SQLiteDatabase db) {
+            db.execSQL("ALTER TABLE sessions ADD COLUMN preview_text TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE sessions ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("CREATE INDEX sessions_activity_index ON sessions(last_activity_at DESC, rowid DESC)");
         }
         /**
          * Populate the cached summary columns for rows written before they existed.
-         * A failure here leaves empty summaries: the list still renders, titles degrade to
-         * the id prefix, and the next write to a session refreshes it properly.
+         *
+         * A failure here leaves empty summaries: the list still renders, titles degrade to the
+         * id prefix, those sessions sort last, and the next write to a session refreshes it.
          */
         private static void backfillSessionSummaries(SQLiteDatabase db) {
             List<String> ids = new ArrayList<>();
@@ -409,8 +441,7 @@ public final class SqliteConversationStore implements ConversationStore {
                 while (cursor.moveToNext()) ids.add(cursor.getString(0));
             }
             for (String id : ids) {
-                try { refreshSessionSummary(db, id); }
-                catch (Exception ignored) { }
+                try { refreshSessionSummary(db, id); } catch (Exception ignored) { }
             }
         }
     }
