@@ -7,6 +7,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -30,7 +31,7 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
     /** Rows from the end within which the next page is requested early. */
     private static final int PREFETCH_DISTANCE = 5;
 
-    /** Callbacks for the host dialog. */
+    /** Notified when the user picks a session. */
     public interface Listener {
         void onSessionChosen(String sessionId, String label);
     }
@@ -140,9 +141,25 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
             return formatClock(then);
         }
         if (dayDelta == 1) return "昨天 " + formatClock(then);
-        if (dayDelta < 7) return then.getDisplayName(Calendar.DAY_OF_WEEK, Locale.getDefault())
-            + " " + formatClock(then);
+        if (dayDelta < 7) return weekdayName(then) + " " + formatClock(then);
         return formatDate(activityAt);
+    }
+
+    /**
+     * Localised weekday abbreviation.
+     *
+     * {@code Calendar.getDisplayName} needs an explicit style argument, so the zero-padded
+     * weekday constant is mapped to a short form here rather than relying on that overload.
+     */
+    private static String weekdayName(Calendar calendar) {
+        int style = isChineseLocale() ? Calendar.SHORT : Calendar.SHORT;
+        String name = calendar.getDisplayName(Calendar.DAY_OF_WEEK, style, Locale.getDefault());
+        return name == null ? "" : name;
+    }
+
+    private static boolean isChineseLocale() {
+        String language = Locale.getDefault().getLanguage();
+        return "zh".equals(language);
     }
 
     /** Calendar-aware day difference, so a DST shift cannot move a session across a day boundary. */
@@ -179,6 +196,8 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
     private static final class RowHolder extends RecyclerView.ViewHolder {
         final TextView title;
         final TextView subtitle;
+        /** Both cells stack vertically; the container cannot carry the gravity itself. */
+        private final LinearLayout container;
 
         RowHolder(View itemView) {
             super(itemView);
@@ -189,9 +208,12 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
             subtitle.setSingleLine(true);
             subtitle.setEllipsize(TextUtils.TruncateAt.END);
             float density = itemView.getResources().getDisplayMetrics().density;
-            itemView.setPadding(Math.round(20 * density), Math.round(12 * density),
-                Math.round(20 * density), Math.round(12 * density));
-            itemView.setGravity(Gravity.CENTER_VERTICAL);
+            int horizontal = Math.round(20 * density);
+            int vertical = Math.round(12 * density);
+            itemView.setPadding(horizontal, vertical, horizontal, vertical);
+            title.setGravity(Gravity.START);
+            subtitle.setGravity(Gravity.START);
+            container = null;
         }
     }
 
