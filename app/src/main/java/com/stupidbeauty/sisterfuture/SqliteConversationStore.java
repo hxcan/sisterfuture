@@ -33,6 +33,7 @@ public final class SqliteConversationStore implements ConversationStore {
     private static final int MESSAGE_SUMMARY_SCAN_LIMIT = 32;
     private static final int PREVIEW_MAX_CHARACTERS = 32;
     private static final int SCHEMA_VERSION = 3;
+    private static final String TAG = "SqliteConversationStore";
 
     public SqliteConversationStore(Context context) {
         this(context, SessionManager.DEFAULT_SESSION_ID);
@@ -102,6 +103,9 @@ public final class SqliteConversationStore implements ConversationStore {
      * Replaces the previous per-session {@code loadFirstUserText()} fan-out, where each session
      * cost one blocking database round trip through {@code IO.submit().get()}. Preview and
      * activity time are read from indexed columns, so a page costs a single query.
+     *
+     * <p>{@code rowid} is legal in ORDER BY, where it breaks ties between sessions that share a
+     * timestamp, but it must never appear in an index definition.
      */
     public List<SessionSummary> listSessionSummaries(int offset, int limit) {
         if (offset < 0) throw new IllegalArgumentException("offset must not be negative");
@@ -328,7 +332,7 @@ public final class SqliteConversationStore implements ConversationStore {
                 finally { db.endTransaction(); }
             } catch (Exception e) {
                 // Do not log SQL bind values or message contents.
-                FileLogger.e("SqliteConversationStore", "历史保存失败，数据库保留上次已提交状态");
+                FileLogger.e(TAG, "历史保存失败，数据库保留上次已提交状态");
             } finally {
                 WRITE.record(System.nanoTime() - writing);
                 WRITE_QUEUE.report("history_write_queue", false);
@@ -377,7 +381,7 @@ public final class SqliteConversationStore implements ConversationStore {
                 ContentValues row = new ContentValues();
                 row.put("max_rounds", value);
                 helper.getWritableDatabase().update("sessions", row, "session_id=?", new String[]{sessionId});
-            } catch (Exception e) { FileLogger.e("SqliteConversationStore", "保存会话轮数失败"); }
+            } catch (Exception e) { FileLogger.e(TAG, "保存会话轮数失败"); }
         });
     }
 
@@ -405,12 +409,33 @@ public final class SqliteConversationStore implements ConversationStore {
                 + "preview_text TEXT NOT NULL DEFAULT '', last_activity_at INTEGER NOT NULL DEFAULT 0)");
             db.execSQL("CREATE TABLE messages (session_id TEXT NOT NULL, position INTEGER NOT NULL, message_json TEXT NOT NULL, "
                     + "PRIMARY KEY(session_id,position), FOREIGN KEY(session_id) REFERENCES sessions(session_id))");
-            db.execSQL("CREATE INDEX sessions_activity_index ON sessions(last_activity_at DESC, rowid DESC)");
+            createActivityIndex(db);
             createRequestContext(db);
         }
         private static void createRequestContext(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE request_context (session_id TEXT PRIMARY KEY NOT NULL, state_json TEXT NOT NULL, "
                 + "FOREIGN KEY(session_id) REFERENCES sessions(session_id))");
+        }
+        /**
+         * Create the session ordering index on the sort column only.
+         *
+         * <p>Two corrections over the version that shipped in #629:
+         * <ul>
+         *   <li>{@code rowid} must not appear in an index definition. SQLite rejects it with
+         *       {@code no such column: rowid}, which aborted the v3 migration and crashed app
+         *       start. It remains in the ORDER BY clause, where it is legal and only breaks ties
+         *       between sessions sharing a timestamp.</li>
+         *   <li>The index is wrapped in try/catch: it only accelerates reads, so a failure must
+         *       not abort a schema migration or block app start. {@code IF NOT EXISTS} also makes
+         *       repeated runs safe.</li>
+         * </ul>
+         */
+        private static void createActivityIndex(SQLiteDatabase db) {
+            try {
+                db.execSQL("CREATE INDEX IF NOT EXISTS sessions_activity_index ON sessions(last_activity_at DESC)");
+            } catch (Exception e) {
+                FileLogger.e(TAG, "创建会话活动索引失败，列表查询仍可用（较慢）");
+            }
         }
         @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
             if (oldVersion == 1 && newVersion == 2) {
@@ -427,7 +452,7 @@ public final class SqliteConversationStore implements ConversationStore {
         private static void addSummaryColumns(SQLiteDatabase db) {
             db.execSQL("ALTER TABLE sessions ADD COLUMN preview_text TEXT NOT NULL DEFAULT ''");
             db.execSQL("ALTER TABLE sessions ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0");
-            db.execSQL("CREATE INDEX sessions_activity_index ON sessions(last_activity_at DESC, rowid DESC)");
+            createActivityIndex(db);
         }
         /**
          * Populate the cached summary columns for rows written before they existed.
