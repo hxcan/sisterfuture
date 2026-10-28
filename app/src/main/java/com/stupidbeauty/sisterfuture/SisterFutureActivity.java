@@ -850,6 +850,9 @@ imageUrl = url;
     activeUsageTurnId = 0L;
     messageAdapter.refreshFromDataSource();
 
+    // #931556791397 切换会话后自动滚动到消息末尾
+    scrollToBottom();
+
     accumulatedAnswer.setLength(0);
     partialToolArgs.clear();
     indexToOriginalIdMap.clear();
@@ -1991,7 +1994,7 @@ imageUrl = url;
       message = "主人，工具已经连续 " + consecutiveToolErrorHops
         + " 跳执行出错，我先停止自动重试，避免无止境循环。"
         + (failedTools.length() > 0 ? "最近出错的工具：" + failedTools.toString() + "。" : "")
-        + "请告诉我是修改参数、换一种工具，还是先停止这个任务？";
+        + "请告诉我是修改参数、换一种工具，还是停止这个任务？";
     }
     else
     {
@@ -2758,7 +2761,7 @@ imageUrl = url;
    * 🔥 新增：从工具结果 JSONObject 中解析 attachments 字段
    * @param result 工具返回的结果 JSON
    * @return List<Attachment> 附件列表，没有则返回 null
-   */
+   **/
   private List<Attachment> parseAttachments(JSONObject result)
   {
     try
