@@ -8,10 +8,10 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.stupidbeauty.sisterfuture.SessionListGrouping;
 import com.stupidbeauty.sisterfuture.SessionSummary;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -102,7 +102,7 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
             // Never show the same session twice, even if a page boundary shifts under us.
             if (indexOf(summary.id) >= 0) continue;
             if (!searchMode) {
-                String group = groupTitle(summary.lastActivityAt);
+                String group = SessionListGrouping.groupTitle(summary.lastActivityAt);
                 if (group != null && !group.equals(lastGroupTitle())) fresh.add(new Row(group));
             }
             fresh.add(new Row(summary));
@@ -122,7 +122,6 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
 
     /** Turn grouping on or off; called when the search keyword is cleared or set. */
     public void setSearchMode(boolean searchMode) {
-        if (this.searchMode == searchMode) return;
         this.searchMode = searchMode;
     }
 
@@ -153,7 +152,7 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
             Row row = rows.get(i);
             if (row.headerTitle != null) return row.headerTitle;
             // A session row means the current group is the one that produced it.
-            return groupTitle(row.summary.lastActivityAt);
+            return SessionListGrouping.groupTitle(row.summary.lastActivityAt);
         }
         return null;
     }
@@ -241,25 +240,6 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
     }
 
     /**
-     * Group title for a session's activity time, or null when the session has no activity yet.
-     *
-     * The boundaries match {@link #describeActivity()} exactly: a session that reads as "昨天"
-     * belongs to the 昨天 group, one that reads as a weekday belongs to 本周, and so on. A
-     * mismatch between the two would show a session under a header that contradicts its own
-     * timestamp.
-     */
-    static String groupTitle(long activityAt) {
-        if (activityAt <= 0L) return null;
-        Calendar then = Calendar.getInstance();
-        then.setTimeInMillis(activityAt);
-        int dayDelta = daysBetween(Calendar.getInstance(), then);
-        if (dayDelta <= 0) return "今天";
-        if (dayDelta == 1) return "昨天";
-        if (dayDelta < 7) return "本周";
-        return "更早";
-    }
-
-    /**
      * Localised weekday abbreviation.
      *
      * {@code Calendar.getDisplayName} needs an explicit style argument, so the zero-padded
@@ -278,8 +258,7 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
 
     /** Calendar-aware day difference, so a DST shift cannot move a session across a day boundary. */
     private static int daysBetween(Calendar today, Calendar then) {
-        long diff = startOfDay(today).getTimeInMillis() - startOfDay(then).getTimeInMillis();
-        return (int) Math.round(diff / 86_400_000.0);
+        return SessionListGrouping.daysBetween(today, then);
     }
 
     private static Calendar startOfDay(Calendar source) {
