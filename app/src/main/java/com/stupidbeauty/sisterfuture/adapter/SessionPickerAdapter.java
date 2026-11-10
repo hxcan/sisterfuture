@@ -7,6 +7,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -23,26 +24,64 @@ import java.util.Locale;
  * Rows are appended as the user scrolls; each page costs one indexed query instead of one
  * blocking database round trip per session. The trailing loading row keeps the layout stable
  * while a page is in flight, and disappears once every session has been loaded.
+ *
+ * <p>Rows carry an optional group header (今天 / 昨天 / 本周 / 更早). The header is a separate
+ * view type so a tap on it never selects a session. While a search keyword is active the group
+ * headers are suppressed: a filtered result set is not contiguous, so grouping it would mislead.
  */
 public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     private static final int ROW_TYPE = 0;
     private static final int FOOTER_TYPE = 1;
+    private static final int HEADER_TYPE = 2;
     /** Rows from the end within which the next page is requested early. */
     private static final int PREFETCH_DISTANCE = 5;
 
     /** Notified when the user picks a session. */
     public interface Listener {
         void onSessionChosen(String sessionId, String label);
+
+        /** Long press on a row: offer pin/unpin and rename. */
+        void onSessionLongPressed(String sessionId, SessionSummary summary);
+
+        /** Swipe action on a row. */
+        void onSessionDeleteRequested(String sessionId);
+
+        /** Swipe action on a row. */
+        void onSessionRenameRequested(String sessionId, SessionSummary summary);
+    }
+
+    /**
+     * One rendered line: either a session row or a group header.
+     *
+     * Keeping the two in one list means a page append is a single insertion range, so the
+     * RecyclerView animates one batch instead of many.
+     */
+    private static final class Row {
+        final SessionSummary summary;
+        /** Non-null for a group header row. */
+        final String headerTitle;
+
+        Row(SessionSummary summary) {
+            this.summary = summary;
+            this.headerTitle = null;
+        }
+
+        Row(String headerTitle) {
+            this.summary = null;
+            this.headerTitle = headerTitle;
+        }
     }
 
     private final Context context;
     private final Listener listener;
-    private final List<SessionSummary> rows = new ArrayList<>();
+    private final List<Row> rows = new ArrayList<>();
     private final String currentSessionId;
     private boolean loadingFooter;
     /** Guards against duplicate requests when scroll callbacks fire repeatedly. */
     private boolean awaitingPage;
+    /** While true, group headers are omitted because the list is filtered by a keyword. */
+    private boolean searchMode;
 
     public SessionPickerAdapter(Context context, String currentSessionId, Listener listener) {
         this.context = context;
@@ -50,16 +89,41 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         this.listener = listener;
     }
 
-    /** Append a freshly loaded page and publish the inserted range. */
+    /**
+     * Append a freshly loaded page and publish the inserted range.
+     *
+     * <p>When group headers are active, a header is emitted only when the group changes, so
+     * consecutive rows of the same group share one header even across a page boundary.
+     */
     public void appendPage(List<SessionSummary> page) {
         if (page == null || page.isEmpty()) return;
-        int insertedAt = rows.size();
-        int inserted = 0;
+        List<Row> fresh = new ArrayList<>();
         for (SessionSummary summary : page) {
             // Never show the same session twice, even if a page boundary shifts under us.
-            if (indexOf(summary.id) < 0) { rows.add(summary); inserted++; }
+            if (indexOf(summary.id) >= 0) continue;
+            if (!searchMode) {
+                String group = groupTitle(summary.lastActivityAt);
+                if (group != null && !group.equals(lastGroupTitle())) fresh.add(new Row(group));
+            }
+            fresh.add(new Row(summary));
         }
-        if (inserted > 0) notifyItemRangeInserted(insertedAt, inserted);
+        if (fresh.isEmpty()) return;
+        int insertedAt = rows.size();
+        rows.addAll(fresh);
+        notifyItemRangeInserted(insertedAt, fresh.size());
+    }
+
+    /** Replace the whole list, used when the search keyword changes. */
+    public void reset() {
+        int removed = rows.size();
+        rows.clear();
+        if (removed > 0) notifyItemRangeRemoved(0, removed);
+    }
+
+    /** Turn grouping on or off; called when the search keyword is cleared or set. */
+    public void setSearchMode(boolean searchMode) {
+        if (this.searchMode == searchMode) return;
+        this.searchMode = searchMode;
     }
 
     public int loadedCount() { return rows.size(); }
@@ -76,12 +140,28 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
     }
 
     private int indexOf(String sessionId) {
-        for (int i = 0; i < rows.size(); i++) if (rows.get(i).id.equals(sessionId)) return i;
+        for (int i = 0; i < rows.size(); i++) {
+            Row row = rows.get(i);
+            if (row.summary != null && row.summary.id.equals(sessionId)) return i;
+        }
         return -1;
     }
 
+    /** The group title of the most recently added row, or null when there is none yet. */
+    private String lastGroupTitle() {
+        for (int i = rows.size() - 1; i >= 0; i--) {
+            Row row = rows.get(i);
+            if (row.headerTitle != null) return row.headerTitle;
+            // A session row means the current group is the one that produced it.
+            return groupTitle(row.summary.lastActivityAt);
+        }
+        return null;
+    }
+
     @Override public int getItemViewType(int position) {
-        return (loadingFooter && position == rows.size()) ? FOOTER_TYPE : ROW_TYPE;
+        if (loadingFooter && position == rows.size()) return FOOTER_TYPE;
+        Row row = rows.get(position);
+        return row.headerTitle != null ? HEADER_TYPE : ROW_TYPE;
     }
 
     @Override public int getItemCount() { return loadingFooter ? rows.size() + 1 : rows.size(); }
@@ -101,7 +181,10 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         if (viewType == FOOTER_TYPE) {
             return new FooterHolder(inflater.inflate(android.R.layout.simple_list_item_1, parent, false));
         }
-        return new RowHolder(inflater.inflate(android.R.layout.simple_list_item_2, parent, false));
+        if (viewType == HEADER_TYPE) {
+            return new HeaderHolder(inflater.inflate(android.R.layout.simple_list_item_1, parent, false));
+        }
+        return new RowHolder(inflater.inflate(R.layout.item_session_picker_row, parent, false));
     }
 
     @Override public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
@@ -109,17 +192,29 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
             ((FooterHolder) holder).bind("正在加载…");
             return;
         }
-        final SessionSummary summary = rows.get(position);
+        if (holder instanceof HeaderHolder) {
+            ((HeaderHolder) holder).bind(rows.get(position).headerTitle);
+            return;
+        }
+        final SessionSummary summary = rows.get(position).summary;
         RowHolder row = (RowHolder) holder;
-        final String label = summary.label();
+        final String title = summary.displayTitle();
         final String activity = describeActivity(summary.lastActivityAt);
-        row.title.setText(label);
-        row.subtitle.setText(activity);
+        final String preview = summary.preview;
+        row.title.setText(title);
+        row.subtitle.setText(preview.isEmpty() ? activity : preview + " · " + activity);
+        row.pinIcon.setVisibility(summary.pinned ? View.VISIBLE : View.GONE);
         // Recycling resets this per row, so the highlight is applied on every bind.
         row.itemView.setBackgroundColor(summary.id.equals(currentSessionId)
             ? 0x243F8CFF : Color.TRANSPARENT);
-        row.itemView.setContentDescription(label + "，" + activity);
-        row.itemView.setOnClickListener(v -> listener.onSessionChosen(summary.id, label));
+        row.itemView.setContentDescription((summary.pinned ? "已置顶，" : "") + title + "，" + activity);
+        row.itemView.setOnClickListener(v -> listener.onSessionChosen(summary.id, title));
+        row.itemView.setOnLongClickListener(v -> {
+            listener.onSessionLongPressed(summary.id, summary);
+            return true;
+        });
+        row.bindSwipeActions(v -> listener.onSessionRenameRequested(summary.id, summary),
+            v -> listener.onSessionDeleteRequested(summary.id));
     }
 
     /**
@@ -143,6 +238,25 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         if (dayDelta == 1) return "昨天 " + formatClock(then);
         if (dayDelta < 7) return weekdayName(then) + " " + formatClock(then);
         return formatDate(activityAt);
+    }
+
+    /**
+     * Group title for a session's activity time, or null when the session has no activity yet.
+     *
+     * The boundaries match {@link #describeActivity()} exactly: a session that reads as "昨天"
+     * belongs to the 昨天 group, one that reads as a weekday belongs to 本周, and so on. A
+     * mismatch between the two would show a session under a header that contradicts its own
+     * timestamp.
+     */
+    static String groupTitle(long activityAt) {
+        if (activityAt <= 0L) return null;
+        Calendar then = Calendar.getInstance();
+        then.setTimeInMillis(activityAt);
+        int dayDelta = daysBetween(Calendar.getInstance(), then);
+        if (dayDelta <= 0) return "今天";
+        if (dayDelta == 1) return "昨天";
+        if (dayDelta < 7) return "本周";
+        return "更早";
     }
 
     /**
@@ -196,24 +310,50 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
     private static final class RowHolder extends RecyclerView.ViewHolder {
         final TextView title;
         final TextView subtitle;
-        /** Both cells stack vertically; the container cannot carry the gravity itself. */
-        private final LinearLayout container;
+        final ImageView pinIcon;
+        private final SwipeRevealContainer container;
 
         RowHolder(View itemView) {
             super(itemView);
-            title = itemView.findViewById(android.R.id.text1);
-            subtitle = itemView.findViewById(android.R.id.text2);
-            title.setSingleLine(true);
+            container = itemView.findViewById(R.id.session_row_container);
+            title = itemView.findViewById(R.id.session_row_title);
+            subtitle = itemView.findViewById(R.id.session_row_subtitle);
+            pinIcon = itemView.findViewById(R.id.session_row_pin);
+            // A long title may wrap onto a second line; the preview stays on one.
+            title.setMaxLines(2);
             title.setEllipsize(TextUtils.TruncateAt.END);
             subtitle.setSingleLine(true);
             subtitle.setEllipsize(TextUtils.TruncateAt.END);
-            float density = itemView.getResources().getDisplayMetrics().density;
-            int horizontal = Math.round(20 * density);
-            int vertical = Math.round(12 * density);
-            itemView.setPadding(horizontal, vertical, horizontal, vertical);
             title.setGravity(Gravity.START);
             subtitle.setGravity(Gravity.START);
-            container = null;
+        }
+
+        void bindSwipeActions(View.OnClickListener rename, View.OnClickListener delete) {
+            container.setActionHandlers(rename, delete);
+        }
+    }
+
+    private static final class HeaderHolder extends RecyclerView.ViewHolder {
+        private final TextView text;
+
+        HeaderHolder(View itemView) {
+            super(itemView);
+            text = itemView.findViewById(android.R.id.text1);
+            text.setGravity(Gravity.START);
+            float density = itemView.getResources().getDisplayMetrics().density;
+            int horizontal = Math.round(20 * density);
+            int vertical = Math.round(10 * density);
+            itemView.setPadding(horizontal, vertical, horizontal, vertical);
+            // A header is not a session: it must never react to a tap or a long press.
+            itemView.setClickable(false);
+            itemView.setLongClickable(false);
+            itemView.setOnClickListener(null);
+            itemView.setOnLongClickListener(null);
+        }
+
+        void bind(String title) {
+            text.setText(title);
+            text.setTypeface(null, android.graphics.Typeface.BOLD);
         }
     }
 
