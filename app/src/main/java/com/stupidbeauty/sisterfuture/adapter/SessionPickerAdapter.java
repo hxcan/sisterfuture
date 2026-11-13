@@ -166,13 +166,21 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         return -1;
     }
 
-    /** The group title of the most recently added row, or null when there is none yet. */
+    /**
+     * The group title of the most recently added row, or null when there is none yet.
+     *
+     * <p>Walks the list backwards looking for a header row first; if none exists, infers the
+     * group from the last session row. The two loops are separate so a session row never
+     * short-circuits the search for a real header.
+     */
     private String lastGroupTitle() {
         for (int i = rows.size() - 1; i >= 0; i--) {
             Row row = rows.get(i);
             if (row.headerTitle != null) return row.headerTitle;
-            // A session row means the current group is the one that produced it.
-            return SessionListGrouping.groupTitle(row.summary.lastActivityAt);
+        }
+        for (int i = rows.size() - 1; i >= 0; i--) {
+            Row row = rows.get(i);
+            if (row.summary != null) return SessionListGrouping.groupTitle(row.summary.lastActivityAt);
         }
         return null;
     }
