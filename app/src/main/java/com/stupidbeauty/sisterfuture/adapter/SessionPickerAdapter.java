@@ -224,14 +224,12 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         row.subtitle.setText(preview.isEmpty() ? activity : preview + " · " + activity);
         row.pinIcon.setVisibility(summary.pinned ? View.VISIBLE : View.GONE);
         // Recycling resets this per row, so the highlight is applied on every bind.
-        row.itemView.setBackgroundColor(summary.id.equals(currentSessionId)
-            ? 0x243F8CFF : Color.TRANSPARENT);
-        row.itemView.setContentDescription((summary.pinned ? "已置顶，" : "") + title + "，" + activity);
-        row.itemView.setOnClickListener(v -> listener.onSessionChosen(summary.id, title));
-        row.itemView.setOnLongClickListener(v -> {
-            listener.onSessionLongPressed(summary.id, summary);
-            return true;
-        });
+        row.bindSelection(summary.id.equals(currentSessionId), summary.pinned, title, activity,
+            v -> listener.onSessionChosen(summary.id, title),
+            v -> {
+                listener.onSessionLongPressed(summary.id, summary);
+                return true;
+            });
         row.bindSwipeActions(v -> listener.onSessionRenameRequested(summary.id, summary),
             v -> listener.onSessionDeleteRequested(summary.id));
     }
@@ -325,6 +323,23 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
             subtitle.setEllipsize(TextUtils.TruncateAt.END);
             title.setGravity(Gravity.START);
             subtitle.setGravity(Gravity.START);
+        }
+
+        /**
+         * Bind the selection state and the tap handlers to the sliding content.
+         *
+         * <p>The container itself swallows the touch while a swipe may be starting, so the
+         * click and long press have to live on the content view instead.
+         *\/
+        void bindSelection(boolean current, boolean pinned, String title, String activity,
+            View.OnClickListener onClick, View.OnLongClickListener onLongClick) {
+            View content = container.getContentView();
+            if (content == null) return;
+            // Recycling resets this per row, so the highlight is applied on every bind.
+            content.setBackgroundColor(current ? 0x243F8CFF : Color.TRANSPARENT);
+            content.setContentDescription((pinned ? "已置顶，" : "") + title + "，" + activity);
+            content.setOnClickListener(onClick);
+            content.setOnLongClickListener(onLongClick);
         }
 
         void bindSwipeActions(View.OnClickListener rename, View.OnClickListener delete) {
