@@ -57,8 +57,11 @@ public final class SessionListGrouping {
     /**
      * Calendar-aware day difference, so a daylight saving shift cannot move a session across a
      * day boundary. Rounding absorbs the 23- and 25-hour days that DST produces.
+     *
+     * <p>Public because the session picker adapter lives in a subpackage and shares this rule
+     * with the grouping logic; keeping one copy is what stops a row and its header from drifting.
      */
-    static int daysBetween(Calendar today, Calendar then) {
+    public static int daysBetween(Calendar today, Calendar then) {
         long diff = startOfDay(today).getTimeInMillis() - startOfDay(then).getTimeInMillis();
         return (int) Math.round(diff / 86_400_000.0);
     }
