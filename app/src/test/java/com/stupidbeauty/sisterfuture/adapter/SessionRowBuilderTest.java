@@ -25,7 +25,7 @@ public class SessionRowBuilderTest {
         return System.currentTimeMillis() - 3_600_000L;
     }
 
-    /** A timestamp two days ago, used as "yesterday" or earlier. */
+    /** A timestamp one day ago, used as "yesterday". */
     private static long yesterdayAt() {
         Calendar then = Calendar.getInstance();
         then.add(Calendar.DAY_OF_YEAR, -1);
@@ -39,7 +39,7 @@ public class SessionRowBuilderTest {
      * page before, and updated as soon as a header is emitted.
      */
     private static List<String> headersOf(List<Long> times, String previousGroup) {
-        List<String> groups = SessionRowBuilder.groupHeaders(times, previousGroup);
+        List<String> groups = SessionRowBuilder.groupHeaders(times);
         List<String> headers = new ArrayList<>();
         String currentGroup = previousGroup;
         for (String group : groups) {
@@ -82,7 +82,7 @@ public class SessionRowBuilderTest {
 
     @Test public void groupHeadersKeepTheOrderOfThePage() {
         List<String> groups = SessionRowBuilder.groupHeaders(
-            Arrays.asList(todayAt(), yesterdayAt(), todayAt()), null);
+            Arrays.asList(todayAt(), yesterdayAt(), todayAt()));
         assertEquals(3, groups.size());
         assertEquals(SessionListGrouping.TODAY, groups.get(0));
         assertEquals(SessionListGrouping.YESTERDAY, groups.get(1));
@@ -109,7 +109,7 @@ public class SessionRowBuilderTest {
     }
 
     @Test public void emptyPageProducesNoGroups() {
-        assertTrue(SessionRowBuilder.groupHeaders(null, null).isEmpty());
-        assertTrue(SessionRowBuilder.groupHeaders(new ArrayList<Long>(), null).isEmpty());
+        assertTrue(SessionRowBuilder.groupHeaders(null).isEmpty());
+        assertTrue(SessionRowBuilder.groupHeaders(new ArrayList<Long>()).isEmpty());
     }
 }
