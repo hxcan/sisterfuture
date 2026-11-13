@@ -2,6 +2,8 @@ package com.stupidbeauty.sisterfuture.adapter;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -11,6 +13,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.stupidbeauty.sisterfuture.R;
 import com.stupidbeauty.sisterfuture.SessionListGrouping;
 import com.stupidbeauty.sisterfuture.SessionSummary;
 import java.util.ArrayList;
@@ -77,6 +80,13 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
     private final Listener listener;
     private final List<Row> rows = new ArrayList<>();
     private final String currentSessionId;
+    /**
+     * Main thread scheduler for the picker's debounced search.
+     *
+     * <p>RecyclerView.Adapter has no post/postDelayed of its own, so the adapter carries one:
+     * the dialog uses it to debounce keystrokes and to hop back to the main thread.
+     */
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean loadingFooter;
     /** Guards against duplicate requests when scroll callbacks fire repeatedly. */
     private boolean awaitingPage;
@@ -87,6 +97,16 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         this.context = context;
         this.currentSessionId = currentSessionId;
         this.listener = listener;
+    }
+
+    /** Run a task on the main thread. */
+    public void post(Runnable task) {
+        mainHandler.post(task);
+    }
+
+    /** Run a task on the main thread after the given delay. */
+    public void postDelayed(Runnable task, long delayMillis) {
+        mainHandler.postDelayed(task, delayMillis);
     }
 
     /**
