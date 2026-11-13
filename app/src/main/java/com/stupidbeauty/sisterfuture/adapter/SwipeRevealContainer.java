@@ -188,13 +188,15 @@ public final class SwipeRevealContainer extends FrameLayout {
         if (openStateListener != null) openStateListener.onOpenStateChanged(this, shouldOpen);
     }
 
-    @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        super.onLayout(changed, left, top, right, bottom);
-        if (actions != null && content != null) {
-            // The action strip is laid out flush to the right, underneath the content.
-            actions.layout(right - actions.getMeasuredWidth(), top, right, bottom);
-            content.layout(left, top, right, bottom);
-        }
+    /**
+     * The action strip is placed flush to the right by the FrameLayout itself, using the
+     * {@code layout_gravity} declared in XML. Laying the children out again here used the
+     * parent bounds, which are not settled yet while the row height is still wrap_content,
+     * and collapsed the content to zero height: the rows rendered empty. Only the strip
+     * width is needed, and it is stable once the row has been measured.
+     */
+    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
         translationLimit = actions == null ? 0f : actions.getMeasuredWidth();
     }
 }

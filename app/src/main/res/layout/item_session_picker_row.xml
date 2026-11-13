@@ -9,15 +9,16 @@
     <LinearLayout
         android:id="@+id/session_row_actions"
         android:layout_width="wrap_content"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:layout_gravity="end"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
         android:background="#22000000">
 
         <TextView
             android:id="@+id/session_row_rename"
             android:layout_width="wrap_content"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:gravity="center"
             android:paddingLeft="20dp"
             android:paddingRight="20dp"
@@ -27,7 +28,7 @@
         <TextView
             android:id="@+id/session_row_delete"
             android:layout_width="wrap_content"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:gravity="center"
             android:paddingLeft="20dp"
             android:paddingRight="20dp"
@@ -44,7 +45,7 @@
         android:paddingRight="20dp"
         android:paddingTop="12dp"
         android:paddingBottom="12dp"
-        android:background="@android:color/transparent">
+        android:background="?android:attr/colorBackground">
 
         <LinearLayout
             android:layout_width="match_parent"
