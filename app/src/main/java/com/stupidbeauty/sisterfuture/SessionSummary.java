@@ -12,11 +12,21 @@ public final class SessionSummary {
     public final String preview;
     /** Latest message time in milliseconds, or 0 when the session has no messages yet. */
     public final long lastActivityAt;
+    /** User-assigned name. Empty when the session was never renamed. */
+    public final String title;
+    /** True when the user pinned this session to the top of the list. */
+    public final boolean pinned;
 
     public SessionSummary(String id, String preview, long lastActivityAt) {
+        this(id, preview, lastActivityAt, "", false);
+    }
+
+    public SessionSummary(String id, String preview, long lastActivityAt, String title, boolean pinned) {
         this.id = id;
         this.preview = preview;
         this.lastActivityAt = lastActivityAt;
+        this.title = title == null ? "" : title;
+        this.pinned = pinned;
     }
 
     /** Human-facing label: the default session keeps its fixed prefix; others show the id prefix. */
@@ -24,7 +34,15 @@ public final class SessionSummary {
         return SessionManager.DEFAULT_SESSION_ID.equals(id) ? "默认会话" : "会话 " + id.substring(0, 8);
     }
 
+    /**
+     * Display title: a user-assigned name wins, otherwise fall back to the generated prefix.
+     */
+    public String displayTitle() {
+        return title.isEmpty() ? prefix() : title;
+    }
+
     public String label() {
-        return preview.isEmpty() ? prefix() : prefix() + " · " + preview;
+        String base = displayTitle();
+        return preview.isEmpty() ? base : base + " · " + preview;
     }
 }

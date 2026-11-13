@@ -32,7 +32,7 @@ public final class SqliteConversationStore implements ConversationStore {
     /** Bounded work per write: summaries only need the newest few messages. */
     private static final int MESSAGE_SUMMARY_SCAN_LIMIT = 32;
     private static final int PREVIEW_MAX_CHARACTERS = 32;
-    private static final int SCHEMA_VERSION = 3;
+    private static final int SCHEMA_VERSION = 4;
     private static final String TAG = "SqliteConversationStore";
 
     public SqliteConversationStore(Context context) {
@@ -108,19 +108,42 @@ public final class SqliteConversationStore implements ConversationStore {
      * timestamp, but it must never appear in an index definition.
      */
     public List<SessionSummary> listSessionSummaries(int offset, int limit) {
+        return listSessionSummaries(offset, limit, null);
+    }
+
+    /**
+     * One page of list-ready session rows, optionally filtered by a search keyword.
+     *
+     * <p>The keyword matches the user-assigned title or the message preview, case-insensitively.
+     * Filtering happens in SQL so a search never pulls the whole table into memory: pagination
+     * stays on the same path as the unfiltered list.
+     */
+    public List<SessionSummary> listSessionSummaries(int offset, int limit, String keyword) {
         if (offset < 0) throw new IllegalArgumentException("offset must not be negative");
         if (limit <= 0) throw new IllegalArgumentException("limit must be positive");
+        final String filter = normalizeKeyword(keyword);
         return run(() -> {
             List<SessionSummary> page = new ArrayList<>();
+            StringBuilder sql = new StringBuilder(
+                "SELECT session_id, preview_text, last_activity_at, title, pinned FROM sessions ");
+            List<String> args = new ArrayList<>();
+            if (filter != null) {
+                sql.append("WHERE title LIKE ? ESCAPE '\\' OR preview_text LIKE ? ESCAPE '\\' ");
+                String pattern = "%" + escapeLike(filter) + "%";
+                args.add(pattern);
+                args.add(pattern);
+            }
+            sql.append("ORDER BY pinned DESC, last_activity_at DESC, rowid DESC LIMIT ? OFFSET ?");
+            args.add(Integer.toString(limit));
+            args.add(Integer.toString(offset));
             try (Helper helper = new Helper(context, databasePath);
-                 Cursor cursor = helper.getReadableDatabase().rawQuery(
-                     "SELECT session_id, preview_text, last_activity_at FROM sessions "
-                         + "ORDER BY last_activity_at DESC, rowid DESC LIMIT ? OFFSET ?",
-                     new String[]{Integer.toString(limit), Integer.toString(offset)})) {
+                 Cursor cursor = helper.getReadableDatabase().rawQuery(sql.toString(), args.toArray(new String[0]))) {
                 while (cursor.moveToNext()) {
                     page.add(new SessionSummary(cursor.getString(0),
                         cursor.getString(1) == null ? "" : cursor.getString(1),
-                        cursor.getLong(2)));
+                        cursor.getLong(2),
+                        cursor.getString(3) == null ? "" : cursor.getString(3),
+                        cursor.getInt(4) != 0));
                 }
             }
             return page;
@@ -129,12 +152,99 @@ public final class SqliteConversationStore implements ConversationStore {
 
     /** Total session count, so the picker can tell whether another page exists without loading it. */
     public int countSessions() {
+        return countSessions(null);
+    }
+
+    /** Total session count matching a search keyword; 0 when the keyword is blank. */
+    public int countSessions(String keyword) {
+        final String filter = normalizeKeyword(keyword);
         return run(() -> {
+            String sql = "SELECT COUNT(*) FROM sessions";
+            String[] args = null;
+            if (filter != null) {
+                sql += " WHERE title LIKE ? ESCAPE '\\' OR preview_text LIKE ? ESCAPE '\\'";
+                String pattern = "%" + escapeLike(filter) + "%";
+                args = new String[]{pattern, pattern};
+            }
             try (Helper helper = new Helper(context, databasePath);
-                 Cursor cursor = helper.getReadableDatabase().rawQuery("SELECT COUNT(*) FROM sessions", null)) {
+                 Cursor cursor = helper.getReadableDatabase().rawQuery(sql, args)) {
                 return cursor.moveToFirst() ? cursor.getInt(0) : 0;
             }
         });
+    }
+
+    /**
+     * Pin or unpin a session.
+     *
+     * Pinned sessions sort ahead of every other session, so the user can keep an important
+     * conversation at the top without changing the recency order of the rest.
+     */
+    public void setSessionPinned(String targetSessionId, boolean pinned) {
+        if (targetSessionId == null || targetSessionId.isEmpty())
+            throw new IllegalArgumentException("sessionId must not be empty");
+        run(() -> {
+            try (Helper helper = new Helper(context, databasePath)) {
+                ContentValues row = new ContentValues();
+                row.put("pinned", pinned ? 1 : 0);
+                helper.getWritableDatabase().update("sessions", row, "session_id=?", new String[]{targetSessionId});
+            }
+            return null;
+        });
+    }
+
+    /**
+     * Give a session a user-visible name.
+     *
+     * A blank name clears the custom title, so the list falls back to the generated prefix.
+     */
+    public void renameSession(String targetSessionId, String newTitle) {
+        if (targetSessionId == null || targetSessionId.isEmpty())
+            throw new IllegalArgumentException("sessionId must not be empty");
+        final String trimmed = newTitle == null ? "" : newTitle.trim();
+        run(() -> {
+            try (Helper helper = new Helper(context, databasePath)) {
+                ContentValues row = new ContentValues();
+                row.put("title", trimmed);
+                helper.getWritableDatabase().update("sessions", row, "session_id=?", new String[]{targetSessionId});
+            }
+            return null;
+        });
+    }
+
+    /**
+     * Delete a session together with its messages and cached request context.
+     *
+     * The delete runs in one transaction so a failure leaves the session intact rather than
+     * dropping the row but keeping orphaned messages.
+     */
+    public void deleteSession(String targetSessionId) {
+        if (targetSessionId == null || targetSessionId.isEmpty())
+            throw new IllegalArgumentException("sessionId must not be empty");
+        run(() -> {
+            try (Helper helper = new Helper(context, databasePath)) {
+                SQLiteDatabase db = helper.getWritableDatabase();
+                db.beginTransaction();
+                try {
+                    db.delete("messages", "session_id=?", new String[]{targetSessionId});
+                    db.delete("request_context", "session_id=?", new String[]{targetSessionId});
+                    db.delete("sessions", "session_id=?", new String[]{targetSessionId});
+                    db.setTransactionSuccessful();
+                } finally { db.endTransaction(); }
+            }
+            return null;
+        });
+    }
+
+    /** Blank or whitespace-only keywords mean "no filter". */
+    private static String normalizeKeyword(String keyword) {
+        if (keyword == null) return null;
+        String trimmed = keyword.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /** Escape LIKE wildcards so a literal % or _ in the keyword does not widen the match. */
+    private static String escapeLike(String keyword) {
+        return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     private void replace(SQLiteDatabase db, List<String> messages) {
@@ -406,7 +516,8 @@ public final class SqliteConversationStore implements ConversationStore {
         @Override public void onConfigure(SQLiteDatabase db) { db.setForeignKeyConstraintsEnabled(true); }
         @Override public void onCreate(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE sessions (session_id TEXT PRIMARY KEY NOT NULL, max_rounds INTEGER NOT NULL, "
-                + "preview_text TEXT NOT NULL DEFAULT '', last_activity_at INTEGER NOT NULL DEFAULT 0)");
+                + "preview_text TEXT NOT NULL DEFAULT '', last_activity_at INTEGER NOT NULL DEFAULT 0, "
+                + "pinned INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL DEFAULT '')");
             db.execSQL("CREATE TABLE messages (session_id TEXT NOT NULL, position INTEGER NOT NULL, message_json TEXT NOT NULL, "
                     + "PRIMARY KEY(session_id,position), FOREIGN KEY(session_id) REFERENCES sessions(session_id))");
             createActivityIndex(db);
@@ -417,7 +528,7 @@ public final class SqliteConversationStore implements ConversationStore {
                 + "FOREIGN KEY(session_id) REFERENCES sessions(session_id))");
         }
         /**
-         * Create the session ordering index on the sort column only.
+         * Create the session ordering index on the sort columns only.
          *
          * <p>Two corrections over the version that shipped in #629:
          * <ul>
@@ -432,7 +543,7 @@ public final class SqliteConversationStore implements ConversationStore {
          */
         private static void createActivityIndex(SQLiteDatabase db) {
             try {
-                db.execSQL("CREATE INDEX IF NOT EXISTS sessions_activity_index ON sessions(last_activity_at DESC)");
+                db.execSQL("CREATE INDEX IF NOT EXISTS sessions_activity_index ON sessions(pinned DESC, last_activity_at DESC)");
             } catch (Exception e) {
                 FileLogger.e(TAG, "创建会话活动索引失败，列表查询仍可用（较慢）");
             }
@@ -446,12 +557,31 @@ public final class SqliteConversationStore implements ConversationStore {
             } else if (oldVersion == 1 && newVersion == 3) {
                 addSummaryColumns(db);
                 createRequestContext(db);
+            } else if (newVersion == 4 && oldVersion >= 1 && oldVersion <= 3) {
+                addPinnedAndTitleColumns(db);
             } else throw new IllegalStateException("Unsupported conversation database upgrade");
             backfillSessionSummaries(db);
         }
         private static void addSummaryColumns(SQLiteDatabase db) {
             db.execSQL("ALTER TABLE sessions ADD COLUMN preview_text TEXT NOT NULL DEFAULT ''");
             db.execSQL("ALTER TABLE sessions ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0");
+            createActivityIndex(db);
+        }
+        /**
+         * Add the pin flag and the user-assigned title.
+         *
+         * Both columns carry defaults, so existing rows survive the migration unchanged and
+         * stay visible in the list. The old activity index is dropped first because its column
+         * list changed; a failure there must not abort the migration.
+         */
+        private static void addPinnedAndTitleColumns(SQLiteDatabase db) {
+            db.execSQL("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE sessions ADD COLUMN title TEXT NOT NULL DEFAULT ''");
+            try {
+                db.execSQL("DROP INDEX IF EXISTS sessions_activity_index");
+            } catch (Exception e) {
+                FileLogger.e(TAG, "删除旧会话活动索引失败，继续重建索引");
+            }
             createActivityIndex(db);
         }
         /**

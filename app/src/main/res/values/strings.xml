@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="app_name">Sister Future</string>
-  <string name="empty" translatable="false"></string>
-  <string name="somethingIsWrong">Someting is wrong, please try again later.</string>
+    <string name="app_name">Sister Future</string>
+    <string name="empty" translatable="false"></string>
+    <string name="somethingIsWrong">Something is wrong, please try again later.</string>
+    <string name="session_action_rename">Rename</string>
+    <string name="session_action_delete">Delete</string>
+    <string name="session_menu_pin">Pin</string>
+    <string name="session_menu_unpin">Unpin</string>
+    <string name="session_menu_rename">Rename</string>
+    <string name="session_menu_delete">Delete</string>
+    <string name="session_search_hint">Search sessions</string>
+    <string name="session_search_empty">No matching sessions found</string>
+    <string name="session_search_empty_hint">Try another keyword</string>
+    <string name="session_rename_title">Rename session</string>
+    <string name="session_rename_hint">Session name</string>
+    <string name="session_delete_title">Delete session</string>
+    <string name="session_delete_message">Delete this session? Its messages will be deleted too, and this cannot be undone.</string>
+    <string name="session_delete_confirm">Delete</string>
+    <string name="session_pinned_description">Pinned</string>
 </resources>
