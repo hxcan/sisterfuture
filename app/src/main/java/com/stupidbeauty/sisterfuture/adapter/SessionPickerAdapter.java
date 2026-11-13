@@ -114,16 +114,28 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
      *
      * <p>When group headers are active, a header is emitted only when the group changes, so
      * consecutive rows of the same group share one header even across a page boundary.
+     *
+     * <p>The group of the previous row is tracked while this page is built. Asking the
+     * committed rows instead would make every session in a page open its own group, because
+     * the rows of the page are not committed until the loop has finished.
      */
     public void appendPage(List<SessionSummary> page) {
         if (page == null || page.isEmpty()) return;
+        List<Long> activityTimes = new ArrayList<>(page.size());
+        for (SessionSummary summary : page) activityTimes.add(summary.lastActivityAt);
+        List<String> groups = SessionRowBuilder.groupHeaders(activityTimes);
         List<Row> fresh = new ArrayList<>();
-        for (SessionSummary summary : page) {
+        String currentGroup = lastGroupTitle();
+        for (int i = 0; i < page.size(); i++) {
+            SessionSummary summary = page.get(i);
             // Never show the same session twice, even if a page boundary shifts under us.
             if (indexOf(summary.id) >= 0) continue;
             if (!searchMode) {
-                String group = SessionListGrouping.groupTitle(summary.lastActivityAt);
-                if (group != null && !group.equals(lastGroupTitle())) fresh.add(new Row(group));
+                String group = groups.get(i);
+                if (SessionRowBuilder.needsHeader(group, currentGroup)) {
+                    fresh.add(new Row(group));
+                    currentGroup = group;
+                }
             }
             fresh.add(new Row(summary));
         }
@@ -167,7 +179,7 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
     }
 
     /**
-     * The group title of the most recently added row, or null when there is none yet.
+     * The group of the last row already shown, or null when there is none.
      *
      * <p>Walks the list backwards looking for a header row first; if none exists, infers the
      * group from the last session row. The two loops are separate so a session row never
