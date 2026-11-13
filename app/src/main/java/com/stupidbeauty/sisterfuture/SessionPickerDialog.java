@@ -90,6 +90,13 @@ final class SessionPickerDialog {
 
         // Paging state lives with the dialog, so no callback outlives it.
         final Paging paging = new Paging(host);
+        /*
+         * The adapter is created together with its listener, but the listener callbacks need the
+         * adapter itself to refresh the list. A holder carries it across the initialization
+         * order, because a plain local variable would read as "might not have been initialized"
+         * inside the anonymous class.
+         */
+        final SessionPickerAdapter[] adapterRef = new SessionPickerAdapter[1];
         final SessionPickerAdapter adapter = new SessionPickerAdapter(host, currentId,
             new SessionPickerAdapter.Listener() {
                 @Override public void onSessionChosen(String sessionId, String label) {
@@ -100,17 +107,18 @@ final class SessionPickerDialog {
                 }
 
                 @Override public void onSessionLongPressed(String sessionId, SessionSummary summary) {
-                    showRowMenu(host, dialog, sessionId, summary, paging, adapter, currentId);
+                    showRowMenu(host, dialog, sessionId, summary, paging, adapterRef[0], currentId);
                 }
 
                 @Override public void onSessionDeleteRequested(String sessionId) {
-                    confirmDelete(host, dialog, sessionId, paging, adapter, currentId);
+                    confirmDelete(host, dialog, sessionId, paging, adapterRef[0], currentId);
                 }
 
                 @Override public void onSessionRenameRequested(String sessionId, SessionSummary summary) {
-                    promptRename(host, dialog, sessionId, summary, paging, adapter);
+                    promptRename(host, dialog, sessionId, summary, paging, adapterRef[0]);
                 }
             });
+        adapterRef[0] = adapter;
         list.setAdapter(adapter);
 
         // Search restarts paging from offset zero with the new keyword.
@@ -150,7 +158,6 @@ final class SessionPickerDialog {
                                     final String sessionId, final SessionSummary summary,
                                     final Paging paging, final SessionPickerAdapter adapter,
                                     final String currentId) {
-        final boolean isCurrent = sessionId.equals(currentId);
         CharSequence[] labels = new CharSequence[] {
             summary.pinned ? host.getString(R.string.session_menu_unpin) : host.getString(R.string.session_menu_pin),
             host.getString(R.string.session_menu_rename),
