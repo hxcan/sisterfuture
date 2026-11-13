@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">未来姐姐</string>
+    <string name="app_name">Sister Future</string>
     <string name="empty" translatable="false"></string>
-    <string name="somethingIsWrong">Someting is wrong, please try again later.</string>
-    <string name="session_action_rename">重命名</string>
-    <string name="session_action_delete">删除</string>
-    <string name="session_menu_pin">置顶</string>
-    <string name="session_menu_unpin">取消置顶</string>
-    <string name="session_menu_rename">重命名</string>
-    <string name="session_menu_delete">删除</string>
-    <string name="session_search_hint">搜索会话</string>
-    <string name="session_search_empty">没有找到匹配的会话</string>
-    <string name="session_search_empty_hint">换个关键词试试</string>
-    <string name="session_rename_title">重命名会话</string>
-    <string name="session_rename_hint">会话名称</string>
-    <string name="session_delete_title">删除会话</string>
-    <string name="session_delete_message">确定删除这个会话吗？该会话的消息将一并删除，且无法恢复。</string>
-    <string name="session_delete_confirm">删除</string>
-    <string name="session_pinned_description">已置顶</string>
+    <string name="somethingIsWrong">Something is wrong, please try again later.</string>
+    <string name="session_action_rename">Rename</string>
+    <string name="session_action_delete">Delete</string>
+    <string name="session_menu_pin">Pin</string>
+    <string name="session_menu_unpin">Unpin</string>
+    <string name="session_menu_rename">Rename</string>
+    <string name="session_menu_delete">Delete</string>
+    <string name="session_search_hint">Search sessions</string>
+    <string name="session_search_empty">No matching sessions found</string>
+    <string name="session_search_empty_hint">Try another keyword</string>
+    <string name="session_rename_title">Rename session</string>
+    <string name="session_rename_hint">Session name</string>
+    <string name="session_delete_title">Delete session</string>
+    <string name="session_delete_message">Delete this session? Its messages will be deleted too, and this cannot be undone.</string>
+    <string name="session_delete_confirm">Delete</string>
+    <string name="session_pinned_description">Pinned</string>
 </resources>
