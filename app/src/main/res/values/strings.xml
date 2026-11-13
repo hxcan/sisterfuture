@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">未来姐姐</string>
+    <string name="empty" translatable="false"></string>
+    <string name="somethingIsWrong">Someting is wrong, please try again later.</string>
     <string name="session_action_rename">重命名</string>
     <string name="session_action_delete">删除</string>
     <string name="session_menu_pin">置顶</string>
