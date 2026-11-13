@@ -6,6 +6,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
+import com.stupidbeauty.sisterfuture.R;
 
 /**
  * Row container that slides its content aside to reveal action buttons.
