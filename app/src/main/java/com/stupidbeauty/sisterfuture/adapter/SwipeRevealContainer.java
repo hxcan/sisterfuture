@@ -22,6 +22,10 @@ import com.stupidbeauty.sisterfuture.R;
  * carrying the {@code session_row_actions} id is the action bar, the other one is the sliding
  * content. The constructors must stay public because LayoutInflater instantiates this class
  * reflectively.
+ *
+ * <p>Clicks and long presses belong on {@link #getContentView()}, not on this container: the
+ * container swallows the touch while a drag may be starting, which would otherwise eat the
+ * tap that selects a session.
  */
 public final class SwipeRevealContainer extends FrameLayout {
 
@@ -80,6 +84,11 @@ public final class SwipeRevealContainer extends FrameLayout {
                 content = child;
             }
         }
+    }
+
+    /** The sliding content; clicks and long presses are registered on it. */
+    View getContentView() {
+        return content;
     }
 
     /** Wire the rename / delete buttons inside the action strip. */
