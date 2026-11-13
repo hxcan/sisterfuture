@@ -330,7 +330,7 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
          *
          * <p>The container itself swallows the touch while a swipe may be starting, so the
          * click and long press have to live on the content view instead.
-         *\/
+         */
         void bindSelection(boolean current, boolean pinned, String title, String activity,
             View.OnClickListener onClick, View.OnLongClickListener onLongClick) {
             View content = container.getContentView();
