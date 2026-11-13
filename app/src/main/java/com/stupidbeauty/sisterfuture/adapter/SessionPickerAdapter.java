@@ -123,7 +123,7 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         if (page == null || page.isEmpty()) return;
         List<Long> activityTimes = new ArrayList<>(page.size());
         for (SessionSummary summary : page) activityTimes.add(summary.lastActivityAt);
-        List<String> groups = SessionRowBuilder.groupHeaders(activityTimes, lastGroupTitle());
+        List<String> groups = SessionRowBuilder.groupHeaders(activityTimes);
         List<Row> fresh = new ArrayList<>();
         String currentGroup = lastGroupTitle();
         for (int i = 0; i < page.size(); i++) {
