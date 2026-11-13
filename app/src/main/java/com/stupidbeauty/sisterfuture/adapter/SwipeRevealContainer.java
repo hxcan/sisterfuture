@@ -17,8 +17,17 @@ import com.stupidbeauty.sisterfuture.R;
  *
  * <p>Scrolling the list vertically takes priority: a vertical drag is handed back to the parent
  * so the RecyclerView keeps scrolling instead of the row latching onto the touch.
+ *
+ * <p>The two children are declared in XML and adopted in {@link #onFinishInflate()}: the strip
+ * carrying the {@code session_row_actions} id is the action bar, the other one is the sliding
+ * content. The constructors must stay public because LayoutInflater instantiates this class
+ * reflectively.
+ *
+ * <p>Clicks and long presses belong on {@link #getContentView()}, not on this container: the
+ * container swallows the touch while a drag may be starting, which would otherwise eat the
+ * tap that selects a session.
  */
-final class SwipeRevealContainer extends FrameLayout {
+public final class SwipeRevealContainer extends FrameLayout {
 
     /** Fraction of the action strip that must be dragged out before the row latches open. */
     private static final float OPEN_THRESHOLD = 0.4f;
@@ -39,13 +48,18 @@ final class SwipeRevealContainer extends FrameLayout {
 
     private OnOpenStateChangedListener openStateListener;
 
-    SwipeRevealContainer(Context context) {
+    public SwipeRevealContainer(Context context) {
         super(context);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
     }
 
-    SwipeRevealContainer(Context context, AttributeSet attrs) {
+    public SwipeRevealContainer(Context context, AttributeSet attrs) {
         super(context, attrs);
+        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+    }
+
+    public SwipeRevealContainer(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
     }
 
@@ -53,16 +67,28 @@ final class SwipeRevealContainer extends FrameLayout {
         this.openStateListener = listener;
     }
 
-    /** The row content that slides. Must be the first child added. */
-    void setContentView(View view) {
-        content = view;
-        addView(view);
+    /**
+     * Adopt the children declared in XML once inflation has finished.
+     *
+     * <p>The strip is recognised by its id; the remaining child is the sliding content. Doing
+     * this here keeps the layout file the single source of truth and avoids the caller having
+     * to hand the views over.
+     */
+    @Override protected void onFinishInflate() {
+        super.onFinishInflate();
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child.getId() == R.id.session_row_actions) {
+                actions = child;
+            } else if (content == null) {
+                content = child;
+            }
+        }
     }
 
-    /** The action strip revealed underneath the content. */
-    void setActionView(View view) {
-        actions = view;
-        addView(view);
+    /** The sliding content; clicks and long presses are registered on it. */
+    View getContentView() {
+        return content;
     }
 
     /** Wire the rename / delete buttons inside the action strip. */
@@ -79,7 +105,7 @@ final class SwipeRevealContainer extends FrameLayout {
         if (!open) return;
         open = false;
         dragging = false;
-        content.setTranslationX(0f);
+        if (content != null) content.setTranslationX(0f);
         if (openStateListener != null) openStateListener.onOpenStateChanged(this, false);
     }
 
@@ -158,7 +184,7 @@ final class SwipeRevealContainer extends FrameLayout {
     /** Slide to the open or closed position without animation jank. */
     private void applyOpen(boolean shouldOpen) {
         open = shouldOpen;
-        content.setTranslationX(shouldOpen ? -translationLimit : 0f);
+        if (content != null) content.setTranslationX(shouldOpen ? -translationLimit : 0f);
         if (openStateListener != null) openStateListener.onOpenStateChanged(this, shouldOpen);
     }
 
