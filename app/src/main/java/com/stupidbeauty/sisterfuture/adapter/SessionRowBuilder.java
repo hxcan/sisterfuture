@@ -1,5 +1,6 @@
 package com.stupidbeauty.sisterfuture.adapter;
 
+import com.stupidbeauty.sisterfuture.SessionListGrouping;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,11 +28,9 @@ public final class SessionRowBuilder {
      * therefore no group.
      *
      * @param activityTimes activity time of each session in the page, in order
-     * @param previousGroup group of the last row already shown, or {@code null} when the list is
-     *        empty; a session in the same group as this one continues the existing header
      * @return one group title per session, in the same order
      */
-    public static List<String> groupHeaders(List<Long> activityTimes, String previousGroup) {
+    public static List<String> groupHeaders(List<Long> activityTimes) {
         List<String> headers = new ArrayList<>();
         if (activityTimes == null) return headers;
         for (Long activityAt : activityTimes) {
