@@ -227,7 +227,8 @@ public class GuideManagerJsonConfigTest
   @Test
   public void rejectsTooShortApiKey() throws JSONException
   {
-    String json = "{\"apiKey\":\"sk-short\",\"baseUrl\":\"https://a.example.com\","
+    // "sk-sh" 长度为 6，短于下限 8
+    String json = "{\"apiKey\":\"sk-sh\",\"baseUrl\":\"https://a.example.com\","
       + "\"endpoint\":\"/v1/chat/completions\",\"modelName\":\"m\"}";
 
     try {
@@ -237,6 +238,19 @@ public class GuideManagerJsonConfigTest
       assertTrue("异常信息应指出 apiKey，实际：" + e.getMessage(),
         e.getMessage().contains("apiKey"));
     }
+  }
+
+  @Test
+  public void acceptsApiKeyAtExactMinimumLength() throws JSONException
+  {
+    // "sk-short" 长度恰好为 8，等于下限，应当通过校验
+    String json = "{\"apiKey\":\"sk-short\",\"baseUrl\":\"https://a.example.com\","
+      + "\"endpoint\":\"/v1/chat/completions\",\"modelName\":\"m\"}";
+
+    List<JSONObject> points = GuideManager.parseAccessPointConfig(json);
+
+    assertEquals(1, points.size());
+    assertEquals("sk-short", points.get(0).getString("apiKey"));
   }
 
   @Test
