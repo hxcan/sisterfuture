@@ -79,7 +79,7 @@ public class ToolRegistry {
 
         toolManager.registerTool(new GetGitHubFileTool(context));
         toolManager.registerTool(new CreateGitHubCommitTool(context));
-        toolManager.registerTool(new GetGithubActionsLogsTool(context));
+        toolManager.registerTool(new GetGitHubActionsLogsTool(context));
         toolManager.registerTool(new CreatePullRequestTool(context));
         toolManager.registerTool(new ApprovePullRequestTool(context));
 
