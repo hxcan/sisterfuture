@@ -31,10 +31,26 @@ public final class SessionRowBuilder {
      * @return one group title per session, in the same order
      */
     public static List<String> groupHeaders(List<Long> activityTimes) {
+        return groupHeaders(activityTimes, System.currentTimeMillis());
+    }
+
+    /**
+     * Group titles for one page of sessions, relative to a given "now".
+     *
+     * <p>The "now" parameter exists so the grouping rule can be exercised deterministically
+     * instead of depending on the wall clock at the moment the test runs. Without it, a test
+     * that builds its sample timestamps from {@code System.currentTimeMillis()} lands in the
+     * wrong group whenever it runs close to midnight.
+     *
+     * @param activityTimes activity time of each session in the page, in order
+     * @param now the moment the groups are resolved against, in milliseconds since the epoch
+     * @return one group title per session, in the same order
+     */
+    public static List<String> groupHeaders(List<Long> activityTimes, long now) {
         List<String> headers = new ArrayList<>();
         if (activityTimes == null) return headers;
         for (Long activityAt : activityTimes) {
-            headers.add(SessionListGrouping.groupTitle(activityAt == null ? 0L : activityAt));
+            headers.add(SessionListGrouping.groupTitle(activityAt == null ? 0L : activityAt, now));
         }
         return headers;
     }
