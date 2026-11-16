@@ -124,6 +124,9 @@ public class ToolRegistry {
         // GitHub PR 列表获取工具
         toolManager.registerTool(new GetPullRequestsTool(context));
 
+        // GitHub 分支对比工具
+        toolManager.registerTool(new CompareGitHubBranchesTool(context));
+
         // PDF 生成工具（renderPdf）- 任务 #1897
         toolManager.registerTool(new RenderPdfTool(context));
         toolManager.registerTool(new MergePdfTool(context));
