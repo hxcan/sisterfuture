@@ -145,8 +145,20 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         notifyItemRangeInserted(insertedAt, fresh.size());
     }
 
-    /** Replace the whole list, used when the search keyword changes. */
+    /**
+     * Replace the whole list, used when the search keyword changes.
+     *
+     * <p>If a loading footer is currently shown, it is removed first to keep the footer's
+     * position consistent with the rows list. Otherwise the footer's position (rows.size())
+     * becomes stale after rows.clear(), and RecyclerView's ChildHelper can crash in unhide()
+     * during layout.
+     */
     public void reset() {
+        // Remove footer first if present, to avoid position mismatch during layout.
+        if (loadingFooter) {
+            loadingFooter = false;
+            notifyItemRemoved(rows.size());
+        }
         int removed = rows.size();
         rows.clear();
         if (removed > 0) notifyItemRangeRemoved(0, removed);
