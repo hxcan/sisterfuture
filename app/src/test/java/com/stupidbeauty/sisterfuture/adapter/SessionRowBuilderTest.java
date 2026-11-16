@@ -17,17 +17,39 @@ import org.junit.Test;
  * <p>The bug this guards against showed a group header above every single session of a page,
  * because the header decision asked the already committed rows instead of the page being
  * built. Neither the compiler nor the linter noticed, so the rule is pinned down here.
+ *
+ * <p>The samples are built from a fixed reference moment instead of the wall clock: the
+ * grouping rule compares calendar days, so a sample derived from "now minus one hour"
+ * lands in the wrong group whenever the test runs close to midnight.
  */
 public class SessionRowBuilderTest {
 
-    /** A timestamp one hour ago, used as "today". */
-    private static long todayAt() {
-        return System.currentTimeMillis() - 3_600_000L;
+    /**
+     * The reference moment every sample is derived from: today at noon.
+     *
+     * <p>Noon keeps {@link #todayAt()} inside the same calendar day, and keeps
+     * {@link #yesterdayAt()} exactly one day earlier.
+     */
+    private static final long NOW = buildReferenceMoment();
+
+    private static long buildReferenceMoment() {
+        Calendar reference = Calendar.getInstance();
+        reference.set(Calendar.HOUR_OF_DAY, 12);
+        reference.set(Calendar.MINUTE, 0);
+        reference.set(Calendar.SECOND, 0);
+        reference.set(Calendar.MILLISECOND, 0);
+        return reference.getTimeInMillis();
     }
 
-    /** A timestamp one day ago, used as "yesterday". */
+    /** A timestamp one hour before the reference moment, used as "today". */
+    private static long todayAt() {
+        return NOW - 3_600_000L;
+    }
+
+    /** A timestamp one day before the reference moment, used as "yesterday". */
     private static long yesterdayAt() {
         Calendar then = Calendar.getInstance();
+        then.setTimeInMillis(NOW);
         then.add(Calendar.DAY_OF_YEAR, -1);
         return then.getTimeInMillis();
     }
@@ -39,7 +61,7 @@ public class SessionRowBuilderTest {
      * page before, and updated as soon as a header is emitted.
      */
     private static List<String> headersOf(List<Long> times, String previousGroup) {
-        List<String> groups = SessionRowBuilder.groupHeaders(times);
+        List<String> groups = SessionRowBuilder.groupHeaders(times, NOW);
         List<String> headers = new ArrayList<>();
         String currentGroup = previousGroup;
         for (String group : groups) {
@@ -82,7 +104,7 @@ public class SessionRowBuilderTest {
 
     @Test public void groupHeadersKeepTheOrderOfThePage() {
         List<String> groups = SessionRowBuilder.groupHeaders(
-            Arrays.asList(todayAt(), yesterdayAt(), todayAt()));
+            Arrays.asList(todayAt(), yesterdayAt(), todayAt()), NOW);
         assertEquals(3, groups.size());
         assertEquals(SessionListGrouping.TODAY, groups.get(0));
         assertEquals(SessionListGrouping.YESTERDAY, groups.get(1));
