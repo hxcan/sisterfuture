@@ -79,7 +79,7 @@ public class ToolRegistry {
 
         toolManager.registerTool(new GetGitHubFileTool(context));
         toolManager.registerTool(new CreateGitHubCommitTool(context));
-        toolManager.registerTool(new GetGitHubActionsLogsTool(context));
+        toolManager.registerTool(new GetGithubActionsLogsTool(context));
         toolManager.registerTool(new CreatePullRequestTool(context));
         toolManager.registerTool(new ApprovePullRequestTool(context));
 
@@ -123,6 +123,9 @@ public class ToolRegistry {
 
         // GitHub PR 列表获取工具
         toolManager.registerTool(new GetPullRequestsTool(context));
+
+        // GitHub 分支对比工具
+        toolManager.registerTool(new CompareGitHubBranchesTool(context));
 
         // PDF 生成工具（renderPdf）- 任务 #1897
         toolManager.registerTool(new RenderPdfTool(context));
