@@ -276,139 +276,6 @@ public class GuideManager {
     }
 
     /**
-     * 🔥 #940963136747 创建自定义接入点（JSON 配置路径）
-     * 
-     * 复用现有的 addModelAccessPoint 工具链路，不另写一套创建逻辑。
-     * - JSON 模式下不追加百炼/CodePlan/MiniMax 三个默认接入点（用户指定什么就用什么）
-     * - 单项失败不中断其余项，最后输出成功/失败清单
-     * - 不做最小请求验证（避免网络往返拖慢向导），创建成功即提示用户可直接试聊
-     * 
-     * @param points 已解析校验通过的接入点参数列表
-     * @param callback 回调接口
-     * @param nameSuffix 名称后缀（普通模式=""，救援模式="-备用"）
-     **/
-    private void createCustomAccessPoints(List<JSONObject> points, ChatCallback callback, String nameSuffix)
-    {
-      try
-      {
-        if (toolManager.getTool("addModelAccessPoint") == null)
-        {
-          callback.onError("❌ 工具未找到：addModelAccessPoint");
-          return;
-        }
-        
-        final int existingCount = modelAccessPointManager.getAllAccessPoints().size();
-        final int total = points.size();
-        
-        final List<String> succeeded = new ArrayList<String>();
-        final List<String> failed = new ArrayList<String>();
-        
-        // 逐个创建：用索引记录进度，串行执行避免并发写持久化文件
-        createCustomAccessPointAt(points, 0, nameSuffix, succeeded, failed, new Runnable()
-        {
-          @Override
-          public void run()
-          {
-            StringBuilder message = new StringBuilder();
-            if (failed.isEmpty())
-            {
-              message.append("✅ **自定义接入点配置成功！**\n\n");
-              message.append("🔹 已添加 ").append(succeeded.size()).append(" 个接入点：\n");
-              for (String name : succeeded)
-              {
-                message.append("  - ").append(name).append("\n");
-              }
-              message.append("\n📊 当前共有 ").append(existingCount + succeeded.size()).append(" 个接入点\n");
-              message.append("🚀 现在可以直接开始对话了！若某个接入点连不上，可在接入点列表中切换到其他可用项。");
-            }
-            else
-            {
-              message.append("⚠️ **部分配置成功**\n\n");
-              if (!succeeded.isEmpty())
-              {
-                message.append("✅ 已成功 ").append(succeeded.size()).append(" 个：\n");
-                for (String name : succeeded)
-                {
-                  message.append("  - ").append(name).append("\n");
-                }
-              }
-              message.append("❌ 失败 ").append(failed.size()).append(" 个：\n");
-              for (String item : failed)
-              {
-                message.append("  - ").append(item).append("\n");
-              }
-              message.append("\n仍可正常使用已创建的接入点。");
-            }
-            callback.onResponse(message.toString());
-          }
-        });
-        
-        callback.onResponse("🔧 正在配置 " + total + " 个自定义接入点，请稍候...");
-      }
-      catch (Exception e)
-      {
-        callback.onError("❌ 处理过程中发生错误：" + e.getMessage());
-      }
-    }
-
-    /**
-     * 🔥 #940963136747 递归创建自定义接入点（串行，逐个等待上一个完成）
-     * 
-     * @param points 接入点参数列表
-     * @param index 当前处理到的索引
-     * @param nameSuffix 名称后缀
-     * @param succeeded 成功名单
-     * @param failed 失败名单
-     * @param onComplete 全部处理完毕后的回调
-     **/
-    private void createCustomAccessPointAt(final List<JSONObject> points, final int index, final String nameSuffix,
-                                           final List<String> succeeded, final List<String> failed, final Runnable onComplete)
-    {
-      if (index >= points.size())
-      {
-        onComplete.run();
-        return;
-      }
-      
-      JSONObject point = points.get(index);
-      JSONObject args = new JSONObject();
-      try
-      {
-        args.put("apiKey", point.getString("apiKey"));
-        args.put("name", point.getString("name") + nameSuffix);
-        args.put("baseUrl", point.getString("baseUrl"));
-        args.put("endpoint", point.getString("endpoint"));
-        args.put("modelName", point.getString("modelName"));
-      }
-      catch (JSONException e)
-      {
-        failed.add(point.optString("name", "第 " + (index + 1) + " 项") + "（参数处理失败：" + e.getMessage() + "）");
-        createCustomAccessPointAt(points, index + 1, nameSuffix, succeeded, failed, onComplete);
-        return;
-      }
-      
-      final String displayName = point.optString("name", "第 " + (index + 1) + " 项");
-      
-      // 🔥 #4790 修改：添加 null 作为 toolCallId 参数（因为这不是来自 LLM 的工具调用）
-      toolManager.executeToolAsync(null, "addModelAccessPoint", args, new Tool.OnResultCallback()
-      {
-        @Override
-        public void onResult(JSONObject result)
-        {
-          succeeded.add(displayName + nameSuffix);
-          createCustomAccessPointAt(points, index + 1, nameSuffix, succeeded, failed, onComplete);
-        }
-
-        @Override
-        public void onError(Exception e)
-        {
-          failed.add(displayName + nameSuffix + "（" + e.getMessage() + "）");
-          createCustomAccessPointAt(points, index + 1, nameSuffix, succeeded, failed, onComplete);
-        }
-      });
-    }
-
-    /**
      * 处理空状态下的聊天输入逻辑（MVP）
      * @param userInput 用户输入
      * @param callback 回调接口，用于返回 AI 回复或执行工具调用
@@ -428,10 +295,30 @@ public class GuideManager {
                 callback.onResponse(
                     "👋 你好！我是未来姐姐～\n\n" +
                     "目前尚未配置任何模型接入点。\n\n" +
-                    "💡 请按以下步骤操作：\n" +
+                    "💡 **两种配置方式，任选其一**：\n\n" +
+                    "**① 纯文本 API Key**（自动配置百炼 / CodePlan / MiniMax 三个接入点）\n" +
                     "1️⃣ 访问阿里云百炼 (https://dashscope.aliyun.com) 或 MiniMax 平台\n" +
                     "2️⃣ 申请 API Key\n" +
                     "3️⃣ 将密钥（长度 20-64 字符）粘贴到这里\n\n" +
+                    "**② JSON 配置**（接入任意第三方 API 或你自己的算力中枢）\n" +
+                    "```json\n" +
+                    "{\n" +
+                    "  \"apiKey\": \"sk-你的密钥\",\n" +
+                    "  \"baseUrl\": \"https://api.deepseek.com\",\n" +
+                    "  \"endpoint\": \"/chat/completions\",\n" +
+                    "  \"modelName\": \"deepseek-chat\"\n" +
+                    "}\n" +
+                    "```\n" +
+                    "多个接入点时用 accessPoints 数组：\n" +
+                    "```json\n" +
+                    "{\n" +
+                    "  \"accessPoints\": [\n" +
+                    "    { \"name\": \"我的算力中枢\", \"apiKey\": \"sk-xxx\", \"baseUrl\": \"https://my-hub.example.com\", \"endpoint\": \"/v1/chat/completions\", \"modelName\": \"qwen3.7-plus\" }\n" +
+                    "  ]\n" +
+                    "}\n" +
+                    "```\n\n" +
+                    "📌 必填字段：apiKey / baseUrl / endpoint / modelName\n" +
+                    "📌 可选字段：name（不填则用 modelName）\n\n" +
                     "📝 您输入的密钥长度：" + actualLength + " 字符 (有效范围：20-64)\n\n" +
                     "准备好了吗？✨"
                 );
@@ -532,6 +419,138 @@ public class GuideManager {
                 "请重新输入正确的 API Key："
             );
         }
+    }
+
+    /**
+     * 🔥 #940963136747 创建自定义接入点（JSON 配置路径）
+     * 
+     * 复用现有的 addModelAccessPoint 工具链路，不另写一套创建逻辑。
+     * - JSON 模式下不追加百炼/CodePlan/MiniMax 三个默认接入点（用户指定什么就用什么）
+     * - 单项失败不中断其余项，最后输出成功/失败清单
+     * - 不做最小请求验证（避免网络往返拖慢向导），创建成功即提示用户可直接试聊
+     * 
+     * @param points 已解析校验通过的接入点参数列表
+     * @param callback 回调接口
+     * @param nameSuffix 名称后缀（普通模式=""，救援模式="-备用"）
+     **/
+    private void createCustomAccessPoints(List<JSONObject> points, ChatCallback callback, String nameSuffix)
+    {
+      try
+      {
+        if (toolManager.getTool("addModelAccessPoint") == null)
+        {
+          callback.onError("❌ 工具未找到：addModelAccessPoint");
+          return;
+        }
+        
+        final int existingCount = modelAccessPointManager.getAllAccessPoints().size();
+        
+        final List<String> succeeded = new ArrayList<String>();
+        final List<String> failed = new ArrayList<String>();
+        
+        // 逐个创建：串行执行，避免并发写持久化文件
+        createCustomAccessPointAt(points, 0, nameSuffix, succeeded, failed, new Runnable()
+        {
+          @Override
+          public void run()
+          {
+            StringBuilder message = new StringBuilder();
+            if (failed.isEmpty())
+            {
+              message.append("✅ **自定义接入点配置成功！**\n\n");
+              message.append("🔹 已添加 ").append(succeeded.size()).append(" 个接入点：\n");
+              for (String name : succeeded)
+              {
+                message.append("  - ").append(name).append("\n");
+              }
+              message.append("\n📊 当前共有 ").append(existingCount + succeeded.size()).append(" 个接入点\n");
+              message.append("🚀 现在可以直接开始对话了！若某个接入点连不上，可在接入点列表中切换到其他可用项。");
+            }
+            else
+            {
+              message.append("⚠️ **部分配置成功**\n\n");
+              if (!succeeded.isEmpty())
+              {
+                message.append("✅ 已成功 ").append(succeeded.size()).append(" 个：\n");
+                for (String name : succeeded)
+                {
+                  message.append("  - ").append(name).append("\n");
+                }
+              }
+              message.append("❌ 失败 ").append(failed.size()).append(" 个：\n");
+              for (String item : failed)
+              {
+                message.append("  - ").append(item).append("\n");
+              }
+              message.append("\n仍可正常使用已创建的接入点。");
+            }
+            callback.onResponse(message.toString());
+          }
+        });
+        
+        callback.onResponse("🔧 正在配置 " + points.size() + " 个自定义接入点，请稍候...");
+      }
+      catch (Exception e)
+      {
+        callback.onError("❌ 处理过程中发生错误：" + e.getMessage());
+      }
+    }
+
+    /**
+     * 🔥 #940963136747 递归创建自定义接入点（串行，逐个等待上一个完成）
+     * 
+     * @param points 接入点参数列表
+     * @param index 当前处理到的索引
+     * @param nameSuffix 名称后缀
+     * @param succeeded 成功名单
+     * @param failed 失败名单
+     * @param onComplete 全部处理完毕后的回调
+     **/
+    private void createCustomAccessPointAt(final List<JSONObject> points, final int index, final String nameSuffix,
+                                           final List<String> succeeded, final List<String> failed, final Runnable onComplete)
+    {
+      if (index >= points.size())
+      {
+        onComplete.run();
+        return;
+      }
+      
+      JSONObject point = points.get(index);
+      JSONObject args = new JSONObject();
+      try
+      {
+        args.put("apiKey", point.getString("apiKey"));
+        args.put("name", point.getString("name") + nameSuffix);
+        args.put("baseUrl", point.getString("baseUrl"));
+        args.put("endpoint", point.getString("endpoint"));
+        args.put("modelName", point.getString("modelName"));
+      }
+      catch (JSONException e)
+      {
+        failed.add(point.optString("name", "第 " + (index + 1) + " 项") + "（参数处理失败：" + e.getMessage() + "）");
+        createCustomAccessPointAt(points, index + 1, nameSuffix, succeeded, failed, onComplete);
+        return;
+      }
+      
+      final String displayName = point.optString("name", "第 " + (index + 1) + " 项");
+      
+      // 🔥 #4790 修改：添加 null 作为 toolCallId 参数（因为这不是来自 LLM 的工具调用）
+      toolManager.executeToolAsync(null, "addModelAccessPoint", args, new Tool.OnResultCallback()
+      {
+        @Override
+        public void onResult(JSONObject result)
+        {
+          succeeded.add(displayName + nameSuffix);
+          createCustomAccessPointAt(points, index + 1, nameSuffix, succeeded, failed, onComplete);
+        }
+
+        @Override
+        public void onError(Exception e)
+        {
+          failed.add(displayName + nameSuffix + "（" + e.getMessage() + "）");
+          createCustomAccessPointAt(points, index + 1, nameSuffix, succeeded, failed, onComplete);
+        }
+      });
     }
 
     /**
