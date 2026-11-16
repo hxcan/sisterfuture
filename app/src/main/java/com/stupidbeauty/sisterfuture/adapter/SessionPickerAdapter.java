@@ -244,11 +244,14 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         row.subtitle.setText(preview.isEmpty() ? activity : preview + " · " + activity);
         row.pinIcon.setVisibility(summary.pinned ? View.VISIBLE : View.GONE);
         // Recycling resets this per row, so the highlight is applied on every bind.
-        row.itemView.setBackgroundColor(summary.id.equals(currentSessionId)
+        // Click events must be on the content view, not the container, because
+        // SwipeRevealContainer swallows touches in ACTION_DOWN to handle swipe gestures.
+        View contentView = row.container.getContentView();
+        contentView.setBackgroundColor(summary.id.equals(currentSessionId)
             ? 0x243F8CFF : Color.TRANSPARENT);
-        row.itemView.setContentDescription((summary.pinned ? "已置顶，" : "") + title + "，" + activity);
-        row.itemView.setOnClickListener(v -> listener.onSessionChosen(summary.id, title));
-        row.itemView.setOnLongClickListener(v -> {
+        contentView.setContentDescription((summary.pinned ? "已置顶，" : "") + title + "，" + activity);
+        contentView.setOnClickListener(v -> listener.onSessionChosen(summary.id, title));
+        contentView.setOnLongClickListener(v -> {
             listener.onSessionLongPressed(summary.id, summary);
             return true;
         });
@@ -330,7 +333,7 @@ public final class SessionPickerAdapter extends RecyclerView.Adapter<RecyclerVie
         final TextView title;
         final TextView subtitle;
         final ImageView pinIcon;
-        private final SwipeRevealContainer container;
+        final SwipeRevealContainer container;
 
         RowHolder(View itemView) {
             super(itemView);
