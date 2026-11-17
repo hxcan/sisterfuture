@@ -149,6 +149,18 @@ public class OssUploadTool implements Tool {
             + "1. 必传参数：localPath\n"
             + "2. 可选参数：objectKey、bucketName、accessKeyId、accessKeySecret、endpoint、publicRead\n"
             + "3. 凭证优先级：参数传入 > 工具备注\n"
-            + "4. 默认 objectKey：sisterfuture/<时间戳>_<原始文件名>";
+            + "4. 默认 objectKey：sisterfuture/<时间戳>_<原始文件名>\n"
+            + "5. 工具备注格式（写入 ossUploadFile 备注时必须严格遵守，否则凭证读不到）：\n"
+            + "必须是每行一个 key=value，用半角等号分隔，换行分隔。键名必须逐字为下列四个，不可缩写或改名：\n"
+            + "aliyun_oss_access_key_id=<AccessKey ID>\n"
+            + "aliyun_oss_access_key_secret=<AccessKey Secret>\n"
+            + "aliyun_oss_bucket_name=<Bucket 名称>\n"
+            + "aliyun_oss_endpoint=https://oss-<region>.aliyuncs.com\n"
+            + "禁止使用冒号、JSON 或其它分隔格式；值不可为空；键名大小写敏感。\n"
+            + "示例：\n"
+            + "aliyun_oss_access_key_id=LTAIxxxx\n"
+            + "aliyun_oss_access_key_secret=xxxx\n"
+            + "aliyun_oss_bucket_name=my-bucket\n"
+            + "aliyun_oss_endpoint=https://oss-cn-shanghai.aliyuncs.com";
     }
 }

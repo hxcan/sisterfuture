@@ -157,9 +157,34 @@ public class OssManager {
         config.endpoint = value(overrides, "endpoint", note, NOTE_KEY_ENDPOINT);
         if (config.accessKeyId == null || config.accessKeySecret == null
             || config.bucketName == null || config.endpoint == null) {
-            throw new IllegalArgumentException("OSS 凭证不完整，请先配置 ossUploadFile 工具备注");
+            throw new IllegalArgumentException(buildMissingCredentialsMessage(config));
         }
         return config;
+    }
+
+    /** Build an actionable error that also documents the required note format. */
+    private static String buildMissingCredentialsMessage(Config config) {
+        StringBuilder missing = new StringBuilder();
+        if (config.accessKeyId == null) missing.append("aliyun_oss_access_key_id");
+        if (config.accessKeySecret == null) {
+            if (missing.length() > 0) missing.append(", ");
+            missing.append("aliyun_oss_access_key_secret");
+        }
+        if (config.bucketName == null) {
+            if (missing.length() > 0) missing.append(", ");
+            missing.append("aliyun_oss_bucket_name");
+        }
+        if (config.endpoint == null) {
+            if (missing.length() > 0) missing.append(", ");
+            missing.append("aliyun_oss_endpoint");
+        }
+        return "OSS 凭证不完整，缺少：" + missing
+            + "。请在 ossUploadFile 工具备注中按下列格式填写"
+            + "（每行一个 key=value，用半角等号分隔，换行分隔，键名必须逐字一致，值不可为空）：\n"
+            + "aliyun_oss_access_key_id=<AccessKey ID>\n"
+            + "aliyun_oss_access_key_secret=<AccessKey Secret>\n"
+            + "aliyun_oss_bucket_name=<Bucket 名称>\n"
+            + "aliyun_oss_endpoint=https://oss-<region>.aliyuncs.com";
     }
 
     private static String value(JSONObject overrides, String argumentName, String note, String noteKey) {
