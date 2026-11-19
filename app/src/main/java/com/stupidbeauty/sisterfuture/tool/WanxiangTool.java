@@ -28,7 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 通义万相图像生成工具（阿里云百炼 Token Plan）
+ * 通义万相图像生成工具（阿里云百炼）
  *
  * 核心能力：
  * - 文生图（text-to-image）
@@ -43,19 +43,20 @@ import java.util.concurrent.TimeUnit;
  * @date 2026-07-31
  * @update 2026-09-19 增加多参考图支持（referenceImages 参数）
  * @update 2026-09-19 修复多参考图 API 调用格式（单 message + content 数组）
+ * @update 2026-11-19 端点参数化：端点与业务空间 ID 可从工具备注读取，默认走按量计费标准域名
  */
 public class WanxiangTool implements Tool {
     private static final String TAG = "WanxiangTool";
 
     /**
-     * 阿里云百炼 API 提交任务端点（Token Plan 异步）
+     * 阿里云百炼 API 提交任务端点（按量计费标准域名，异步）
      */
-    private static final String SUBMIT_ENDPOINT = "https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/image-generation/generation";
+    private static final String DEFAULT_SUBMIT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation/generation";
 
     /**
      * 阿里云百炼 API 轮询任务端点（Task ID 前缀）
      */
-    private static final String POLL_ENDPOINT_PREFIX = "https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1/tasks/";
+    private static final String DEFAULT_POLL_ENDPOINT_PREFIX = "https://dashscope.aliyuncs.com/api/v1/tasks/";
 
     /**
      * 默认模型：通义万相图生图
@@ -73,6 +74,21 @@ public class WanxiangTool implements Tool {
     private static final int MAX_REFERENCE_IMAGES = 4;
 
     private static final String NOTE_KEY_API_KEY = "dashscope_api_key";
+
+    /**
+     * 🆕 工具备注键：百炼 API 基础地址（含 /api/v1 前缀）
+     *
+     * 不同套餐类型对应不同的接入域名，工具不应把域名写死：
+     * - sk-sp- (Token Plan) → https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1
+     * - sk-ws- (业务空间版) → https://{workspaceId}.cn-beijing.maas.aliyuncs.com/api/v1
+     * - sk- (按量付费) → https://dashscope.aliyuncs.com/api/v1
+     */
+    private static final String NOTE_KEY_BASE_URL = "dashscope_base_url";
+
+    /**
+     * 🆕 工具备注键：业务空间 ID（配合 X-DashScope-WorkSpace 请求头）
+     */
+    private static final String NOTE_KEY_WORKSPACE_ID = "dashscope_workspace_id";
     private static final String NOTE_KEY_DEFAULT_MODEL = "wanxiang_default_model";
 
     private final Context context;
@@ -207,6 +223,8 @@ public class WanxiangTool implements Tool {
                 String modelOverride = arguments.optString("model", null);
 
                 String apiKey = arguments.optString("apiKey", null);
+                // 🆕 可选参数：业务空间 ID（调用时覆盖工具备注）
+                String workspaceIdOverride = arguments.optString("workspaceId", null);
                 if (apiKey == null || apiKey.trim().isEmpty()) {
                     apiKey = getApiKeyFromNote();
                     if (apiKey == null || apiKey.trim().isEmpty()) {
@@ -218,6 +236,31 @@ public class WanxiangTool implements Tool {
                     }
                 }
                 FileLogger.i(TAG, "[1/10] 获取 API Key 完成（掩码: " + maskApiKey(apiKey) + "）");
+
+                // 🆕 解析接入端点与业务空间：调用参数 > 工具备注 > 代码默认值
+                String submitEndpoint;
+                String pollEndpointPrefix;
+                String workspaceId = workspaceIdOverride;
+                if (workspaceId == null || workspaceId.trim().isEmpty()) {
+                    workspaceId = getValueFromNote(NOTE_KEY_WORKSPACE_ID);
+                }
+                String baseUrl = getValueFromNote(NOTE_KEY_BASE_URL);
+                if (baseUrl != null && !baseUrl.trim().isEmpty()) {
+                    String base = baseUrl.trim();
+                    while (base.endsWith("/")) {
+                        base = base.substring(0, base.length() - 1);
+                    }
+                    submitEndpoint = base + "/services/aigc/image-generation/generation";
+                    pollEndpointPrefix = base + "/tasks/";
+                    FileLogger.i(TAG, "  使用工具备注配置的 API 基础地址: " + base);
+                } else {
+                    submitEndpoint = DEFAULT_SUBMIT_ENDPOINT;
+                    pollEndpointPrefix = DEFAULT_POLL_ENDPOINT_PREFIX;
+                    FileLogger.i(TAG, "  使用默认 API 端点: " + submitEndpoint);
+                }
+                if (workspaceId != null && !workspaceId.trim().isEmpty()) {
+                    FileLogger.i(TAG, "  使用业务空间 ID: " + workspaceId.trim());
+                }
 
                 String modelName = modelOverride;
                 if (modelName == null || modelName.trim().isEmpty()) {
@@ -309,15 +352,20 @@ public class WanxiangTool implements Tool {
                 MediaType mediaType = MediaType.parse("application/json; charset=utf-8");
                 RequestBody body = RequestBody.create(mediaType, requestBody.toString());
 
-                Request request = new Request.Builder()
-                        .url(SUBMIT_ENDPOINT)
+                Request.Builder requestBuilder = new Request.Builder()
+                        .url(submitEndpoint)
                         .post(body)
                         .header("Content-Type", "application/json")
                         .header("Authorization", "Bearer " + apiKey)
                         .header("X-DashScope-Async", "enable")
-                        .build();
+                        ;
+                // 🆕 业务空间版 Key：带上 X-DashScope-WorkSpace 头（官方标注为可选）
+                if (workspaceId != null && !workspaceId.trim().isEmpty()) {
+                    requestBuilder.header("X-DashScope-WorkSpace", workspaceId.trim());
+                }
+                Request request = requestBuilder.build();
 
-                FileLogger.i(TAG, "[4/10] 提交异步任务到: " + SUBMIT_ENDPOINT);
+                FileLogger.i(TAG, "[4/10] 提交异步任务到: " + submitEndpoint);
 
                 String taskId;
                 long submitTime = System.currentTimeMillis();
@@ -341,7 +389,7 @@ public class WanxiangTool implements Tool {
 
                 FileLogger.i(TAG, "[5/10] 开始轮询任务状态");
 
-                String imageUrl = pollTaskResult(taskId, apiKey);
+                String imageUrl = pollTaskResult(taskId, apiKey, pollEndpointPrefix, workspaceId);
 
                 if (imageUrl == null) {
                     throw new IOException("任务未返回图片 URL");
@@ -429,18 +477,23 @@ public class WanxiangTool implements Tool {
     /**
      * 轮询任务结果
      */
-    private String pollTaskResult(String taskId, String apiKey) throws IOException, InterruptedException, JSONException {
-        String pollUrl = POLL_ENDPOINT_PREFIX + taskId;
+    private String pollTaskResult(String taskId, String apiKey, String pollEndpointPrefix, String workspaceId) throws IOException, InterruptedException, JSONException {
+        String pollUrl = pollEndpointPrefix + taskId;
         FileLogger.i(TAG, "  轮询端点: " + pollUrl);
 
         for (int attempt = 1; attempt <= POLL_MAX_ATTEMPTS; attempt++) {
             Thread.sleep(POLL_INTERVAL_MS);
 
-            Request pollRequest = new Request.Builder()
+            Request.Builder pollBuilder = new Request.Builder()
                     .url(pollUrl)
                     .get()
                     .header("Authorization", "Bearer " + apiKey)
-                    .build();
+                    ;
+            // 🆕 业务空间版 Key：带上 X-DashScope-WorkSpace 头
+            if (workspaceId != null && !workspaceId.trim().isEmpty()) {
+                pollBuilder.header("X-DashScope-WorkSpace", workspaceId.trim());
+            }
+            Request pollRequest = pollBuilder.build();
 
             try (Response response = getClient().newCall(pollRequest).execute()) {
                 ResponseBody respBody = response.body();
@@ -550,7 +603,15 @@ public class WanxiangTool implements Tool {
         return null;
     }
 
-    private String getModelFromNote() {
+    /**
+     * 🆕 从工具备注读取指定键的值（通用）
+     *
+     * 复用与 getApiKeyFromNote() 相同的行解析范式，只是把键名参数化。
+     *
+     * @param key 备注键名（不含等号）
+     * @return 去掉首尾空白后的值；未配置或为空时返回 null
+     */
+    private String getValueFromNote(String key) {
         String note = getNote(context);
         if (note == null || note.isEmpty()) {
             return null;
@@ -558,14 +619,18 @@ public class WanxiangTool implements Tool {
         String[] lines = note.split("\n");
         for (String line : lines) {
             line = line.trim();
-            if (line.startsWith(NOTE_KEY_DEFAULT_MODEL + "=")) {
-                String value = line.substring((NOTE_KEY_DEFAULT_MODEL + "=").length()).trim();
+            if (line.startsWith(key + "=")) {
+                String value = line.substring((key + "=").length()).trim();
                 if (!value.isEmpty()) {
                     return value;
                 }
             }
         }
         return null;
+    }
+
+    private String getModelFromNote() {
+        return getValueFromNote(NOTE_KEY_DEFAULT_MODEL);
     }
 
     private String downloadImageFromUrl(String imageUrl, File targetFile) throws IOException {
@@ -656,10 +721,10 @@ public class WanxiangTool implements Tool {
 
             if (code == 401 || code == 403) {
                 errorResult.put("error_type", "invalid_api_key");
-                errorResult.put("error", "API Key 无效或已过期（请检查 Token Plan 是否激活）: " + errorDetail);
+                errorResult.put("error", "API Key 无效、被拒绝或 IP 不在白名单内（请检查 Key 有效性、套餐类型与 API-Key 的 IP 访问限制）: " + errorDetail);
             } else if (code == 429) {
                 errorResult.put("error_type", "rate_limited");
-                errorResult.put("error", "触发限流（Token Plan 有额度限制），请稍后再试: " + errorDetail);
+                errorResult.put("error", "触发限流或额度限制，请稍后再试: " + errorDetail);
             } else if (code == 400) {
                 errorResult.put("error_type", "bad_request");
                 errorResult.put("error", "请求参数错误: " + errorDetail);
@@ -698,7 +763,7 @@ public class WanxiangTool implements Tool {
             + "   - 角色同框：王生参考图 + 姑娘参考图 + 场景参考图 一起传入\n"
             + "   - 角色一致性：同一角色多镜头时复用同一张标准形象图\n"
             + "   - 道具参考：角色参考图 + 道具参考图 + 场景参考图\n"
-            + "6. 与 generateImage 工具的差异：wanxiangImage 支持图生图和风格迁移，但需要主人已有 Token Plan 订阅\n"
+            + "6. 与 generateImage 工具的差异：wanxiangImage 支持图生图和风格迁移；需在工具备注中配置可用的百炼 API Key 与对应接入端点（dashscope_base_url）\n"
             + "7. 中文 prompt 友好，建议详细描述想要的风格、场景、变换效果\n"
             + "8. 返回的图片会自动下载到 /sdcard/Download/ 并扫描到系统相册\n"
             + "9. 注意：通义万相速度比 MiniMax 慢，n 建议不超过 2\n"
