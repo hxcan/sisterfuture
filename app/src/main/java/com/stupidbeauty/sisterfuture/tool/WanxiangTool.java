@@ -1,1 +1,2 @@
-placeholder-will-be-replaced
+package com.stupidbeauty.sisterfuture.tool;
+// probe
