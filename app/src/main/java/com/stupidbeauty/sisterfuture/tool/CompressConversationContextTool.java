@@ -63,14 +63,19 @@ public final class CompressConversationContextTool implements Tool {
                         try {
                             timings.phase("commit");
                             context.installCompression(candidate);
-                            result = new JSONObject().put("status", "success")
+                            result = new JSONObject()
+                                .put("status", candidate.optString("status", "success"))
                                 .put("coveredMessages", candidate.getInt("coveredCount"))
                                 .put("summaryCharacters", candidate.getString("summary").length())
                                 .put("summaryRequests", candidate.getInt("summaryRequests"))
                                 .put("sourceCharacters", candidate.getLong("sourceCharacters"))
+                                .put("failedSegments", candidate.optJSONArray("failedSegments"))
+                                .put("succeededSegments", candidate.optJSONArray("succeededSegments"))
                                 .put("model", snapshot.getModelName())
                                 .put("timings", timings.finish())
-                                .put("message", "已压缩后续请求上下文，原始历史完整保留。");
+                                .put("message", "partial".equals(candidate.optString("status"))
+                                    ? "部分压缩已提交：成功段落已写入上下文，失败段落保持原样，可再次调用继续压缩。"
+                                    : "已压缩后续请求上下文，原始历史完整保留。");
                         } catch (Exception e) {
                             context.endCompression(); reportFailure(callback, e, timings); return;
                         }
@@ -102,15 +107,21 @@ public final class CompressConversationContextTool implements Tool {
             throw new IllegalArgumentException("没有可压缩的更早完整对话；保留最近两轮，原上下文未改变");
         List<JSONObject> prefix = new ArrayList<>(archive.subList(0, boundary));
         List<JSONObject> source = RequestContext.project(prefix, previous);
-        List<String> chunks = ChunkedSummary.plan(source, ChunkedSummary.CHUNK_CHARACTERS);
+        List<ChunkedSummary.Chunk> planned = ChunkedSummary.planWithBoundaries(source, ChunkedSummary.CHUNK_CHARACTERS);
+        List<String> chunks = new ArrayList<>();
+        int[] endMessageIndexBySegment = new int[planned.size()];
         long sourceCharacters = 0;
-        for (String chunk : chunks) sourceCharacters += chunk.length();
+        for (int i = 0; i < planned.size(); i++) {
+            chunks.add(planned.get(i).text);
+            endMessageIndexBySegment[i] = planned.get(i).endMessageIndex;
+            sourceCharacters += planned.get(i).text.length();
+        }
         JSONObject usage = new JSONObject();
         java.util.concurrent.atomic.AtomicInteger requests = new java.util.concurrent.atomic.AtomicInteger();
         final String operation = Long.toHexString(System.nanoTime());
         final Map<Integer, Integer> attempts = new HashMap<>();
         timings.phase("summarizing");
-        String summary = ChunkedSummary.run(chunks, (previousSummary, fragment, index, total) ->
+        ChunkedSummary.Result greedy = ChunkedSummary.runGreedy(chunks, (previousSummary, fragment, index, total) ->
         {
             requests.incrementAndGet();
             int attempt = attempts.getOrDefault(index, 0) + 1;
@@ -131,16 +142,41 @@ public final class CompressConversationContextTool implements Tool {
                 timings.requests.put(measurement);
             }
         }, event -> com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
-            "[CONTEXT_COMPRESSION] operation=" + operation + " " + event));
+            "[CONTEXT_COMPRESSION] operation=" + operation + " " + event),
+            endMessageIndexBySegment);
         timings.phase("validation");
-        if (summary.length() >= sourceCharacters)
-            throw new java.io.IOException("摘要未缩短，未应用");
-        JSONObject state = new JSONObject().put("summary", summary).put("coveredCount", boundary)
-            .put("fingerprint", RequestContext.fingerprint(archive, boundary))
+        String summary = greedy.summary;
+        if (summary == null || summary.isEmpty())
+            throw new java.io.IOException("摘要未生成，未应用");
+        int coveredCount = resolveCoveredCount(greedy, endMessageIndexBySegment);
+        if (coveredCount <= alreadyCovered)
+            throw new java.io.IOException("没有可安全提交的完整消息边界，未应用");
+        JSONObject state = new JSONObject().put("summary", summary).put("coveredCount", coveredCount)
+            .put("fingerprint", RequestContext.fingerprint(archive, coveredCount))
             .put("model", model.getModelName()).put("createdAt", System.currentTimeMillis())
-            .put("summaryRequests", requests.get()).put("sourceCharacters", sourceCharacters);
+            .put("summaryRequests", requests.get()).put("sourceCharacters", sourceCharacters)
+            .put("status", greedy.isComplete() ? "success" : "partial")
+            .put("failedSegments", new JSONArray(greedy.failedSegments))
+            .put("succeededSegments", new JSONArray(greedy.succeededSegments));
         if (usage.length() > 0) state.put("usage", usage);
         return state;
+    }
+
+    /**
+     * Greedy boundary resolution: only messages that are fully covered by successful segments may be replaced.
+     * A failed segment blocks every message from its own start onwards, so the safe boundary is the last
+     * message boundary that was reached before the first failed segment.
+     */
+    private static int resolveCoveredCount(ChunkedSummary.Result greedy, int[] endMessageIndexBySegment) {
+        int firstFailed = greedy.failedSegments.isEmpty() ? Integer.MAX_VALUE : greedy.failedSegments.get(0);
+        int safe = -1;
+        for (int segment = 1; segment < endMessageIndexBySegment.length + 1; segment++) {
+            if (segment >= firstFailed) break;
+            if (!greedy.succeededSegments.contains(segment)) break;
+            int end = endMessageIndexBySegment[segment - 1];
+            if (end > safe) safe = end;
+        }
+        return safe;
     }
 
     private static String requestSummary(ModelAccessPoint model, String previousSummary, String fragment,
