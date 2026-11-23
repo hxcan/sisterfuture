@@ -2356,6 +2356,9 @@ imageUrl = url;
     modelAccessPointManager = new ModelAccessPointManager(this);
     memoryManager = new MemoryManager(this);
     repeatDetectionManager = new RepeatDetectionManager();
+
+    // #954151647060 启动时按体积阈值自动触发一次上下文压缩（失败只记日志，不影响启动）
+    AutoCompressionStartup.run(contextManager, modelAccessPointManager);
   }
 
   private void initTools()
