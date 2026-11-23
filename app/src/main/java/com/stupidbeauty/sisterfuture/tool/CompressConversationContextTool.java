@@ -142,7 +142,8 @@ public final class CompressConversationContextTool implements Tool {
                 timings.requests.put(measurement);
             }
         }, event -> com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
-            "[CONTEXT_COMPRESSION] operation=" + operation + " " + event));
+            "[CONTEXT_COMPRESSION] operation=" + operation + " " + event),
+            endMessageIndexBySegment);
         timings.phase("validation");
         String summary = greedy.summary;
         if (summary == null || summary.isEmpty())
