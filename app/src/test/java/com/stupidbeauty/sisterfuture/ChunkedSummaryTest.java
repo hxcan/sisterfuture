@@ -139,7 +139,7 @@ public class ChunkedSummaryTest {
     }
     @Test public void planWithBoundariesMarksFragmentsSplitInsideMessageAsUnknown() throws Exception {
         StringBuilder value = new StringBuilder();
-        for (int i=0;i<5000;i++) value.append("中文abc");
+        for (int i=0;i<20000;i++) value.append("中文abc");
         List<JSONObject> messages = Arrays.asList(
             new JSONObject().put("role","user").put("content",value.toString()));
         List<ChunkedSummary.Chunk> chunks =
