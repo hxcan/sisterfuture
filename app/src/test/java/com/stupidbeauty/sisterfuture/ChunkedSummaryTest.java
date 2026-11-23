@@ -35,20 +35,17 @@ public class ChunkedSummaryTest {
         assertEquals("final",result);
         assertEquals(3,calls.get());
     }
-    @Test public void persistentOversizeStopsAfterThreeAttemptsWithSpecificError() throws Exception {
+    @Test public void persistentOversizeMarksSegmentFailedButGreedyRunStillReturns() throws Exception {
         AtomicInteger calls=new AtomicInteger();
-        try {
-            ChunkedSummary.run(Arrays.asList("first","never processed"),(previous,fragment,index,total)->{
+        ChunkedSummary.Result result = ChunkedSummary.runGreedy(Arrays.asList("first","second"),
+            (previous,fragment,index,total)->{
                 calls.incrementAndGet();
                 return String.join("",Collections.nCopies(12001,"x"));
-            });
-            fail();
-        } catch(IllegalArgumentException expected) {
-            assertTrue(expected.getMessage().contains("1/2"));
-            assertTrue(expected.getMessage().contains("12001"));
-            assertTrue(expected.getMessage().contains("过长"));
-        }
+            }, event -> { }, null);
         assertEquals(3,calls.get());
+        assertFalse(result.isComplete());
+        assertEquals(Arrays.asList(1), result.failedSegments);
+        assertTrue(result.succeededSegments.isEmpty());
     }
     @Test public void hugeMessageIsSplitWithoutLosingUnicodeOrCharacters() throws Exception {
         StringBuilder value = new StringBuilder();
@@ -88,22 +85,65 @@ public class ChunkedSummaryTest {
         assertEquals("ABC",result);
         assertEquals(Arrays.asList("A","B","C"),seen);
     }
-    @Test public void middleFailureDoesNotReturnPartialSummaryOrContinue() throws Exception {
+    @Test public void greedyModeKeepsPartialSummaryAndContinuesAfterMiddleFailure() throws Exception {
         AtomicInteger calls=new AtomicInteger();
-        try {
-            ChunkedSummary.run(Arrays.asList("A","B","C"),(previous,fragment,index,total)->{
+        ChunkedSummary.Result result = ChunkedSummary.runGreedy(Arrays.asList("A","B","C"),
+            (previous,fragment,index,total)->{
                 calls.incrementAndGet();
                 if(index==2) throw new java.io.IOException("failed");
-                return "partial";
-            });
-            fail("No result should be returned");
-        } catch(java.io.IOException expected) { }
-        assertEquals(2,calls.get());
+                return previous+fragment;
+            }, event -> { }, null);
+        assertEquals(3,calls.get());
+        assertEquals("AC",result.summary);
+        assertEquals(Arrays.asList(1,3),result.succeededSegments);
+        assertEquals(Arrays.asList(2),result.failedSegments);
+        assertFalse(result.isComplete());
     }
-    @Test public void invalidIntermediateSummaryStopsTheOperation() throws Exception {
-        try {
-            ChunkedSummary.run(Arrays.asList("A","B"),(previous,fragment,index,total)->" ");
-            fail();
-        } catch(IllegalArgumentException expected) { }
+    @Test public void greedyModeReportsCompleteWhenEverySegmentSucceeds() throws Exception {
+        ChunkedSummary.Result result = ChunkedSummary.runGreedy(Arrays.asList("A","B"),
+            (previous,fragment,index,total)-> previous+fragment, event -> { }, null);
+        assertTrue(result.isComplete());
+        assertTrue(result.failedSegments.isEmpty());
+        assertEquals(Arrays.asList(1,2),result.succeededSegments);
+        assertEquals("AB",result.summary);
+    }
+    @Test public void greedyModeReportsEverySegmentFailedWhenNothingSucceeds() throws Exception {
+        ChunkedSummary.Result result = ChunkedSummary.runGreedy(Arrays.asList("A","B"),
+            (previous,fragment,index,total)-> { throw new java.io.IOException("failed"); }, event -> { }, null);
+        assertFalse(result.isComplete());
+        assertEquals(Arrays.asList(1,2),result.failedSegments);
+        assertTrue(result.succeededSegments.isEmpty());
+        assertEquals("",result.summary);
+    }
+    @Test public void greedyModeKeepsFirstSegmentWhenSecondFails() throws Exception {
+        ChunkedSummary.Result result = ChunkedSummary.runGreedy(Arrays.asList("A","B","C"),
+            (previous,fragment,index,total)->{
+                if(index==2) throw new java.io.IOException("failed");
+                return previous+fragment;
+            }, event -> { }, null);
+        assertEquals("AC",result.summary);
+        assertEquals(Arrays.asList(2),result.failedSegments);
+    }
+    @Test public void planWithBoundariesReportsMessageIndexForCompleteFragments() throws Exception {
+        List<JSONObject> messages = Arrays.asList(
+            new JSONObject().put("role","user").put("content","first"),
+            new JSONObject().put("role","assistant").put("content","reply"),
+            new JSONObject().put("role","user").put("content","second"));
+        List<ChunkedSummary.Chunk> chunks =
+            ChunkedSummary.planWithBoundaries(messages, 100000);
+        assertEquals(1,chunks.size());
+        assertEquals(3,chunks.get(0).endMessageIndex);
+    }
+    @Test public void planWithBoundariesMarksFragmentsSplitInsideMessageAsUnknown() throws Exception {
+        StringBuilder value = new StringBuilder();
+        for (int i=0;i<5000;i++) value.append("中文abc");
+        List<JSONObject> messages = Arrays.asList(
+            new JSONObject().put("role","user").put("content",value.toString()));
+        List<ChunkedSummary.Chunk> chunks =
+            ChunkedSummary.planWithBoundaries(messages, 48000);
+        assertTrue(chunks.size() > 1);
+        for (ChunkedSummary.Chunk chunk : chunks) {
+            assertEquals(-1,chunk.endMessageIndex);
+        }
     }
 }
