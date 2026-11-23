@@ -3,11 +3,35 @@ package com.stupidbeauty.sisterfuture;
 import java.util.*;
 import org.json.*;
 
-/** Sequential rolling summary; nothing is persisted until the entire operation succeeds. */
+/** Sequential rolling summary. Greedy mode keeps every successfully summarised segment instead of discarding all work when one segment fails. */
 public final class ChunkedSummary {
     public static final int CHUNK_CHARACTERS = 48000;
     private ChunkedSummary() { }
     public interface Summarizer { String summarize(String previous, String fragment, int index, int total) throws Exception; }
+
+    /** One planned fragment together with the number of archive messages it fully covers. */
+    public static final class Chunk {
+        public final String text;
+        /** Exclusive message index; -1 when the fragment does not end on a message boundary. */
+        public final int endMessageIndex;
+        Chunk(String text, int endMessageIndex) { this.text = text; this.endMessageIndex = endMessageIndex; }
+    }
+
+    /** Outcome of a greedy run: the summary built from the segments that did succeed. */
+    public static final class Result {
+        public final String summary;
+        public final List<Integer> succeededSegments;
+        public final List<Integer> failedSegments;
+        /** For every segment (1-based) the exclusive archive message index it fully covers, -1 if unknown. */
+        public final int[] endMessageIndexBySegment;
+        Result(String summary, List<Integer> succeededSegments, List<Integer> failedSegments, int[] endMessageIndexBySegment) {
+            this.summary = summary;
+            this.succeededSegments = Collections.unmodifiableList(succeededSegments);
+            this.failedSegments = Collections.unmodifiableList(failedSegments);
+            this.endMessageIndexBySegment = endMessageIndexBySegment;
+        }
+        public boolean isComplete() { return failedSegments.isEmpty(); }
+    }
 
     public static String run(List<String> chunks, Summarizer summarizer) throws Exception {
         return run(chunks, summarizer, event -> { });
@@ -15,9 +39,23 @@ public final class ChunkedSummary {
 
     public static String run(List<String> chunks, Summarizer summarizer,
                              java.util.function.Consumer<String> diagnostic) throws Exception {
+        return runGreedy(chunks, summarizer, diagnostic, null).summary;
+    }
+
+    /**
+     * Greedy variant: a failing segment no longer aborts the run. The summary collected so far is kept,
+     * the failed segment is recorded and the next segment continues from the last successful summary.
+     * The caller decides what to persist.
+     */
+    public static Result runGreedy(List<String> chunks, Summarizer summarizer,
+                                   java.util.function.Consumer<String> diagnostic,
+                                   int[] endMessageIndexBySegment) throws Exception {
         String summary = "";
+        List<Integer> succeeded = new ArrayList<>();
+        List<Integer> failed = new ArrayList<>();
         for (int i = 0; i < chunks.size(); i++) {
             String oversized = null;
+            boolean segmentOk = false;
             for (int attempt = 1; attempt <= 3; attempt++) {
                 String label = "segment=" + (i + 1) + "/" + chunks.size() + " attempt=" + attempt;
                 diagnostic.accept(label + " phase=start mode=" + (oversized == null ? "summarize" : "refine")
@@ -30,35 +68,55 @@ public final class ChunkedSummary {
                         : summarizer.summarize("", "请精简以下累计摘要，保留关键决定、约束、待办和不确定性，"
                             + "不要添加事实。仅输出精简后的完整累计摘要，目标1500字以内：\n" + oversized, i + 1, chunks.size());
                 } catch (Exception e) {
-                    diagnostic.accept(label + " phase=failed reason=request_error errorType=" + e.getClass().getSimpleName());
-                    throw new java.io.IOException("摘要第 " + (i + 1) + "/" + chunks.size()
-                        + " 段请求失败（" + e.getClass().getSimpleName() + "）；未应用任何压缩结果", e);
+                    diagnostic.accept(label + " phase=failed reason=request_error errorType=" + e.getClass().getSimpleName()
+                        + " action=skip_segment");
+                    failed.add(i + 1);
+                    break;
                 }
                 next = next == null ? "" : next.trim();
                 String reason = next.isEmpty() ? "empty" : next.length() > RequestContext.MAX_SUMMARY_CHARS ? "too_long" : "ok";
                 diagnostic.accept(label + " phase=result reason=" + reason + " summaryChars=" + next.length()
                     + " elapsedMs=" + ((System.nanoTime() - start) / 1000000));
-                if ("ok".equals(reason)) { summary = next; break; }
-                if (attempt == 3) throw new IllegalArgumentException("摘要第 " + (i + 1) + "/" + chunks.size()
-                    + " 段在3次尝试后仍" + (next.isEmpty() ? "为空" : "过长（" + next.length() + "字符，上限"
-                    + RequestContext.MAX_SUMMARY_CHARS + "）") + "；未应用任何压缩结果");
+                if ("ok".equals(reason)) { summary = next; segmentOk = true; break; }
+                if (attempt == 3) {
+                    diagnostic.accept(label + " phase=abandoned reason=" + reason + " action=skip_segment");
+                    failed.add(i + 1);
+                    break;
+                }
                 if (!next.isEmpty()) oversized = next;
             }
+            if (segmentOk) succeeded.add(i + 1);
         }
-        return summary;
+        return new Result(summary, succeeded, failed, endMessageIndexBySegment);
     }
 
     /** Keep user turns/tool batches together when they fit; oversized groups are losslessly split. */
     public static List<String> plan(List<JSONObject> messages, int limit) {
+        List<String> chunks = new ArrayList<>();
+        for (Chunk chunk : planWithBoundaries(messages, limit)) chunks.add(chunk.text);
+        return chunks;
+    }
+
+    /**
+     * Same planning as {@link #plan} but each fragment also reports the exclusive archive message index it
+     * fully covers, so a greedy run can persist only the part that was summarised successfully.
+     * -1 means the fragment ends inside a message and therefore cannot be used as a compression boundary.
+     */
+    public static List<Chunk> planWithBoundaries(List<JSONObject> messages, int limit) {
         if (limit < 2) throw new IllegalArgumentException("Chunk limit too small");
         List<String> groups = new ArrayList<>();
+        List<Integer> groupEnds = new ArrayList<>();
         StringBuilder group = new StringBuilder();
+        int groupEndMessage = -1;
         Set<String> pending = new HashSet<>();
-        for (JSONObject message : messages) {
+        for (int index = 0; index < messages.size(); index++) {
+            JSONObject message = messages.get(index);
             if ("user".equals(message.optString("role")) && pending.isEmpty() && group.length() > 0) {
-                groups.add(group.toString()); group.setLength(0);
+                groups.add(group.toString()); groupEnds.add(groupEndMessage);
+                group.setLength(0); groupEndMessage = -1;
             }
             group.append(message.toString()).append('\n');
+            groupEndMessage = index + 1;
             JSONArray calls = message.optJSONArray("tool_calls");
             if (calls != null) for (int i = 0; i < calls.length(); i++) {
                 JSONObject call = calls.optJSONObject(i);
@@ -66,22 +124,25 @@ public final class ChunkedSummary {
             }
             if ("tool".equals(message.optString("role"))) pending.remove(message.optString("tool_call_id"));
         }
-        if (group.length() > 0) groups.add(group.toString());
-        List<String> chunks = new ArrayList<>();
+        if (group.length() > 0) { groups.add(group.toString()); groupEnds.add(groupEndMessage); }
+        List<Chunk> chunks = new ArrayList<>();
         StringBuilder batch = new StringBuilder();
-        for (String value : groups) {
+        int batchEnd = -1;
+        for (int g = 0; g < groups.size(); g++) {
+            String value = groups.get(g);
+            int end = groupEnds.get(g);
             if (batch.length() + value.length() > limit && batch.length() > 0) {
-                chunks.add(batch.toString()); batch.setLength(0);
+                chunks.add(new Chunk(batch.toString(), batchEnd)); batch.setLength(0); batchEnd = -1;
             }
-            if (value.length() <= limit) { batch.append(value); continue; }
+            if (value.length() <= limit) { batch.append(value); batchEnd = end; continue; }
             for (int offset = 0; offset < value.length();) {
-                int end = Math.min(value.length(), offset + limit);
-                if (end < value.length() && Character.isHighSurrogate(value.charAt(end - 1))
-                    && Character.isLowSurrogate(value.charAt(end))) end--;
-                chunks.add(value.substring(offset, end)); offset = end;
+                int stop = Math.min(value.length(), offset + limit);
+                if (stop < value.length() && Character.isHighSurrogate(value.charAt(stop - 1))
+                    && Character.isLowSurrogate(value.charAt(stop))) stop--;
+                chunks.add(new Chunk(value.substring(offset, stop), -1)); offset = stop;
             }
         }
-        if (batch.length() > 0) chunks.add(batch.toString());
+        if (batch.length() > 0) chunks.add(new Chunk(batch.toString(), batchEnd));
         return chunks;
     }
 }
