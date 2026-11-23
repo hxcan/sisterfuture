@@ -40,12 +40,15 @@ public class ChunkedSummaryTest {
         ChunkedSummary.Result result = ChunkedSummary.runGreedy(Arrays.asList("first","second"),
             (previous,fragment,index,total)->{
                 calls.incrementAndGet();
-                return String.join("",Collections.nCopies(12001,"x"));
+                if(index==1) return String.join("",Collections.nCopies(12001,"x"));
+                return "second segment summary";
             }, event -> { }, null);
-        assertEquals(3,calls.get());
+        assertEquals(4,calls.get());
         assertFalse(result.isComplete());
         assertEquals(Arrays.asList(1), result.failedSegments);
-        assertTrue(result.succeededSegments.isEmpty());
+        assertEquals(Arrays.asList(2), result.succeededSegments);
+        assertEquals("second segment summary", result.summary);
+        assertFalse(result.succeededSegments.isEmpty());
     }
     @Test public void hugeMessageIsSplitWithoutLosingUnicodeOrCharacters() throws Exception {
         StringBuilder value = new StringBuilder();
