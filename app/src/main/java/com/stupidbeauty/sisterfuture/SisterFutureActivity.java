@@ -996,6 +996,16 @@ imageUrl = url;
       scrollToBottom();
       ttsSayReply("上下文超长，自动缩短后重试");
 
+      // #954854031072 已有压缩在进行中 → 告知主人「正在压缩」，不重复发起（避免 beginCompression 抛异常）
+      if (contextManager.isCompressionInProgress())
+      {
+        FileLogger.i(TAG, "🗜️ [OVERLONG_COMPRESS] 已有压缩在进行中，本次不再重复发起");
+        messageAdapter.addMessage(new MessageItem("🗜️ 上下文正在压缩中，请稍候…", MessageType.AI));
+        scrollToBottom();
+        Toast.makeText(SisterFutureActivity.this, "上下文正在压缩中，请稍候…", Toast.LENGTH_SHORT).show();
+        return;
+      }
+
       // #954854031072 上下文超长 → 先尝试自动压缩一次，压缩失败再回退到减少轮次
       if (contextCompressionRetryCount < MAX_CONTEXT_COMPRESSION_RETRIES && isRetry)
       {
