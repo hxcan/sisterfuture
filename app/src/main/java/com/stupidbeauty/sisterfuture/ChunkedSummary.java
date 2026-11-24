@@ -22,15 +22,29 @@ public final class ChunkedSummary {
         public final String summary;
         public final List<Integer> succeededSegments;
         public final List<Integer> failedSegments;
+        /**
+         * Segments that were never attempted because the time budget ran out.
+         * 2026-11-24 主人要求：到点就提交已有成果，不等所有片段跑完。
+         * 这些片段保持原样（不丢数据），下次压缩可继续累积。
+         */
+        public final List<Integer> skippedSegments;
+        /** True when the run stopped because the time budget was exhausted (not because of a failure). */
+        public final boolean budgetExhausted;
         /** For every segment (1-based) the exclusive archive message index it fully covers, -1 if unknown. */
         public final int[] endMessageIndexBySegment;
         Result(String summary, List<Integer> succeededSegments, List<Integer> failedSegments, int[] endMessageIndexBySegment) {
+            this(summary, succeededSegments, failedSegments, Collections.<Integer>emptyList(), false, endMessageIndexBySegment);
+        }
+        Result(String summary, List<Integer> succeededSegments, List<Integer> failedSegments,
+               List<Integer> skippedSegments, boolean budgetExhausted, int[] endMessageIndexBySegment) {
             this.summary = summary;
             this.succeededSegments = Collections.unmodifiableList(succeededSegments);
             this.failedSegments = Collections.unmodifiableList(failedSegments);
+            this.skippedSegments = Collections.unmodifiableList(skippedSegments);
+            this.budgetExhausted = budgetExhausted;
             this.endMessageIndexBySegment = endMessageIndexBySegment;
         }
-        public boolean isComplete() { return failedSegments.isEmpty(); }
+        public boolean isComplete() { return failedSegments.isEmpty() && skippedSegments.isEmpty(); }
     }
 
     public static String run(List<String> chunks, Summarizer summarizer) throws Exception {
@@ -50,10 +64,46 @@ public final class ChunkedSummary {
     public static Result runGreedy(List<String> chunks, Summarizer summarizer,
                                    java.util.function.Consumer<String> diagnostic,
                                    int[] endMessageIndexBySegment) throws Exception {
+        return runGreedy(chunks, summarizer, diagnostic, endMessageIndexBySegment, 0L);
+    }
+
+    /**
+     * Greedy variant with a total time budget.
+     *
+     * 2026-11-24 主人指示：「从你开始压缩开始，比如说一分钟之内我要你结束压缩，
+     * 并且把已有的成果给提交，我不要等所有的片段全都搞完。」
+     *
+     * The budget is checked between segments, so a segment that is already running is never interrupted.
+     * When the budget is exhausted the remaining segments are recorded in {@link Result#skippedSegments}
+     * and the summary collected so far is returned, so the caller can persist the partial progress.
+     *
+     * @param timeBudgetMs total budget in milliseconds; values &lt;= 0 mean "no limit"
+     */
+    public static Result runGreedy(List<String> chunks, Summarizer summarizer,
+                                   java.util.function.Consumer<String> diagnostic,
+                                   int[] endMessageIndexBySegment,
+                                   long timeBudgetMs) throws Exception {
         String summary = "";
         List<Integer> succeeded = new ArrayList<>();
         List<Integer> failed = new ArrayList<>();
+        List<Integer> skipped = new ArrayList<>();
+        boolean budgetExhausted = false;
+        final long startedAt = System.nanoTime();
         for (int i = 0; i < chunks.size(); i++) {
+            // 🆕 #955184165419 时间预算检查：放在片段之间，不打断正在进行的单片
+            if (timeBudgetMs > 0) {
+                long elapsedMs = (System.nanoTime() - startedAt) / 1000000L;
+                if (elapsedMs >= timeBudgetMs) {
+                    budgetExhausted = true;
+                    for (int remaining = i; remaining < chunks.size(); remaining++) {
+                        skipped.add(remaining + 1);
+                    }
+                    diagnostic.accept("phase=budget_exhausted action=stop elapsedMs=" + elapsedMs
+                        + " budgetMs=" + timeBudgetMs + " completedSegments=" + succeeded.size()
+                        + " failedSegments=" + failed.size() + " skippedSegments=" + skipped.size());
+                    break;
+                }
+            }
             String oversized = null;
             boolean segmentOk = false;
             for (int attempt = 1; attempt <= 3; attempt++) {
@@ -87,7 +137,7 @@ public final class ChunkedSummary {
             }
             if (segmentOk) succeeded.add(i + 1);
         }
-        return new Result(summary, succeeded, failed, endMessageIndexBySegment);
+        return new Result(summary, succeeded, failed, skipped, budgetExhausted, endMessageIndexBySegment);
     }
 
     /** Keep user turns/tool batches together when they fit; oversized groups are losslessly split. */

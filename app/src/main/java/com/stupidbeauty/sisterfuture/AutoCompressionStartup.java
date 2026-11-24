@@ -2,6 +2,8 @@ package com.stupidbeauty.sisterfuture;
 
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import android.content.Context;
+import android.content.SharedPreferences;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -27,10 +29,28 @@ public final class AutoCompressionStartup {
 
     /**
      * 触发阈值（请求体字节数）。
-     * 依据本次事故：2.5MB 请求体正常、12.1MB 被服务端直接 reset，
-     * 取中间保守值 2MB。
+     *
+     * 2026-11-24 主人调整：原 2MB 太短，未达模型上下文上限就触发压缩属于过早压缩，
+     * 白白牺牲对话历史。阈值上提到 8MB。
      */
-    public static final int THRESHOLD_BYTES = 2 * 1024 * 1024;
+    public static final int THRESHOLD_BYTES = 8 * 1024 * 1024;
+
+    /**
+     * 单次压缩的总时长预算（毫秒）。
+     *
+     * 2026-11-24 主人指示：从开始压缩起，一分钟内必须结束并把已有成果提交，
+     * 不等所有片段全部跑完（实测大会话要 2 小时，几乎没有实用性）。
+     */
+    public static final long TIME_BUDGET_MS = 60_000L;
+
+    /** 配置读取用的系统属性键（优先于 SharedPreferences，便于线上临时调参）。 */
+    private static final String PROP_THRESHOLD = "auto_compress_threshold_bytes";
+    private static final String PROP_TIME_BUDGET = "auto_compress_time_budget_ms";
+
+    /** 配置读取用的 SharedPreferences。 */
+    private static final String PREFS_NAME = "sisterfuture_prefs";
+    private static final String PREF_THRESHOLD = "auto_compress_threshold_bytes";
+    private static final String PREF_TIME_BUDGET = "auto_compress_time_budget_ms";
 
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "auto-context-compression");
@@ -58,23 +78,88 @@ public final class AutoCompressionStartup {
         WORKER.execute(() -> {
             try {
                 int bytes = estimateRequestBytes(context);
-                if (bytes <= THRESHOLD_BYTES) {
+                int threshold = resolveThresholdBytes();
+                if (bytes <= threshold) {
                     FileLogger.i(TAG, "⏭️ [AUTO_COMPRESS] 启动检查：上下文未超阈值，跳过 | bytes="
-                        + bytes + " | threshold=" + THRESHOLD_BYTES);
+                        + bytes + " | threshold=" + threshold);
                     return;
                 }
+                long timeBudgetMs = resolveTimeBudgetMs();
                 FileLogger.i(TAG, "🚀 [AUTO_COMPRESS] 启动检查：上下文超阈值，触发一次自动压缩 | bytes="
-                    + bytes + " | threshold=" + THRESHOLD_BYTES);
+                    + bytes + " | threshold=" + threshold + " | timeBudgetMs=" + timeBudgetMs);
                 if (feedback != null) {
                     feedback.onCompressionStarted("启动检查");
                 }
                 new ContextCompressionController(context, accessPoints)
-                    .compressAsync("启动检查", feedback);
+                    .compressAsync("启动检查", feedback, timeBudgetMs);
             } catch (Throwable t) {
                 // 自动压缩永远不能影响启动
                 FileLogger.e(TAG, "❌ [AUTO_COMPRESS] 启动自动压缩异常，已忽略", t);
             }
         });
+    }
+
+    /**
+     * 解析实际生效的体积阈值。
+     * 优先级：系统属性 → SharedPreferences → 默认 8MB。
+     */
+    static int resolveThresholdBytes() {
+        Long fromProperty = readLongFromSystemProperty(PROP_THRESHOLD);
+        if (fromProperty != null && fromProperty > 0) {
+            return fromProperty.intValue();
+        }
+        Long fromPreferences = readLongFromPreferences(PREF_THRESHOLD);
+        if (fromPreferences != null && fromPreferences > 0) {
+            return fromPreferences.intValue();
+        }
+        return THRESHOLD_BYTES;
+    }
+
+    /**
+     * 解析实际生效的单次压缩总时长预算（毫秒）。
+     * 优先级：系统属性 → SharedPreferences → 默认 60 秒。
+     */
+    static long resolveTimeBudgetMs() {
+        Long fromProperty = readLongFromSystemProperty(PROP_TIME_BUDGET);
+        if (fromProperty != null && fromProperty > 0) {
+            return fromProperty;
+        }
+        Long fromPreferences = readLongFromPreferences(PREF_TIME_BUDGET);
+        if (fromPreferences != null && fromPreferences > 0) {
+            return fromPreferences;
+        }
+        return TIME_BUDGET_MS;
+    }
+
+    private static Long readLongFromSystemProperty(String key) {
+        try {
+            String value = System.getProperty(key);
+            if (value == null || value.trim().isEmpty()) {
+                return null;
+            }
+            return Long.parseLong(value.trim());
+        } catch (Throwable t) {
+            FileLogger.w(TAG, "[AUTO_COMPRESS] 读取系统属性失败 | key=" + key + " | error=" + t.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private static Long readLongFromPreferences(String key) {
+        try {
+            Context appContext = SisterFutureApplication.getAppContext();
+            if (appContext == null) {
+                return null;
+            }
+            SharedPreferences preferences = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            if (preferences == null || !preferences.contains(key)) {
+                return null;
+            }
+            long value = preferences.getLong(key, -1L);
+            return value > 0 ? Long.valueOf(value) : null;
+        } catch (Throwable t) {
+            FileLogger.w(TAG, "[AUTO_COMPRESS] 读取 SharedPreferences 失败 | key=" + key + " | error=" + t.getClass().getSimpleName());
+            return null;
+        }
     }
 
     /**

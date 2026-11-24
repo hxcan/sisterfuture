@@ -39,6 +39,17 @@ public final class CompressConversationContextTool implements Tool {
         } catch (JSONException e) { throw new IllegalStateException(e); }
     }
     @Override public void executeAsync(JSONObject arguments, OnResultCallback callback) {
+        executeAsync(arguments, callback, 0L);
+    }
+    /**
+     * 触发一次压缩，可指定单次压缩的总时长预算。
+     *
+     * 2026-11-24 主人指示：「从你开始压缩开始，比如说一分钟之内我要你结束压缩，
+     * 并且把已有的成果给提交，我不要等所有的片段全都搞完。」
+     *
+     * @param timeBudgetMs 总时长预算（毫秒）；传 0 或负数表示不限制总时长
+     */
+    public void executeAsync(JSONObject arguments, OnResultCallback callback, final long timeBudgetMs) {
         final CompressionTimings timings = new CompressionTimings();
         main.post(() -> {
             timings.phase("snapshot");
@@ -55,8 +66,10 @@ public final class CompressConversationContextTool implements Tool {
             } catch (Exception e) { reportFailure(callback, e, timings); return; }
             timings.phase("workerQueue");
             WORKER.execute(() -> {
+                final long runStartedAt = System.nanoTime();
                 try {
-                    JSONObject candidate = summarize(archive, previous, snapshot, timings);
+                    JSONObject candidate = summarize(archive, previous, snapshot, timings, timeBudgetMs);
+                    final long elapsedMs = (System.nanoTime() - runStartedAt) / 1000000L;
                     timings.phase("commitQueue");
                     main.post(() -> {
                         JSONObject result;
@@ -71,11 +84,13 @@ public final class CompressConversationContextTool implements Tool {
                                 .put("sourceCharacters", candidate.getLong("sourceCharacters"))
                                 .put("failedSegments", candidate.optJSONArray("failedSegments"))
                                 .put("succeededSegments", candidate.optJSONArray("succeededSegments"))
+                                .put("skippedSegments", candidate.optJSONArray("skippedSegments"))
+                                .put("budgetExhausted", candidate.optBoolean("budgetExhausted", false))
+                                .put("elapsedMs", elapsedMs)
+                                .put("timeBudgetMs", timeBudgetMs)
                                 .put("model", snapshot.getModelName())
                                 .put("timings", timings.finish())
-                                .put("message", "partial".equals(candidate.optString("status"))
-                                    ? "部分压缩已提交：成功段落已写入上下文，失败段落保持原样，可再次调用继续压缩。"
-                                    : "已压缩后续请求上下文，原始历史完整保留。");
+                                .put("message", buildMessage(candidate));
                         } catch (Exception e) {
                             context.endCompression(); reportFailure(callback, e, timings); return;
                         }
@@ -89,6 +104,18 @@ public final class CompressConversationContextTool implements Tool {
             });
         });
     }
+    /** 根据压缩结果生成给界面看的说明文案。 */
+    private static String buildMessage(JSONObject candidate) {
+        String status = candidate.optString("status", "success");
+        boolean budgetExhausted = candidate.optBoolean("budgetExhausted", false);
+        if (budgetExhausted) {
+            return "已达到单次压缩时长上限，已把已完成部分的压缩结果提交；未处理的片段保持原样，可再次调用继续累积。";
+        }
+        if ("partial".equals(status)) {
+            return "部分压缩已提交：成功段落已写入上下文，失败段落保持原样，可再次调用继续压缩。";
+        }
+        return "已压缩后续请求上下文，原始历史完整保留。";
+    }
     private static void reportFailure(OnResultCallback callback, Exception error, CompressionTimings timings) {
         JSONObject result;
         try {
@@ -100,6 +127,16 @@ public final class CompressConversationContextTool implements Tool {
 
     static JSONObject summarize(List<JSONObject> archive, JSONObject previous, ModelAccessPoint model,
                                 CompressionTimings timings) throws Exception {
+        return summarize(archive, previous, model, timings, 0L);
+    }
+
+    /**
+     * 生成摘要候选状态。
+     *
+     * @param timeBudgetMs 单次压缩的总时长预算（毫秒）；传 0 或负数表示不限制总时长
+     */
+    static JSONObject summarize(List<JSONObject> archive, JSONObject previous, ModelAccessPoint model,
+                                CompressionTimings timings, long timeBudgetMs) throws Exception {
         timings.phase("planning");
         int boundary = RequestContext.compressionBoundary(archive);
         int alreadyCovered = RequestContext.valid(archive, previous) ? previous.getInt("coveredCount") : 0;
@@ -143,7 +180,7 @@ public final class CompressConversationContextTool implements Tool {
             }
         }, event -> com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
             "[CONTEXT_COMPRESSION] operation=" + operation + " " + event),
-            endMessageIndexBySegment);
+            endMessageIndexBySegment, timeBudgetMs);
         timings.phase("validation");
         String summary = greedy.summary;
         if (summary == null || summary.isEmpty())
@@ -157,7 +194,9 @@ public final class CompressConversationContextTool implements Tool {
             .put("summaryRequests", requests.get()).put("sourceCharacters", sourceCharacters)
             .put("status", greedy.isComplete() ? "success" : "partial")
             .put("failedSegments", new JSONArray(greedy.failedSegments))
-            .put("succeededSegments", new JSONArray(greedy.succeededSegments));
+            .put("succeededSegments", new JSONArray(greedy.succeededSegments))
+            .put("skippedSegments", new JSONArray(greedy.skippedSegments))
+            .put("budgetExhausted", greedy.budgetExhausted);
         if (usage.length() > 0) state.put("usage", usage);
         return state;
     }
