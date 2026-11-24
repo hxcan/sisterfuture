@@ -39,12 +39,25 @@ public final class ContextCompressionController {
     }
 
     /**
-     * 异步触发一次压缩。
+     * 异步触发一次压缩（不限制总时长）。
      *
      * @param reason   触发原因，用于界面提示（例如「上下文超长」）
      * @param feedback 界面反馈回调，可为 null
      */
     public void compressAsync(final String reason, final Feedback feedback) {
+        compressAsync(reason, feedback, 0L);
+    }
+
+    /**
+     * 异步触发一次压缩。
+     *
+     * @param reason        触发原因，用于界面提示（例如「上下文超长」）
+     * @param feedback      界面反馈回调，可为 null
+     * @param timeBudgetMs  单次压缩的总时长预算（毫秒）。主人 2026-11-24 要求：
+     *                      从开始压缩起一分钟内必须结束并把已有成果提交，
+     *                      不等所有片段全部跑完。传 0 或负数表示不限制总时长。
+     */
+    public void compressAsync(final String reason, final Feedback feedback, final long timeBudgetMs) {
         if (context == null || models == null) {
             return;
         }
@@ -65,7 +78,9 @@ public final class ContextCompressionController {
                     int covered = result.optInt("coveredMessages", 0);
                     FileLogger.i(TAG, "✅ [CONTEXT_COMPRESSION_FINISHED] reason=" + reason
                         + " | status=" + status + " | coveredMessages=" + covered
-                        + " | failedSegments=" + result.optJSONArray("failedSegments"));
+                        + " | failedSegments=" + result.optJSONArray("failedSegments")
+                        + " | skippedSegments=" + result.optInt("skippedSegments", 0)
+                        + " | timeBudgetMs=" + timeBudgetMs);
                     if (feedback != null) {
                         feedback.onCompressionFinished(covered, status);
                     }
@@ -75,7 +90,7 @@ public final class ContextCompressionController {
                 public void onError(Exception e) {
                     notifyFailed(feedback, e == null ? "压缩失败" : String.valueOf(e.getMessage()));
                 }
-            });
+            }, timeBudgetMs);
         } catch (Exception e) {
             notifyFailed(feedback, e == null ? "压缩失败" : String.valueOf(e.getMessage()));
         }
