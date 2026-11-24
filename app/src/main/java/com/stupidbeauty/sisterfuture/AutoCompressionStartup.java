@@ -99,14 +99,6 @@ public final class AutoCompressionStartup {
                 FileLogger.e(TAG, "❌ [AUTO_COMPRESS] 启动自动压缩异常，已忽略", t);
             }
         });
-                }
-                new ContextCompressionController(context, accessPoints)
-                    .compressAsync("启动检查", feedback, timeBudgetMs);
-            } catch (Throwable t) {
-                // 自动压缩永远不能影响启动
-                FileLogger.e(TAG, "❌ [AUTO_COMPRESS] 启动自动压缩异常，已忽略", t);
-            }
-        });
     }
 
     /**
