@@ -236,6 +236,12 @@ private volatile boolean isImageProcessing = false;
   private static final int MAX_CONSECUTIVE_TOOL_ERROR_HOPS = 3;
   // #954854031072 上下文超长时最多自动压缩几次，避免无限循环
   private static final int MAX_CONTEXT_COMPRESSION_RETRIES = 2;
+  /**
+   * #955250392096 上下文超长时单次自动压缩的总时长预算（毫秒）。
+   * 与 AutoCompressionStartup.TIME_BUDGET_MS 保持一致：到点必须结束并提交已有成果，
+   * 不等所有片段全部跑完（否则 266 段要跑 2 小时，主人干等）。
+   */
+  private static final long CONTEXT_COMPRESSION_TIME_BUDGET_MS = 60_000L;
   private int contextCompressionRetryCount = 0;
   private int toolCallHopCount = 0;
   private int consecutiveToolErrorHops = 0;
@@ -991,7 +997,10 @@ imageUrl = url;
     runOnUiThread(() ->
     {
       if (usageTurnId != activeUsageTurnId || turnContexts.get(usageTurnId) != contextManager) return;
-      String displayMessage = errorMessage + "\n⚠️ 上下文超长，自动缩短后重试";
+      // #955250392096 errorMessage 是服务端原始 JSON（含 request_id / http_code 等），
+      // 直接展示给主人很难看懂。原始内容只进日志，界面只给可读文案。
+      FileLogger.i(TAG, "📄 [OVERLONG_DETAIL] 上下文超长原始错误：" + errorMessage);
+      String displayMessage = "⚠️ 上下文超出模型窗口，正在自动压缩后重试";
       messageAdapter.addMessage(new MessageItem(displayMessage, MessageType.AI));
       scrollToBottom();
       ttsSayReply("上下文超长，自动缩短后重试");
@@ -1000,9 +1009,13 @@ imageUrl = url;
       if (contextManager.isCompressionInProgress())
       {
         FileLogger.i(TAG, "🗜️ [OVERLONG_COMPRESS] 已有压缩在进行中，本次不再重复发起");
-        messageAdapter.addMessage(new MessageItem("🗜️ 上下文正在压缩中，请稍候…", MessageType.AI));
+        // #955250392096 先明确告知主人上限，避免以为要等 2 小时。
+        String compressingHint = "🗜️ 上下文正在压缩中（单次最多 "
+          + (CONTEXT_COMPRESSION_TIME_BUDGET_MS / 1000)
+          + " 秒，到点会提交已完成的部分结果）";
+        messageAdapter.addMessage(new MessageItem(compressingHint, MessageType.AI));
         scrollToBottom();
-        Toast.makeText(SisterFutureActivity.this, "上下文正在压缩中，请稍候…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(SisterFutureActivity.this, compressingHint, Toast.LENGTH_SHORT).show();
         return;
       }
 
@@ -1032,7 +1045,9 @@ imageUrl = url;
                 messageAdapter.refreshFromDataSource();
                 messageAdapter.addMessage(new MessageItem(
                   "✅ 上下文压缩完成，已压缩 " + coveredMessages + " 条历史消息"
-                    + ("partial".equals(status) ? "（部分完成）" : ""), MessageType.AI));
+                    + ("partial".equals(status)
+                       ? "（已达单次时长上限，本次提交已完成部分；若仍超长，再次请求会自动继续累积）"
+                       : ""), MessageType.AI));
                 scrollToBottom();
                 Toast.makeText(SisterFutureActivity.this,
                   "上下文压缩完成，已压缩 " + coveredMessages + " 条历史消息", Toast.LENGTH_SHORT).show();
@@ -1051,7 +1066,7 @@ imageUrl = url;
                 retryWithFewerRounds(usageTurnId, isRetry);
               });
             }
-          });
+          }, CONTEXT_COMPRESSION_TIME_BUDGET_MS);
         return;
       }
 
