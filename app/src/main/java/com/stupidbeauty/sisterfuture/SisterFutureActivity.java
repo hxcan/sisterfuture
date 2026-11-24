@@ -234,6 +234,9 @@ private volatile boolean isImageProcessing = false;
   // A group of tool calls returned by one model response counts as one hop.
   private static final int MAX_TOOL_CALL_HOPS = 8;
   private static final int MAX_CONSECUTIVE_TOOL_ERROR_HOPS = 3;
+  // #954854031072 上下文超长时最多自动压缩几次，避免无限循环
+  private static final int MAX_CONTEXT_COMPRESSION_RETRIES = 2;
+  private int contextCompressionRetryCount = 0;
   private int toolCallHopCount = 0;
   private int consecutiveToolErrorHops = 0;
   private final TurnUsageTracker turnUsageTracker = new TurnUsageTracker();
@@ -981,6 +984,7 @@ imageUrl = url;
     });
   }
 
+
   private void handleContextLengthError(String errorMessage, final boolean isRetry,
                                         long usageTurnId)
   {
@@ -992,6 +996,62 @@ imageUrl = url;
       scrollToBottom();
       ttsSayReply("上下文超长，自动缩短后重试");
 
+      // #954854031072 上下文超长 → 先尝试自动压缩一次，压缩失败再回退到减少轮次
+      if (contextCompressionRetryCount < MAX_CONTEXT_COMPRESSION_RETRIES && isRetry)
+      {
+        contextCompressionRetryCount++;
+        FileLogger.i(TAG, "🗜️ [OVERLONG_COMPRESS] 上下文超长，触发自动压缩 | attempt="
+          + contextCompressionRetryCount + "/" + MAX_CONTEXT_COMPRESSION_RETRIES);
+        new ContextCompressionController(contextManager, modelAccessPointManager)
+          .compressAsync("上下文超长", new ContextCompressionController.Feedback() {
+            @Override
+            public void onCompressionStarted(String reason) {
+              runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                messageAdapter.addMessage(new MessageItem("🗜️ 上下文超长，正在压缩上下文…", MessageType.AI));
+                scrollToBottom();
+                Toast.makeText(SisterFutureActivity.this, "上下文超长，正在压缩上下文…", Toast.LENGTH_SHORT).show();
+              });
+            }
+
+            @Override
+            public void onCompressionFinished(int coveredMessages, String status) {
+              runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                // 先刷新（让压缩后的短历史生效），再追加提示，避免提示被刷新清掉。
+                messageAdapter.refreshFromDataSource();
+                messageAdapter.addMessage(new MessageItem(
+                  "✅ 上下文压缩完成，已压缩 " + coveredMessages + " 条历史消息"
+                    + ("partial".equals(status) ? "（部分完成）" : ""), MessageType.AI));
+                scrollToBottom();
+                Toast.makeText(SisterFutureActivity.this,
+                  "上下文压缩完成，已压缩 " + coveredMessages + " 条历史消息", Toast.LENGTH_SHORT).show();
+                contextCompressionRetryCount = 0;
+                sendChatRequestTongYi(usageTurnId);
+              });
+            }
+
+            @Override
+            public void onCompressionFailed(String message) {
+              runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                messageAdapter.addMessage(new MessageItem(
+                  "⚠️ 上下文压缩失败（" + message + "），改用减少轮次方式重试", MessageType.AI));
+                scrollToBottom();
+                retryWithFewerRounds(usageTurnId, isRetry);
+              });
+            }
+          });
+        return;
+      }
+
+      retryWithFewerRounds(usageTurnId, isRetry);
+    });
+  }
+
+  /** Fallback path when compression is unavailable: drop the oldest rounds and retry once. */
+  private void retryWithFewerRounds(long usageTurnId, boolean isRetry) {
+    runOnUiThread(() -> {
       if (!contextManager.decreaseMaxRounds()) {
         messageAdapter.addMessage(new MessageItem("当前完整轮次仍超限，已停止重试；原历史保留。可新建会话或减少本次输入。", MessageType.AI));
         finishUsageTurnWithoutFinalMessage(usageTurnId);
@@ -2358,7 +2418,7 @@ imageUrl = url;
     repeatDetectionManager = new RepeatDetectionManager();
 
     // #954151647060 启动时按体积阈值自动触发一次上下文压缩（失败只记日志，不影响启动）
-    AutoCompressionStartup.run(contextManager, modelAccessPointManager);
+    // #954151647060 启动时自动压缩的调用点已移到 initView() 之后（界面反馈需要 messageAdapter）
   }
 
   private void initTools()
@@ -2417,6 +2477,44 @@ imageUrl = url;
           return true;
         }
         return false;
+      }
+    });
+
+    // #954151647060 启动时按体积阈值自动触发一次上下文压缩
+    // 调用点放在 initView() 之后：压缩完成的界面反馈需要 messageAdapter。
+    AutoCompressionStartup.run(contextManager, modelAccessPointManager, new ContextCompressionController.Feedback() {
+      @Override
+      public void onCompressionStarted(String reason) {
+        runOnUiThread(() -> {
+          if (isFinishing() || isDestroyed() || messageAdapter == null) return;
+          messageAdapter.addMessage(new MessageItem("🗜️ " + reason + "，正在压缩上下文…", MessageType.AI));
+          scrollToBottom();
+          Toast.makeText(SisterFutureActivity.this, reason + "，正在压缩上下文…", Toast.LENGTH_SHORT).show();
+        });
+      }
+
+      @Override
+      public void onCompressionFinished(int coveredMessages, String status) {
+        runOnUiThread(() -> {
+          if (isFinishing() || isDestroyed() || messageAdapter == null) return;
+          // 先刷新（让压缩后的短历史生效），再追加提示，避免提示被刷新清掉。
+          messageAdapter.refreshFromDataSource();
+          messageAdapter.addMessage(new MessageItem(
+            "✅ 上下文压缩完成，已压缩 " + coveredMessages + " 条历史消息"
+              + ("partial".equals(status) ? "（部分完成）" : ""), MessageType.AI));
+          scrollToBottom();
+          Toast.makeText(SisterFutureActivity.this, "上下文压缩完成，已压缩 " + coveredMessages + " 条历史消息", Toast.LENGTH_SHORT).show();
+        });
+      }
+
+      @Override
+      public void onCompressionFailed(String message) {
+        runOnUiThread(() -> {
+          if (isFinishing() || isDestroyed() || messageAdapter == null) return;
+          messageAdapter.addMessage(new MessageItem(
+            "⚠️ 上下文压缩失败（" + message + "），原上下文保留", MessageType.AI));
+          scrollToBottom();
+        });
       }
     });
 

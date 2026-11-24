@@ -1,8 +1,6 @@
 package com.stupidbeauty.sisterfuture;
 
 import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
-import com.stupidbeauty.sisterfuture.tool.CompressConversationContextTool;
-import com.stupidbeauty.sisterfuture.tool.Tool;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -29,7 +27,7 @@ public final class AutoCompressionStartup {
 
     /**
      * 触发阈值（请求体字节数）。
-     * 依据本次事故：2.5MB 请求体正常，12.1MB 被服务端直接 reset，
+     * 依据本次事故：2.5MB 请求体正常、12.1MB 被服务端直接 reset，
      * 取中间保守值 2MB。
      */
     public static final int THRESHOLD_BYTES = 2 * 1024 * 1024;
@@ -49,8 +47,11 @@ public final class AutoCompressionStartup {
      * @param context      当前会话的 ContextManager（必须与 Activity 使用同一个实例，
      *                      这样 installCompression 更新内存状态后无需额外刷新）
      * @param accessPoints 接入点管理器
+     * @param feedback     界面反馈回调，可为 null
      */
-    public static void run(final ContextManager context, final ModelAccessPointManager accessPoints) {
+    public static void run(final ContextManager context,
+                           final ModelAccessPointManager accessPoints,
+                           final ContextCompressionController.Feedback feedback) {
         if (context == null || accessPoints == null) {
             return;
         }
@@ -64,7 +65,11 @@ public final class AutoCompressionStartup {
                 }
                 FileLogger.i(TAG, "🚀 [AUTO_COMPRESS] 启动检查：上下文超阈值，触发一次自动压缩 | bytes="
                     + bytes + " | threshold=" + THRESHOLD_BYTES);
-                compressOnce(context, accessPoints);
+                if (feedback != null) {
+                    feedback.onCompressionStarted("启动检查");
+                }
+                new ContextCompressionController(context, accessPoints)
+                    .compressAsync("启动检查", feedback);
             } catch (Throwable t) {
                 // 自动压缩永远不能影响启动
                 FileLogger.e(TAG, "❌ [AUTO_COMPRESS] 启动自动压缩异常，已忽略", t);
@@ -87,34 +92,6 @@ public final class AutoCompressionStartup {
         } catch (Exception e) {
             FileLogger.e(TAG, "❌ [AUTO_COMPRESS] 估算请求体大小失败", e);
             return 0;
-        }
-    }
-
-    private static void compressOnce(final ContextManager context,
-                                     final ModelAccessPointManager accessPoints) {
-        final CompressConversationContextTool tool =
-            new CompressConversationContextTool(context, accessPoints);
-        try {
-            tool.executeAsync(new JSONObject(), new Tool.OnResultCallback() {
-                @Override
-                public void onResult(JSONObject result) {
-                    if (result == null) {
-                        FileLogger.w(TAG, "⚠️ [AUTO_COMPRESS] 自动压缩返回空结果");
-                        return;
-                    }
-                    FileLogger.i(TAG, "✅ [AUTO_COMPRESS] 自动压缩完成 | status="
-                        + result.optString("status", "unknown")
-                        + " | coveredMessages=" + result.optInt("coveredMessages", 0)
-                        + " | failedSegments=" + result.optJSONArray("failedSegments"));
-                }
-
-                @Override
-                public void onError(Exception e) {
-                    FileLogger.e(TAG, "❌ [AUTO_COMPRESS] 自动压缩失败，原上下文未改变", e);
-                }
-            });
-        } catch (Exception e) {
-            FileLogger.e(TAG, "❌ [AUTO_COMPRESS] 启动自动压缩异常，原上下文未改变", e);
         }
     }
 }
