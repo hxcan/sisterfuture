@@ -36,6 +36,8 @@ public class ContextManager
   private final ConversationStore conversationStore;
   private JSONObject compressionState;
   private boolean compressionInProgress;
+  /** #955190163963 压缩锁获取时间戳（毫秒），用于诊断锁的持有时长 */
+  private long compressionLockAcquiredAt;
   private int requestTurnLimit = Integer.MAX_VALUE;
   private int currentMaxRounds = INITIAL_MAX_ROUNDS;
   private int MAX_ARGUMENTS_STR_LENGTH = 226810;
@@ -1191,17 +1193,43 @@ public class ContextManager
     }
     return normalizeToolCallMessages(projected, true);
   }
-
-  /** These lifecycle methods are called on the UI thread, like archive mutations. */
   public List<JSONObject> beginCompression() {
-    if (compressionInProgress) throw new IllegalStateException("当前会话正在压缩，请等待完成");
+    if (compressionInProgress) {
+      FileLogger.w(TAG, "🔒 [COMPRESSION_LOCK] beginCompression 被拒：锁已被持有 | instance=" + instanceTag()
+          + " | heldMs=" + (compressionLockAcquiredAt > 0 ? (System.currentTimeMillis() - compressionLockAcquiredAt) : -1)
+          + " | thread=" + Thread.currentThread().getName());
+      throw new IllegalStateException("当前会话正在压缩，请等待完成");
+    }
     List<JSONObject> snapshot = RequestContext.copy(getHistory());
     compressionInProgress = true;
+    compressionLockAcquiredAt = System.currentTimeMillis();
+    FileLogger.i(TAG, "🔓 [COMPRESSION_LOCK] beginCompression 获得锁 | instance=" + instanceTag()
+        + " | thread=" + Thread.currentThread().getName()
+        + " | snapshotMessages=" + (snapshot == null ? -1 : snapshot.size()));
     return snapshot;
   }
-  public void endCompression() { compressionInProgress = false; }
+  public void endCompression() {
+    long heldMs = compressionLockAcquiredAt > 0 ? (System.currentTimeMillis() - compressionLockAcquiredAt) : -1;
+    FileLogger.i(TAG, "🔑 [COMPRESSION_LOCK] endCompression 释放锁 | instance=" + instanceTag()
+        + " | thread=" + Thread.currentThread().getName()
+        + " | heldMs=" + heldMs
+        + " | wasInProgress=" + compressionInProgress);
+    compressionInProgress = false;
+    compressionLockAcquiredAt = 0L;
+  }
   /** #954854031072 是否已有压缩在进行中（用于避免重复发起压缩） */
-  public boolean isCompressionInProgress() { return compressionInProgress; }
+  public boolean isCompressionInProgress() {
+    if (compressionInProgress) {
+      long heldMs = compressionLockAcquiredAt > 0 ? (System.currentTimeMillis() - compressionLockAcquiredAt) : -1;
+      FileLogger.i(TAG, "🔍 [COMPRESSION_LOCK] isCompressionInProgress 查询 | instance=" + instanceTag()
+          + " | inProgress=true | heldMs=" + heldMs);
+    }
+    return compressionInProgress;
+  }
+  /** #955190163963 实例标识：用于确认启动压缩与超长判定是否使用同一个 ContextManager 实例 */
+  private String instanceTag() {
+    return TAG + "@" + Integer.toHexString(System.identityHashCode(this));
+  }
   public JSONObject getCompressionState() {
     try { return compressionState == null ? null : new JSONObject(compressionState.toString()); }
     catch (JSONException e) { throw new IllegalStateException(e); }
