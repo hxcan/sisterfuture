@@ -86,9 +86,19 @@ public final class AutoCompressionStartup {
                 }
                 long timeBudgetMs = resolveTimeBudgetMs();
                 FileLogger.i(TAG, "🚀 [AUTO_COMPRESS] 启动检查：上下文超阈值，触发一次自动压缩 | bytes="
-                    + bytes + " | threshold=" + threshold + " | timeBudgetMs=" + timeBudgetMs);
+                    + bytes + " | threshold=" + threshold + " | timeBudgetMs=" + timeBudgetMs
+                    + " | contextInstance=" + Integer.toHexString(System.identityHashCode(context))
+                    + " | compressionAlreadyInProgress=" + context.isCompressionInProgress());
                 if (feedback != null) {
                     feedback.onCompressionStarted("启动检查");
+                }
+                new ContextCompressionController(context, accessPoints)
+                    .compressAsync("启动检查", feedback, timeBudgetMs);
+            } catch (Throwable t) {
+                // 自动压缩永远不能影响启动
+                FileLogger.e(TAG, "❌ [AUTO_COMPRESS] 启动自动压缩异常，已忽略", t);
+            }
+        });
                 }
                 new ContextCompressionController(context, accessPoints)
                     .compressAsync("启动检查", feedback, timeBudgetMs);
