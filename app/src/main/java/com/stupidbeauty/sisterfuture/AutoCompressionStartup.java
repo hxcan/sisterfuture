@@ -4,7 +4,6 @@ import com.stupidbeauty.sisterfuture.manager.ModelAccessPointManager;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.SystemClock;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -79,13 +78,13 @@ public final class AutoCompressionStartup {
         WORKER.execute(() -> {
             try {
                 int bytes = estimateRequestBytes(context);
-                int threshold = resolveThresholdBytes(context);
+                int threshold = resolveThresholdBytes();
                 if (bytes <= threshold) {
                     FileLogger.i(TAG, "⏭️ [AUTO_COMPRESS] 启动检查：上下文未超阈值，跳过 | bytes="
                         + bytes + " | threshold=" + threshold);
                     return;
                 }
-                long timeBudgetMs = resolveTimeBudgetMs(context);
+                long timeBudgetMs = resolveTimeBudgetMs();
                 FileLogger.i(TAG, "🚀 [AUTO_COMPRESS] 启动检查：上下文超阈值，触发一次自动压缩 | bytes="
                     + bytes + " | threshold=" + threshold + " | timeBudgetMs=" + timeBudgetMs);
                 if (feedback != null) {
@@ -104,14 +103,14 @@ public final class AutoCompressionStartup {
      * 解析实际生效的体积阈值。
      * 优先级：系统属性 → SharedPreferences → 默认 8MB。
      */
-    static int resolveThresholdBytes(ContextManager context) {
-        Integer fromProperty = readIntFromSystemProperty(PROP_THRESHOLD);
+    static int resolveThresholdBytes() {
+        Long fromProperty = readLongFromSystemProperty(PROP_THRESHOLD);
         if (fromProperty != null && fromProperty > 0) {
-            return fromProperty;
+            return fromProperty.intValue();
         }
-        Integer fromPreferences = readIntFromPreferences(context, PREF_THRESHOLD);
+        Long fromPreferences = readLongFromPreferences(PREF_THRESHOLD);
         if (fromPreferences != null && fromPreferences > 0) {
-            return fromPreferences;
+            return fromPreferences.intValue();
         }
         return THRESHOLD_BYTES;
     }
@@ -120,29 +119,16 @@ public final class AutoCompressionStartup {
      * 解析实际生效的单次压缩总时长预算（毫秒）。
      * 优先级：系统属性 → SharedPreferences → 默认 60 秒。
      */
-    static long resolveTimeBudgetMs(ContextManager context) {
+    static long resolveTimeBudgetMs() {
         Long fromProperty = readLongFromSystemProperty(PROP_TIME_BUDGET);
         if (fromProperty != null && fromProperty > 0) {
             return fromProperty;
         }
-        Long fromPreferences = readLongFromPreferences(context, PREF_TIME_BUDGET);
+        Long fromPreferences = readLongFromPreferences(PREF_TIME_BUDGET);
         if (fromPreferences != null && fromPreferences > 0) {
             return fromPreferences;
         }
         return TIME_BUDGET_MS;
-    }
-
-    private static Integer readIntFromSystemProperty(String key) {
-        try {
-            String value = System.getProperty(key);
-            if (value == null || value.trim().isEmpty()) {
-                return null;
-            }
-            return Integer.parseInt(value.trim());
-        } catch (Throwable t) {
-            FileLogger.w(TAG, "[AUTO_COMPRESS] 读取系统属性失败 | key=" + key + " | error=" + t.getClass().getSimpleName());
-            return null;
-        }
     }
 
     private static Long readLongFromSystemProperty(String key) {
@@ -158,17 +144,9 @@ public final class AutoCompressionStartup {
         }
     }
 
-    private static Integer readIntFromPreferences(ContextManager context, String key) {
-        Long value = readLongFromPreferences(context, key);
-        return value == null ? null : Integer.valueOf(value.intValue());
-    }
-
-    private static Long readLongFromPreferences(ContextManager context, String key) {
+    private static Long readLongFromPreferences(String key) {
         try {
-            if (context == null) {
-                return null;
-            }
-            Context appContext = context.getAppContext();
+            Context appContext = SisterFutureApplication.getAppContext();
             if (appContext == null) {
                 return null;
             }
