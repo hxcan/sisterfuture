@@ -86,7 +86,9 @@ public final class AutoCompressionStartup {
                 }
                 long timeBudgetMs = resolveTimeBudgetMs();
                 FileLogger.i(TAG, "🚀 [AUTO_COMPRESS] 启动检查：上下文超阈值，触发一次自动压缩 | bytes="
-                    + bytes + " | threshold=" + threshold + " | timeBudgetMs=" + timeBudgetMs);
+                    + bytes + " | threshold=" + threshold + " | timeBudgetMs=" + timeBudgetMs
+                    + " | contextInstance=" + Integer.toHexString(System.identityHashCode(context))
+                    + " | compressionAlreadyInProgress=" + context.isCompressionInProgress());
                 if (feedback != null) {
                     feedback.onCompressionStarted("启动检查");
                 }
