@@ -1200,6 +1200,8 @@ public class ContextManager
     return snapshot;
   }
   public void endCompression() { compressionInProgress = false; }
+  /** #954854031072 是否已有压缩在进行中（用于避免重复发起压缩） */
+  public boolean isCompressionInProgress() { return compressionInProgress; }
   public JSONObject getCompressionState() {
     try { return compressionState == null ? null : new JSONObject(compressionState.toString()); }
     catch (JSONException e) { throw new IllegalStateException(e); }
