@@ -92,14 +92,25 @@ public final class CompressConversationContextTool implements Tool {
                                 .put("timings", timings.finish())
                                 .put("message", buildMessage(candidate));
                         } catch (Exception e) {
-                            context.endCompression(); reportFailure(callback, e, timings); return;
+                            context.endCompression();
+                            FileLogger.w(TAG, "❌ [COMPRESSION_LOCK] installCompression 异常，锁已释放 | thread="
+                                + Thread.currentThread().getName() + " | error=" + e.getClass().getSimpleName());
+                            reportFailure(callback, e, timings); return;
                         }
                         context.endCompression();
+                        FileLogger.i(TAG, "✅ [COMPRESSION_LOCK] 提交成功，锁已释放 | thread="
+                            + Thread.currentThread().getName()
+                            + " | elapsedMs=" + elapsedMs
+                            + " | timeBudgetMs=" + timeBudgetMs
+                            + " | budgetExhausted=" + candidate.optBoolean("budgetExhausted", false));
                         callback.onResult(result);
                     });
                 } catch (Exception e) {
                     timings.phase("failureCallbackQueue");
-                    main.post(() -> { context.endCompression(); reportFailure(callback, e, timings); });
+                    main.post(() -> { context.endCompression();
+                        FileLogger.w(TAG, "❌ [COMPRESSION_LOCK] 后台任务异常，锁已释放 | thread="
+                            + Thread.currentThread().getName() + " | error=" + e.getClass().getSimpleName());
+                        reportFailure(callback, e, timings); });
                 }
             });
         });
