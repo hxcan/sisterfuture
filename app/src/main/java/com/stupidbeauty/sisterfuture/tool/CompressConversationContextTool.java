@@ -254,7 +254,33 @@ public final class CompressConversationContextTool implements Tool {
         try (Response response = CLIENT.newCall(builder.build()).execute()) {
             com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
                 "[CONTEXT_COMPRESSION] segment=" + index + "/" + total + " httpStatus=" + response.code());
-            if (!response.isSuccessful()) throw new java.io.IOException("摘要请求失败，HTTP " + response.code() + "；原上下文未改变");
+            if (!response.isSuccessful()) {
+                // [DIAG] 诊断日志：记录服务端原始响应体与请求体特征，用于定位 HTTP 400 的具体原因。
+                // 只做日志记录，不改变任何原有逻辑；响应体读取失败也不影响后续流程。
+                try {
+                    String diagUrl = model.getBaseUrl() + model.getChatEndpoint();
+                    String diagRequestBody = body.toString();
+                    String diagRespBody = response.body() != null ? response.body().string() : "<null-body>";
+                    int diagRespLimit = Math.min(4000, diagRespBody.length());
+                    int diagReqLimit = Math.min(2000, diagRequestBody.length());
+                    com.stupidbeauty.sisterfuture.utils.FileLogger.e("ContextCompression",
+                        "[CONTEXT_COMPRESSION_DIAG] segment=" + index + "/" + total
+                        + " httpStatus=" + response.code()
+                        + " url=" + diagUrl
+                        + " model=" + model.getModelName()
+                        + " requestBodyChars=" + diagRequestBody.length()
+                        + " requestBodyHead=" + diagRequestBody.substring(0, diagReqLimit)
+                        + " respBodyLen=" + diagRespBody.length()
+                        + " respBody=" + diagRespBody.substring(0, diagRespLimit));
+                } catch (Exception diagError) {
+                    com.stupidbeauty.sisterfuture.utils.FileLogger.e("ContextCompression",
+                        "[CONTEXT_COMPRESSION_DIAG] segment=" + index + "/" + total
+                        + " httpStatus=" + response.code()
+                        + " diagFailed=" + diagError.getClass().getSimpleName()
+                        + " diagMessage=" + diagError.getMessage());
+                }
+                throw new java.io.IOException("摘要请求失败，HTTP " + response.code() + "；原上下文未改变");
+            }
             if (response.body() == null) throw new java.io.IOException("摘要响应为空");
             okio.BufferedSource responseSource = response.body().source();
             if (responseSource.request(256 * 1024 + 1)) throw new java.io.IOException("摘要响应过大，未应用");
