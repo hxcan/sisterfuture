@@ -220,11 +220,25 @@ public final class CompressConversationContextTool implements Tool {
     private static int resolveCoveredCount(ChunkedSummary.Result greedy, int[] endMessageIndexBySegment) {
         int firstFailed = greedy.failedSegments.isEmpty() ? Integer.MAX_VALUE : greedy.failedSegments.get(0);
         int safe = -1;
+        boolean hasValidBoundary = false;
         for (int segment = 1; segment < endMessageIndexBySegment.length + 1; segment++) {
             if (segment >= firstFailed) break;
             if (!greedy.succeededSegments.contains(segment)) break;
             int end = endMessageIndexBySegment[segment - 1];
             if (end > safe) safe = end;
+            if (end >= 0) hasValidBoundary = true;
+        }
+        // 🆕 修复：即使所有成功 segment 的 endMessageIndex 都是 -1（被切开的超大消息），
+        // 只要有成功的 segment，就允许提交部分成果（至少覆盖到第一个成功 segment 的起始位置）
+        if (!hasValidBoundary && !greedy.succeededSegments.isEmpty()) {
+            // 找到第一个成功 segment 的起始消息索引
+            int firstSucceeded = greedy.succeededSegments.get(0);
+            if (firstSucceeded > 0 && firstSucceeded - 1 < endMessageIndexBySegment.length) {
+                int prevEnd = endMessageIndexBySegment[firstSucceeded - 1 - 1];
+                safe = prevEnd >= 0 ? prevEnd : 0;
+            } else {
+                safe = 0;
+            }
         }
         return safe;
     }
@@ -254,7 +268,33 @@ public final class CompressConversationContextTool implements Tool {
         try (Response response = CLIENT.newCall(builder.build()).execute()) {
             com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
                 "[CONTEXT_COMPRESSION] segment=" + index + "/" + total + " httpStatus=" + response.code());
-            if (!response.isSuccessful()) throw new java.io.IOException("摘要请求失败，HTTP " + response.code() + "；原上下文未改变");
+            if (!response.isSuccessful()) {
+                // [DIAG] 诊断日志：记录服务端原始响应体与请求体特征，用于定位 HTTP 400 的具体原因。
+                // 只做日志记录，不改变任何原有逻辑；响应体读取失败也不影响后续流程。
+                try {
+                    String diagUrl = model.getBaseUrl() + model.getChatEndpoint();
+                    String diagRequestBody = body.toString();
+                    String diagRespBody = response.body() != null ? response.body().string() : "<null-body>";
+                    int diagRespLimit = Math.min(4000, diagRespBody.length());
+                    int diagReqLimit = Math.min(2000, diagRequestBody.length());
+                    com.stupidbeauty.sisterfuture.utils.FileLogger.e("ContextCompression",
+                        "[CONTEXT_COMPRESSION_DIAG] segment=" + index + "/" + total
+                        + " httpStatus=" + response.code()
+                        + " url=" + diagUrl
+                        + " model=" + model.getModelName()
+                        + " requestBodyChars=" + diagRequestBody.length()
+                        + " requestBodyHead=" + diagRequestBody.substring(0, diagReqLimit)
+                        + " respBodyLen=" + diagRespBody.length()
+                        + " respBody=" + diagRespBody.substring(0, diagRespLimit));
+                } catch (Exception diagError) {
+                    com.stupidbeauty.sisterfuture.utils.FileLogger.e("ContextCompression",
+                        "[CONTEXT_COMPRESSION_DIAG] segment=" + index + "/" + total
+                        + " httpStatus=" + response.code()
+                        + " diagFailed=" + diagError.getClass().getSimpleName()
+                        + " diagMessage=" + diagError.getMessage());
+                }
+                throw new java.io.IOException("摘要请求失败，HTTP " + response.code() + "；原上下文未改变");
+            }
             if (response.body() == null) throw new java.io.IOException("摘要响应为空");
             okio.BufferedSource responseSource = response.body().source();
             if (responseSource.request(256 * 1024 + 1)) throw new java.io.IOException("摘要响应过大，未应用");
