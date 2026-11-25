@@ -19,7 +19,7 @@ public class ChunkedSummaryTest {
         assertFalse(logs.toString().contains("PRIVATE"));
     }
     @Test public void oversizedResponseIsRefinedAndThenCarriedToNextSegment() throws Exception {
-        String longSummary = String.join("", Collections.nCopies(12001,"x"));
+        String longSummary = String.join("", Collections.nCopies(188001,"x"));
         AtomicInteger calls = new AtomicInteger();
         String result = ChunkedSummary.run(Arrays.asList("first","second"), (previous, fragment, index, total) -> {
             int call = calls.incrementAndGet();
@@ -40,7 +40,7 @@ public class ChunkedSummaryTest {
         ChunkedSummary.Result result = ChunkedSummary.runGreedy(Arrays.asList("first","second"),
             (previous,fragment,index,total)->{
                 calls.incrementAndGet();
-                if(index==1) return String.join("",Collections.nCopies(12001,"x"));
+                if(index==1) return String.join("",Collections.nCopies(188001,"x"));
                 return "second segment summary";
             }, event -> { }, null);
         assertEquals(4,calls.get());
