@@ -5,7 +5,7 @@ import org.json.*;
 
 /** Sequential rolling summary. Greedy mode keeps every successfully summarised segment instead of discarding all work when one segment fails. */
 public final class ChunkedSummary {
-    public static final int CHUNK_CHARACTERS = 48000;
+    public static final int CHUNK_CHARACTERS = 188000;
     private ChunkedSummary() { }
     public interface Summarizer { String summarize(String previous, String fragment, int index, int total) throws Exception; }
 
@@ -124,7 +124,7 @@ public final class ChunkedSummary {
                     break;
                 }
                 next = next == null ? "" : next.trim();
-                String reason = next.isEmpty() ? "empty" : next.length() > RequestContext.MAX_SUMMARY_CHARS ? "too_long" : "ok";
+                String reason = next.isEmpty() ? "empty" : next.length() > chunks.get(i).length() ? "too_long" : "ok";
                 diagnostic.accept(label + " phase=result reason=" + reason + " summaryChars=" + next.length()
                     + " elapsedMs=" + ((System.nanoTime() - start) / 1000000));
                 if ("ok".equals(reason)) { summary = next; segmentOk = true; break; }
