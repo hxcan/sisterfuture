@@ -220,11 +220,25 @@ public final class CompressConversationContextTool implements Tool {
     private static int resolveCoveredCount(ChunkedSummary.Result greedy, int[] endMessageIndexBySegment) {
         int firstFailed = greedy.failedSegments.isEmpty() ? Integer.MAX_VALUE : greedy.failedSegments.get(0);
         int safe = -1;
+        boolean hasValidBoundary = false;
         for (int segment = 1; segment < endMessageIndexBySegment.length + 1; segment++) {
             if (segment >= firstFailed) break;
             if (!greedy.succeededSegments.contains(segment)) break;
             int end = endMessageIndexBySegment[segment - 1];
             if (end > safe) safe = end;
+            if (end >= 0) hasValidBoundary = true;
+        }
+        // 🆕 修复：即使所有成功 segment 的 endMessageIndex 都是 -1（被切开的超大消息），
+        // 只要有成功的 segment，就允许提交部分成果（至少覆盖到第一个成功 segment 的起始位置）
+        if (!hasValidBoundary && !greedy.succeededSegments.isEmpty()) {
+            // 找到第一个成功 segment 的起始消息索引
+            int firstSucceeded = greedy.succeededSegments.get(0);
+            if (firstSucceeded > 0 && firstSucceeded - 1 < endMessageIndexBySegment.length) {
+                int prevEnd = endMessageIndexBySegment[firstSucceeded - 1 - 1];
+                safe = prevEnd >= 0 ? prevEnd : 0;
+            } else {
+                safe = 0;
+            }
         }
         return safe;
     }
