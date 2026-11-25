@@ -8,7 +8,7 @@ import org.json.*;
 /** Pure request projection. Never edits the archive or treats a summary as system instructions. */
 public final class RequestContext {
     private RequestContext() {}
-    public static final int MAX_SUMMARY_CHARS = 12000;
+    public static final int MAX_SUMMARY_CHARS = 200000;
     public static List<JSONObject> copy(List<JSONObject> archive) {
         try {
             List<JSONObject> result = new ArrayList<>();
