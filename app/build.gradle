@@ -19,13 +19,13 @@ dependencies
   implementation group: 'com.koushikdutta.async', name: 'androidasync', version: '2.1.7'
   implementation 'androidx.multidex:multidex:2.0.1'
   implementation 'io.noties.markwon:core:4.6.1'
-  implementation 'com.jcraft:jsch:0.1.55'
+  implementation 'com.noties:core:4.6.1'
   implementation 'io.noties.markwon:ext-strikethrough:4.6.1'
   implementation 'io.noties.markwon:ext-tables:4.6.1'
   implementation 'com.belerweb:pinyin4j:2.5.1'
   implementation 'androidx.annotation:annotation:1.5.0'
   implementation 'androidx.appcompat:appcompat:1.6.1' // Or the latest version
-  implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+  implementation 'androidx.legacy:legacy-support-v4:1.0.0' // Or the latest version
   implementation 'com.google.ai.edge.litert:litert:1.2.0'
   implementation 'org.tensorflow:tensorflow-lite-select-tf-ops:2.16.1'
   implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
@@ -74,8 +74,8 @@ dependencies
 
 // LiteRT retains org.tensorflow.lite APIs; exclude the old runtime pulled by support/Flex.
 configurations.configureEach {
-  exclude group: 'org.tensorflow', module: 'tensorflow-lite'
-  exclude group: 'org.tensorflow', module: 'tensorflow-lite-api'
+    exclude group: 'org.tensorflow', module: 'tensorflow-lite'
+    exclude group: 'org.tensorflow', module: 'tensorflow-lite-api'
 }
 
 android
@@ -137,15 +137,15 @@ android
     applicationId "com.stupidbeauty.sisterfuture"
     minSdkVersion 24  // 提升最低 API 级别以支持 ConcurrentHashMap.newKeySet() (API 24+)
     targetSdkVersion 28
-    versionCode 1099
-    versionName "2026.9.14"
+    versionCode 1100
+    versionName "2026.11.25"
     multiDexEnabled true
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
     // 配置支持的 SO 库架构 - 仅保留手机端需要的架构
     ndk
     {
-      abiFilters "armeabi", "armeabi-v7a", "arm64-v8a"
+        abiFilters "armeabi", "armeabi-v7a", "arm64-v8a"
     }
   }
 
@@ -174,22 +174,22 @@ android
 // # enable internal JDK API access at runtime
 tasks.withType(JavaCompile).configureEach {
     options.fork = true
-    options.forkOptions.jvmArgs += [
-//         # essential for butterknife
-        '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+    options.forkOptions.jvmArgs +=
+        [
+            // essential for butterknife
+            '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
 
-//         # if you need Glide or LomBok
-//         # these may not be the exact list, but it works for me
-        '--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
-        '--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
-        '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
-        '--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
-        '--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED',
-        '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
-        '--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED',
-        '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
-        '--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED',
-    ]
+            // if you need Glide or LomBok
+            '--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED',
+        ]
 }
 // 自定义 APK 输出文件名，包含版本信息
 android.applicationVariants.all { variant ->
