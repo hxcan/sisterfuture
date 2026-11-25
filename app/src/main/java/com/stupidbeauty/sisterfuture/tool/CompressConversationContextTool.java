@@ -33,7 +33,7 @@ public final class CompressConversationContextTool implements Tool {
         try {
             return new JSONObject().put("type", "function").put("function", new JSONObject()
                 .put("name", getName())
-                .put("description", "仅在用户明确要求压缩当前上下文时调用。使用当前模型异步摘要较早的完整对话，保留最近两轮用户对话原文。只改变后续模型请求，原历史不删除，不分享、不新建会话。无需参数。")
+                .put("description", "仅在用户明确要求压缩当前上下文时调用。使用当前模型异步摘要较早的完整对话，保留最近两轮用户对话原文。只改变后续模型请求，原历史不删除，不分享，不新建会话。无需参数。")
                 .put("parameters", new JSONObject().put("type", "object").put("properties", new JSONObject())
                     .put("required", new JSONArray())));
         } catch (JSONException e) { throw new IllegalStateException(e); }
@@ -164,6 +164,16 @@ public final class CompressConversationContextTool implements Tool {
             endMessageIndexBySegment[i] = planned.get(i).endMessageIndex;
             sourceCharacters += planned.get(i).text.length();
         }
+        // 🆕 诊断日志：记录每个 segment 的 endMessageIndex
+        StringBuilder boundaryDiag = new StringBuilder("[BOUNDARY_DIAG] endMessageIndexBySegment=[");
+        for (int i = 0; i < endMessageIndexBySegment.length; i++) {
+            if (i > 0) boundaryDiag.append(",");
+            boundaryDiag.append(endMessageIndexBySegment[i]);
+        }
+        boundaryDiag.append("] totalSegments=").append(endMessageIndexBySegment.length)
+            .append(" alreadyCovered=").append(alreadyCovered);
+        com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression", boundaryDiag.toString());
+        
         JSONObject usage = new JSONObject();
         java.util.concurrent.atomic.AtomicInteger requests = new java.util.concurrent.atomic.AtomicInteger();
         final String operation = Long.toHexString(System.nanoTime());
@@ -197,6 +207,11 @@ public final class CompressConversationContextTool implements Tool {
         if (summary == null || summary.isEmpty())
             throw new java.io.IOException("摘要未生成，未应用");
         int coveredCount = resolveCoveredCount(greedy, endMessageIndexBySegment);
+        // 🆕 诊断日志：记录 resolveCoveredCount 的结果
+        com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
+            "[BOUNDARY_DIAG] resolvedCoveredCount=" + coveredCount + " alreadyCovered=" + alreadyCovered
+                + " succeededSegments=" + greedy.succeededSegments + " failedSegments=" + greedy.failedSegments
+                + " skippedSegments=" + greedy.skippedSegments);
         if (coveredCount <= alreadyCovered)
             throw new java.io.IOException("没有可安全提交的完整消息边界，未应用");
         JSONObject state = new JSONObject().put("summary", summary).put("coveredCount", coveredCount)
@@ -229,15 +244,35 @@ public final class CompressConversationContextTool implements Tool {
             if (end >= 0) hasValidBoundary = true;
         }
         // 🆕 修复：即使所有成功 segment 的 endMessageIndex 都是 -1（被切开的超大消息），
-        // 只要有成功的 segment，就允许提交部分成果（至少覆盖到第一个成功 segment 的起始位置）
+        // 只要有成功的 segment，就允许提交部分成果
         if (!hasValidBoundary && !greedy.succeededSegments.isEmpty()) {
             // 找到第一个成功 segment 的起始消息索引
             int firstSucceeded = greedy.succeededSegments.get(0);
-            if (firstSucceeded > 0 && firstSucceeded - 1 < endMessageIndexBySegment.length) {
-                int prevEnd = endMessageIndexBySegment[firstSucceeded - 1 - 1];
+            // 修复数组越界：firstSucceeded 是 1-based，endMessageIndexBySegment 是 0-based
+            // 第一个成功 segment 之前的 segment 的 endMessageIndex 就是它的起始位置
+            if (firstSucceeded > 1) {
+                // 有前序 segment，取前一个 segment 的 endMessageIndex
+                int prevEnd = endMessageIndexBySegment[firstSucceeded - 2]; // firstSucceeded-1-1 = firstSucceeded-2
                 safe = prevEnd >= 0 ? prevEnd : 0;
             } else {
+                // 第一个 segment 就成功了，从头开始
                 safe = 0;
+            }
+            // 🆕 如果 safe 仍然是 0 或 -1，但至少有一个成功的 segment，
+            // 我们可以安全地覆盖到第一个成功 segment 结束之前的消息
+            // 即使 endMessageIndex 是 -1，也意味着这个 segment 覆盖了某些消息的一部分
+            // 我们应该找到这些消息之前的完整消息边界
+            if (safe <= 0) {
+                // 找到第一个 endMessageIndex >= 0 的 segment，用它之前的位置
+                for (int i = 0; i < endMessageIndexBySegment.length; i++) {
+                    if (endMessageIndexBySegment[i] > 0) {
+                        safe = 0; // 可以安全覆盖到这个位置之前的所有消息
+                        break;
+                    }
+                }
+                // 如果所有 endMessageIndex 都是 -1，说明所有消息都被切开了
+                // 这种情况下，我们至少可以覆盖 0 条消息（不覆盖任何消息，但保留摘要）
+                // 但这没有意义，所以保持 safe = 0，让调用方决定是否接受
             }
         }
         return safe;
