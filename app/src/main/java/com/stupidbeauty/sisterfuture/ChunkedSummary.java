@@ -124,7 +124,7 @@ public final class ChunkedSummary {
                     break;
                 }
                 next = next == null ? "" : next.trim();
-                String reason = next.isEmpty() ? "empty" : next.length() > chunks.get(i).length() ? "too_long" : "ok";
+                String reason = next.isEmpty() ? "empty" : next.length() > CHUNK_CHARACTERS ? "too_long" : "ok";
                 diagnostic.accept(label + " phase=result reason=" + reason + " summaryChars=" + next.length()
                     + " elapsedMs=" + ((System.nanoTime() - start) / 1000000));
                 if ("ok".equals(reason)) { summary = next; segmentOk = true; break; }
