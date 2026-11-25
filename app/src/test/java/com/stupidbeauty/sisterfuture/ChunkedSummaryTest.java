@@ -54,11 +54,11 @@ public class ChunkedSummaryTest {
         StringBuilder value = new StringBuilder();
         for (int i=0;i<100000;i++) value.append("中文😀abc");
         JSONObject message = new JSONObject().put("role","user").put("content",value.toString());
-        List<String> chunks = ChunkedSummary.plan(Arrays.asList(message),48000);
+        List<String> chunks = ChunkedSummary.plan(Arrays.asList(message),188000);
         assertTrue(chunks.size()>8);
         StringBuilder restored = new StringBuilder();
         for(String chunk:chunks) {
-            assertTrue(chunk.length()<=48000);
+            assertTrue(chunk.length()<=188000);
             assertFalse(Character.isHighSurrogate(chunk.charAt(chunk.length()-1)));
             assertFalse(Character.isLowSurrogate(chunk.charAt(0)));
             restored.append(chunk);
@@ -143,7 +143,7 @@ public class ChunkedSummaryTest {
         List<JSONObject> messages = Arrays.asList(
             new JSONObject().put("role","user").put("content",value.toString()));
         List<ChunkedSummary.Chunk> chunks =
-            ChunkedSummary.planWithBoundaries(messages, 48000);
+            ChunkedSummary.planWithBoundaries(messages, 188000);
         assertTrue(chunks.size() > 1);
         for (ChunkedSummary.Chunk chunk : chunks) {
             assertEquals(-1,chunk.endMessageIndex);
