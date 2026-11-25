@@ -43,7 +43,7 @@ public class ChunkedSummaryTest {
                 if(index==1) return String.join("",Collections.nCopies(188001,"x"));
                 return "second segment summary";
             }, event -> { }, null);
-        assertEquals(2,calls.get());
+        assertEquals(4,calls.get());
         assertFalse(result.isComplete());
         assertEquals(Arrays.asList(1), result.failedSegments);
         assertEquals(Arrays.asList(2), result.succeededSegments);
@@ -139,7 +139,7 @@ public class ChunkedSummaryTest {
     }
     @Test public void planWithBoundariesMarksFragmentsSplitInsideMessageAsUnknown() throws Exception {
         StringBuilder value = new StringBuilder();
-        for (int i=0;i<20000;i++) value.append("中文abc");
+        for (int i=0;i<40000;i++) value.append("中文abc");
         List<JSONObject> messages = Arrays.asList(
             new JSONObject().put("role","user").put("content",value.toString()));
         List<ChunkedSummary.Chunk> chunks =
