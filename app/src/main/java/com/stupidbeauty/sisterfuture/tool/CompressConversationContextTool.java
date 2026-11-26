@@ -206,10 +206,18 @@ public final class CompressConversationContextTool implements Tool {
         String summary = greedy.summary;
         if (summary == null || summary.isEmpty())
             throw new java.io.IOException("摘要未生成，未应用");
-        int coveredCount = resolveCoveredCount(greedy, endMessageIndexBySegment);
-        // 🆕 诊断日志：记录 resolveCoveredCount 的结果
+        // 🆕 #955845796633 修复：endMessageIndex 是「投影后列表」的索引，不能直接当绝对位置用。
+        // RequestContext.project() 会先 subList(count, ...) 跳过已覆盖的 alreadyCovered 条，
+        // 再在开头插入 1 条「此前会话摘要」消息，于是投影内索引 = 原始索引 - alreadyCovered + 1。
+        // 因此必须换算回原始绝对位置：原始位置 = alreadyCovered + 投影内索引 - 1。
+        // 旧代码直接拿投影内索引（48）跟 alreadyCovered（140）比较，恒为 <=，导致第二次及以后的压缩永远失败。
+        int projectedCovered = resolveCoveredCount(greedy, endMessageIndexBySegment);
+        int summaryHeadOffset = projectedCovered >= 0 ? 1 : 0;
+        int coveredCount = alreadyCovered + projectedCovered - summaryHeadOffset;
+        // 🆕 诊断日志：记录换算前后的边界，以及本次压缩的实际收益
         com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
-            "[BOUNDARY_DIAG] resolvedCoveredCount=" + coveredCount + " alreadyCovered=" + alreadyCovered
+            "[BOUNDARY_DIAG] projectedCovered=" + projectedCovered + " summaryHeadOffset=" + summaryHeadOffset
+                + " alreadyCovered=" + alreadyCovered + " resolvedCoveredCount=" + coveredCount
                 + " succeededSegments=" + greedy.succeededSegments + " failedSegments=" + greedy.failedSegments
                 + " skippedSegments=" + greedy.skippedSegments);
         if (coveredCount <= alreadyCovered)
@@ -224,6 +232,27 @@ public final class CompressConversationContextTool implements Tool {
             .put("skippedSegments", new JSONArray(greedy.skippedSegments))
             .put("budgetExhausted", greedy.budgetExhausted);
         if (usage.length() > 0) state.put("usage", usage);
+        // 🆕 #955845796633 压缩收益日志：明确本次提交把上下文上限缩短了多少，便于评估压缩是否值得。
+        // coveredMessages：本次新覆盖的原始消息条数（绝对位置增量）
+        // coveredRatio：本次新覆盖的消息占可压缩区（boundary）的比例
+        // summaryChars / sourceChars：摘要长度与被摘要的原文长度，反映压缩比
+        // remainingMessages：压缩后仍需保留在原文里的消息条数（可压缩区剩余）
+        int coveredMessages = coveredCount - alreadyCovered;
+        int compressible = boundary - alreadyCovered;
+        int coveredRatio = compressible > 0 ? (int) Math.round(100.0 * coveredMessages / compressible) : 0;
+        int summaryChars = summary.length();
+        int compressionRatio = sourceCharacters > 0 ? (int) Math.round(100.0 * summaryChars / sourceCharacters) : 0;
+        com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
+            "[COMPRESSION_GAIN] coveredMessages=" + coveredMessages
+                + " coveredRatio=" + coveredRatio + "%"
+                + " compressibleMessages=" + compressible
+                + " remainingMessages=" + (compressible - coveredMessages)
+                + " summaryChars=" + summaryChars
+                + " sourceChars=" + sourceCharacters
+                + " compressionRatio=" + compressionRatio + "%"
+                + " status=" + state.optString("status")
+                + " budgetExhausted=" + greedy.budgetExhausted
+                + " requests=" + requests.get());
         return state;
     }
 
