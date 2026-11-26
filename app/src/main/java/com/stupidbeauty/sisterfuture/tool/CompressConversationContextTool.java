@@ -155,15 +155,15 @@ public final class CompressConversationContextTool implements Tool {
             throw new IllegalArgumentException("没有可压缩的更早完整对话；保留最近两轮，原上下文未改变");
         List<JSONObject> prefix = new ArrayList<>(archive.subList(0, boundary));
         List<JSONObject> source = RequestContext.project(prefix, previous);
-        List<ChunkedSummary.Chunk> planned = ChunkedSummary.planWithBoundaries(source, ChunkedSummary.CHUNK_CHARACTERS);
+        // 🆕 #956583437306 分片容量自适应：起始用实测推导的默认容量，
+        // 若服务端判定「上下文超出模型窗口」，则把容量减半后重新规划并重试（最多 3 轮）。
+        // 实测 MiniMax-M3 纯文本上限约 2,750,000 ~ 2,781,250 字符，默认 900000 已留足余量；
+        // 减半机制用于兜住「实际内容密度比探测样本更高」等意外情况。
+        int chunkLimit = ChunkedSummary.CHUNK_CHARACTERS;
+        boolean replanned = false;
         List<String> chunks = new ArrayList<>();
-        int[] endMessageIndexBySegment = new int[planned.size()];
+        int[] endMessageIndexBySegment = new int[0];
         long sourceCharacters = 0;
-        for (int i = 0; i < planned.size(); i++) {
-            chunks.add(planned.get(i).text);
-            endMessageIndexBySegment[i] = planned.get(i).endMessageIndex;
-            sourceCharacters += planned.get(i).text.length();
-        }
         // 🆕 诊断日志：记录每个 segment 的 endMessageIndex
         StringBuilder boundaryDiag = new StringBuilder("[BOUNDARY_DIAG] endMessageIndexBySegment=[");
         for (int i = 0; i < endMessageIndexBySegment.length; i++) {
@@ -179,7 +179,24 @@ public final class CompressConversationContextTool implements Tool {
         final String operation = Long.toHexString(System.nanoTime());
         final Map<Integer, Integer> attempts = new HashMap<>();
         timings.phase("summarizing");
-        ChunkedSummary.Result greedy = ChunkedSummary.runGreedy(chunks, (previousSummary, fragment, index, total) ->
+        ChunkedSummary.Result greedy = null;
+        while (true) {
+        // 🆕 #956583437306 分片容量自适应：先规划，再跑摘要；
+        // 若服务端判定「上下文超出模型窗口」，把容量减半后重新规划并重试。
+        List<ChunkedSummary.Chunk> planned = ChunkedSummary.planWithBoundaries(source, chunkLimit);
+        chunks = new ArrayList<>();
+        endMessageIndexBySegment = new int[planned.size()];
+        sourceCharacters = 0;
+        for (int i = 0; i < planned.size(); i++) {
+            chunks.add(planned.get(i).text);
+            endMessageIndexBySegment[i] = planned.get(i).endMessageIndex;
+            sourceCharacters += planned.get(i).text.length();
+        }
+        com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
+            "[COMPRESSION_PLAN] chunkLimit=" + chunkLimit + " totalSegments=" + planned.size()
+                + " sourceChars=" + sourceCharacters);
+        try {
+        greedy = ChunkedSummary.runGreedy(chunks, (previousSummary, fragment, index, total) ->
         {
             requests.incrementAndGet();
             int attempt = attempts.getOrDefault(index, 0) + 1;
@@ -202,6 +219,22 @@ public final class CompressConversationContextTool implements Tool {
         }, event -> com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
             "[CONTEXT_COMPRESSION] operation=" + operation + " " + event),
             endMessageIndexBySegment, timeBudgetMs);
+        break;
+        } catch (ChunkedSummary.ContextTooLargeException tooLarge) {
+            int nextLimit = chunkLimit / 2;
+            if (nextLimit < 50000 || replanned) {
+                com.stupidbeauty.sisterfuture.utils.FileLogger.e("ContextCompression",
+                    "[COMPRESSION_REPLAN] 容量已无法继续下调，放弃 | chunkLimit=" + chunkLimit
+                        + " | reason=" + tooLarge.getMessage());
+                throw tooLarge;
+            }
+            replanned = true;
+            chunkLimit = nextLimit;
+            com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
+                "[COMPRESSION_REPLAN] 服务端判定上下文超限，分片容量减半重规划 | from="
+                    + (chunkLimit * 2) + " to=" + chunkLimit);
+        }
+        }
         timings.phase("validation");
         String summary = greedy.summary;
         if (summary == null || summary.isEmpty())
@@ -347,10 +380,11 @@ public final class CompressConversationContextTool implements Tool {
             if (!response.isSuccessful()) {
                 // [DIAG] 诊断日志：记录服务端原始响应体与请求体特征，用于定位 HTTP 400 的具体原因。
                 // 只做日志记录，不改变任何原有逻辑；响应体读取失败也不影响后续流程。
+                String diagRespBody = "";
                 try {
                     String diagUrl = model.getBaseUrl() + model.getChatEndpoint();
                     String diagRequestBody = body.toString();
-                    String diagRespBody = response.body() != null ? response.body().string() : "<null-body>";
+                    diagRespBody = response.body() != null ? response.body().string() : "<null-body>";
                     int diagRespLimit = Math.min(4000, diagRespBody.length());
                     int diagReqLimit = Math.min(2000, diagRequestBody.length());
                     com.stupidbeauty.sisterfuture.utils.FileLogger.e("ContextCompression",
@@ -369,6 +403,12 @@ public final class CompressConversationContextTool implements Tool {
                         + " diagFailed=" + diagError.getClass().getSimpleName()
                         + " diagMessage=" + diagError.getMessage());
                 }
+                // 🆕 #956583437306：区分「上下文超出模型窗口」与其它 400。
+                // 实测 MiniMax 返回：invalid params, context window exceeds limit (2013)
+                // 只有这一类才值得把分片容量减半后重试；语法错误、余额不足等减半也没用。
+                if (diagRespBody != null && diagRespBody.contains("context window exceeds limit"))
+                    throw new ChunkedSummary.ContextTooLargeException(
+                        "摘要请求超出模型上下文窗口，HTTP " + response.code());
                 throw new java.io.IOException("摘要请求失败，HTTP " + response.code() + "；原上下文未改变");
             }
             if (response.body() == null) throw new java.io.IOException("摘要响应为空");
