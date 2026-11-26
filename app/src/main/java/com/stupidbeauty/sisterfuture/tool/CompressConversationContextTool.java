@@ -212,11 +212,23 @@ public final class CompressConversationContextTool implements Tool {
         // 因此必须换算回原始绝对位置：原始位置 = alreadyCovered + 投影内索引 - 1。
         // 旧代码直接拿投影内索引（48）跟 alreadyCovered（140）比较，恒为 <=，导致第二次及以后的压缩永远失败。
         int projectedCovered = resolveCoveredCount(greedy, endMessageIndexBySegment);
-        int summaryHeadOffset = projectedCovered >= 0 ? 1 : 0;
+        // 🆕 #955845796633 修复：摘要头偏移量必须看「投影时到底插没插摘要头」，不能固定按 1 处理。
+        // RequestContext.project() 只有在 valid(archive, previous) 为 true 时才会在开头插入
+        // 1 条「此前会话摘要」消息；否则投影列表就是原始消息的纯子列表，没有摘要头。
+        //
+        // endMessageIndex 是投影列表内的「结束位置+1」(exclusive)，换算回原始绝对位置：
+        //   有摘要头：原始位置 = alreadyCovered + endMessageIndex - 1 + 1 = alreadyCovered + endMessageIndex
+        //   无摘要头：原始位置 = alreadyCovered + endMessageIndex - 1
+        //
+        // 旧代码固定减 1，导致第二次及以后的压缩（有摘要头）永远算出 coveredCount == alreadyCovered，
+        // 判定「没有可安全提交的完整消息边界」而失败。
+        boolean hasSummaryHead = RequestContext.valid(archive, previous);
+        int summaryHeadOffset = hasSummaryHead ? 0 : 1;
         int coveredCount = alreadyCovered + projectedCovered - summaryHeadOffset;
         // 🆕 诊断日志：记录换算前后的边界，以及本次压缩的实际收益
         com.stupidbeauty.sisterfuture.utils.FileLogger.i("ContextCompression",
             "[BOUNDARY_DIAG] projectedCovered=" + projectedCovered + " summaryHeadOffset=" + summaryHeadOffset
+                + " hasSummaryHead=" + hasSummaryHead
                 + " alreadyCovered=" + alreadyCovered + " resolvedCoveredCount=" + coveredCount
                 + " succeededSegments=" + greedy.succeededSegments + " failedSegments=" + greedy.failedSegments
                 + " skippedSegments=" + greedy.skippedSegments);
