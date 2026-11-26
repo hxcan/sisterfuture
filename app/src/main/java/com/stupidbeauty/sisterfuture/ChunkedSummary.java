@@ -5,9 +5,32 @@ import org.json.*;
 
 /** Sequential rolling summary. Greedy mode keeps every successfully summarised segment instead of discarding all work when one segment fails. */
 public final class ChunkedSummary {
-    public static final int CHUNK_CHARACTERS = 188000;
+    /**
+     * 单片最大字符数。
+     *
+     * 2026-11-26 依据实测重设（Redmine #956583437306）：
+     * 在 192.168.1.144 上用真实接入点 MiniMax-M3-stupidbeauty 二分探测，
+     * 纯文本上下文上限约为 2,750,000 ~ 2,781,250 字符（body 约 8.8 MB），
+     * 服务端超限时的响应为：
+     *   invalid params, context window exceeds limit (2013)
+     * 旧值 188000 只用到真实上限的 6.8%，导致 9.4MB 的历史被切成 66 片，
+     * 60 秒预算只跑得完 2 片。现取 900000（约上限的 1/3），留足余量给
+     * system prompt、累计摘要与实际内容密度的波动。
+     */
+    public static final int CHUNK_CHARACTERS = 900000;
     private ChunkedSummary() { }
     public interface Summarizer { String summarize(String previous, String fragment, int index, int total) throws Exception; }
+
+    /**
+     * 服务端判定上下文超出模型窗口时抛出，用于触发上层「减小分片容量后重试」。
+     *
+     * 2026-11-26：实测 MiniMax 返回
+     *   invalid params, context window exceeds limit (2013)
+     * 与「语法错误」「余额不足」等其它 400 必须区分开，只有这一类才需要减半重试。
+     */
+    public static final class ContextTooLargeException extends Exception {
+        public ContextTooLargeException(String message) { super(message); }
+    }
 
     /** One planned fragment together with the number of archive messages it fully covers. */
     public static final class Chunk {
