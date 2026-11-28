@@ -99,6 +99,7 @@ import com.stupidbeauty.sisterfuture.manager.OssManager;
 import com.stupidbeauty.sisterfuture.manager.EmptyDeltaDetectionManager;
 import com.stupidbeauty.sisterfuture.manager.TurnUsageTracker;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import com.stupidbeauty.sisterfuture.utils.MarkdownRenderDiagnostics;
 import com.stupidbeauty.sisterfuture.utils.ToolArgumentsParser;
 import com.google.gson.Gson;
 import okhttp3.Response;
@@ -1842,6 +1843,14 @@ imageUrl = url;
       boolean isNewMessage = (responseAccumulator.length() == 0 && !answerIncrement.isEmpty());
       responseAccumulator.append(answerIncrement);
 
+      // 🔍 任务 #958696185511 子任务 #958698459506（1/4 测量）：
+      // 首次收到文本增量时开启一次观测会话，流式结束时输出统计摘要。
+      // 纯观测，不改变任何渲染行为。
+      if (isNewMessage)
+      {
+        MarkdownRenderDiagnostics.beginStream();
+      }
+
       if (!answerIncrement.isEmpty() && isNewMessage)
       {
         String currentAnswer = responseAccumulator.toString();
@@ -1936,6 +1945,9 @@ imageUrl = url;
           modelAccessPointManager.resetFailureCount();
           rateLimitRetryCount = 0;
           resetToolCallHopGuard("model_reply_complete", responseUsageTurnId);
+          // 🔍 任务 #958696185511 子任务 #958698459506（1/4 测量）：
+          // 流式结束，输出本次会话的渲染闪烁统计。
+          MarkdownRenderDiagnostics.finishStream();
         });
       }
     }
