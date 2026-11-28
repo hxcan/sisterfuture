@@ -30,6 +30,7 @@ import io.noties.markwon.core.CorePlugin;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
 import io.noties.markwon.ext.tables.TablePlugin;
 import com.stupidbeauty.sisterfuture.utils.FileLogger;
+import com.stupidbeauty.sisterfuture.utils.MarkdownRenderDiagnostics;
 import android.util.Base64;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -793,8 +794,13 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             try {
                 markwon.setMarkdown(textView, message.getText());
             } finally {
-                MARKDOWN_PERF.record(System.nanoTime() - started);
+                long elapsed = System.nanoTime() - started;
+                MARKDOWN_PERF.record(elapsed);
                 MARKDOWN_PERF.report("message_markdown_bind", false);
+                // 🔍 任务 #958696185511 子任务 #958698459506（1/4 测量）：
+                // 观测流式期间的 Markdown 渲染次数、表格形态切换与高度变化。
+                // 纯观测，不改变任何渲染行为；不在流式会话中时该调用为空操作。
+                MarkdownRenderDiagnostics.recordBind(message.getText(), elapsed, textView.getHeight());
             }
             ModelUsage usage = message.getModelUsage();
             if (usage != null && usage.hasAnyUsage()) {
